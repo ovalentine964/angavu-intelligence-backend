@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     """Main application settings loaded from environment variables."""
 
     # === Application ===
-    APP_NAME: str = "Msaidizi"
+    APP_NAME: str = "Biashara Intelligence"
     APP_ENV: str = "development"
     DEBUG: bool = True
     SECRET_KEY: str = "CHANGE_ME_IN_PRODUCTION"

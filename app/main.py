@@ -1,5 +1,5 @@
 """
-Msaidizi / Biashara AI — FastAPI Application
+Biashara Intelligence — FastAPI Application
 
 Main entry point for the cloud backend. Sets up:
 - CORS middleware
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Msaidizi / Biashara AI",
+    title="Biashara Intelligence",
     description=(
         "Intelligence platform for Kenya's informal economy. "
         "Transforms raw transaction data from dukawallahs and mama mbogas "
@@ -232,7 +232,7 @@ async def health_check():
 async def root():
     """Root endpoint — redirects to docs in development."""
     return {
-        "service": "Msaidizi / Biashara AI Backend",
+        "service": "Biashara Intelligence Backend",
         "version": "0.1.0",
         "docs": "/docs" if settings.DEBUG else None,
         "health": "/health",
@@ -266,7 +266,7 @@ app.include_router(whatsapp_router, prefix=settings.API_V1_PREFIX)
 async def startup_banner():
     """Print startup banner for visibility."""
     logger.info("=" * 60)
-    logger.info("🇰🇪 Msaidizi / Biashara AI — Backend Starting")
+    logger.info("🇰🇪 Biashara Intelligence — Backend Starting")
     logger.info(f"   Environment: {settings.APP_ENV}")
     logger.info(f"   API Prefix:  {settings.API_V1_PREFIX}")
     logger.info(f"   Debug:       {settings.DEBUG}")

@@ -1,10 +1,15 @@
-# Msaidizi — Backend & Cloud Intelligence
+# Biashara Intelligence — Cloud Platform
 
-**The brain behind Africa's first economic intelligence platform.**
+**The economic intelligence engine behind Africa's informal economy.**
 
 ## Overview
 
-FastAPI backend that powers Msaidizi's cloud intelligence layer. Receives transaction data from Android devices, generates economic intelligence for buyers (FMCG companies, government, banks, NGOs).
+FastAPI backend that powers Biashara Intelligence's cloud platform. Receives anonymized transaction data from Msaidizi (on-device app), generates economic intelligence for buyers (FMCG companies, government, banks, NGOs).
+
+## Architecture
+
+- **Msaidizi** = On-device app (worker's AI CFO)
+- **Biashara Intelligence** = Cloud platform (this repo)
 
 ## Stack
 
