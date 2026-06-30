@@ -1,0 +1,377 @@
+"""
+Authentication endpoints.
+
+Handles:
+- Device authentication (for user sync)
+- Buyer API key authentication
+- JWT token generation and validation
+"""
+
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.db.database import get_db
+from app.models.buyer import Buyer, BuyerAPIKey
+from app.models.user import User
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+settings = get_settings()
+security = HTTPBearer()
+
+
+# =========================================================================
+# Schemas
+# =========================================================================
+
+
+class DeviceRegisterRequest(BaseModel):
+    """Request to register or authenticate a device."""
+
+    phone: str = Field(..., min_length=10, max_length=15)
+    device_id: str = Field(..., max_length=100)
+    name: Optional[str] = Field(None, max_length=200)
+    business_type: str = Field(
+        "dukawallah",
+        pattern=r"^(dukawallah|mama_mboga|boda_boda|vendor|tailor|restaurant|other)$",
+    )
+    language: str = Field("sw", pattern=r"^(sw|en|sh)$")
+    location_geohash: Optional[str] = Field(None, max_length=12)
+    location_name: Optional[str] = Field(None, max_length=200)
+
+
+class TokenResponse(BaseModel):
+    """JWT token response."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int = Field(
+        ...,
+        description="Access token expiry in seconds",
+    )
+    user_id: str
+
+
+class RefreshRequest(BaseModel):
+    """Request to refresh an access token."""
+
+    refresh_token: str
+
+
+# =========================================================================
+# Token Utilities
+# =========================================================================
+
+
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """
+    Create a JWT access token.
+
+    Args:
+        data: Claims to include in the token
+        expires_delta: Custom expiry time
+
+    Returns:
+        Encoded JWT string
+    """
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (
+        expires_delta
+        or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode.update({"exp": expire, "type": "access"})
+    return jwt.encode(
+        to_encode,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+def create_refresh_token(data: dict) -> str:
+    """Create a JWT refresh token with longer expiry."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    to_encode.update({"exp": expire, "type": "refresh"})
+    return jwt.encode(
+        to_encode,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+def decode_token(token: str) -> dict:
+    """
+    Decode and validate a JWT token.
+
+    Raises:
+        HTTPException if token is invalid or expired
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+        return payload
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}",
+        )
+
+
+# =========================================================================
+# Dependencies
+# =========================================================================
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    FastAPI dependency — extract and validate current user from JWT.
+
+    Usage:
+        @router.get("/me")
+        async def get_me(user: User = Depends(get_current_user)):
+            return user
+    """
+    payload = decode_token(credentials.credentials)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing subject",
+        )
+
+    result = await db.execute(
+        select(User).where(
+            and_(User.id == user_id, User.is_active == True)
+        )
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    return user
+
+
+async def get_buyer_from_api_key(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Buyer:
+    """
+    FastAPI dependency — authenticate buyer via API key.
+
+    Expects header: Authorization: Bearer msai_xxxx
+
+    Usage:
+        @router.get("/intelligence/market/{market_id}")
+        async def get_market(
+            buyer: Buyer = Depends(get_buyer_from_api_key),
+        ):
+            ...
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+
+    api_key = auth_header.replace("Bearer ", "")
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+    # Look up the API key
+    result = await db.execute(
+        select(BuyerAPIKey).where(
+            and_(
+                BuyerAPIKey.key_hash == key_hash,
+                BuyerAPIKey.is_active == True,
+            )
+        )
+    )
+    api_key_obj = result.scalar_one_or_none()
+
+    if not api_key_obj:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    if api_key_obj.is_expired:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has expired",
+        )
+
+    # Update last used timestamp
+    api_key_obj.last_used_at = datetime.now(timezone.utc)
+
+    # Get the buyer
+    result = await db.execute(
+        select(Buyer).where(
+            and_(
+                Buyer.id == api_key_obj.buyer_id,
+                Buyer.is_active == True,
+            )
+        )
+    )
+    buyer = result.scalar_one_or_none()
+
+    if not buyer or not buyer.is_contract_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Buyer account is inactive or contract expired",
+        )
+
+    return buyer
+
+
+# =========================================================================
+# Endpoints
+# =========================================================================
+
+
+@router.post("/register", response_model=TokenResponse)
+async def register_device(
+    request: DeviceRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Register a new device or authenticate an existing one.
+
+    If the phone number already exists, returns tokens for the
+    existing user. Otherwise, creates a new user.
+    """
+    phone_hash = hashlib.sha256(request.phone.encode()).hexdigest()
+
+    # Check if user exists
+    result = await db.execute(
+        select(User).where(User.phone_hash == phone_hash)
+    )
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Existing user — update device info
+        user.device_id = request.device_id
+        user.last_sync_at = datetime.now(timezone.utc)
+    else:
+        # New user — encrypt phone and create
+        from app.utils.crypto import encrypt_value
+        user = User(
+            phone_hash=phone_hash,
+            phone_encrypted=encrypt_value(request.phone),
+            name_encrypted=encrypt_value(request.name) if request.name else None,
+            business_type=request.business_type,
+            language=request.language,
+            location_geohash=request.location_geohash,
+            location_name=request.location_name,
+            device_id=request.device_id,
+            consent_data_sharing=False,
+        )
+        db.add(user)
+
+    await db.flush()
+
+    # Generate tokens
+    token_data = {"sub": str(user.id), "phone_hash": phone_hash}
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user_id=str(user.id),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    request: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Refresh an expired access token using a valid refresh token."""
+    payload = decode_token(request.refresh_token)
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not a refresh token",
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    # Verify user still exists and is active
+    result = await db.execute(
+        select(User).where(
+            and_(User.id == user_id, User.is_active == True)
+        )
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # Issue new tokens
+    token_data = {"sub": str(user.id), "phone_hash": user.phone_hash}
+    new_access = create_access_token(token_data)
+    new_refresh = create_refresh_token(token_data)
+
+    return TokenResponse(
+        access_token=new_access,
+        refresh_token=new_refresh,
+        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user_id=str(user.id),
+    )
+
+
+@router.post("/consent")
+async def update_consent(
+    consent: bool = True,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update user's data sharing consent.
+
+    Users must explicitly consent before their data can be included
+    in anonymized intelligence products.
+    """
+    user.consent_data_sharing = consent
+    return {
+        "status": "ok",
+        "consent": consent,
+        "message": (
+            "Data sharing consent updated. "
+            + ("Your data will be included in anonymized intelligence products."
+               if consent
+               else "Your data will not be shared.")
+        ),
+    }

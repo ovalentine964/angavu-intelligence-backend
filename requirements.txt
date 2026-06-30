@@ -1,0 +1,51 @@
+# Msaidizi Backend - Python Dependencies
+# Core framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# Database
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.30.0
+alembic==1.13.3
+greenlet==3.1.1
+
+# Caching & Rate Limiting
+redis[hiredis]==5.1.1
+slowapi==0.1.9
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.12
+cryptography==43.0.1
+
+# Data Processing
+zstandard==0.23.0
+orjson==3.10.7
+numpy==2.1.2
+pandas==2.2.3
+scipy==1.14.1
+
+# HTTP Client
+httpx==0.27.2
+aiohttp==3.10.10
+
+# Validation & Serialization
+marshmallow==3.22.0
+
+# Logging & Monitoring
+structlog==24.4.0
+sentry-sdk[fastapi]==2.15.0
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0
+httpx==0.27.2
+
+# Utilities
+python-dotenv==1.0.1
+python-dateutil==2.9.0
+geopy==2.4.1

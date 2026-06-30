@@ -1,0 +1,26 @@
+version: "3.9"
+
+# Standalone docker-compose for running OpenWA independently
+# Use the root docker-compose.yml for the full stack
+
+services:
+  openwa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: msaidizi-openwa
+    restart: unless-stopped
+    environment:
+      OPENWA_PORT: "3000"
+      OPENWA_BACKEND_URL: http://host.docker.internal:8000
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:?Set OPENWA_WEBHOOK_SECRET in .env}
+      LOG_LEVEL: info
+    ports:
+      - "3000:3000"
+    volumes:
+      - openwa_data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  openwa_data:

@@ -1,0 +1,273 @@
+"""
+Msaidizi / Biashara AI — FastAPI Application
+
+Main entry point for the cloud backend. Sets up:
+- CORS middleware
+- Rate limiting
+- Exception handlers
+- API router with versioning (/api/v1/)
+- Health check endpoint
+- Database lifecycle events
+"""
+
+import logging
+import time
+import uuid
+from contextlib import asynccontextmanager
+
+import structlog
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from app.config import get_settings
+from app.db.database import close_db, init_db
+
+settings = get_settings()
+
+# Configure structured logging
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        structlog.dev.ConsoleRenderer() if settings.DEBUG else structlog.processors.JSONRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+logger = structlog.get_logger(__name__)
+
+# Rate limiter
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"],
+    storage_uri=settings.REDIS_URL,
+)
+
+
+# =========================================================================
+# Lifespan Events
+# =========================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifecycle management.
+
+    Startup: Initialize database, log configuration
+    Shutdown: Close database connections
+    """
+    # Startup
+    logger.info(
+        "application_starting",
+        app_name=settings.APP_NAME,
+        env=settings.APP_ENV,
+        debug=settings.DEBUG,
+    )
+    await init_db()
+    logger.info("database_initialized")
+
+    yield
+
+    # Shutdown
+    logger.info("application_shutting_down")
+    await close_db()
+    logger.info("database_connections_closed")
+
+
+# =========================================================================
+# Application Instance
+# =========================================================================
+
+
+app = FastAPI(
+    title="Msaidizi / Biashara AI",
+    description=(
+        "Intelligence platform for Kenya's informal economy. "
+        "Transforms raw transaction data from dukawallahs and mama mbogas "
+        "into actionable economic intelligence."
+    ),
+    version="0.1.0",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
+    lifespan=lifespan,
+)
+
+
+# =========================================================================
+# Middleware
+# =========================================================================
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Remaining"],
+)
+
+# Rate limiting
+app.state.limiter = limiter
+
+
+# Request ID middleware
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add unique request ID to every request for tracing."""
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request.state.request_id = request_id
+
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = f"{process_time:.4f}"
+
+    logger.info(
+        "request_completed",
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        process_time=round(process_time, 4),
+        request_id=request_id,
+    )
+
+    return response
+
+
+# =========================================================================
+# Exception Handlers
+# =========================================================================
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Handle rate limit exceeded errors."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "rate_limit_exceeded",
+            "message": "Too many requests. Please try again later.",
+            "retry_after": 60,
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with consistent format."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "http_error",
+            "status_code": exc.status_code,
+            "message": exc.detail,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions — log and return 500."""
+    logger.error(
+        "unhandled_exception",
+        error=str(exc),
+        path=request.url.path,
+        method=request.method,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "internal_server_error",
+            "message": "An unexpected error occurred. Please try again later.",
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+# =========================================================================
+# Health Check
+# =========================================================================
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """
+    Health check endpoint.
+
+    Returns basic application status. Used by:
+    - Docker health checks
+    - Load balancers
+    - Monitoring systems
+    """
+    return {
+        "status": "ok",
+        "service": "msaidizi-backend",
+        "version": "0.1.0",
+        "environment": settings.APP_ENV,
+    }
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint — redirects to docs in development."""
+    return {
+        "service": "Msaidizi / Biashara AI Backend",
+        "version": "0.1.0",
+        "docs": "/docs" if settings.DEBUG else None,
+        "health": "/health",
+    }
+
+
+# =========================================================================
+# API Routers
+# =========================================================================
+
+from app.api.auth import router as auth_router
+from app.api.sync import router as sync_router
+from app.api.reports import router as reports_router
+from app.api.intelligence import router as intelligence_router
+from app.api.whatsapp import router as whatsapp_router
+
+# Mount all API routers under versioned prefix
+app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
+app.include_router(reports_router, prefix=settings.API_V1_PREFIX)
+app.include_router(intelligence_router, prefix=settings.API_V1_PREFIX)
+app.include_router(whatsapp_router, prefix=settings.API_V1_PREFIX)
+
+
+# =========================================================================
+# Startup Banner
+# =========================================================================
+
+
+@app.on_event("startup")
+async def startup_banner():
+    """Print startup banner for visibility."""
+    logger.info("=" * 60)
+    logger.info("🇰🇪 Msaidizi / Biashara AI — Backend Starting")
+    logger.info(f"   Environment: {settings.APP_ENV}")
+    logger.info(f"   API Prefix:  {settings.API_V1_PREFIX}")
+    logger.info(f"   Debug:       {settings.DEBUG}")
+    logger.info("=" * 60)
