@@ -8,7 +8,7 @@ from .report_scheduler import ReportScheduler
 from .health_score import BusinessHealthScorer
 from .seasonal_analyzer import SeasonalAnalyzer
 from .comparison_engine import ComparisonEngine
-from .whatsapp_charts import WhatsAppCharts
+from .whatsapp_charts import BarChart, Sparkline, Heatmap, CashFlowDiagram, ProgressBar, TrendLine
 
 __all__ = [
     "ReportGenerator",
@@ -16,5 +16,10 @@ __all__ = [
     "BusinessHealthScorer",
     "SeasonalAnalyzer",
     "ComparisonEngine",
-    "WhatsAppCharts",
+    "BarChart",
+    "Sparkline",
+    "Heatmap",
+    "CashFlowDiagram",
+    "ProgressBar",
+    "TrendLine",
 ]

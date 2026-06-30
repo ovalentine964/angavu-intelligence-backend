@@ -725,7 +725,7 @@ class ReportGenerator:
 
         # Seasonal analysis
         seasonal_monthly = [
-            MonthlyData(year=m.year, month=m.month, revenue=m.total_sales, profit=m.total_profit)
+            MonthlyData(year=m.year, month=m.month, revenue=m.total_sales, profit=m.profit)
             for m in monthly_data_list
         ]
         seasonal_result = self.seasonal_analyzer.analyze(seasonal_monthly, lang)
@@ -952,7 +952,7 @@ class ReportGenerator:
 
     def _swahili_day_short(self, d: date) -> str:
         """Get short Swahili day name for a date."""
-        names = ["Jp", "Jt", "Jn", "Al", "Ij", "Js"]
+        names = ["Jp", "Jt", "Jn", "Al", "Ij", "Js", "Jp"]
         return names[d.weekday()]
 
     def _format_date(self, d: date, lang: str = "sw") -> str:
@@ -1500,7 +1500,7 @@ class ReportGenerator:
         return BusinessMetrics(
             total_revenue=total_sales,
             total_expenses=total_purchases,
-            total_profit=profit,
+            total_profit=total_profit,
             total_transactions=total_transactions,
             days_active=sum(m.active_days for m in monthly_data_list),
             days_in_period=len(monthly_data_list) * 30,
