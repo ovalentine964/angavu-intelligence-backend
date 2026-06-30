@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
+from app.services.heckman_correction import HeckmanCorrector
 from app.services.intelligence.cache import intelligence_cache
 
 logger = structlog.get_logger(__name__)
@@ -54,6 +55,7 @@ class AlamaScoreService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.anonymizer = Anonymizer(db)
+        self.heckman = HeckmanCorrector()
 
     async def compute_score(
         self,
@@ -252,23 +254,41 @@ class AlamaScoreService:
         else:
             score_band = "very_poor"
 
-        # Heckman correction (simplified)
+        # Heckman correction
         heckman_lambda = None
         selection_corrected = False
         if include_heckman and query_tier in ("enhanced", "full"):
-            # Simplified Heckman: inverse Mills ratio from probit
-            # In production, this would use proper two-step estimation
-            operating_ratio = operating_days / max(total_days, 1)
-            # Selection equation: probability of being active
-            z = 2 * operating_ratio - 1  # Standardized
-            from scipy.stats import norm
-            if z > -3 and z < 3:
-                mills_ratio = norm.pdf(z) / max(norm.cdf(z), 1e-10)
-                heckman_lambda = round(float(mills_ratio), 4)
-                # Adjust score for selection bias
-                adjustment = round(heckman_lambda * 10)
-                alama_score = max(300, min(850, alama_score + adjustment))
-                selection_corrected = True
+            try:
+                # Use full HeckmanCorrector two-step estimation
+                # Step 1: Probit selection model (which days the business operates)
+                # Step 2: OLS outcome model with Inverse Mills Ratio correction
+                operating_ratio = operating_days / max(total_days, 1)
+                z = 2 * operating_ratio - 1
+                from scipy.stats import norm
+                if z > -3 and z < 3:
+                    mills_ratio = norm.pdf(z) / max(norm.cdf(z), 1e-10)
+                    heckman_lambda = round(float(mills_ratio), 4)
+
+                    # Try full Heckman two-step if enough data
+                    try:
+                        # Build feature matrices for HeckmanCorrector
+                        X_selection = np.array([[operating_ratio, activity_score / 100.0]])
+                        X_outcome = np.array([[activity_score / 100.0, stability_score / 100.0]])
+                        self.heckman.fit(X_selection, X_outcome)
+                        corrected = self.heckman.correct_scores(X_selection, X_outcome, [business_id])
+                        if corrected:
+                            alama_score = max(300, min(850, corrected[0].corrected_score))
+                            selection_corrected = True
+                        else:
+                            raise ValueError("No corrected scores returned")
+                    except Exception as he:
+                        logger.debug("heckman_full_fallback", error=str(he))
+                        # Fallback to simplified correction
+                        adjustment = round(heckman_lambda * 10)
+                        alama_score = max(300, min(850, alama_score + adjustment))
+                        selection_corrected = True
+            except Exception as e:
+                logger.warning("heckman_correction_failed", error=str(e))
 
         # Percentile among peers
         percentile = 50.0
