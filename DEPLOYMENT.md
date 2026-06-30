@@ -1,329 +1,390 @@
-# Msaidizi Deployment Guide
+# Msaidizi Backend — Deployment Guide
+
+**Production deployment instructions for the Msaidizi cloud backend.**
+
+---
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Domain name (for production)
-- WhatsApp phone number for Msaidizi bot
-- SSL certificate (for production)
+- Docker 24+ and Docker Compose v2
+- A server with minimum 2 vCPUs, 4GB RAM
+- Domain name with DNS configured
+- SSL certificate (or use the included nginx + Let's Encrypt setup)
+
+---
 
 ## Quick Start (Development)
 
-### 1. Clone and Configure
+```bash
+# Clone the repository
+git clone https://github.com/ovalentine964/msaidizi-backend.git
+cd msaidizi-backend
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your settings
+nano .env
+
+# Start all services
+docker-compose up -d
+
+# Verify
+curl http://localhost:8000/api/v1/health
+```
+
+---
+
+## Environment Variables
+
+Create a `.env` file from the template:
 
 ```bash
-cd msaidizi-backend
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration:
-```bash
-# Generate a secure JWT secret
-JWT_SECRET=$(openssl rand -base64 32)
+### Required Variables
 
-# Set OpenWA API key
-OPENWA_API_KEY=$(openssl rand -base64 16)
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://user:pass@db:5432/msaidizi` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379/0` |
+| `JWT_SECRET` | JWT signing secret (min 32 chars) | Generate with `openssl rand -hex 32` |
+| `JWT_ALGORITHM` | JWT algorithm | `HS256` |
+| `JWT_EXPIRY_HOURS` | Token validity period | `168` (7 days) |
 
-# Set database password
-DB_PASSWORD=$(openssl rand -base64 16)
+### Optional Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SENTRY_DSN` | Sentry error tracking | None |
+| `OPENAI_API_KEY` | For AI-powered advice generation | None |
+| `WHATSAPP_API_TOKEN` | WhatsApp Business API token | None |
+| `ENCRYPTION_KEY` | AES-256-GCM key for data at rest | Auto-generated |
+| `LOG_LEVEL` | Logging verbosity | `INFO` |
+| `WORKERS` | Uvicorn worker count | `4` |
+| `CORS_ORIGINS` | Allowed CORS origins | `*` |
+
+---
+
+## Docker Compose Architecture
+
+The `docker-compose.yml` orchestrates 5 services:
+
+```
+┌─────────────────────────────────────────────────┐
+│                   nginx (port 80/443)            │
+│              Reverse proxy + SSL termination     │
+├─────────────────────────────────────────────────┤
+│                                                   │
+│  ┌──────────────┐  ┌──────────────┐              │
+│  │   FastAPI     │  │   Celery     │              │
+│  │  (port 8000)  │  │   Worker     │              │
+│  │  4 workers    │  │  Background  │              │
+│  └──────┬───────┘  └──────┬───────┘              │
+│         │                  │                      │
+│  ┌──────┴──────────────────┴───────┐              │
+│  │        PostgreSQL 15            │              │
+│  │        (port 5432)              │              │
+│  └─────────────────────────────────┘              │
+│                                                   │
+│  ┌─────────────────────────────────┐              │
+│  │        Redis 7                  │              │
+│  │   (cache + Celery broker)       │              │
+│  └─────────────────────────────────┘              │
+│                                                   │
+└─────────────────────────────────────────────────┘
 ```
 
-### 2. Start Services
+### Service Details
 
-```bash
-docker-compose up -d
-```
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `api` | Custom (Python 3.11) | 8000 | FastAPI application server |
+| `celery` | Custom (Python 3.11) | — | Background task processing |
+| `db` | postgres:15-alpine | 5432 | Primary database |
+| `redis` | redis:7-alpine | 6379 | Cache + message broker |
+| `nginx` | nginx:alpine | 80, 443 | Reverse proxy |
 
-This starts:
-- Backend API (port 3000)
-- OpenWA gateway (port 8080)
-- PostgreSQL database (port 5432)
-- Redis cache (port 6379)
-- Nginx reverse proxy (port 80)
-
-### 3. Initialize OpenWA
-
-```bash
-# Get QR code for WhatsApp Web
-curl http://localhost:8080/session/msaidizi/qr
-
-# Scan QR code with WhatsApp on your phone
-# Open WhatsApp → Settings → Linked Devices → Link a Device
-```
-
-### 4. Verify Setup
-
-```bash
-# Check health
-curl http://localhost:3000/health
-
-# Check OpenWA status
-curl http://localhost:8080/session/msaidizi/status
-```
+---
 
 ## Production Deployment
 
-### 1. Server Setup
+### Step 1: Server Setup
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
 # Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
 
 # Install Docker Compose
-sudo apt install docker-compose -y
+sudo apt install docker-compose-plugin -y
 
-# Create deployment directory
-sudo mkdir -p /opt/msaidizi
-sudo chown $USER:$USER /opt/msaidizi
+# Verify
+docker --version
+docker compose version
 ```
 
-### 2. Configure Environment
+### Step 2: Clone and Configure
 
 ```bash
+# Clone to production directory
+git clone https://github.com/ovalentine964/msaidizi-backend.git /opt/msaidizi
 cd /opt/msaidizi
 
-# Clone repository
-git clone <repository-url> .
+# Generate secure secrets
+echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
+echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+echo "DATABASE_URL=postgresql+asyncpg://msaidizi:$(openssl rand -hex 16)@db:5432/msaidizi" >> .env
+echo "REDIS_URL=redis://redis:6379/0" >> .env
+echo "JWT_ALGORITHM=HS256" >> .env
+echo "JWT_EXPIRY_HOURS=168" >> .env
+echo "LOG_LEVEL=WARNING" >> .env
+echo "WORKERS=4" >> .env
+echo "CORS_ORIGINS=https://msaidizi.biashara.ai" >> .env
 
-# Create production .env
-cat > .env << EOF
-NODE_ENV=production
-PORT=3000
-JWT_SECRET=$(openssl rand -base64 32)
-OPENWA_API_KEY=$(openssl rand -base64 16)
-OPENWA_SESSION_ID=msaidizi
-DB_PASSWORD=$(openssl rand -base64 16)
-ALLOWED_ORIGINS=https://msaidizi.app,https://api.msaidizi.app
-LOG_LEVEL=info
-EOF
+# Review and edit
+nano .env
 ```
 
-### 3. SSL Certificate
+### Step 3: SSL with Let's Encrypt
 
 ```bash
-# Install Certbot
+# Install certbot
 sudo apt install certbot -y
 
 # Get certificate
-sudo certbot certonly --standalone -d api.msaidizi.app
+sudo certbot certonly --standalone -d api.msaidizi.biashara.ai
 
-# Copy certificates
-sudo mkdir -p nginx/ssl
-sudo cp /etc/letsencrypt/live/api.msaidizi.app/fullchain.pem nginx/ssl/
-sudo cp /etc/letsencrypt/live/api.msaidizi.app/privkey.pem nginx/ssl/
+# Copy certs to nginx directory
+mkdir -p nginx/ssl
+sudo cp /etc/letsencrypt/live/api.msaidizi.biashara.ai/fullchain.pem nginx/ssl/
+sudo cp /etc/letsencrypt/live/api.msaidizi.biashara.ai/privkey.pem nginx/ssl/
 sudo chown -R $USER:$USER nginx/ssl/
 ```
 
-### 4. Update Nginx Configuration
-
-Edit `nginx/nginx.conf` to enable HTTPS:
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.msaidizi.app;
-
-    ssl_certificate /etc/nginx/ssl/fullchain.pem;
-    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    # ... rest of configuration
-}
-```
-
-### 5. Deploy
+### Step 4: Start Services
 
 ```bash
 # Build and start
-docker-compose -f docker-compose.yml up -d --build
+docker compose up -d --build
 
-# Check logs
-docker-compose logs -f
+# Run database migrations
+docker compose exec api alembic upgrade head
 
-# Verify
-curl https://api.msaidizi.app/health
+# Verify all services
+docker compose ps
+curl -f http://localhost:8000/api/v1/health
 ```
 
-### 6. Auto-renew SSL
+### Step 5: Set Up Auto-Renewal
 
 ```bash
-# Create renewal script
-cat > /opt/msaidizi/renew-ssl.sh << 'EOF'
-#!/bin/bash
-certbot renew
-cp /etc/letsencrypt/live/api.msaidizi.app/fullchain.pem /opt/msaidizi/nginx/ssl/
-cp /etc/letsencrypt/live/api.msaidizi.app/privkey.pem /opt/msaidizi/nginx/ssl/
-docker-compose restart nginx
-EOF
-
-chmod +x /opt/msaidizi/renew-ssl.sh
-
-# Add to crontab
-echo "0 0 1 * * /opt/msaidizi/renew-ssl.sh" | crontab -
+# Add certbot renewal cron
+echo "0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/api.msaidizi.biashara.ai/*.pem /opt/msaidizi/nginx/ssl/ && docker compose restart nginx" | sudo tee /etc/cron.d/msaidizi-ssl
 ```
+
+---
+
+## Database Management
+
+### Run Migrations
+
+```bash
+# Apply all pending migrations
+docker compose exec api alembic upgrade head
+
+# Create a new migration
+docker compose exec api alembic revision --autogenerate -m "description"
+
+# Rollback one migration
+docker compose exec api alembic downgrade -1
+```
+
+### Backup
+
+```bash
+# Manual backup
+docker compose exec db pg_dump -U msaidizi msaidizi > backup_$(date +%Y%m%d).sql
+
+# Restore
+cat backup_20260630.sql | docker compose exec -T db psql -U msaidizi msaidizi
+```
+
+### Automated Backups (Cron)
+
+```bash
+# Add to crontab
+echo "0 2 * * * cd /opt/msaidizi && docker compose exec -T db pg_dump -U msaidizi msaidizi | gzip > /opt/msaidizi/backups/backup_\$(date +\%Y\%m\%d).sql.gz" | sudo tee /etc/cron.d/msaidizi-backup
+
+# Create backup directory
+mkdir -p /opt/msaidizi/backups
+```
+
+---
 
 ## Monitoring
 
 ### Health Checks
 
 ```bash
-# Backend health
-curl https://api.msaidizi.app/health
+# API health
+curl http://localhost:8000/api/v1/health
 
-# OpenWA status
-curl https://api.msaidizi.app/api/v1/whatsapp/status
+# Database
+docker compose exec db pg_isready -U msaidizi
 
-# Database connection
-docker-compose exec postgres pg_isready
+# Redis
+docker compose exec redis redis-cli ping
+
+# Celery
+docker compose exec celery celery -A app.tasks inspect ping
 ```
 
 ### Logs
 
 ```bash
-# All logs
-docker-compose logs -f
+# All services
+docker compose logs -f
 
-# Backend logs only
-docker-compose logs -f backend
+# Specific service
+docker compose logs -f api
+docker compose logs -f celery
 
-# OpenWA logs only
-docker-compose logs -f openwa
-
-# PostgreSQL logs
-docker-compose logs -f postgres
+# Last 100 lines
+docker compose logs --tail 100 api
 ```
 
-### Backup
+### Resource Usage
 
 ```bash
-# Backup database
-docker-compose exec postgres pg_dump -U msaidizi msaidizi > backup_$(date +%Y%m%d).sql
-
-# Backup OpenWA session
-docker-compose exec openwa tar czf /tmp/session-backup.tar.gz /app/session-data
-docker cp msaidizi-openwa:/tmp/session-backup.tar.gz ./backup/session_$(date +%Y%m%d).tar.gz
+docker stats --no-stream
 ```
+
+---
 
 ## Scaling
 
-### Horizontal Scaling
+### Horizontal Scaling (API Workers)
 
 ```bash
-# Scale backend instances
-docker-compose up -d --scale backend=3
-
-# Update Nginx upstream
-# Edit nginx.conf to add more backend servers
+# Scale API to 3 instances
+docker compose up -d --scale api=3
 ```
 
-### Database Scaling
+Update nginx upstream config to include all instances.
 
-```bash
-# Add read replica
-docker-compose -f docker-compose.yml -f docker-compose.replica.yml up -d
-```
+### Vertical Scaling
 
-## Troubleshooting
+Edit `docker-compose.yml`:
 
-### OpenWA Not Connecting
-
-```bash
-# Check OpenWA status
-curl http://localhost:8080/session/msaidizi/status
-
-# Restart OpenWA
-docker-compose restart openwa
-
-# Get new QR code
-curl http://localhost:8080/session/msaidizi/qr
-```
-
-### Database Connection Issues
-
-```bash
-# Check PostgreSQL status
-docker-compose exec postgres pg_isready
-
-# Check database logs
-docker-compose logs postgres
-
-# Connect to database
-docker-compose exec postgres psql -U msaidizi msaidizi
-```
-
-### High Memory Usage
-
-```bash
-# Check container resources
-docker stats
-
-# Restart services
-docker-compose restart
-
-# Limit memory in docker-compose.yml
+```yaml
 services:
-  backend:
+  api:
     deploy:
       resources:
         limits:
-          memory: 512M
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 ```
 
-### Rate Limiting Issues
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Database connection refused:**
 
 ```bash
-# Check Nginx logs
-docker-compose logs nginx | grep "limiting"
+# Check if DB is running
+docker compose ps db
 
-# Adjust rate limits in nginx.conf
-# Increase limit_req_zone rate
+# Check DB logs
+docker compose logs db
+
+# Restart DB
+docker compose restart db
 ```
 
-## Maintenance
-
-### Update Dependencies
+**API returns 502:**
 
 ```bash
-# Pull latest images
-docker-compose pull
+# Check API is running
+docker compose ps api
+
+# Check API logs
+docker compose logs api
+
+# Restart API
+docker compose restart api
+```
+
+**Celery tasks not processing:**
+
+```bash
+# Check Celery is running
+docker compose ps celery
+
+# Check Redis connection
+docker compose exec redis redis-cli ping
+
+# Restart Celery
+docker compose restart celery
+```
+
+**Disk space full:**
+
+```bash
+# Clean Docker artifacts
+docker system prune -af --volumes
+
+# Check disk usage
+df -h
+du -sh /opt/msaidizi/backups/
+```
+
+---
+
+## Updating
+
+```bash
+cd /opt/msaidizi
+
+# Pull latest code
+git pull origin main
 
 # Rebuild and restart
-docker-compose up -d --build
+docker compose up -d --build
+
+# Run any new migrations
+docker compose exec api alembic upgrade head
+
+# Verify
+curl -f http://localhost:8000/api/v1/health
 ```
 
-### Clear Logs
-
-```bash
-# Clear old logs
-find /opt/msaidizi/logs -name "*.log" -mtime +30 -delete
-
-# Clear Docker logs
-sudo truncate -s 0 /var/lib/docker/containers/*/\*-json.log
-```
-
-### Database Maintenance
-
-```bash
-# Vacuum database
-docker-compose exec postgres vacuumdb -U msaidizi msaidizi
-
-# Analyze tables
-docker-compose exec postgres analyzedb -U msaidizi msaidizi
-```
+---
 
 ## Security Checklist
 
-- [ ] Change default passwords
-- [ ] Enable HTTPS
-- [ ] Set up firewall (allow only 80, 443)
-- [ ] Regular security updates
-- [ ] Monitor logs for suspicious activity
-- [ ] Backup database regularly
-- [ ] Test disaster recovery
-- [ ] Set up monitoring alerts
-- [ ] Review rate limiting settings
-- [ ] Audit API access logs
+- [ ] All secrets in `.env` (not in code)
+- [ ] SSL/TLS enabled on nginx
+- [ ] Database not exposed to public internet
+- [ ] Redis password set
+- [ ] Rate limiting enabled
+- [ ] CORS restricted to known origins
+- [ ] Regular security updates (`apt update`)
+- [ ] Backups tested and verified
+- [ ] Log rotation configured
+- [ ] Firewall configured (allow only 80, 443, SSH)
+
+---
+
+*Biashara AI Ltd — Proprietary*
