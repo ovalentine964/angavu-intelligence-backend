@@ -1,7 +1,5 @@
--- Msaidizi Database Schema
--- PostgreSQL / SQLite compatible
+-- Msaidizi Database Schema (PostgreSQL)
 
--- Users table
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -17,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- WhatsApp connections table
 CREATE TABLE IF NOT EXISTS whatsapp_connections (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL UNIQUE,
@@ -34,7 +31,6 @@ CREATE TABLE IF NOT EXISTS whatsapp_connections (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Verification records table
 CREATE TABLE IF NOT EXISTS verifications (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
@@ -55,21 +51,19 @@ CREATE TABLE IF NOT EXISTS verifications (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Transactions table (for reports)
 CREATE TABLE IF NOT EXISTS transactions (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
-    type VARCHAR(20) NOT NULL, -- 'sale', 'expense', 'refund'
+    type VARCHAR(20) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
     description TEXT,
     product_name VARCHAR(200),
     quantity INT DEFAULT 1,
-    payment_method VARCHAR(50), -- 'cash', 'mpesa', 'credit'
+    payment_method VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Products table
 CREATE TABLE IF NOT EXISTS products (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
@@ -83,7 +77,6 @@ CREATE TABLE IF NOT EXISTS products (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Daily summaries table (for faster report generation)
 CREATE TABLE IF NOT EXISTS daily_summaries (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
@@ -100,7 +93,6 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Weekly summaries table
 CREATE TABLE IF NOT EXISTS weekly_summaries (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
@@ -120,30 +112,25 @@ CREATE TABLE IF NOT EXISTS weekly_summaries (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- WhatsApp message log
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
     phone VARCHAR(20) NOT NULL,
-    direction VARCHAR(10) NOT NULL, -- 'inbound', 'outbound'
-    message_type VARCHAR(20) DEFAULT 'text', -- 'text', 'media', 'report'
+    direction VARCHAR(10) NOT NULL,
+    message_type VARCHAR(20) DEFAULT 'text',
     content TEXT,
     openwa_message_id VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'sent', -- 'sent', 'delivered', 'read', 'failed'
+    status VARCHAR(20) DEFAULT 'sent',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_connections_user_id ON whatsapp_connections(user_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_connections_phone ON whatsapp_connections(phone);
 CREATE INDEX IF NOT EXISTS idx_verifications_user_id ON verifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_verifications_status ON verifications(status);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_weekly_summaries_user_week ON weekly_summaries(user_id, week_start);
-CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_user_id ON whatsapp_messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_created_at ON whatsapp_messages(created_at);

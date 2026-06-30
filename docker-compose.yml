@@ -1,11 +1,8 @@
 version: '3.8'
 
 services:
-  # Msaidizi Backend API
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: msaidizi-backend
     ports:
       - "3000:3000"
@@ -19,15 +16,11 @@ services:
       - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
     volumes:
       - ./logs:/app/logs
-      - openwa-data:/app/openwa-data
     depends_on:
       - postgres
       - openwa
     restart: unless-stopped
-    networks:
-      - msaidizi-network
 
-  # OpenWA WhatsApp Gateway
   openwa:
     image: openwa/wa-automate:latest
     container_name: msaidizi-openwa
@@ -37,17 +30,10 @@ services:
       - PORT=8080
       - API_KEY=${OPENWA_API_KEY}
       - SESSION_ID=msaidizi
-      - WEB_VERSION_CACHE=REMOTE
-      - MAX_LOG_LEVEL=warn
     volumes:
       - openwa-data:/app/session-data
     restart: unless-stopped
-    networks:
-      - msaidizi-network
-    # OpenWA needs a display for QR code
-    # Use VNC or headless mode in production
 
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: msaidizi-postgres
@@ -61,10 +47,7 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
-    networks:
-      - msaidizi-network
 
-  # Redis (for caching and rate limiting)
   redis:
     image: redis:7-alpine
     container_name: msaidizi-redis
@@ -73,30 +56,8 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
-    networks:
-      - msaidizi-network
-
-  # Nginx Reverse Proxy (optional)
-  nginx:
-    image: nginx:alpine
-    container_name: msaidizi-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - msaidizi-network
 
 volumes:
   postgres-data:
   redis-data:
   openwa-data:
-
-networks:
-  msaidizi-network:
-    driver: bridge

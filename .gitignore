@@ -1,59 +1,21 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
+node_modules/
+npm-debug.log*
 .env
-.venv
-venv/
-ENV/
-env/
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-.tox/
-.coverage
-htmlcov/
-
-# Logs
+.env.local
+logs/
 *.log
-
-# IDEs
+dist/
+build/
+coverage/
 .idea/
 .vscode/
-*.swp
-*.swo
-*~
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Database
-*.sqlite3
+openwa-data/
+session-data/
+*.session.json
+docker-compose.override.yml
+tmp/
+temp/
+*.sqlite
 *.db
-
-# Secrets
-.env.local
-.env.production

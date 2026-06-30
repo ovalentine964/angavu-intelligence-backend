@@ -66,4 +66,4 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for production setup.
 
 ## License
 
-Proprietary — Biashara AI Ltd
+Proprietary — Biashara Intelligence

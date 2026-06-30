@@ -1,16 +1,6 @@
-/**
- * Verification Model
- * 
- * Represents a WhatsApp verification record.
- * In production, this would be stored in a database (MongoDB, PostgreSQL, etc.).
- */
-
 const { v4: uuidv4 } = require('uuid');
 
 class Verification {
-    /**
-     * Create a new verification record.
-     */
     static create({ phone, userId, userName, assistantName, language, reportTime }) {
         return {
             id: uuidv4(),
@@ -20,8 +10,8 @@ class Verification {
             assistantName,
             language: language || 'sw',
             reportTime: reportTime || 'evening',
-            code: Math.random().toString().slice(2, 6), // 4-digit code
-            status: 'pending', // pending, connected, expired
+            code: Math.random().toString().slice(2, 6),
+            status: 'pending',
             createdAt: Date.now(),
             connectedAt: null,
             whatsappId: null,
@@ -31,75 +21,32 @@ class Verification {
         };
     }
 
-    /**
-     * Check if verification is expired (5 minutes).
-     */
     static isExpired(verification) {
-        const maxAge = 5 * 60 * 1000; // 5 minutes
-        return (Date.now() - verification.createdAt) > maxAge;
+        return (Date.now() - verification.createdAt) > 5 * 60 * 1000;
     }
 
-    /**
-     * Mark verification as connected.
-     */
     static markConnected(verification, whatsappId) {
-        return {
-            ...verification,
-            status: 'connected',
-            connectedAt: Date.now(),
-            whatsappId: whatsappId || null
-        };
+        return { ...verification, status: 'connected', connectedAt: Date.now(), whatsappId: whatsappId || null };
     }
 
-    /**
-     * Mark verification as expired.
-     */
     static markExpired(verification) {
-        return {
-            ...verification,
-            status: 'expired'
-        };
+        return { ...verification, status: 'expired' };
     }
 
-    /**
-     * Increment attempt counter.
-     */
     static incrementAttempt(verification) {
-        return {
-            ...verification,
-            attempts: verification.attempts + 1,
-            lastAttemptAt: Date.now()
-        };
+        return { ...verification, attempts: verification.attempts + 1, lastAttemptAt: Date.now() };
     }
 
-    /**
-     * Mark delivery receipt received.
-     */
     static markDeliveryReceipt(verification) {
-        return {
-            ...verification,
-            deliveryReceiptReceived: true
-        };
+        return { ...verification, deliveryReceiptReceived: true };
     }
 
-    /**
-     * Verify code.
-     */
     static verifyCode(verification, code) {
         return verification.code === code;
     }
 
-    /**
-     * Get verification summary for logging.
-     */
     static getSummary(verification) {
-        return {
-            id: verification.id,
-            phone: verification.phone.replace(/(\d{4})\d{4}(\d{3})/, '$1****$2'),
-            userId: verification.userId,
-            status: verification.status,
-            age: Date.now() - verification.createdAt
-        };
+        return { id: verification.id, phone: verification.phone.replace(/(\d{4})\d{4}(\d{3})/, '$1****$2'), userId: verification.userId, status: verification.status, age: Date.now() - verification.createdAt };
     }
 }
 
