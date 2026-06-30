@@ -296,3 +296,170 @@ class BuyerQueryParams(BaseModel):
     )
     limit: int = Field(100, ge=1, le=1000)
     offset: int = Field(0, ge=0)
+
+
+# =========================================================================
+# Heckman Selection Correction Schemas
+# =========================================================================
+
+class HeckmanCorrectionRequest(BaseModel):
+    """Request for Heckman-corrected credit scores."""
+
+    market_id: Optional[str] = Field(
+        None, description="Geographic market filter"
+    )
+    lookback_days: int = Field(
+        90, ge=30, le=365,
+        description="Analysis window in days",
+    )
+    include_diagnostics: bool = Field(
+        False,
+        description="Include model diagnostics in response",
+    )
+    confidence_level: float = Field(
+        0.95, ge=0.80, le=0.99,
+        description="Confidence level for intervals",
+    )
+
+
+class CorrectedScoreResponse(BaseModel):
+    """A single bias-corrected credit score."""
+
+    business_hash: str = Field(
+        ..., description="Anonymized business identifier"
+    )
+    raw_score: float = Field(
+        ..., description="Score from naive (potentially biased) model"
+    )
+    corrected_score: float = Field(
+        ..., description="Score after Heckman selection correction"
+    )
+    bias_adjustment: float = Field(
+        ..., description="Difference: corrected - raw (positive = underestimated)"
+    )
+    confidence_interval: Dict[str, float] = Field(
+        ..., description="{lower, upper} 95% CI for corrected score"
+    )
+    selection_probability: float = Field(
+        ..., description="Estimated P(approval) from selection equation"
+    )
+    mills_ratio_contribution: float = Field(
+        ..., description="Inverse Mills ratio contribution to this prediction"
+    )
+    risk_category: str = Field(
+        ..., description="Risk classification: very_low, low, medium, high, very_high"
+    )
+    correction_applied: bool = Field(
+        ..., description="Whether Heckman correction was statistically significant"
+    )
+
+
+class HeckmanDiagnosticsResponse(BaseModel):
+    """Diagnostics for the Heckman selection model."""
+
+    selection_equation: Dict[str, Any] = Field(
+        ..., description="Probit selection equation parameters"
+    )
+    outcome_equation: Dict[str, Any] = Field(
+        ..., description="Corrected outcome equation parameters"
+    )
+    correction_summary: Dict[str, Any] = Field(
+        ..., description="Selection bias correction diagnostics"
+    )
+    sample_info: Dict[str, Any] = Field(
+        ..., description="Sample composition details"
+    )
+    confidence_intervals: Optional[Dict[str, Any]] = Field(
+        None, description="Parameter confidence intervals"
+    )
+
+
+class HeckmanCorrectionResponse(BaseModel):
+    """Response containing Heckman-corrected credit scores."""
+
+    scores: List[CorrectedScoreResponse]
+    diagnostics: Optional[HeckmanDiagnosticsResponse] = None
+    processing_time_ms: float
+    correction_method: str = "heckman_two_step"
+
+
+# =========================================================================
+# CUSUM Drift Detection Schemas
+# =========================================================================
+
+class DriftAlertResponse(BaseModel):
+    """A drift detection alert."""
+
+    timestamp: str = Field(..., description="ISO timestamp of alert")
+    direction: str = Field(
+        ..., description="Drift direction: degradation or improvement"
+    )
+    severity: str = Field(
+        ..., description="Alert severity: info, warning, critical"
+    )
+    cusum_value: float = Field(..., description="CUSUM statistic at detection")
+    threshold: float = Field(..., description="Threshold that was breached")
+    drift_magnitude_sigma: float = Field(
+        ..., description="Drift magnitude in standard deviation units"
+    )
+    metric_name: str
+    metric_value: float
+    baseline_value: float
+    samples_since_last_alert: int
+    recommendation: str
+
+
+class MetricStatusResponse(BaseModel):
+    """Status of a single monitored metric."""
+
+    metric_name: str
+    status: str = Field(
+        ..., description="stable, warning, drift_detected, retraining_required"
+    )
+    observations: int
+    alerts_total: int
+    samples_since_last_alert: int
+    cusum_upper: float
+    cusum_lower: float
+    threshold: float
+    baseline: Dict[str, Any]
+    recent_performance: Dict[str, Any]
+    drift_detected: bool
+    last_alert: Optional[DriftAlertResponse] = None
+
+
+class DriftStatusResponse(BaseModel):
+    """Overall drift monitoring status."""
+
+    overall_status: str = Field(
+        ..., description="stable, warning, drift_detected"
+    )
+    metrics_monitored: int
+    drift_detected_in_any: bool
+    metrics: Dict[str, MetricStatusResponse]
+    timestamp: str
+
+
+class DriftAlertsResponse(BaseModel):
+    """List of drift alerts."""
+
+    alerts: List[DriftAlertResponse]
+    total: int
+    limit: int
+
+
+class PerformanceTrendResponse(BaseModel):
+    """Performance trend analysis for a metric."""
+
+    status: str
+    window: int
+    current_value: Optional[float] = None
+    mean: Optional[float] = None
+    std: Optional[float] = None
+    min_val: Optional[float] = Field(None, alias="min")
+    max_val: Optional[float] = Field(None, alias="max")
+    trend: Optional[str] = None
+    trend_slope: Optional[float] = None
+    mean_z_score: Optional[float] = None
+    latest_z_score: Optional[float] = None
+    observations_outside_2sigma: Optional[int] = None
