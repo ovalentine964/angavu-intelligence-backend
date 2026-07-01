@@ -119,8 +119,14 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Device-ID", "X-OpenWA-Signature"],
     expose_headers=["X-Request-ID", "X-RateLimit-Remaining"],
+)
+
+# Trusted host middleware (prevents Host header attacks)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.CORS_ORIGINS if settings.is_production else ["*"],
 )
 
 # Rate limiting
@@ -222,7 +228,7 @@ async def health_check():
     """
     return {
         "status": "ok",
-        "service": "msaidizi-backend",
+        "service": "biashara-intelligence-backend",
         "version": "0.1.0",
         "environment": settings.APP_ENV,
     }

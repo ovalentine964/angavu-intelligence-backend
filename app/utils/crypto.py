@@ -62,7 +62,8 @@ def encrypt_value(plaintext: str) -> str:
     if not plaintext:
         return ""
 
-    key = settings.ENCRYPTION_KEY.encode()[:32].ljust(32, b"\0")
+    salt = os.urandom(16)
+    key = _derive_key(settings.ENCRYPTION_KEY, salt)
     nonce = os.urandom(12)  # 96-bit nonce for GCM
 
     cipher = Cipher(algorithms.AES(key), modes.GCM(nonce))
@@ -70,8 +71,8 @@ def encrypt_value(plaintext: str) -> str:
 
     ciphertext = encryptor.update(plaintext.encode()) + encryptor.finalize()
 
-    # Combine nonce + tag + ciphertext
-    combined = nonce + encryptor.tag + ciphertext
+    # Combine salt + nonce + tag + ciphertext
+    combined = salt + nonce + encryptor.tag + ciphertext
     return base64.b64encode(combined).decode()
 
 
@@ -91,12 +92,13 @@ def decrypt_value(encrypted: str) -> str:
     if not encrypted:
         return ""
 
-    key = settings.ENCRYPTION_KEY.encode()[:32].ljust(32, b"\0")
     combined = base64.b64decode(encrypted)
 
-    nonce = combined[:12]
-    tag = combined[12:28]
-    ciphertext = combined[28:]
+    salt = combined[:16]
+    key = _derive_key(settings.ENCRYPTION_KEY, salt)
+    nonce = combined[16:28]
+    tag = combined[28:44]
+    ciphertext = combined[44:]
 
     cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag))
     decryptor = cipher.decryptor()
@@ -188,11 +190,12 @@ def encrypt_payload(data: bytes) -> bytes:
     Returns:
         Encrypted bytes (base64-encoded internally by Fernet)
     """
-    key = settings.ENCRYPTION_KEY.encode()[:32].ljust(32, b"\0")
+    salt = os.urandom(16)
+    key = _derive_key(settings.ENCRYPTION_KEY, salt)
     # Fernet requires a URL-safe base64-encoded 32-byte key
     fernet_key = base64.urlsafe_b64encode(key)
     f = Fernet(fernet_key)
-    return f.encrypt(data)
+    return salt + f.encrypt(data)
 
 
 def decrypt_payload(encrypted_data: bytes) -> bytes:
@@ -208,10 +211,11 @@ def decrypt_payload(encrypted_data: bytes) -> bytes:
     Raises:
         InvalidToken: If decryption fails
     """
-    key = settings.ENCRYPTION_KEY.encode()[:32].ljust(32, b"\0")
+    salt = encrypted_data[:16]
+    key = _derive_key(settings.ENCRYPTION_KEY, salt)
     fernet_key = base64.urlsafe_b64encode(key)
     f = Fernet(fernet_key)
-    return f.decrypt(encrypted_data)
+    return f.decrypt(encrypted_data[16:])
 
 
 def generate_api_key() -> tuple[str, str, str]:

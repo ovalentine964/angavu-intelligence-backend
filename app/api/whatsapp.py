@@ -75,20 +75,25 @@ async def whatsapp_webhook(
     # Get raw body for signature validation
     body = await request.body()
 
-    # Validate HMAC signature
+    # Validate HMAC signature (fail-closed: always require valid signature)
     signature = request.headers.get("X-OpenWA-Signature")
-    if signature and settings.OPENWA_WEBHOOK_SECRET != "change-me":
-        expected = hmac.new(
-            settings.OPENWA_WEBHOOK_SECRET.encode(),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            logger.warning("whatsapp_webhook_invalid_signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature",
-            )
+    if not signature:
+        logger.warning("whatsapp_webhook_missing_signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing webhook signature",
+        )
+    expected = hmac.new(
+        settings.OPENWA_WEBHOOK_SECRET.encode(),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        logger.warning("whatsapp_webhook_invalid_signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook signature",
+        )
 
     # Parse payload
     try:

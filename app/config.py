@@ -84,37 +84,29 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def validate_jwt_secret(cls, v):
-        if v == "change-me-to-another-random-string":
-            import os
-            if os.getenv("APP_ENV") == "production":
-                raise ValueError("JWT_SECRET_KEY must be set to a unique secret in production")
+        if v.startswith("change-me"):
+            raise ValueError("JWT_SECRET_KEY must be set to a unique secret (got default)")
         return v
 
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v):
-        if v == "CHANGE_ME_IN_PRODUCTION":
-            import os
-            if os.getenv("APP_ENV") == "production":
-                raise ValueError("SECRET_KEY must be set to a unique secret in production")
+        if v.startswith("CHANGE_ME"):
+            raise ValueError("SECRET_KEY must be set to a unique secret (got default)")
         return v
 
     @field_validator("ENCRYPTION_KEY")
     @classmethod
     def validate_encryption_key(cls, v):
-        if v == "change-me-32-byte-key-for-aes-256":
-            import os
-            if os.getenv("APP_ENV") == "production":
-                raise ValueError("ENCRYPTION_KEY must be set in production")
+        if v.startswith("change-me"):
+            raise ValueError("ENCRYPTION_KEY must be set to a unique key (got default)")
         return v
 
     @field_validator("OPENWA_WEBHOOK_SECRET")
     @classmethod
     def validate_webhook_secret(cls, v):
         if v == "change-me":
-            import os
-            if os.getenv("APP_ENV") == "production":
-                raise ValueError("OPENWA_WEBHOOK_SECRET must be set in production")
+            raise ValueError("OPENWA_WEBHOOK_SECRET must be set (got default)")
         return v
 
     @property

@@ -2,22 +2,27 @@ version: '3.8'
 
 services:
   backend:
-    build: .
-    container_name: msaidizi-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: biashara-intelligence-backend
     ports:
-      - "3000:3000"
+      - "8000:8000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      - APP_ENV=production
+      - PORT=8000
       - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
+      - REDIS_URL=redis://redis:6379/0
       - OPENWA_API_URL=http://openwa:8080
       - OPENWA_API_KEY=${OPENWA_API_KEY}
       - OPENWA_SESSION_ID=msaidizi
-      - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
     volumes:
       - ./logs:/app/logs
     depends_on:
       - postgres
+      - redis
       - openwa
     restart: unless-stopped
 
@@ -44,15 +49,12 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-    ports:
-      - "5432:5432"
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     container_name: msaidizi-redis
-    ports:
-      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
     restart: unless-stopped
