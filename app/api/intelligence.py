@@ -12,7 +12,7 @@ All responses enforce:
 """
 
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import numpy as np
@@ -339,7 +339,7 @@ async def get_demand_patterns(
             "k_anonymity": k,
             "quality_score": 1.0,
         },
-        "data_freshness": datetime.utcnow().isoformat(),
+        "data_freshness": datetime.now(timezone.utc).isoformat(),
         "confidence_level": min(1.0, len(transactions) / 100),
     }
 
@@ -515,7 +515,7 @@ async def get_economic_activity(
         },
         "sector_breakdown": sector_breakdown,
         "mpesa_penetration_pct": round(mpesa_pct, 1),
-        "data_freshness": datetime.utcnow().isoformat(),
+        "data_freshness": datetime.now(timezone.utc).isoformat(),
         "confidence_level": min(1.0, len(sales) / 100),
         "users_contributing": user_count,
     }

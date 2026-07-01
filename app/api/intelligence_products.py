@@ -51,6 +51,7 @@ from app.services.intelligence.pricing import (
     ALAMA_QUERY_PRICES,
     DISTRIBUTION_GAP_ONE_TIME,
     DISTRIBUTION_MONITORING_MONTHLY_KES,
+    DISTRIBUTION_MONITORING_MONTHLY_USD,
     calculate_monthly_cost,
     get_product_pricing,
 )

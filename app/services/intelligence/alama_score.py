@@ -272,9 +272,12 @@ class AlamaScoreService:
                     # Try full Heckman two-step if enough data
                     try:
                         # Build feature matrices for HeckmanCorrector
-                        X_selection = np.array([[operating_ratio, activity_score / 100.0]])
+                        # selection_indicator: 1 for active days, 0 for inactive
+                        active_day_indicators = np.array([1] * len(transactions))
+                        X_selection = np.array([[operating_ratio, activity_score / 100.0]] * len(transactions))
                         X_outcome = np.array([[activity_score / 100.0, stability_score / 100.0]])
-                        self.heckman.fit(X_selection, X_outcome)
+                        y_outcome = np.array([alama_score / 850.0])
+                        self.heckman.fit(X_selection, active_day_indicators, X_outcome, y_outcome)
                         corrected = self.heckman.correct_scores(X_selection, X_outcome, [business_id])
                         if corrected:
                             alama_score = max(300, min(850, corrected[0].corrected_score))

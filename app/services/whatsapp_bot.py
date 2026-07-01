@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.user import User
 from app.services.report_gen import ReportGenerator
+from app.utils.crypto import decrypt_value
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -638,7 +639,7 @@ class WhatsAppBot:
         sent = 0
         for user in users:
             try:
-                phone = user.phone_encrypted  # Would need decryption
+                phone = decrypt_value(user.phone_encrypted)
                 report = await self.report_gen.generate_daily_report(user)
                 message = self._format_daily_report(report, user.language or "sw")
                 if await self.send_message(phone, message):

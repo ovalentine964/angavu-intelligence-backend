@@ -6,7 +6,7 @@ and the cloud backend. The device sends compressed, encrypted payloads
 that get decompressed, decrypted, validated, and stored.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -157,6 +157,6 @@ class SyncResponse(BaseModel):
         description="Recommended seconds until next sync",
     )
     server_time: datetime = Field(
-        default_factory=lambda: datetime.utcnow(),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Current server time for clock sync",
     )
