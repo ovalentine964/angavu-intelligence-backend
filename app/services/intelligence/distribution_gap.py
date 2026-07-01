@@ -1,6 +1,53 @@
 """
 Distribution Gap Analysis — FMCG Market Coverage Service.
 
+Theoretical Foundations (Valentine's BSc Economics & Statistics):
+
+PRIMARY UNITS:
+- ECO 422 (Economics of Industry): Market structure analysis — Herfindahl-
+  Hirschman Index (HHI = Σsᵢ²) for market concentration, barriers to
+  entry (structural, strategic, legal), spatial competition models
+  (Hotelling's linear city), contestable markets theory (Baumol),
+  price discrimination detection, market power measurement
+- ECO 210 (Quantitative Methods): Linear programming for optimal
+  distribution routing, optimization under constraints (budget, capacity,
+  perishability), break-even analysis for market entry, calculus-based
+  marginal analysis for expansion decisions
+
+SUPPORTING UNITS:
+- ECO 201 (Intermediate Microeconomics): Spatial price analysis, market
+  integration testing, supply-demand equilibrium across markets,
+  consumer/producer surplus calculation for gap markets
+- STA 444 (Non-Parametric Methods): Kernel density estimation for market
+  coverage distributions, non-parametric regression for demand curves,
+  bootstrap confidence intervals for revenue potential estimates
+- ECO 305 (International Economics): Gravity model of trade (Trade_ij =
+  A × GDP_i × GDP_j / Distance_ij^β) for cross-border distribution
+  gap analysis, comparative advantage for product-market matching
+- STA 442 (Applied Multivariate Analysis): Market clustering (K-means)
+  for market segmentation, PCA for market similarity analysis
+
+Data Flow: Transaction Data → Market Geolocation → Spatial Analysis
+  (ECO 422) → Coverage Estimation (STA 444) → Gap Identification →
+  Revenue Potential (ECO 210) → Expansion Recommendations
+
+Key Economic Concepts:
+- Market Structure: Kenya's informal food market is monopolistically
+  competitive (many mama mbogas, differentiated by location/quality).
+  Distribution gap analysis identifies where competition is insufficient.
+- Spatial Competition (Hotelling): Firms choose locations to differentiate.
+  Distribution gaps exist where no firm has chosen to locate — the
+  analysis identifies these underserved locations.
+- Contestable Markets (Baumol): Even monopolies behave competitively if
+  entry is threatless. Distribution gaps represent opportunities for
+  competitive entry.
+- Barriers to Entry: Financial barriers (capital requirements) are the
+  primary obstacle in informal markets. Alama Score addresses this;
+  Distribution Gap identifies where to deploy capital.
+- Network Effects: More traders in a market → more buyers → more traders.
+  Distribution gaps break this virtuous cycle. Filling gaps creates
+  positive externalities for the entire market ecosystem.
+
 Identifies where products are NOT reaching:
 - Underserved market identification
 - Coverage and penetration analysis

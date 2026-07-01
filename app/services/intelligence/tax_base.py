@@ -1,6 +1,52 @@
 """
 Tax Base Estimation — Government Revenue Service.
 
+Theoretical Foundations (Valentine's BSc Economics & Statistics):
+
+PRIMARY UNITS:
+- ECO 421 (Public Finance and Fiscal Policy): Tax incidence analysis
+  (who bears the burden — consumer share = εˢ/(εˢ-εᵈ)), deadweight loss
+  calculation (DWL = ½·t²·ε·Q₀/P₀), optimal taxation (Ramsey rule:
+  tax rate inversely proportional to demand elasticity), Mirrlees optimal
+  income tax (equity vs efficiency), VAT theory, fiscal decentralization
+  (Kenya's 47 counties), government budget constraint
+- ECO 203 (Economic Statistics): Index number construction for revenue
+  tracking (Laspeyres, Paasche, Fisher), regression for tax elasticity
+  estimation, time series for revenue forecasting
+
+SUPPORTING UNITS:
+- ECO 422 (Economics of Industry): Market structure and tax compliance
+  (different sectors have different compliance rates), industry-specific
+  tax profiles, barriers to formalization
+- STA 442 (Applied Multivariate Analysis): Sector clustering for tax
+  policy design, revenue decomposition by multiple dimensions
+- ECO 414/424 (Econometrics): Regression models for tax elasticity,
+  causal inference for tax policy impact evaluation
+- STA 341 (Theory of Estimation): Bayesian estimation of tax compliance
+  rates with limited data, bootstrap confidence intervals for revenue
+  estimates
+
+Data Flow: Transaction Data → Sector Classification → Revenue
+  Estimation (ECO 203) → Tax Incidence Analysis (ECO 421) →
+  Compliance Modeling → Tax Base Report
+
+Key Economic Concepts:
+- Tax Incidence: The more inelastic side bears more of the tax burden.
+  For Kenya's informal markets, supply is inelastic (farmers can't
+  easily change production) → producers bear most VAT burden.
+- Ramsey Rule: Tax goods inversely proportional to their demand elasticity.
+  Necessities (inelastic) should be taxed more — but this is regressive.
+  Kenya's VAT exemptions on basic foods reflect this tradeoff.
+- Laffer Curve: There's a revenue-maximizing tax rate. For Kenya's
+  informal sector, current compliance is ~3-5% — well below the
+  Laffer peak. Biashara Intelligence can help identify the optimal rate.
+- Fiscal Decentralization: Kenya's 47 counties receive ~15% of national
+  revenue. Biashara Intelligence provides county-level tax base data
+  for evidence-based revenue allocation.
+- Deadweight Loss: Taxes distort behavior. The DWL from taxing informal
+  workers can be measured using Soko Pulse price data before/after
+  tax changes.
+
 Estimated tax liability for informal businesses:
 - VAT collection potential by sector/region
 - Tax gap analysis
