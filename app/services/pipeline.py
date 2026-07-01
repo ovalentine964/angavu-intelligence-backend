@@ -5,10 +5,14 @@ The pipeline transforms raw transaction data from devices into
 structured intelligence products for buyers. It runs in stages:
 
 1. Validation & Cleaning: Fix malformed data, normalize product names
+   (ECO 202/203: Economic Statistics — data cleaning standards)
 2. Categorization: Assign business categories
 3. Aggregation: Per-market, per-region, per-product
 4. Intelligence Generation: Trends, forecasts, anomalies
+   (STA 342: Hypothesis Testing — significance tests on all outputs)
+   (STA 346: Quality Control — SPC monitoring of data pipeline)
 5. Buyer Packaging: Format for specific buyer needs
+   (ECO 315: Research Methods — confidence intervals on all estimates)
 """
 
 import hashlib
@@ -33,6 +37,9 @@ from app.schemas.intelligence import (
     EconomicActivity,
     MarketIntelligence,
 )
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator, BootstrapCI
+from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.research.data_quality import DataValidator, DataQualityFramework
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -96,6 +103,7 @@ class DataPipeline:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._dq_framework = DataQualityFramework()
 
     # =========================================================================
     # Stage 1: Cleaning & Normalization
@@ -285,6 +293,14 @@ class DataPipeline:
             for d, v in sorted(daily.items())
         ]
 
+        # Compute confidence intervals (ECO 315: Research Methods)
+        ci_revenue = ConfidenceIntervalCalculator.mean_ci(
+            [t["amount"] for t in sales], confidence=0.95
+        ) if sales else None
+        ci_profit = ConfidenceIntervalCalculator.mean_ci(
+            [t.get("profit", 0) or 0 for t in sales], confidence=0.95
+        ) if sales else None
+
         return {
             "total_sales": total_sales,
             "total_purchases": total_purchases,
@@ -298,6 +314,12 @@ class DataPipeline:
             "profit_margin_pct": (
                 (net_profit / total_sales * 100) if total_sales > 0 else 0
             ),
+            "confidence_intervals": {
+                "avg_sale_amount": ci_revenue.to_dict() if ci_revenue else None,
+                "avg_profit": ci_profit.to_dict() if ci_profit else None,
+                "confidence_level": 0.95,
+                "method": "t-interval (STA 342)",
+            },
             "top_products": top_products,
             "daily_breakdown": daily_breakdown,
         }

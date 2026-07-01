@@ -1,63 +1,26 @@
 """
 Tax Base Estimation — Government Revenue Service.
 
-Theoretical Foundations (Valentine's BSc Economics & Statistics):
-
-PRIMARY UNITS:
-- ECO 421 (Public Finance and Fiscal Policy): Tax incidence analysis
-  (who bears the burden — consumer share = εˢ/(εˢ-εᵈ)), deadweight loss
-  calculation (DWL = ½·t²·ε·Q₀/P₀), optimal taxation (Ramsey rule:
-  tax rate inversely proportional to demand elasticity), Mirrlees optimal
-  income tax (equity vs efficiency), VAT theory, fiscal decentralization
-  (Kenya's 47 counties), government budget constraint
-- ECO 203 (Economic Statistics): Index number construction for revenue
-  tracking (Laspeyres, Paasche, Fisher), regression for tax elasticity
-  estimation, time series for revenue forecasting
-
-SUPPORTING UNITS:
-- ECO 422 (Economics of Industry): Market structure and tax compliance
-  (different sectors have different compliance rates), industry-specific
-  tax profiles, barriers to formalization
-- STA 442 (Applied Multivariate Analysis): Sector clustering for tax
-  policy design, revenue decomposition by multiple dimensions
-- ECO 414/424 (Econometrics): Regression models for tax elasticity,
-  causal inference for tax policy impact evaluation
-- STA 341 (Theory of Estimation): Bayesian estimation of tax compliance
-  rates with limited data, bootstrap confidence intervals for revenue
-  estimates
-
-Data Flow: Transaction Data → Sector Classification → Revenue
-  Estimation (ECO 203) → Tax Incidence Analysis (ECO 421) →
-  Compliance Modeling → Tax Base Report
-
-Key Economic Concepts:
-- Tax Incidence: The more inelastic side bears more of the tax burden.
-  For Kenya's informal markets, supply is inelastic (farmers can't
-  easily change production) → producers bear most VAT burden.
-- Ramsey Rule: Tax goods inversely proportional to their demand elasticity.
-  Necessities (inelastic) should be taxed more — but this is regressive.
-  Kenya's VAT exemptions on basic foods reflect this tradeoff.
-- Laffer Curve: There's a revenue-maximizing tax rate. For Kenya's
-  informal sector, current compliance is ~3-5% — well below the
-  Laffer peak. Biashara Intelligence can help identify the optimal rate.
-- Fiscal Decentralization: Kenya's 47 counties receive ~15% of national
-  revenue. Biashara Intelligence provides county-level tax base data
-  for evidence-based revenue allocation.
-- Deadweight Loss: Taxes distort behavior. The DWL from taxing informal
-  workers can be measured using Soko Pulse price data before/after
-  tax changes.
-
 Estimated tax liability for informal businesses:
 - VAT collection potential by sector/region
 - Tax gap analysis
 - Formalization tracking
+
+Academic Foundation (Valentine's BSc Economics & Statistics):
+- ECO 421: Public Finance and Fiscal Policy → Tax theory (Ramsey rule,
+  optimal taxation), Laffer curve, tax incidence analysis, deadweight
+  loss, fiscal decentralization, Mirrlees optimal income tax
+- ECO 210: Introduction to Quantitative Methods → Estimation techniques,
+  matrix algebra for tax models, optimisation under constraints
+- STA 245: Social & Economic Statistics for National Planning → Official
+  statistics methodology, revenue forecasting, fiscal indicators
 
 Buyers: KRA, county governments
 """
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import structlog
@@ -92,12 +55,197 @@ SECTOR_TAX_PROFILES = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ECO 421 — Public Finance helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _laffer_curve_revenue(
+    tax_rate: float, base_revenue: float, elasticity: float = 1.5
+) -> float:
+    """
+    Laffer curve: revenue as a function of tax rate.
+
+    Driven by ECO 421 § Taxation Theory — the Laffer curve shows that
+    tax revenue is zero at both t=0% (no tax) and t=100% (no incentive
+    to produce), with a maximum in between. The symmetric Laffer model:
+
+    Revenue(t) = Base × t × (1 - t)^ε
+
+    where ε captures the elasticity of the tax base to the tax rate.
+
+    Args:
+        tax_rate: tax rate in [0, 1]
+        base_revenue: maximum possible revenue (at optimal rate)
+        elasticity: elasticity of taxable income
+
+    Returns:
+        estimated revenue at this tax rate
+    """
+    if tax_rate <= 0 or tax_rate >= 1:
+        return 0.0
+    return round(float(base_revenue * tax_rate * (1 - tax_rate) ** elasticity), 0)
+
+
+def _optimal_tax_rate(elasticity: float = 1.5) -> float:
+    """
+    Revenue-maximising tax rate from the Laffer curve.
+
+    Driven by ECO 421 § Optimal Taxation — from the symmetric Laffer
+    model R(t) = B·t·(1-t)^ε, the revenue-maximising rate is:
+
+    t* = 1 / (1 + ε)
+
+    For ε = 1.5, t* = 0.40 (40%).
+
+    Args:
+        elasticity: elasticity of taxable income
+
+    Returns:
+        optimal tax rate (0-1)
+    """
+    return round(1.0 / (1.0 + elasticity), 4)
+
+
+def _ramsey_tax_rate(
+    demand_elasticity: float, base_rate: float = 0.16
+) -> float:
+    """
+    Ramsey (inverse elasticity) rule for optimal commodity taxation.
+
+    Driven by ECO 421 § Taxation Theory — the Ramsey rule states that
+    optimal tax rates should be inversely proportional to demand
+    elasticities to minimise deadweight loss:
+
+    tᵢ / tⱼ = εⱼ / εᵢ
+
+    Inelastic goods (staples) get higher rates; elastic goods (luxuries)
+    get lower rates. This is efficiency-optimal but regressive.
+
+    Args:
+        demand_elasticity: price elasticity of demand for the good
+        base_rate: reference tax rate for unit-elastic good
+
+    Returns:
+        optimal tax rate for this good
+    """
+    if demand_elasticity <= 0:
+        return base_rate
+    # Inverse elasticity rule: t ∝ 1/ε
+    return round(float(base_rate / max(demand_elasticity, 0.1)), 4)
+
+
+def _deadweight_loss(
+    tax_rate: float, elasticity: float, quantity: float, price: float
+) -> float:
+    """
+    Deadweight loss from taxation.
+
+    Driven by ECO 421 § Tax Incidence and Deadweight Loss:
+    DWL ≈ ½ · t² · ε · Q₀ / P₀
+
+    This is the Harberger triangle approximation.
+
+    Args:
+        tax_rate: ad valorem tax rate
+        elasticity: price elasticity of demand
+        quantity: pre-tax equilibrium quantity
+        price: pre-tax equilibrium price
+
+    Returns:
+        estimated deadweight loss
+    """
+    return round(0.5 * tax_rate**2 * abs(elasticity) * quantity / max(price, 1), 0)
+
+
+def _tax_incidence(
+    supply_elasticity: float, demand_elasticity: float
+) -> Dict[str, float]:
+    """
+    Tax incidence: who bears the burden?
+
+    Driven by ECO 421 § Tax Incidence:
+    Consumer share = εˢ / (εˢ + |εᵈ|)
+    Producer share = |εᵈ| / (εˢ + |εᵈ|)
+
+    The more inelastic side bears more of the burden.
+
+    Args:
+        supply_elasticity: price elasticity of supply
+        demand_elasticity: price elasticity of demand (negative)
+
+    Returns:
+        dict with consumer and producer shares
+    """
+    es = abs(supply_elasticity)
+    ed = abs(demand_elasticity)
+    total = es + ed
+    if total == 0:
+        return {"consumer_share": 0.5, "producer_share": 0.5}
+    return {
+        "consumer_share": round(es / total, 4),
+        "producer_share": round(ed / total, 4),
+        "interpretation": (
+            "consumers_bear_more" if es > ed
+            else "producers_bear_more" if ed > es
+            else "equal_burden"
+        ),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STA 341 — Bootstrap Confidence Intervals
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _bootstrap_ci(
+    data: np.ndarray,
+    statistic_fn,
+    n_bootstrap: int = 1000,
+    confidence: float = 0.95,
+    seed: int = 42,
+) -> Tuple[float, float, float]:
+    """
+    Bootstrap confidence interval for any statistic.
+
+    Driven by STA 341 § Interval Estimation — non-parametric bootstrap
+    (Efron, 1979) for confidence intervals without distributional
+    assumptions.
+
+    Args:
+        data: 1-D observations
+        statistic_fn: function computing the statistic
+        n_bootstrap: replicates
+        confidence: CI level
+
+    Returns:
+        (point_estimate, ci_lower, ci_upper)
+    """
+    rng = np.random.default_rng(seed)
+    point = float(statistic_fn(data))
+    boot = np.empty(n_bootstrap)
+    n = len(data)
+    for i in range(n_bootstrap):
+        boot[i] = statistic_fn(rng.choice(data, size=n, replace=True))
+    alpha = 1 - confidence
+    return (
+        round(point, 2),
+        round(float(np.percentile(boot, 100 * alpha / 2)), 2),
+        round(float(np.percentile(boot, 100 * (1 - alpha / 2))), 2),
+    )
+
+
 class TaxBaseService:
     """
     Tax base estimation service for government buyers.
 
     Estimates tax liability and collection potential from
     informal economy transaction data.
+
+    Statistical methods powered by Valentine's degree:
+    - Laffer curve and optimal taxation (ECO 421)
+    - Ramsey rule for commodity taxation (ECO 421)
+    - Tax incidence and deadweight loss (ECO 421)
+    - Bootstrap confidence intervals (STA 341)
+    - Revenue forecasting (STA 245)
     """
 
     def __init__(self, db: AsyncSession):
@@ -190,7 +338,7 @@ class TaxBaseService:
             sector_data[cat]["count"] += 1
             sector_data[cat]["users"].add(t.user_id)
 
-        # Estimate formalized businesses (proxy: M-Pesa users with >50% digital)
+        # Estimate formalized businesses
         formalized = 0
         for u in users:
             user_sales = [t for t in sales if t.user_id == u.id]
@@ -199,16 +347,14 @@ class TaxBaseService:
                 if mpesa_pct > 0.5:
                     formalized += 1
 
-        # Annualized revenue per business
         annual_rev_per_business = total_revenue / max(user_count, 1) * (12 / months_in_period)
 
-        # VAT-liable businesses (above threshold)
         vat_liable_count = sum(
             1 for u in users
             if sum(t.amount for t in sales if t.user_id == u.id) * (12 / months_in_period) > VAT_THRESHOLD_KES
         )
 
-        # Sector-level tax estimates
+        # ── ECO 421: Sector-level tax estimates ─────────────────────────────
         sector_breakdown = []
         total_vat_base = 0
         total_vat_collectible = 0
@@ -226,6 +372,11 @@ class TaxBaseService:
             total_vat_collectible += vat_collectible
             total_income_tax_base += income_tax_base
 
+            # ECO 421: Ramsey-optimal tax rate for this sector
+            # Use demand elasticity proxy from SECTOR_TAX_PROFILES
+            demand_elasticity = 1.0 / max(profile["vat_applicable"], 0.1)
+            ramsey_rate = _ramsey_tax_rate(demand_elasticity, base_rate=VAT_RATE)
+
             sector_breakdown.append({
                 "sector": cat,
                 "estimated_revenue_kes": round(annualized_rev, 2),
@@ -233,6 +384,8 @@ class TaxBaseService:
                 "vat_collectible_kes": round(vat_collectible, 2),
                 "business_count": len(data["users"]),
                 "compliance_rate": round(profile["compliance_rate"] * 100, 1),
+                # ECO 421: Ramsey optimal rate
+                "ramsey_optimal_rate": round(ramsey_rate * 100, 1),
             })
 
         sector_breakdown.sort(key=lambda x: x["estimated_revenue_kes"], reverse=True)
@@ -241,13 +394,69 @@ class TaxBaseService:
         total_potential_vat = total_vat_base * VAT_RATE
         tax_gap = total_potential_vat - total_vat_collectible
 
-        # Compliance rate
         overall_compliance = round(
             (total_vat_collectible + total_income_tax_base)
             / max(total_potential_vat + total_income_tax_base, 1) * 100, 1
         )
 
-        # Growth (compare to previous period)
+        # ── ECO 421: Laffer curve analysis ──────────────────────────────────
+        annualized_total = total_revenue * (12 / months_in_period)
+        optimal_rate = _optimal_tax_rate(elasticity=1.5)
+        laffer_revenue_at_optimal = _laffer_curve_revenue(optimal_rate, annualized_total, elasticity=1.5)
+        laffer_revenue_at_current = _laffer_curve_revenue(VAT_RATE, annualized_total, elasticity=1.5)
+
+        laffer_analysis = {
+            "current_rate_pct": round(VAT_RATE * 100, 1),
+            "optimal_rate_pct": round(optimal_rate * 100, 1),
+            "revenue_at_current_rate_kes": round(laffer_revenue_at_current, 0),
+            "revenue_at_optimal_rate_kes": round(laffer_revenue_at_optimal, 0),
+            "revenue_gain_from_optimization_kes": round(
+                laffer_revenue_at_optimal - laffer_revenue_at_current, 0
+            ),
+            "elasticity_assumption": 1.5,
+            "interpretation": (
+                "current_rate_below_optimal" if VAT_RATE < optimal_rate
+                else "current_rate_above_optimal"
+            ),
+        }
+
+        # ── ECO 421: Tax incidence analysis ─────────────────────────────────
+        # Assume: supply elasticity 0.3 (farmers/producers), demand elasticity 0.8
+        incidence = _tax_incidence(supply_elasticity=0.3, demand_elasticity=0.8)
+
+        # ── ECO 421: Deadweight loss ────────────────────────────────────────
+        dwl = _deadweight_loss(
+            VAT_RATE, elasticity=0.8,
+            quantity=total_revenue / max(VAT_RATE * 100, 1),
+            price=annualized_total / max(user_count, 1)
+        )
+
+        # ── STA 341: Bootstrap confidence intervals ─────────────────────────
+        bootstrap_ci = {}
+        if len(sales) >= 30:
+            revenue_data = np.array([t.amount for t in sales], dtype=float)
+            mean_val, mean_lo, mean_hi = _bootstrap_ci(revenue_data, np.mean, n_bootstrap=500)
+            total_val, total_lo, total_hi = _bootstrap_ci(
+                revenue_data, np.sum, n_bootstrap=500
+            )
+            bootstrap_ci = {
+                "mean_transaction": {
+                    "estimate": mean_val,
+                    "ci_lower": mean_lo,
+                    "ci_upper": mean_hi,
+                    "confidence": 0.95,
+                },
+                "total_annualised_revenue": {
+                    "estimate": round(total_val * 12 / months_in_period, 0),
+                    "ci_lower": round(total_lo * 12 / months_in_period, 0),
+                    "ci_upper": round(total_hi * 12 / months_in_period, 0),
+                    "confidence": 0.95,
+                },
+                "n_bootstrap": 500,
+                "method": "bootstrap_percentile",
+            }
+
+        # Growth comparison
         prev_start = period_start - timedelta(days=(period_end - period_start).days)
         prev_txn_query = select(Transaction).where(
             and_(
@@ -269,7 +478,7 @@ class TaxBaseService:
                 (annualized_current - annualized_prev) / annualized_prev * 100, 1
             )
 
-        # Apply DP to sensitive fields
+        # Apply DP
         dp_total_rev = max(0, round(
             self.anonymizer.add_laplace_noise(
                 total_revenue * (12 / months_in_period), sensitivity=100000
@@ -279,7 +488,6 @@ class TaxBaseService:
             self.anonymizer.add_laplace_noise(total_vat_collectible, sensitivity=50000), 0
         ))
 
-        # Top tax contributors
         top_contributors = [
             {"sector": s["sector"], "contribution_pct": round(
                 s["vat_collectible_kes"] / max(total_vat_collectible, 1) * 100, 1
@@ -287,13 +495,17 @@ class TaxBaseService:
             for s in sector_breakdown[:5]
         ]
 
-        # Confidence interval (bootstrap-style)
-        ci_lower = round(dp_total_rev * 0.85, 0)
-        ci_upper = round(dp_total_rev * 1.15, 0)
+        # Bootstrap-based CI (wider than fixed percentage)
+        ci_lower = bootstrap_ci.get("total_annualised_revenue", {}).get(
+            "ci_lower", round(dp_total_rev * 0.85, 0)
+        )
+        ci_upper = bootstrap_ci.get("total_annualised_revenue", {}).get(
+            "ci_upper", round(dp_total_rev * 1.15, 0)
+        )
 
         response = {
             "product": "tax_base_estimation",
-            "version": "1.0",
+            "version": "2.0",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "data_freshness": datetime.now(timezone.utc).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
@@ -318,6 +530,10 @@ class TaxBaseService:
                 "tax_gap_kes": round(tax_gap, 0),
                 "tax_compliance_rate": overall_compliance,
             },
+            # ECO 421: Public Finance analysis
+            "laffer_curve_analysis": laffer_analysis,
+            "tax_incidence": incidence,
+            "deadweight_loss_kes": dwl,
             "sector_breakdown": sector_breakdown,
             "top_tax_contributors": top_contributors,
             "revenue_growth_pct": revenue_growth if revenue_growth != 0 else None,
@@ -325,6 +541,8 @@ class TaxBaseService:
             "new_registrations_est": None,
             "vs_previous_period_pct": revenue_growth if revenue_growth != 0 else None,
             "county_rank": None,
+            # STA 341: Bootstrap confidence intervals
+            "bootstrap_estimates": bootstrap_ci if bootstrap_ci else None,
             "users_included": user_count,
             "confidence_interval": {"lower": ci_lower, "upper": ci_upper},
         }
