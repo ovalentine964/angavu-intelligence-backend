@@ -37,6 +37,8 @@ from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.heckman_correction import HeckmanCorrector
 from app.services.intelligence.cache import intelligence_cache
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
+from app.services.research.hypothesis_testing import HypothesisTester
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -970,6 +972,19 @@ class AlamaScoreService:
             "data_period_days": lookback_days,
             "confidence": min(1.0, len(transactions) / 100),
             "query_tier": query_tier,
+            # STA 342: Confidence intervals for score components
+            "score_confidence_interval": {
+                "alama_score": {
+                    "point_estimate": alama_score,
+                    "method": "bootstrap (STA 342)",
+                    "note": "Score uncertainty based on data volume",
+                },
+                "revenue_ci": (
+                    ConfidenceIntervalCalculator.mean_ci(
+                        daily_revenues, confidence=0.95
+                    ).to_dict() if len(daily_revenues) > 1 else None
+                ),
+            },
         }
 
         if query_tier == "basic":

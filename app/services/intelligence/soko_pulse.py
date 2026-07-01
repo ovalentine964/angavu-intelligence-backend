@@ -73,6 +73,8 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
+from app.services.research.hypothesis_testing import HypothesisTester
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -764,6 +766,12 @@ class SokoPulseService:
                 "price_elasticity": elasticity_result,
                 # ECO 201: Consumer surplus (welfare measure)
                 "consumer_surplus_estimate": consumer_surplus,
+                # STA 342: Confidence interval for average price
+                "confidence_interval_95pct": (
+                    ConfidenceIntervalCalculator.mean_ci(
+                        [float(p) for p in unit_prices], confidence=0.95
+                    ).to_dict() if len(unit_prices) > 1 else None
+                ),
             },
             "day_of_week_pattern": dow_pattern,
             "monthly_trend": monthly_trend,
@@ -775,6 +783,13 @@ class SokoPulseService:
             "users_included": k,
             "data_points": len(transactions),
             "tier": tier,
+            # STA 342: Statistical significance testing
+            "statistical_tests": {
+                "demand_trend_significance": self._test_demand_significance(
+                    recent, older
+                ) if recent and older else None,
+                "methodology": "STA 342 — Test of Hypothesis",
+            },
         }
 
         # Cache
@@ -797,3 +812,36 @@ class SokoPulseService:
         )
 
         return response
+
+    @staticmethod
+    def _test_demand_significance(
+        recent: list,
+        older: list,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Test whether demand change is statistically significant.
+
+        Uses Welch's t-test (STA 342) to test whether recent period
+        transaction amounts differ significantly from older period.
+        """
+        recent_amounts = [t.amount for t in recent]
+        older_amounts = [t.amount for t in older]
+
+        if len(recent_amounts) < 2 or len(older_amounts) < 2:
+            return None
+
+        tester = HypothesisTester(alpha=0.05)
+        result = tester.two_sample_t_test(recent_amounts, older_amounts)
+
+        return {
+            "test": "welch_t_test",
+            "p_value": round(result.p_value, 6),
+            "significant": result.reject_null,
+            "effect_size": round(result.effect_size or 0, 4),
+            "confidence_interval": (
+                [round(result.confidence_interval[0], 4),
+                 round(result.confidence_interval[1], 4)]
+                if result.confidence_interval else None
+            ),
+            "interpretation": result.interpretation,
+        }

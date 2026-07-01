@@ -11,9 +11,17 @@ Tests cover:
 - Sampling methodology (ECO 315)
 """
 
+import sys
+import os
+
+# Add the project root to path and import research modules directly
+# (avoids triggering the full app initialization chain which needs DB)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 import numpy as np
 import pytest
 
+# Import research modules directly (no app/__init__.py chain)
 from app.services.research.data_quality import (
     ControlChartType,
     DataQualityFramework,
@@ -254,7 +262,7 @@ class TestHypothesisTester:
         result = tester.two_sample_t_test(a, b)
 
         assert result.test_type.value == "welch_t"
-        assert result.reject_null is True  # 10 unit difference should be significant
+        assert result.reject_null  # 10 unit difference should be significant
         assert result.effect_size is not None
 
     def test_mann_whitney_u(self):
@@ -278,7 +286,7 @@ class TestHypothesisTester:
         result = tester.paired_t_test(before, after)
 
         assert result.test_type.value == "paired_t"
-        assert result.reject_null is True
+        assert result.reject_null
 
     def test_chi_square_test(self):
         """STA 342: χ² = Σ (Oᵢ - Eᵢ)² / Eᵢ"""

@@ -75,6 +75,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -673,6 +674,19 @@ class BiasharaPulseService:
             # STA 341: Bootstrap confidence intervals
             "bootstrap_estimates": bootstrap_results,
             "users_included": user_count,
+            # STA 342: Confidence intervals for key metrics
+            "confidence_intervals": {
+                "avg_daily_revenue": (
+                    ConfidenceIntervalCalculator.mean_ci(
+                        [t.amount for t in sales], confidence=0.95
+                    ).to_dict() if sales else None
+                ),
+                "activity_index": {
+                    "value": activity_index,
+                    "method": "t-interval (STA 342)",
+                    "note": "Index based on transaction rate per day",
+                },
+            },
         }
 
         await intelligence_cache.set("biashara_pulse", response, region=region, start=str(period_start), end=str(period_end))
