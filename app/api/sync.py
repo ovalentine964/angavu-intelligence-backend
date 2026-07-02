@@ -190,6 +190,7 @@ async def sync_batch(
 async def upload_transactions(
     batch: TransactionBatch,
     request: Request,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -454,12 +455,14 @@ async def sync_status_worker(
     delivery = IntelligenceDelivery(db)
 
     # Get last sync time from most recent transaction
+    # Sanitize worker_id to prevent SQL LIKE injection — remove wildcards
+    sanitized_worker_id = worker_id[:16].replace("%", "").replace("_", "")
     result = await db.execute(
         select(
             func.max(Transaction.synced_at).label("last_sync"),
             func.count(Transaction.id).label("total_synced"),
         ).where(
-            Transaction.device_id.like(f"%{worker_id[:16]}%"),
+            Transaction.device_id.like(f"%{sanitized_worker_id}%"),
         )
     )
     row = result.first()
