@@ -18,11 +18,16 @@ the data they generate is worth to Biashara Intelligence.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -132,15 +137,28 @@ class WorkerValueTracker:
         aggregate = tracker.get_aggregate_value()
     """
 
+    # Valid categories for money_saved and money_earned
+    _VALID_SAVED_CATEGORIES = {"better_prices", "less_spoilage", "stockout_prevention"}
+    _VALID_EARNED_SOURCES = {"credit_access", "market_intelligence", "business_growth"}
+    _VALID_TIME_SOURCES = {"voice_bookkeeping", "automated_reports"}
+    _MAX_LIMIT = 1000
+
     def __init__(self, state_dir: Optional[str] = None):
         self._state_dir = Path(state_dir) if state_dir else _DEFAULT_STATE_DIR
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._workers: dict[str, WorkerMetrics] = {}
-        self._load_all_workers()
+        self._load_all_workers_sync()
 
     # ------------------------------------------------------------------
     # Tracking methods
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _sanitize_worker_id(worker_id: str) -> str:
+        """Sanitize worker_id to prevent path traversal attacks."""
+        if not re.match(r'^[a-zA-Z0-9_-]+$', worker_id):
+            raise ValueError(f"Invalid worker_id: {worker_id}")
+        return worker_id
 
     def track_time_saved(
         self,
@@ -156,6 +174,11 @@ class WorkerValueTracker:
             hours_saved: Hours saved (e.g., 0.5 for 30 min)
             source: Source of time savings (voice_bookkeeping, automated_reports, etc.)
         """
+        worker_id = self._sanitize_worker_id(worker_id)
+        if hours_saved < 0:
+            raise ValueError(f"hours_saved must be non-negative, got {hours_saved}")
+        if source not in self._VALID_TIME_SOURCES:
+            raise ValueError(f"Invalid source: {source}. Valid: {self._VALID_TIME_SOURCES}")
         worker = self._get_or_create(worker_id)
         worker.hours_saved += hours_saved
         if source == "voice_bookkeeping":
@@ -186,6 +209,13 @@ class WorkerValueTracker:
             amount_saved: Amount saved in KES
             category: better_prices | less_spoilage | stockout_prevention
         """
+        worker_id = self._sanitize_worker_id(worker_id)
+        if amount_saved < 0:
+            raise ValueError(f"amount_saved must be non-negative, got {amount_saved}")
+        if category not in self._VALID_SAVED_CATEGORIES:
+            raise ValueError(
+                f"Invalid category: {category}. Valid: {self._VALID_SAVED_CATEGORIES}"
+            )
         worker = self._get_or_create(worker_id)
         worker.money_saved_kes += amount_saved
 
@@ -221,6 +251,13 @@ class WorkerValueTracker:
             amount_earned: Amount earned in KES
             source: credit_access | market_intelligence | business_growth
         """
+        worker_id = self._sanitize_worker_id(worker_id)
+        if amount_earned < 0:
+            raise ValueError(f"amount_earned must be non-negative, got {amount_earned}")
+        if source not in self._VALID_EARNED_SOURCES:
+            raise ValueError(
+                f"Invalid source: {source}. Valid: {self._VALID_EARNED_SOURCES}"
+            )
         worker = self._get_or_create(worker_id)
         worker.money_earned_kes += amount_earned
 
@@ -244,6 +281,7 @@ class WorkerValueTracker:
 
     def record_transaction(self, worker_id: str) -> dict:
         """Increment transaction count for a worker."""
+        worker_id = self._sanitize_worker_id(worker_id)
         worker = self._get_or_create(worker_id)
         worker.transactions_recorded += 1
         self._touch_worker(worker)
@@ -261,6 +299,7 @@ class WorkerValueTracker:
 
     def get_value_summary(self, worker_id: str) -> dict:
         """Show how much value this worker has received."""
+        worker_id = self._sanitize_worker_id(worker_id)
         worker = self._workers.get(worker_id)
         if not worker:
             return {
@@ -320,6 +359,9 @@ class WorkerValueTracker:
 
     def get_top_workers(self, limit: int = 10) -> list[dict]:
         """Get top workers by total value received."""
+        if limit < 1:
+            raise ValueError(f"limit must be >= 1, got {limit}")
+        limit = min(limit, self._MAX_LIMIT)
         ranked = sorted(
             self._workers.values(),
             key=lambda w: w.money_saved_kes + w.money_earned_kes,
@@ -359,11 +401,19 @@ class WorkerValueTracker:
             worker.days_active = 1
 
     def _save_worker(self, worker: WorkerMetrics) -> None:
+        """Synchronous worker save. Use save_worker_async in async contexts."""
+        # Double-check worker_id is safe (defense in depth)
+        self._sanitize_worker_id(worker.worker_id)
         path = self._state_dir / f"worker_{worker.worker_id}.json"
         path.write_text(json.dumps(worker.to_dict(), indent=2))
         self._workers[worker.worker_id] = worker
 
-    def _load_all_workers(self) -> None:
+    async def save_worker_async(self, worker: WorkerMetrics) -> None:
+        """Async wrapper for worker save — offloads to thread pool."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._save_worker, worker)
+
+    def _load_all_workers_sync(self) -> None:
         for path in self._state_dir.glob("worker_*.json"):
             try:
                 data = json.loads(path.read_text())
@@ -390,8 +440,14 @@ class WorkerValueTracker:
                     money_earned_market_intel_kes=me.get("market_intelligence_kes", 0),
                     money_earned_business_growth_kes=me.get("business_growth_kes", 0),
                 )
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning("Failed to load worker data from %s: %s", path.name, e)
                 continue
+
+    async def load_all_workers_async(self) -> None:
+        """Async wrapper for loading all workers — offloads to thread pool."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._load_all_workers_sync)
 
     @staticmethod
     def _impact_statement(total_value_kes: float, hours_saved: float) -> str:

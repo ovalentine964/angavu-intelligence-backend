@@ -15,10 +15,11 @@ The flywheel:
               → Better performance → More workers
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timezone
 from typing import Optional
-import os
 
 from app.services.infrastructure.roadmap import DataCenterRoadmap
 from app.services.infrastructure.worker_value import WorkerValueTracker
@@ -39,6 +40,24 @@ def _get_worker_tracker() -> WorkerValueTracker:
     global _worker_tracker
     if _worker_tracker is None:
         _worker_tracker = WorkerValueTracker()
+    return _worker_tracker
+
+
+async def _get_roadmap_async() -> DataCenterRoadmap:
+    """Async wrapper — offloads init (file I/O) to thread pool."""
+    global _roadmap
+    if _roadmap is None:
+        loop = asyncio.get_event_loop()
+        _roadmap = await loop.run_in_executor(None, DataCenterRoadmap)
+    return _roadmap
+
+
+async def _get_worker_tracker_async() -> WorkerValueTracker:
+    """Async wrapper — offloads init (file I/O) to thread pool."""
+    global _worker_tracker
+    if _worker_tracker is None:
+        loop = asyncio.get_event_loop()
+        _worker_tracker = await loop.run_in_executor(None, WorkerValueTracker)
     return _worker_tracker
 
 router = APIRouter(tags=["Infrastructure"])
@@ -336,7 +355,7 @@ async def infrastructure_roadmap():
     - All phase details with worker benefits
     - Timeline estimates
     """
-    roadmap = _get_roadmap()
+    roadmap = await _get_roadmap_async()
     current = roadmap.get_current_phase()
     progress = roadmap.get_progress_to_next_phase()
     all_phases = roadmap.get_all_phases()
@@ -367,7 +386,15 @@ async def worker_value(worker_id: str):
     - Money earned (credit access, market intelligence, business growth)
     - Value-to-data ratio (worker value vs. data revenue generated)
     """
-    tracker = _get_worker_tracker()
+    # Validate worker_id format (defense in depth — service also validates)
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', worker_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid worker_id format: {worker_id}",
+        )
+
+    tracker = await _get_worker_tracker_async()
     summary = tracker.get_value_summary(worker_id)
 
     if summary.get("status") == "not_found":
@@ -400,7 +427,7 @@ async def infrastructure_fund():
     - Progress to next phase threshold
     - Breakdown of what the fund buys at each phase
     """
-    roadmap = _get_roadmap()
+    roadmap = await _get_roadmap_async()
     current = roadmap.get_current_phase()
     progress = roadmap.get_progress_to_next_phase()
     metrics = roadmap.get_infrastructure_metrics()

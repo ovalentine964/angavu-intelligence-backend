@@ -18,11 +18,15 @@ Phase 5: Pan-African DC network → $500K+
 from __future__ import annotations
 
 import json
+import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class Phase(IntEnum):
@@ -170,12 +174,20 @@ class DataCenterRoadmap:
     # Persistence helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _sanitize_worker_id(worker_id: str) -> str:
+        """Sanitize worker_id to prevent path traversal attacks."""
+        if not re.match(r'^[a-zA-Z0-9_-]+$', worker_id):
+            raise ValueError(f"Invalid worker_id: {worker_id}")
+        return worker_id
+
     def _load_state(self) -> RoadmapState:
         if self._state_path and self._state_path.exists():
             try:
                 data = json.loads(self._state_path.read_text())
                 return RoadmapState(**data)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning("Failed to load roadmap state from %s: %s", self._state_path, e)
                 pass
         return RoadmapState(
             current_phase=Phase.CLOUD,
@@ -327,6 +339,7 @@ class DataCenterRoadmap:
         In a production system this would query the transaction DB.
         For now we estimate based on average worker economics.
         """
+        worker_id = self._sanitize_worker_id(worker_id)
         # Average worker economics from critical-mass-value.md
         avg_data_value_per_month_usd = 3.75  # KES 500
         infra_allocation_pct = INFRA_ALLOCATION_PCT.get(self._state.current_phase, 0.10)
