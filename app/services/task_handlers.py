@@ -40,20 +40,43 @@ async def handle_report_generation(payload: dict) -> dict:
 @register_handler("model_training")
 async def handle_model_training(payload: dict) -> dict:
     """
-    Aggregate federated learning model updates.
+    Run a training cycle, typically triggered by drift detection.
 
     Payload:
-        model_id: str
-        round_number: int
-        participant_updates: list of serialized gradients
+        model_type: str (e.g. "credit_scoring", "market_forecast")
+        trigger: str ("drift_alert", "scheduled", "manual")
+        alert: dict (drift alert details, if triggered by drift)
     """
-    logger.info("aggregating_model", model_id=payload.get("model_id"))
-    # Federated learning aggregation would go here
-    return {
-        "status": "aggregated",
-        "model_id": payload.get("model_id"),
-        "round": payload.get("round_number"),
+    from app.services.training.loop import TrainingLoop
+
+    model_type = payload.get("model_type", "intent_classifier")
+    trigger = payload.get("trigger", "scheduled")
+
+    logger.info(
+        "training_cycle_starting",
+        model_type=model_type,
+        trigger=trigger,
+    )
+
+    loop = TrainingLoop()
+    summary = await loop.run_training_cycle(model_type)
+
+    result = {
+        "status": summary.status.value,
+        "model_type": model_type,
+        "trigger": trigger,
+        "cycle_id": summary.cycle_id,
+        "phases_completed": [p.value for p in summary.phases_completed],
+        "improvement_achieved": summary.improvement_achieved,
+        "deployed": summary.deployed,
+        "signals_collected": summary.signals_collected,
     }
+
+    if summary.error:
+        result["error"] = summary.error
+
+    logger.info("training_cycle_completed", **result)
+    return result
 
 
 @register_handler("data_aggregation")

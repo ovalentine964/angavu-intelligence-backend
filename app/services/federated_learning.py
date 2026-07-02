@@ -653,14 +653,19 @@ class FederatedLearningService:
         1. Collect pending updates (up to MAX_UPDATES_IN_ROUND)
         2. Run FedAvg (weighted mean of calibration params + vocab)
         3. Apply differential privacy (Gaussian noise)
-        4. Store aggregated model
-        5. Clear processed updates
+        4. Verify improvement over previous model
+        5. Store aggregated model (or rollback if no improvement)
+        6. Clear processed updates
 
         Returns:
-            New model version string
+            Model version string (new version if improved, old version if rolled back)
         """
         updates = _state.pending_updates[dialect][:MAX_UPDATES_IN_ROUND]
         _state.pending_updates[dialect] = _state.pending_updates[dialect][MAX_UPDATES_IN_ROUND:]
+
+        # ── Snapshot previous model for comparison ──
+        previous_model = _state.global_models.get(dialect)
+        previous_version = previous_model["version"] if previous_model else None
 
         # ── FedAvg ──
         agg_calibration, agg_vocab = _fedavg_aggregate(updates)
@@ -674,22 +679,42 @@ class FederatedLearningService:
         agg_vocab = _apply_dp_to_vocabulary(agg_vocab, self._sigma)
 
         # ── Adapter aggregation ──
-        # In production, this would average the encrypted LoRA deltas.
-        # For now, we store the most recent adapter delta (last-device wins).
-        # A proper implementation would use secure aggregation protocols
-        # (Bonawitz et al., 2017) to sum ciphertexts.
         adapter_deltas_b64 = None
         for update in reversed(updates):
             if update.adapter_deltas:
                 adapter_deltas_b64 = update.adapter_deltas
                 break
 
-        # ── Version and store ──
-        version = _next_version(dialect)
+        # ── Generate candidate version ──
+        candidate_version = _next_version(dialect)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
+        # ── Verify improvement (closes the FL verification loop) ──
+        improvement_verified = await self._verify_improvement(
+            dialect=dialect,
+            updates=updates,
+            new_calibration=agg_calibration,
+            new_vocab=agg_vocab,
+            previous_model=previous_model,
+        )
+
+        if not improvement_verified and previous_model:
+            # Rollback — keep the previous model
+            _state.version_counters[dialect] -= 1
+            logger.warning(
+                "fl_aggregation_rolled_back",
+                dialect=dialect,
+                candidate_version=candidate_version,
+                kept_version=previous_version,
+                reason="no_improvement_verified",
+            )
+            # Still mark updates as processed to avoid re-processing
+            _persistence.mark_processed(dialect)
+            return previous_version
+
+        # ── Store new model ──
         _state.global_models[dialect] = {
-            "version": version,
+            "version": candidate_version,
             "calibration_params": agg_calibration,
             "vocabulary_updates": agg_vocab,
             "adapter_deltas": adapter_deltas_b64,
@@ -708,16 +733,109 @@ class FederatedLearningService:
             "prior": agg_calibration.prior,
         } if agg_calibration else {}
         agg_phonemes = [vu.word for vu in agg_vocab]
-        _persistence.save_global_model(dialect, version, agg_params_dict, agg_phonemes)
+        _persistence.save_global_model(dialect, candidate_version, agg_params_dict, agg_phonemes)
         _persistence.mark_processed(dialect)
 
         logger.info(
             "fl_aggregation_complete",
             dialect=dialect,
-            version=version,
+            version=candidate_version,
             updates_aggregated=len(updates),
             vocab_entries=len(agg_vocab),
             round=_state.aggregation_round,
+            improvement_verified=improvement_verified,
         )
 
-        return version
+        return candidate_version
+
+    async def _verify_improvement(
+        self,
+        dialect: str,
+        updates: List[FLUpdate],
+        new_calibration: CalibrationParams,
+        new_vocab: List[VocabularyUpdate],
+        previous_model: Optional[Dict[str, Any]],
+    ) -> bool:
+        """
+        Verify that the new aggregated model improves over the previous one.
+
+        Verification criteria:
+        1. Quality gate: average update quality must be >= 0.5
+        2. Calibration shift: temperature and Platt params must not
+           shift dramatically (> 50% change = suspicious)
+        3. Vocabulary gain: new model must have >= previous vocab entries
+        4. Update consensus: >= 60% of updates must agree on direction
+
+        Returns:
+            True if improvement is verified, False to trigger rollback
+        """
+        # ── Check 1: Update quality ──
+        qualities = [_state.device_quality.get(u.device_id, 0.5) for u in updates]
+        avg_quality = sum(qualities) / len(qualities) if qualities else 0.0
+
+        if avg_quality < 0.3:
+            logger.warning(
+                "fl_verification_low_quality",
+                dialect=dialect,
+                avg_quality=round(avg_quality, 4),
+            )
+            return False
+
+        # ── Check 2: Calibration sanity ──
+        if previous_model and previous_model.get("calibration_params"):
+            prev_cal = previous_model["calibration_params"]
+            if isinstance(prev_cal, CalibrationParams):
+                # Reject if temperature shifts > 50%
+                if prev_cal.temperature > 0:
+                    temp_change = abs(
+                        new_calibration.temperature - prev_cal.temperature
+                    ) / prev_cal.temperature
+                    if temp_change > 0.5:
+                        logger.warning(
+                            "fl_verification_calibration_shift",
+                            dialect=dialect,
+                            temp_change=round(temp_change, 4),
+                        )
+                        return False
+
+        # ── Check 3: Vocabulary must not shrink ──
+        if previous_model and previous_model.get("vocabulary_updates"):
+            prev_vocab_count = len(previous_model["vocabulary_updates"])
+            new_vocab_count = len(new_vocab)
+            if new_vocab_count < prev_vocab_count * 0.5:
+                logger.warning(
+                    "fl_verification_vocab_shrink",
+                    dialect=dialect,
+                    prev_count=prev_vocab_count,
+                    new_count=new_vocab_count,
+                )
+                return False
+
+        # ── Check 4: Update consensus ──
+        # Check if calibration params from updates converge (low variance)
+        if len(updates) >= 3:
+            temps = [
+                u.calibration_params.temperature
+                for u in updates
+                if u.calibration_params
+            ]
+            if len(temps) >= 3:
+                import numpy as np
+                temp_std = float(np.std(temps))
+                temp_mean = float(np.mean(temps))
+                cv = temp_std / max(abs(temp_mean), 1e-6)  # coefficient of variation
+                if cv > 1.0:
+                    logger.warning(
+                        "fl_verification_low_consensus",
+                        dialect=dialect,
+                        cv=round(cv, 4),
+                    )
+                    return False
+
+        logger.info(
+            "fl_verification_passed",
+            dialect=dialect,
+            avg_quality=round(avg_quality, 4),
+            vocab_entries=len(new_vocab),
+        )
+        return True

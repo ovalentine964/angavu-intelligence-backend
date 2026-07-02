@@ -104,6 +104,20 @@ class TransactionProcessorAgent(BiasharaAgent):
         if recent_errors:
             confidence = max(0.5, 0.95 - len(recent_errors) * 0.1)
 
+        # Apply strategy adjustment from reflect→behavior loop
+        strategy = context.get("strategy_adjustment")
+        if strategy:
+            confidence *= strategy.get("threshold_factor", 1.0)
+            confidence = max(0.3, confidence)
+
+        # Check past reflections for relevant lessons
+        reflections = context.get("past_reflections", [])
+        if reflections:
+            self._logger.debug(
+                "applying_reflections",
+                count=len(reflections),
+            )
+
         action = "process_batch" if is_batch else "process_single"
         parameters = {
             "user_id": user_id,
@@ -256,13 +270,28 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         # Always generate price forecasts for market intelligence
         products.append("price_forecast")
 
+        # Apply strategy adjustment from reflect→behavior loop
+        confidence = 0.90
+        strategy = context.get("strategy_adjustment")
+        if strategy:
+            confidence *= strategy.get("threshold_factor", 1.0)
+            confidence = max(0.3, confidence)
+
+        # Check past reflections for relevant lessons
+        reflections = context.get("past_reflections", [])
+        if reflections:
+            self._logger.debug(
+                "applying_reflections",
+                count=len(reflections),
+            )
+
         return AgentDecision(
             action="generate_intelligence",
             parameters={
                 "user_id": user_id,
                 "products": products,
             },
-            confidence=0.90,
+            confidence=confidence,
             reasoning=(
                 f"Generating {len(products)} intelligence product(s) "
                 f"for user {user_id}: {', '.join(products)}. "
@@ -426,6 +455,20 @@ class ReportGeneratorAgent(BiasharaAgent):
         if recent_deliveries:
             confidence = 0.75  # Lower confidence — might be duplicate
 
+        # Apply strategy adjustment from reflect→behavior loop
+        strategy = context.get("strategy_adjustment")
+        if strategy:
+            confidence *= strategy.get("threshold_factor", 1.0)
+            confidence = max(0.3, confidence)
+
+        # Check past reflections for relevant lessons
+        reflections = context.get("past_reflections", [])
+        if reflections:
+            self._logger.debug(
+                "applying_reflections",
+                count=len(reflections),
+            )
+
         return AgentDecision(
             action="generate_report",
             parameters={
@@ -580,6 +623,21 @@ class SelfEvolutionAgent(BiasharaAgent):
         should_cluster = len(recent_feedback) >= 5
         action = "analyze_and_cluster" if should_cluster else "collect_feedback"
 
+        # Apply strategy adjustment from reflect→behavior loop
+        confidence = 0.90
+        strategy = context.get("strategy_adjustment")
+        if strategy:
+            confidence *= strategy.get("threshold_factor", 1.0)
+            confidence = max(0.3, confidence)
+
+        # Check past reflections for relevant lessons
+        reflections = context.get("past_reflections", [])
+        if reflections:
+            self._logger.debug(
+                "applying_reflections",
+                count=len(reflections),
+            )
+
         return AgentDecision(
             action=action,
             parameters={
@@ -589,7 +647,7 @@ class SelfEvolutionAgent(BiasharaAgent):
                 "should_cluster": should_cluster,
                 "feedback_count": len(recent_feedback),
             },
-            confidence=0.90,
+            confidence=confidence,
             reasoning=(
                 f"Processing {feedback_type} feedback from worker {worker_id}. "
                 f"{len(recent_feedback)} recent feedback items. "

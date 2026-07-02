@@ -30,12 +30,13 @@ Typical usage:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 import structlog
@@ -231,6 +232,9 @@ class CUSUMDriftDetector:
         self._alerts: List[DriftAlert] = []
         self._recent_values: Deque[float] = deque(maxlen=window_size)
 
+        # Callback invoked when drift is detected (closes drift→retrain loop)
+        self._on_drift_callback: Optional[Callable[["DriftAlert"], Coroutine]] = None
+
         logger.info(
             "cusum_initialized",
             metric=metric_name,
@@ -251,6 +255,14 @@ class CUSUMDriftDetector:
             # Check if last alert was recent
             return ModelStatus.WARNING
         return ModelStatus.STABLE
+
+    def set_drift_callback(self, callback: Callable[["DriftAlert"], Coroutine]) -> None:
+        """Register an async callback to invoke when drift is detected.
+
+        The callback receives the DriftAlert and should trigger
+        downstream actions (e.g., model retraining via task queue).
+        """
+        self._on_drift_callback = callback
 
     @property
     def alert_history(self) -> List[DriftAlert]:
@@ -352,6 +364,26 @@ class CUSUMDriftDetector:
                 drift_magnitude=round(alert.drift_magnitude, 4),
                 cusum_value=round(alert.cusum_value, 4),
             )
+
+            # ── Auto-trigger callback (closes drift→retrain loop) ──
+            if (
+                self._on_drift_callback
+                and alert.direction == DriftDirection.DEGRADATION
+                and alert.severity in (AlertSeverity.WARNING, AlertSeverity.CRITICAL)
+            ):
+                try:
+                    asyncio.create_task(self._on_drift_callback(alert))
+                    logger.info(
+                        "drift_callback_triggered",
+                        metric=self.metric_name,
+                        severity=alert.severity.value,
+                    )
+                except Exception as cb_exc:
+                    logger.error(
+                        "drift_callback_error",
+                        metric=self.metric_name,
+                        error=str(cb_exc),
+                    )
 
         return alert
 
@@ -645,6 +677,7 @@ class ModelDriftMonitor:
         self._delta = delta
         self._h = h
         self._burn_in = burn_in
+        self._drift_callback: Optional[Callable[[DriftAlert], Coroutine]] = None
 
         if metrics_config:
             for name, config in metrics_config.items():
@@ -681,7 +714,20 @@ class ModelDriftMonitor:
             burn_in=burn_in if burn_in is not None else self._burn_in,
             metric_name=name,
         )
+        # Propagate callback to new detector
+        if self._drift_callback:
+            self._detectors[name].set_drift_callback(self._drift_callback)
         logger.info("drift_monitor_metric_added", metric=name)
+
+    def set_drift_callback(self, callback: Callable[[DriftAlert], Coroutine]) -> None:
+        """Register an async callback for all managed detectors.
+
+        Propagates the callback to existing and future detectors.
+        Use this to wire drift detection to automatic retraining.
+        """
+        self._drift_callback = callback
+        for detector in self._detectors.values():
+            detector.set_drift_callback(callback)
 
     def update(
         self, metric_name: str, value: float

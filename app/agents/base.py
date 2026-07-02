@@ -21,6 +21,7 @@ DeerFlow sub-agent orchestration.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -287,6 +288,11 @@ class BiasharaAgent:
         self._event_bus: Any = None       # EventBus | None
         self._tracer: Any = None          # AgentTracer | None
 
+        # Background polling lifecycle
+        self._poll_task: Optional[asyncio.Task] = None
+        self._poll_interval: float = 1.0  # seconds between polls
+        self._running: bool = False
+
         self._logger = logger.bind(agent=name, role=role)
 
     # ── Infrastructure injection ────────────────────────────────────
@@ -298,6 +304,61 @@ class BiasharaAgent:
     def set_tracer(self, tracer: Any) -> None:
         """Inject the tracer (called by orchestrator)."""
         self._tracer = tracer
+
+    # ── Lifecycle start / stop ──────────────────────────────────────
+
+    async def start(self) -> None:
+        """
+        Start the agent's background event polling loop.
+
+        Call after set_event_bus() and subscribe() have been done.
+        """
+        if self._running:
+            return
+        self._running = True
+        self._poll_task = asyncio.create_task(self._poll_loop())
+        self._logger.info("agent_started", poll_interval=self._poll_interval)
+
+    async def stop(self) -> None:
+        """Stop the agent's background polling loop gracefully."""
+        self._running = False
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+        self._poll_task = None
+        self._logger.info("agent_stopped")
+
+    async def _poll_loop(self) -> None:
+        """
+        Background loop: pull events from the bus and handle them.
+
+        Each iteration calls get_events() then handle_event() for each.
+        Errors are caught per-event so one bad event doesn't kill the loop.
+        """
+        self._logger.debug("poll_loop_started")
+        while self._running:
+            try:
+                events = await self._event_bus.get_events(self, limit=10)
+                for event in events:
+                    try:
+                        await self.handle_event(event)
+                    except Exception as exc:
+                        self._logger.error(
+                            "poll_event_error",
+                            event_type=event.event_type.value,
+                            error=str(exc),
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                self._logger.warning("poll_loop_error", error=str(exc))
+
+            await asyncio.sleep(self._poll_interval)
+
+        self._logger.debug("poll_loop_exited")
 
     # ── Lifecycle methods ───────────────────────────────────────────
 
@@ -343,8 +404,11 @@ class BiasharaAgent:
         """
         Learn from the result and update memory.
 
-        Default implementation stores the result summary in memory
-        and logs performance metrics.
+        Stores the result summary in memory. On failure, generates
+        a reflection and stores it in long-term memory so that future
+        think() calls can learn from past mistakes.
+
+        On consecutive failures, adjusts strategy parameters.
         """
         self.status = AgentStatus.REFLECTING
         self.memory.remember({
@@ -367,6 +431,41 @@ class BiasharaAgent:
                 error=result.error,
                 duration_ms=result.duration_ms,
             )
+
+            # ── Store reflection in long-term memory (closes reflect→behavior loop) ──
+            recent_context = self.memory.recall_recent(5)
+            context_summary = [
+                m.get("event_type", "unknown") for m in recent_context
+            ]
+            reflection = (
+                f"Action failed: {result.error}. "
+                f"Recent event types: {context_summary}. "
+                f"Lesson: adjust strategy for similar conditions."
+            )
+            reflection_key = f"reflection:{result.result_id}"
+            self.memory.store(reflection_key, reflection)
+            self._logger.info(
+                "reflection_stored",
+                key=reflection_key,
+                error=result.error,
+            )
+
+            # ── Detect consecutive failures → trigger strategy adjustment ──
+            recent = self.memory.recall_recent(10)
+            recent_failures = [r for r in recent if not r.get("success", True)]
+            if len(recent_failures) >= 3:
+                adjustment = {
+                    "action": "reduce_confidence_threshold",
+                    "failures_in_window": len(recent_failures),
+                    "threshold_factor": max(0.5, 1.0 - len(recent_failures) * 0.1),
+                    "updated_at": time.time(),
+                }
+                self.memory.store("strategy_adjustment", adjustment)
+                self._logger.warning(
+                    "strategy_adjustment_triggered",
+                    failures=len(recent_failures),
+                    threshold_factor=adjustment["threshold_factor"],
+                )
 
     async def communicate(self, message: AgentMessage) -> None:
         """
@@ -410,10 +509,22 @@ class BiasharaAgent:
 
             # 2. Think
             self.status = AgentStatus.THINKING
+
+            # Gather past reflections from long-term memory
+            reflections = [
+                v for k, v in self.memory._long_term.items()
+                if k.startswith("reflection:")
+            ]
+
+            # Check for strategy adjustments from consecutive failures
+            strategy_adjustment = self.memory.retrieve("strategy_adjustment")
+
             context = {
                 "event": event.to_dict(),
                 "memory": self.memory.snapshot(),
                 "tools": self.tools.list_tools(),
+                "past_reflections": reflections[-5:],  # Last 5 reflections
+                "strategy_adjustment": strategy_adjustment,
             }
 
             if self._tracer:
