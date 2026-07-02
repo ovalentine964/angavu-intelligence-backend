@@ -23,6 +23,12 @@ from app.models.worker_features import (
     MindsetLessonProgress,
     RichHabitScore,
 )
+from app.models.infrastructure import (
+    ServerMetric,
+    ModelVersion,
+    FederatedUpdate,
+    CostTracking,
+)
 
 __all__ = [
     "User",
@@ -47,4 +53,8 @@ __all__ = [
     "MindsetLesson",
     "MindsetLessonProgress",
     "RichHabitScore",
+    "ServerMetric",
+    "ModelVersion",
+    "FederatedUpdate",
+    "CostTracking",
 ]

@@ -318,6 +318,9 @@ from app.api.fmcg import router as fmcg_router
 # Infrastructure dashboard (data center flywheel)
 from app.api.infrastructure import router as infrastructure_router
 
+# Infrastructure V2 (health monitoring, model registry, federated learning v2)
+from app.api.infrastructure_v2 import router as infrastructure_v2_router
+
 # Worker features (tithe, goals, loans, mindset)
 from app.api.worker_features import router as worker_features_router
 
@@ -336,6 +339,7 @@ app.include_router(phase1_router, prefix=settings.API_V1_PREFIX)
 app.include_router(formal_reports_router, prefix=settings.API_V1_PREFIX)
 app.include_router(fmcg_router, prefix=settings.API_V1_PREFIX)
 app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
+app.include_router(infrastructure_v2_router, prefix=settings.API_V1_PREFIX)
 app.include_router(worker_features_router, prefix=settings.API_V1_PREFIX)
 
 
