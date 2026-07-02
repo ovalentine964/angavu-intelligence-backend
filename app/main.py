@@ -50,11 +50,12 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
-# Rate limiter
+# Rate limiter — use Redis if available, else in-memory
+_rate_storage = settings.REDIS_URL if settings.REDIS_URL else "memory://"
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"],
-    storage_uri=settings.REDIS_URL,
+    storage_uri=_rate_storage,
 )
 
 

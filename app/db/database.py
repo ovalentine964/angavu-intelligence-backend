@@ -2,7 +2,7 @@
 Async SQLAlchemy database setup.
 
 Provides:
-    - Async engine connected to PostgreSQL
+    - Async engine connected to PostgreSQL or SQLite
     - Session factory for request-scoped sessions
     - Base class for all ORM models
     - get_db dependency for FastAPI endpoints
@@ -21,14 +21,29 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Create async engine with connection pooling
+# SQLite needs different engine args than PostgreSQL
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+_engine_kwargs: dict = {
+    "echo": settings.DATABASE_ECHO,
+}
+
+if _is_sqlite:
+    # SQLite: no connection pooling, allow multi-threaded access
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # PostgreSQL: connection pooling
+    _engine_kwargs.update({
+        "pool_size": settings.DATABASE_POOL_SIZE,
+        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+    })
+
+# Create async engine
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_pre_ping=True,  # Verify connections before use
-    pool_recycle=3600,    # Recycle connections every hour
-    echo=settings.DATABASE_ECHO,
+    **_engine_kwargs,
 )
 
 # Session factory — each request gets its own session
@@ -75,6 +90,13 @@ async def init_db() -> None:
     models that inherit from Base. In production, use Alembic
     migrations instead.
     """
+    # Enable WAL mode for SQLite (better concurrency)
+    if _is_sqlite:
+        async with engine.begin() as conn:
+            await conn.execute(
+                __import__("sqlalchemy").text("PRAGMA journal_mode=WAL")
+            )
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

@@ -1,0 +1,72 @@
+# =============================================================
+# Biashara Intelligence — Oracle Cloud Optimized Dockerfile
+# Multi-stage build for minimal image size (~150MB)
+# Supports both ARM (A1.Flex) and AMD64 (E2.Micro)
+# =============================================================
+
+# --- Stage 1: Build dependencies ---
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+# Install Python deps to a separate prefix for clean copy
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# --- Stage 2: Production image ---
+FROM python:3.11-slim AS production
+
+WORKDIR /app
+
+# Runtime deps only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libpq5 \
+        curl \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy application code
+COPY app/ ./app/
+COPY alembic.ini ./
+COPY alembic/ ./alembic/ 2>/dev/null || true
+
+# Create non-root user
+RUN groupadd -r biashara && useradd -r -g biashara -d /app -s /sbin/nologin biashara && \
+    mkdir -p /app/logs /app/data && \
+    chown -R biashara:biashara /app
+
+USER biashara
+
+EXPOSE 8000
+
+# tini for proper signal handling
+ENTRYPOINT ["tini", "--"]
+
+# Default: single worker for 1GB RAM. Override in docker-compose for ARM.
+CMD ["gunicorn", "app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "1", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30", \
+     "--keep-alive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "50", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8000/health || exit 1

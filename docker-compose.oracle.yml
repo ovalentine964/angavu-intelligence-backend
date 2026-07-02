@@ -1,0 +1,72 @@
+# =============================================================
+# Biashara Intelligence — Oracle Cloud Docker Compose
+# Two profiles:
+#   - MICRO  (E2.Micro 1GB RAM): SQLite, 1 worker, no Redis
+#   - ARM    (A1.Flex 24GB RAM): PostgreSQL, 4 workers, Redis
+#
+# Usage:
+#   docker compose -f docker-compose.oracle.yml up -d
+#   PROFILE=arm docker compose -f docker-compose.oracle.yml --profile arm up -d
+# =============================================================
+
+services:
+  # ─── API Server (both profiles) ─────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.oracle
+    container_name: biashara-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      - APP_ENV=production
+    volumes:
+      - app-data:/app/data
+      - app-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # ─── ARM profile: PostgreSQL ────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: biashara-postgres
+    restart: unless-stopped
+    profiles: ["arm"]
+    environment:
+      POSTGRES_DB: biashara
+      POSTGRES_USER: biashara
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biashara"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── ARM profile: Redis ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: biashara-redis
+    restart: unless-stopped
+    profiles: ["arm"]
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  app-data:
+  app-logs:
+  postgres-data:
+  redis-data:
