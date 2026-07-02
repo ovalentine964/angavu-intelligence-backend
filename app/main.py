@@ -324,6 +324,12 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("loop_patterns_setup_failed", error=str(exc))
 
+    # Initialize MCP server
+    from app.mcp.server import get_mcp_server
+    mcp_server = get_mcp_server()
+    app.state.mcp_server = mcp_server
+    logger.info("mcp_server_initialized", tools=mcp_server.get_health()["tools_registered"])
+
     yield
 
     # Shutdown
@@ -571,9 +577,18 @@ from app.api.worker_features import router as worker_features_router
 # Multi-agent architecture (domain agent routing, worker classification)
 from app.api.agent_router import router as agent_router
 
+# OmniRoute-inspired model router (multi-provider inference gateway)
+from app.api.model_router import router as model_router_api
+
+# Skills API (degree-to-skill mappings)
+from app.api.skills import router as skills_router
+
 # Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
 from app.api.agent_loops import router as agent_loops_router
 from app.api.agent_loops import set_loop_infrastructure
+
+# MCP (Model Context Protocol) server
+from app.mcp.router import router as mcp_router
 
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
@@ -593,7 +608,10 @@ app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
 app.include_router(infrastructure_v2_router, prefix=settings.API_V1_PREFIX)
 app.include_router(worker_features_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
+app.include_router(model_router_api, prefix=settings.API_V1_PREFIX)
+app.include_router(skills_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
+app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
