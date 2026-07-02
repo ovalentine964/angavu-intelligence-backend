@@ -34,6 +34,14 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
+from app.services.research.confidence_intervals import BootstrapCI
+from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.statistical_foundation import (
+    BootstrapInference,
+    KernelDensityEstimator,
+    bootstrap,
+    kde_estimator,
+)
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -662,6 +670,10 @@ class DistributionGapService:
             "market_share_estimate": None,
             "avg_distribution_cost_per_unit": None,
             "distribution_density": avg_density,
+            # STA 444: Non-parametric analysis
+            "nonparametric_analysis": self._run_nonparametric_analysis(
+                market_data, valid_gap_markets, product_txns, gap_revenue_potential,
+            ),
             # ECO 210: Optimised expansion allocation
             "expansion_optimisation": allocation,
             "recommended_expansion_markets": [
@@ -687,3 +699,136 @@ class DistributionGapService:
             gaps=len(valid_gap_markets),
         )
         return response
+
+    @staticmethod
+    def _run_nonparametric_analysis(
+        market_data: dict,
+        valid_gap_markets: list,
+        product_txns: list,
+        gap_revenue_potential: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run non-parametric statistical analysis (STA 444).
+
+        Applies KDE for market coverage distribution, Mann-Whitney for
+        served vs underserved markets, and bootstrap CI on gap estimates.
+        Essential for informal economy data which is skewed and
+        heteroscedastic.
+        """
+        if not market_data or len(market_data) < 5:
+            return None
+
+        result: Dict[str, Any] = {}
+
+        # ── STA 444: KDE for market coverage distribution ──────────────────
+        try:
+            densities = np.array([
+                d["txns"] for d in market_data.values()
+            ], dtype=float)
+            densities = densities[densities > 0]
+            if len(densities) >= 5:
+                grid, density = kde_estimator.gaussian_kde(densities)
+                mode_idx = int(np.argmax(density))
+                result["kde_market_coverage"] = {
+                    "description": "Non-parametric market transaction density",
+                    "mode_transactions": round(float(grid[mode_idx]), 2),
+                    "bandwidth": round(float(
+                        0.9 * min(
+                            np.std(densities),
+                            (np.percentile(densities, 75) - np.percentile(densities, 25)) / 1.34,
+                        ) * len(densities) ** (-0.2)
+                    ), 4),
+                    "n_markets": len(densities),
+                    "multimodality": kde_estimator.detect_multimodality(densities),
+                    "method": "STA 444 — Kernel Density Estimation",
+                }
+        except Exception as e:
+            logger.debug("kde_market_coverage_failed", error=str(e))
+
+        # ── STA 444: Mann-Whitney — served vs underserved markets ───────────
+        try:
+            served_volumes = []
+            underserved_volumes = []
+            for m, d in market_data.items():
+                vol = float(d["revenue"])
+                if len(d["vendors"]) >= 3:
+                    served_volumes.append(vol)
+                else:
+                    underserved_volumes.append(vol)
+
+            served_arr = np.array(served_volumes, dtype=float)
+            underserved_arr = np.array(underserved_volumes, dtype=float)
+
+            if len(served_arr) >= 5 and len(underserved_arr) >= 5:
+                tester = HypothesisTester(alpha=0.05)
+                mw_result = tester.mann_whitney_u(
+                    served_arr.tolist(), underserved_arr.tolist()
+                )
+                result["mann_whitney_served_vs_underserved"] = {
+                    "test": "Mann-Whitney U",
+                    "null_hypothesis": "Revenue distributions are the same for served and underserved markets",
+                    "test_statistic": round(mw_result.test_statistic, 4),
+                    "p_value": round(mw_result.p_value, 6),
+                    "significant": mw_result.reject_null,
+                    "effect_size": round(mw_result.effect_size or 0, 4),
+                    "served_median_revenue": round(float(np.median(served_arr)), 2),
+                    "underserved_median_revenue": round(float(np.median(underserved_arr)), 2),
+                    "n_served": len(served_arr),
+                    "n_underserved": len(underserved_arr),
+                    "interpretation": mw_result.interpretation,
+                    "method": "STA 444 — Non-parametric two-sample test (no normality assumption)",
+                }
+        except Exception as e:
+            logger.debug("mann_whitney_served_vs_underserved_failed", error=str(e))
+
+        # ── STA 444: Bootstrap CI on gap estimates ─────────────────────────
+        try:
+            rev_values = np.array([
+                d["revenue"] for d in market_data.values()
+            ], dtype=float)
+            rev_values = rev_values[rev_values > 0]
+            if len(rev_values) >= 10:
+                # Bootstrap CI on mean market revenue
+                boot_mean = bootstrap.percentile_ci(
+                    rev_values, np.mean, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on total gap revenue potential
+                def _gap_estimate(data):
+                    avg = float(np.mean(data))
+                    return avg * len(valid_gap_markets)
+
+                boot_gap = bootstrap.percentile_ci(
+                    rev_values, _gap_estimate, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on median market revenue
+                boot_median = bootstrap.percentile_ci(
+                    rev_values, np.median, n_bootstrap=5000, confidence=0.95,
+                )
+                result["bootstrap_gap_ci"] = {
+                    "mean_market_revenue": {
+                        "estimate": boot_mean["estimate"],
+                        "ci_lower": boot_mean["ci_lower"],
+                        "ci_upper": boot_mean["ci_upper"],
+                        "bootstrap_se": boot_mean["bootstrap_se"],
+                    },
+                    "total_gap_revenue": {
+                        "estimate": boot_gap["estimate"],
+                        "ci_lower": boot_gap["ci_lower"],
+                        "ci_upper": boot_gap["ci_upper"],
+                        "bootstrap_se": boot_gap["bootstrap_se"],
+                    },
+                    "median_market_revenue": {
+                        "estimate": boot_median["estimate"],
+                        "ci_lower": boot_median["ci_lower"],
+                        "ci_upper": boot_median["ci_upper"],
+                        "bootstrap_se": boot_median["bootstrap_se"],
+                    },
+                    "n_gap_markets": len(valid_gap_markets),
+                    "confidence": 0.95,
+                    "n_bootstrap": 5000,
+                    "method": "STA 444 — Bootstrap percentile CI (distribution-free)",
+                }
+        except Exception as e:
+            logger.debug("bootstrap_gap_ci_failed", error=str(e))
+
+        return result if result else None

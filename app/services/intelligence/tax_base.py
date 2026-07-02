@@ -32,6 +32,14 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
+from app.services.research.confidence_intervals import BootstrapCI
+from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.statistical_foundation import (
+    BootstrapInference,
+    KernelDensityEstimator,
+    bootstrap,
+    kde_estimator,
+)
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -543,6 +551,10 @@ class TaxBaseService:
             "county_rank": None,
             # STA 341: Bootstrap confidence intervals
             "bootstrap_estimates": bootstrap_ci if bootstrap_ci else None,
+            # STA 444: Non-parametric analysis
+            "nonparametric_analysis": self._run_nonparametric_analysis(
+                sales, sector_breakdown, user_count,
+            ),
             "users_included": user_count,
             "confidence_interval": {"lower": ci_lower, "upper": ci_upper},
         }
@@ -555,6 +567,142 @@ class TaxBaseService:
 
         logger.info("tax_base_estimated", region=region, businesses=user_count, revenue=dp_total_rev)
         return response
+
+    @staticmethod
+    def _run_nonparametric_analysis(
+        sales: list,
+        sector_breakdown: list,
+        user_count: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run non-parametric statistical analysis (STA 444).
+
+        Applies KDE for tax compliance distribution, comprehensive
+        bootstrap CIs, and Kruskal-Wallis for cross-sector comparison.
+        Essential for informal economy data which is skewed and
+        outlier-heavy.
+        """
+        if len(sales) < 20:
+            return None
+
+        result: Dict[str, Any] = {}
+
+        # ── STA 444: KDE for tax compliance distribution ───────────────────
+        try:
+            # Per-business revenue as compliance proxy
+            business_revenues: Dict[str, float] = defaultdict(float)
+            for t in sales:
+                business_revenues[str(t.user_id)] += t.amount
+            rev_arr = np.array(list(business_revenues.values()), dtype=float)
+            rev_arr = rev_arr[rev_arr > 0]
+            if len(rev_arr) >= 10:
+                grid, density = kde_estimator.gaussian_kde(rev_arr)
+                mode_idx = int(np.argmax(density))
+                result["kde_compliance_distribution"] = {
+                    "description": "Non-parametric business revenue density (compliance proxy)",
+                    "mode_revenue": round(float(grid[mode_idx]), 2),
+                    "bandwidth": round(float(
+                        0.9 * min(
+                            np.std(rev_arr),
+                            (np.percentile(rev_arr, 75) - np.percentile(rev_arr, 25)) / 1.34,
+                        ) * len(rev_arr) ** (-0.2)
+                    ), 4),
+                    "n_businesses": len(rev_arr),
+                    "multimodality": kde_estimator.detect_multimodality(rev_arr),
+                    "interpretation": "Multimodal revenue distribution suggests distinct compliance tiers",
+                    "method": "STA 444 — Kernel Density Estimation",
+                }
+        except Exception as e:
+            logger.debug("kde_compliance_distribution_failed", error=str(e))
+
+        # ── STA 444: Kruskal-Wallis — compare tax compliance across sectors ──
+        if len(sector_breakdown) >= 3:
+            try:
+                sector_revenues: Dict[str, list] = defaultdict(list)
+                for t in sales:
+                    cat = t.item_category or "other"
+                    sector_revenues[cat].append(float(t.amount))
+
+                valid_groups = [
+                    v for v in sector_revenues.values() if len(v) >= 5
+                ]
+                if len(valid_groups) >= 3:
+                    tester = HypothesisTester(alpha=0.05)
+                    kw_result = tester.kruskal_wallis(valid_groups)
+                    result["kruskal_wallis_sector_compliance"] = {
+                        "test": "Kruskal-Wallis H",
+                        "null_hypothesis": "All sectors have the same revenue distribution",
+                        "test_statistic": round(kw_result.test_statistic, 4),
+                        "p_value": round(kw_result.p_value, 6),
+                        "significant": kw_result.reject_null,
+                        "effect_size_epsilon_sq": round(kw_result.effect_size or 0, 4),
+                        "n_groups": len(valid_groups),
+                        "n_total": sum(len(g) for g in valid_groups),
+                        "interpretation": kw_result.interpretation,
+                        "method": "STA 444 — Non-parametric ANOVA (no normality assumption)",
+                    }
+            except Exception as e:
+                logger.debug("kruskal_wallis_sector_compliance_failed", error=str(e))
+
+        # ── STA 444: Comprehensive Bootstrap CI on tax estimates ────────────
+        try:
+            rev_arr = np.array([t.amount for t in sales], dtype=float)
+            if len(rev_arr) >= 30:
+                # Bootstrap CI on mean transaction
+                boot_mean = bootstrap.percentile_ci(
+                    rev_arr, np.mean, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on total revenue
+                boot_total = bootstrap.percentile_ci(
+                    rev_arr, np.sum, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on median transaction
+                boot_median = bootstrap.percentile_ci(
+                    rev_arr, np.median, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on revenue per business
+                business_revs = defaultdict(float)
+                for t in sales:
+                    business_revs[str(t.user_id)] += t.amount
+                per_biz = np.array(list(business_revs.values()), dtype=float)
+                per_biz = per_biz[per_biz > 0]
+                boot_per_biz = bootstrap.percentile_ci(
+                    per_biz, np.mean, n_bootstrap=5000, confidence=0.95,
+                ) if len(per_biz) >= 10 else None
+
+                result["bootstrap_comprehensive_ci"] = {
+                    "mean_transaction": {
+                        "estimate": boot_mean["estimate"],
+                        "ci_lower": boot_mean["ci_lower"],
+                        "ci_upper": boot_mean["ci_upper"],
+                        "bootstrap_se": boot_mean["bootstrap_se"],
+                    },
+                    "total_revenue": {
+                        "estimate": boot_total["estimate"],
+                        "ci_lower": boot_total["ci_lower"],
+                        "ci_upper": boot_total["ci_upper"],
+                        "bootstrap_se": boot_total["bootstrap_se"],
+                    },
+                    "median_transaction": {
+                        "estimate": boot_median["estimate"],
+                        "ci_lower": boot_median["ci_lower"],
+                        "ci_upper": boot_median["ci_upper"],
+                        "bootstrap_se": boot_median["bootstrap_se"],
+                    },
+                    "revenue_per_business": ({
+                        "estimate": boot_per_biz["estimate"],
+                        "ci_lower": boot_per_biz["ci_lower"],
+                        "ci_upper": boot_per_biz["ci_upper"],
+                        "bootstrap_se": boot_per_biz["bootstrap_se"],
+                    } if boot_per_biz else None),
+                    "confidence": 0.95,
+                    "n_bootstrap": 5000,
+                    "method": "STA 444 — Bootstrap percentile CI (distribution-free)",
+                }
+        except Exception as e:
+            logger.debug("bootstrap_comprehensive_ci_failed", error=str(e))
+
+        return result if result else None
 
     @staticmethod
     def _determine_region_type(region: str) -> str:

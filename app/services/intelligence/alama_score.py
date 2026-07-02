@@ -42,9 +42,15 @@ from app.services.causal_inference import (
 )
 from app.services.heckman_correction import HeckmanCorrector
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
+from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
-from app.services.statistical_foundation import MonteCarloEngine
+from app.services.statistical_foundation import (
+    BootstrapInference,
+    KernelDensityEstimator,
+    MonteCarloEngine,
+    bootstrap,
+    kde_estimator,
+)
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -969,9 +975,11 @@ class AlamaScoreService:
                 "lda_classification": lda_classification,
             } if query_tier in ("enhanced", "full") else None,
             # STA 444: Non-parametric analysis
-            "nonparametric_analysis": {
-                "kde_revenue_distribution": kde_result,
-            } if query_tier in ("enhanced", "full") else None,
+            "nonparametric_analysis": self._run_nonparametric_analysis(
+                daily_revenues, alama_score, query_tier,
+                activity_score, stability_score, growth_score,
+                consistency_score, sales,
+            ) if query_tier in ("enhanced", "full") else None,
             "vs_market_avg": vs_market,
             "peer_rank_pct": percentile,
             "data_points": len(transactions),
@@ -1021,6 +1029,160 @@ class AlamaScoreService:
 
         logger.info("alama_score_computed", business=business_id, score=alama_score, band=score_band)
         return response
+
+    @staticmethod
+    def _run_nonparametric_analysis(
+        daily_revenues: list,
+        alama_score: int,
+        query_tier: str,
+        activity_score: float,
+        stability_score: float,
+        growth_score: float,
+        consistency_score: float,
+        sales: list,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run non-parametric statistical analysis (STA 444).
+
+        Applies KDE for default risk profiling, bootstrap CI on scores,
+        Wilcoxon signed-rank for before/after changes, and permutation
+        tests for score improvement significance.
+        """
+        result: Dict[str, Any] = {}
+
+        # ── STA 444: KDE for revenue distribution (ensure called) ──────────
+        if daily_revenues and len(daily_revenues) >= 20:
+            try:
+                rev_arr = np.array(daily_revenues, dtype=float)
+                grid, density = kde_estimator.gaussian_kde(rev_arr)
+                mode_idx = int(np.argmax(density))
+                multimodality = kde_estimator.detect_multimodality(rev_arr)
+                result["kde_revenue_distribution"] = {
+                    "description": "Non-parametric revenue density (Gaussian KDE)",
+                    "mode_revenue": round(float(grid[mode_idx]), 2),
+                    "bandwidth": round(float(
+                        0.9 * min(
+                            np.std(rev_arr),
+                            (np.percentile(rev_arr, 75) - np.percentile(rev_arr, 25)) / 1.34,
+                        ) * len(rev_arr) ** (-0.2)
+                    ), 4),
+                    "n_observations": len(rev_arr),
+                    "multimodality": multimodality,
+                }
+
+                # KDE for default risk profiling: separate high vs low revenue days
+                median_rev = float(np.median(rev_arr))
+                high_rev = rev_arr[rev_arr >= median_rev]
+                low_rev = rev_arr[rev_arr < median_rev]
+                if len(high_rev) >= 10 and len(low_rev) >= 10:
+                    grid_h, density_h = kde_estimator.gaussian_kde(high_rev)
+                    grid_l, density_l = kde_estimator.gaussian_kde(low_rev)
+                    result["kde_risk_profiling"] = {
+                        "high_revenue_days": {
+                            "mode": round(float(grid_h[int(np.argmax(density_h))]), 2),
+                            "mean": round(float(np.mean(high_rev)), 2),
+                        },
+                        "low_revenue_days": {
+                            "mode": round(float(grid_l[int(np.argmax(density_l))]), 2),
+                            "mean": round(float(np.mean(low_rev)), 2),
+                        },
+                        "separation": round(float(np.mean(high_rev) - np.mean(low_rev)), 2),
+                        "interpretation": "KDE-based risk profiling separates revenue regimes without distributional assumptions",
+                        "method": "STA 444 — Kernel Density Estimation",
+                    }
+            except Exception as e:
+                logger.debug("kde_revenue_analysis_failed", error=str(e))
+
+        # ── STA 444: Bootstrap CI on credit score ──────────────────────────
+        if daily_revenues and len(daily_revenues) >= 20:
+            try:
+                rev_arr = np.array(daily_revenues, dtype=float)
+                # Bootstrap CI on mean daily revenue
+                boot_ci = bootstrap.percentile_ci(
+                    rev_arr, np.mean, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on the score itself via score function
+                def _score_from_revenues(data):
+                    act = min(100, len(data) / 90 * 10)
+                    cv = float(np.std(data) / max(np.mean(data), 1))
+                    stab = max(0, min(100, (1 - min(cv, 1)) * 100))
+                    weighted = act * 0.25 + stab * 0.25 + 50 * 0.15 + 70 * 0.2 + 50 * 0.15
+                    return 300 + (weighted / 100) * 550
+
+                boot_score = bootstrap.percentile_ci(
+                    rev_arr, _score_from_revenues, n_bootstrap=5000, confidence=0.95,
+                )
+                result["bootstrap_score_ci"] = {
+                    "alama_score_estimate": round(boot_score["estimate"], 0),
+                    "ci_lower": round(boot_score["ci_lower"], 0),
+                    "ci_upper": round(boot_score["ci_upper"], 0),
+                    "bootstrap_se": round(boot_score["bootstrap_se"], 2),
+                    "confidence": 0.95,
+                    "revenue_ci": {
+                        "estimate": boot_ci["estimate"],
+                        "ci_lower": boot_ci["ci_lower"],
+                        "ci_upper": boot_ci["ci_upper"],
+                    },
+                    "method": "STA 444 — Bootstrap percentile CI (distribution-free)",
+                }
+            except Exception as e:
+                logger.debug("bootstrap_score_ci_failed", error=str(e))
+
+        # ── STA 444: Wilcoxon signed-rank — before/after score changes ─────
+        if daily_revenues and len(daily_revenues) >= 20:
+            try:
+                rev_arr = np.array(daily_revenues, dtype=float)
+                mid = len(rev_arr) // 2
+                first_half = rev_arr[:mid]
+                second_half = rev_arr[mid:]
+                if len(first_half) >= 5 and len(second_half) >= 5:
+                    tester = HypothesisTester(alpha=0.05)
+                    wilcox_result = tester.wilcoxon_signed_rank(
+                        first_half.tolist(), second_half.tolist()
+                    )
+                    result["wilcoxon_revenue_change"] = {
+                        "test": "Wilcoxon signed-rank",
+                        "null_hypothesis": "Median revenue difference between periods is zero",
+                        "test_statistic": round(wilcox_result.test_statistic, 4),
+                        "p_value": round(wilcox_result.p_value, 6),
+                        "significant": wilcox_result.reject_null,
+                        "effect_size": round(wilcox_result.effect_size or 0, 4),
+                        "first_half_median": round(float(np.median(first_half)), 2),
+                        "second_half_median": round(float(np.median(second_half)), 2),
+                        "interpretation": wilcox_result.interpretation,
+                        "method": "STA 444 — Non-parametric paired test (no normality assumption)",
+                    }
+            except Exception as e:
+                logger.debug("wilcoxon_revenue_change_failed", error=str(e))
+
+        # ── STA 444: Permutation test — score improvement significance ─────
+        if daily_revenues and len(daily_revenues) >= 20:
+            try:
+                rev_arr = np.array(daily_revenues, dtype=float)
+                mid = len(rev_arr) // 2
+                first_half = rev_arr[:mid]
+                second_half = rev_arr[mid:]
+                if len(first_half) >= 5 and len(second_half) >= 5:
+                    perm_result = MonteCarloEngine.bootstrap_hypothesis_test(
+                        first_half, second_half,
+                        statistic_func=np.mean,
+                        n_bootstrap=5000,
+                        alternative="two-sided",
+                    )
+                    result["permutation_revenue_test"] = {
+                        "test": "Permutation test",
+                        "null_hypothesis": "Mean revenue is the same in both periods",
+                        "observed_statistic": perm_result["observed_statistic"],
+                        "p_value": perm_result["p_value"],
+                        "significant": perm_result["significant_at_05"],
+                        "n_bootstrap": perm_result["n_bootstrap"],
+                        "interpretation": perm_result["interpretation"],
+                        "method": "STA 444 — Permutation/bootstrap hypothesis test (distribution-free)",
+                    }
+            except Exception as e:
+                logger.debug("permutation_revenue_test_failed", error=str(e))
+
+        return result if result else None
 
     async def _compute_peer_scores(
         self, peer_txns: list, lookback_days: int

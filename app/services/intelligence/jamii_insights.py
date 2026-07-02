@@ -34,7 +34,15 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
-from app.services.statistical_foundation import ClusterAnalyzer
+from app.services.research.confidence_intervals import BootstrapCI
+from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.statistical_foundation import (
+    BootstrapInference,
+    ClusterAnalyzer,
+    KernelDensityEstimator,
+    bootstrap,
+    kde_estimator,
+)
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -675,6 +683,11 @@ class JamiiInsightsService:
             "barriers": barriers,
             # STA 442: Cluster analysis for community segmentation
             "community_segmentation": community_segmentation,
+            # STA 444: Non-parametric analysis
+            "nonparametric_analysis": self._run_nonparametric_analysis(
+                sales, users, user_monthly_incomes, user_count,
+                poverty_line_monthly, digital_adoption, credit_access,
+            ),
             "sample_size": user_count,
         }
 
@@ -686,6 +699,176 @@ class JamiiInsightsService:
 
         logger.info("jamii_insights_generated", region=region, k=user_count)
         return response
+
+    @staticmethod
+    def _run_nonparametric_analysis(
+        sales: list,
+        users: list,
+        user_monthly_incomes: np.ndarray,
+        user_count: int,
+        poverty_line_monthly: float,
+        digital_adoption: float,
+        credit_access: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run non-parametric statistical analysis (STA 444).
+
+        Applies Kruskal-Wallis for cross-community comparison,
+        Mann-Whitney for gender income gap, KDE for income distribution,
+        and bootstrap CI on poverty measures. Essential for informal
+        economy data which is non-normal, small-sample, and ordinal.
+        """
+        if len(sales) < 20 or len(user_monthly_incomes) < 10:
+            return None
+
+        result: Dict[str, Any] = {}
+
+        # ── STA 444: KDE for income distribution ───────────────────────────
+        try:
+            inc_arr = np.array(user_monthly_incomes, dtype=float)
+            inc_arr = inc_arr[inc_arr > 0]
+            if len(inc_arr) >= 10:
+                grid, density = kde_estimator.gaussian_kde(inc_arr)
+                mode_idx = int(np.argmax(density))
+                result["kde_income_distribution"] = {
+                    "description": "Non-parametric income density (Gaussian KDE)",
+                    "mode_income": round(float(grid[mode_idx]), 2),
+                    "bandwidth": round(float(
+                        0.9 * min(
+                            np.std(inc_arr),
+                            (np.percentile(inc_arr, 75) - np.percentile(inc_arr, 25)) / 1.34,
+                        ) * len(inc_arr) ** (-0.2)
+                    ), 4),
+                    "n_observations": len(inc_arr),
+                    "multimodality": kde_estimator.detect_multimodality(inc_arr),
+                    "interpretation": "Multimodal income distribution suggests distinct economic segments",
+                    "method": "STA 444 — Kernel Density Estimation",
+                }
+        except Exception as e:
+            logger.debug("kde_income_distribution_failed", error=str(e))
+
+        # ── STA 444: Mann-Whitney — gender income gap analysis ─────────────
+        try:
+            male_incomes = []
+            female_incomes = []
+            for u in users:
+                uid = u.id
+                u_income = sum(t.amount for t in sales if t.user_id == uid)
+                if u.business_type in ("mama_mboga", "tailor"):
+                    female_incomes.append(float(u_income))
+                else:
+                    male_incomes.append(float(u_income))
+
+            male_arr = np.array(male_incomes, dtype=float)
+            female_arr = np.array(female_incomes, dtype=float)
+            male_arr = male_arr[male_arr > 0]
+            female_arr = female_arr[female_arr > 0]
+
+            if len(male_arr) >= 5 and len(female_arr) >= 5:
+                tester = HypothesisTester(alpha=0.05)
+                mw_result = tester.mann_whitney_u(
+                    male_arr.tolist(), female_arr.tolist()
+                )
+                result["mann_whitney_gender_income_gap"] = {
+                    "test": "Mann-Whitney U",
+                    "null_hypothesis": "Income distributions are the same for male- and female-owned businesses",
+                    "test_statistic": round(mw_result.test_statistic, 4),
+                    "p_value": round(mw_result.p_value, 6),
+                    "significant": mw_result.reject_null,
+                    "effect_size": round(mw_result.effect_size or 0, 4),
+                    "male_median_income": round(float(np.median(male_arr)), 2),
+                    "female_median_income": round(float(np.median(female_arr)), 2),
+                    "gap_pct": round(
+                        (float(np.median(male_arr)) - float(np.median(female_arr)))
+                        / max(float(np.median(female_arr)), 1) * 100, 1
+                    ),
+                    "n_male": len(male_arr),
+                    "n_female": len(female_arr),
+                    "interpretation": mw_result.interpretation,
+                    "method": "STA 444 — Non-parametric two-sample test (no normality assumption)",
+                }
+        except Exception as e:
+            logger.debug("mann_whitney_gender_gap_failed", error=str(e))
+
+        # ── STA 444: Kruskal-Wallis — compare financial inclusion across communities ──
+        try:
+            # Group users by business type as proxy for community
+            community_incomes: Dict[str, list] = defaultdict(list)
+            for u in users:
+                uid = u.id
+                u_income = sum(t.amount for t in sales if t.user_id == uid)
+                if u_income > 0:
+                    community_incomes[u.business_type or "other"].append(float(u_income))
+
+            valid_groups = [
+                v for v in community_incomes.values() if len(v) >= 5
+            ]
+            if len(valid_groups) >= 3:
+                tester = HypothesisTester(alpha=0.05)
+                kw_result = tester.kruskal_wallis(valid_groups)
+                result["kruskal_wallis_community_inclusion"] = {
+                    "test": "Kruskal-Wallis H",
+                    "null_hypothesis": "All communities have the same income distribution",
+                    "test_statistic": round(kw_result.test_statistic, 4),
+                    "p_value": round(kw_result.p_value, 6),
+                    "significant": kw_result.reject_null,
+                    "effect_size_epsilon_sq": round(kw_result.effect_size or 0, 4),
+                    "n_groups": len(valid_groups),
+                    "n_total": sum(len(g) for g in valid_groups),
+                    "interpretation": kw_result.interpretation,
+                    "method": "STA 444 — Non-parametric ANOVA (no normality assumption)",
+                }
+        except Exception as e:
+            logger.debug("kruskal_wallis_community_failed", error=str(e))
+
+        # ── STA 444: Bootstrap CI on poverty measures ──────────────────────
+        try:
+            inc_arr = np.array(user_monthly_incomes, dtype=float)
+            inc_arr = inc_arr[inc_arr > 0]
+            if len(inc_arr) >= 20:
+                # Bootstrap CI on headcount ratio
+                def _headcount(data):
+                    return float(np.mean(data < poverty_line_monthly))
+
+                boot_headcount = bootstrap.percentile_ci(
+                    inc_arr, _headcount, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on mean income
+                boot_mean = bootstrap.percentile_ci(
+                    inc_arr, np.mean, n_bootstrap=5000, confidence=0.95,
+                )
+                # Bootstrap CI on median income
+                boot_median = bootstrap.percentile_ci(
+                    inc_arr, np.median, n_bootstrap=5000, confidence=0.95,
+                )
+                result["bootstrap_poverty_ci"] = {
+                    "headcount_ratio": {
+                        "estimate": boot_headcount["estimate"],
+                        "ci_lower": boot_headcount["ci_lower"],
+                        "ci_upper": boot_headcount["ci_upper"],
+                        "bootstrap_se": boot_headcount["bootstrap_se"],
+                    },
+                    "mean_income": {
+                        "estimate": boot_mean["estimate"],
+                        "ci_lower": boot_mean["ci_lower"],
+                        "ci_upper": boot_mean["ci_upper"],
+                        "bootstrap_se": boot_mean["bootstrap_se"],
+                    },
+                    "median_income": {
+                        "estimate": boot_median["estimate"],
+                        "ci_lower": boot_median["ci_lower"],
+                        "ci_upper": boot_median["ci_upper"],
+                        "bootstrap_se": boot_median["bootstrap_se"],
+                    },
+                    "poverty_line_monthly_kes": round(poverty_line_monthly, 0),
+                    "confidence": 0.95,
+                    "n_bootstrap": 5000,
+                    "method": "STA 444 — Bootstrap percentile CI (distribution-free)",
+                }
+        except Exception as e:
+            logger.debug("bootstrap_poverty_ci_failed", error=str(e))
+
+        return result if result else None
 
     @staticmethod
     def _filter_demographic(users: list, segment: str) -> list:

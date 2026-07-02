@@ -75,9 +75,16 @@ from app.services.anonymizer import Anonymizer
 from app.services.econometric_engine import ARIMAModel, CointegrationTester, VARModel
 from app.services.game_theory import CournotDuopoly, BertrandDuopoly
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
+from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
-from app.services.statistical_foundation import ClusterAnalyzer
+from app.services.statistical_foundation import (
+    BootstrapInference,
+    ClusterAnalyzer,
+    KernelDensityEstimator,
+    bayesian_updater,
+    bootstrap,
+    kde_estimator,
+)
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -901,6 +908,13 @@ class SokoPulseService:
                         [float(p) for p in unit_prices], confidence=0.95
                     ).to_dict() if len(unit_prices) > 1 else None
                 ),
+                # STA 444: Bootstrap CI on average price (non-parametric)
+                "bootstrap_ci": (
+                    BootstrapCI.compute(
+                        [float(p) for p in unit_prices],
+                        statistic="mean", confidence=0.95, n_bootstrap=5000,
+                    ).to_dict() if len(unit_prices) >= 10 else None
+                ),
             },
             "day_of_week_pattern": dow_pattern,
             "monthly_trend": monthly_trend,
@@ -910,6 +924,10 @@ class SokoPulseService:
             # STA 244: Cointegration for cross-border price analysis
             "cointegration_cross_border": cointegration_analysis,
             # STA 442: Cluster analysis for market segmentation
+            # STA 444: Non-parametric analysis
+            "nonparametric_analysis": self._run_nonparametric_analysis(
+                transactions, unit_prices, quantities, tier, user_ids,
+            ),
             "market_segmentation": market_segmentation,
             # ECO 422: Competition analysis (Cournot & Bertrand)
             "competition_analysis": competition_analysis,
@@ -949,6 +967,157 @@ class SokoPulseService:
         )
 
         return response
+
+    def _run_nonparametric_analysis(
+        self,
+        transactions: list,
+        unit_prices: list,
+        quantities: list,
+        tier: str,
+        user_ids: Optional[list],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run non-parametric statistical analysis (STA 444).
+
+        Applies Kruskal-Wallis, Mann-Whitney, KDE, bootstrap CI,
+        and Spearman rank correlation — essential for informal economy
+        data which is non-normal, small-sample, and outlier-heavy.
+        """
+        if tier == "basic" or len(transactions) < 20:
+            return None
+
+        result: Dict[str, Any] = {}
+
+        # ── STA 444: KDE for price distribution ─────────────────────────────
+        if unit_prices and len(unit_prices) >= 20:
+            try:
+                prices_arr = np.array(unit_prices, dtype=float)
+                grid, density = kde_estimator.gaussian_kde(prices_arr)
+                mode_idx = int(np.argmax(density))
+                result["kde_price_distribution"] = {
+                    "description": "Non-parametric price density (Gaussian KDE)",
+                    "mode_price": round(float(grid[mode_idx]), 2),
+                    "bandwidth": round(float(
+                        0.9 * min(
+                            np.std(prices_arr),
+                            (np.percentile(prices_arr, 75) - np.percentile(prices_arr, 25)) / 1.34,
+                        ) * len(prices_arr) ** (-0.2)
+                    ), 4),
+                    "n_observations": len(prices_arr),
+                    "multimodality": kde_estimator.detect_multimodality(prices_arr),
+                }
+            except Exception as e:
+                logger.debug("kde_price_distribution_failed", error=str(e))
+
+        # ── STA 444: Kruskal-Wallis — compare prices across markets ────────
+        if user_ids and len(unit_prices) >= 30:
+            try:
+                # Group prices by user (proxy for market/supplier)
+                user_prices: Dict[str, list] = defaultdict(list)
+                for t in transactions:
+                    if t.unit_price and t.unit_price > 0:
+                        user_prices[str(t.user_id)].append(float(t.unit_price))
+
+                # Need 3+ groups with 5+ observations each
+                valid_groups = [
+                    p for p in user_prices.values() if len(p) >= 5
+                ]
+                if len(valid_groups) >= 3:
+                    tester = HypothesisTester(alpha=0.05)
+                    kw_result = tester.kruskal_wallis(valid_groups)
+                    result["kruskal_wallis_price_comparison"] = {
+                        "test": "Kruskal-Wallis H",
+                        "null_hypothesis": "All markets/suppliers have the same price distribution",
+                        "test_statistic": round(kw_result.test_statistic, 4),
+                        "p_value": round(kw_result.p_value, 6),
+                        "significant": kw_result.reject_null,
+                        "effect_size_epsilon_sq": round(kw_result.effect_size or 0, 4),
+                        "n_groups": len(valid_groups),
+                        "n_total": sum(len(g) for g in valid_groups),
+                        "interpretation": kw_result.interpretation,
+                        "method": "STA 444 — Non-parametric ANOVA (no normality assumption)",
+                    }
+            except Exception as e:
+                logger.debug("kruskal_wallis_price_failed", error=str(e))
+
+        # ── STA 444: Mann-Whitney U — compare two market segments ──────────
+        if len(unit_prices) >= 20:
+            try:
+                prices_arr = np.array(unit_prices, dtype=float)
+                median_price = float(np.median(prices_arr))
+                above_median = prices_arr[prices_arr >= median_price]
+                below_median = prices_arr[prices_arr < median_price]
+                if len(above_median) >= 5 and len(below_median) >= 5:
+                    tester = HypothesisTester(alpha=0.05)
+                    mw_result = tester.mann_whitney_u(
+                        above_median.tolist(), below_median.tolist()
+                    )
+                    result["mann_whitney_price_segments"] = {
+                        "test": "Mann-Whitney U",
+                        "null_hypothesis": "Price distributions of high-value and low-value segments are the same",
+                        "test_statistic": round(mw_result.test_statistic, 4),
+                        "p_value": round(mw_result.p_value, 6),
+                        "significant": mw_result.reject_null,
+                        "effect_size": round(mw_result.effect_size or 0, 4),
+                        "high_segment_median": round(float(np.median(above_median)), 2),
+                        "low_segment_median": round(float(np.median(below_median)), 2),
+                        "interpretation": mw_result.interpretation,
+                        "method": "STA 444 — Non-parametric two-sample test",
+                    }
+            except Exception as e:
+                logger.debug("mann_whitney_price_failed", error=str(e))
+
+        # ── STA 444: Spearman rank correlation — price vs demand ───────────
+        if unit_prices and quantities and len(unit_prices) >= 20:
+            try:
+                p_arr = np.array(unit_prices[:len(quantities)], dtype=float)
+                q_arr = np.array(quantities[:len(unit_prices)], dtype=float)
+                mask = (p_arr > 0) & (np.array(q_arr) > 0)
+                if mask.sum() >= 20:
+                    from scipy import stats as sp_stats
+                    rho, p_val = sp_stats.spearmanr(p_arr[mask], q_arr[mask])
+                    result["spearman_price_demand_correlation"] = {
+                        "test": "Spearman rank correlation",
+                        "null_hypothesis": "No monotonic relationship between price and demand",
+                        "rho": round(float(rho), 4),
+                        "p_value": round(float(p_val), 6),
+                        "significant": p_val < 0.05,
+                        "direction": "positive" if rho > 0 else "negative",
+                        "strength": (
+                            "strong" if abs(rho) > 0.7
+                            else "moderate" if abs(rho) > 0.4
+                            else "weak"
+                        ),
+                        "n_observations": int(mask.sum()),
+                        "interpretation": (
+                            f"{'Significant' if p_val < 0.05 else 'Non-significant'} "
+                            f"{'positive' if rho > 0 else 'negative'} monotonic "
+                            f"relationship (ρ={rho:.3f})"
+                        ),
+                        "method": "STA 444 — Rank-based correlation (no linearity assumption)",
+                    }
+            except Exception as e:
+                logger.debug("spearman_correlation_failed", error=str(e))
+
+        # ── STA 444: Bootstrap CI on forecast ──────────────────────────────
+        if unit_prices and len(unit_prices) >= 30:
+            try:
+                prices_arr = np.array(unit_prices, dtype=float)
+                boot_ci = bootstrap.percentile_ci(
+                    prices_arr, np.mean, n_bootstrap=5000, confidence=0.95,
+                )
+                result["bootstrap_forecast_ci"] = {
+                    "estimate": boot_ci["estimate"],
+                    "ci_lower": boot_ci["ci_lower"],
+                    "ci_upper": boot_ci["ci_upper"],
+                    "bootstrap_se": boot_ci["bootstrap_se"],
+                    "confidence": 0.95,
+                    "method": "STA 444 — Bootstrap percentile CI (distribution-free)",
+                }
+            except Exception as e:
+                logger.debug("bootstrap_forecast_ci_failed", error=str(e))
+
+        return result if result else None
 
     @staticmethod
     def _test_demand_significance(
