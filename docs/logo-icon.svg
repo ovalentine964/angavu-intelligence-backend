@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0D1929"/>
+      <stop offset="100%" stop-color="#1B2A4A"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+  
+  <!-- B letterform -->
+  <rect x="120" y="120" width="56" height="272" rx="14" fill="#FFFFFF"/>
+  <path d="M176,120 L268,120 C314,120 352,158 352,200 C352,242 314,264 268,264 L176,264Z" fill="#FFFFFF"/>
+  <path d="M176,280 L274,280 C318,280 356,314 356,352 C356,390 318,396 274,396 L176,396Z" fill="#FFFFFF"/>
+  
+  <!-- Pulse line — the signature accent -->
+  <polyline points="176,272 208,272 224,238 244,304 260,228 278,280 300,272 370,272"
+            fill="none" stroke="#E8853D" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Data node dots on pulse peaks -->
+  <circle cx="224" cy="238" r="7" fill="#F5A623"/>
+  <circle cx="260" cy="228" r="7" fill="#F5A623"/>
+</svg>

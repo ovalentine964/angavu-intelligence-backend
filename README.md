@@ -1,3 +1,5 @@
+![Biashara Intelligence](docs/logo-banner.svg)
+
 # Biashara Intelligence — Cloud Platform
 
 **The economic intelligence engine behind Africa's informal economy.**
