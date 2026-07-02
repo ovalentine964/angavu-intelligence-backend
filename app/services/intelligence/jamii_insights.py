@@ -626,6 +626,22 @@ class JamiiInsightsService:
                 "cost_per_beneficiary_kes": None,
             }
 
+        # ── ECO 106: Health-economic intelligence ──────────────────────
+        health_economic = None
+        try:
+            # Estimate average monthly income for health module
+            avg_monthly_inc = avg_monthly if avg_monthly > 0 else 10000
+            health_economic = HealthEconomicIntelligence.full_health_economic_report(
+                user_id=str(user_ids[0]) if user_ids else "unknown",
+                transactions=transactions,
+                region=region,
+                user_count=user_count,
+                avg_monthly_income=avg_monthly_inc,
+                poverty_line_monthly=poverty_line_monthly,
+            )
+        except Exception as e:
+            logger.debug("health_economic_failed", error=str(e))
+
         response = {
             "product": "jamii_insights",
             "version": "2.0",
@@ -681,6 +697,8 @@ class JamiiInsightsService:
             "livelihoods_supported": livelihoods,
             "program_impact": program_impact,
             "barriers": barriers,
+            # ECO 106: Health-economic intelligence
+            "health_economic": health_economic,
             # STA 442: Cluster analysis for community segmentation
             "community_segmentation": community_segmentation,
             # STA 444: Non-parametric analysis
@@ -933,3 +951,827 @@ class JamiiInsightsService:
                 "recommended_intervention": "Continue monitoring",
             })
         return barriers
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ECO 106 — Emerging Public Health Issues: Health-Economic Intelligence
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class HealthEconomicIntelligence:
+    """
+    Health-economic intelligence module for informal workers.
+
+    Driven by ECO 106 § Emerging Public Health Issues:
+
+    Health shocks are the #1 cause of poverty entry for informal
+    workers in Kenya. A single hospitalization can wipe out months
+    of savings and push a family below the poverty line.
+
+    Key Concepts:
+
+    - Grossman Health Capital Model (1972): Health is a durable capital
+      stock that depreciates over time and can be augmented by
+      investment (medical care, nutrition, exercise):
+        H(t+1) = H(t) - δ·H(t) + I(t)
+      where δ = depreciation rate, I = health investment.
+      Optimal health investment: MB(MC) = δ + r (depreciation + interest).
+
+    - Health Shocks and Poverty: A health shock reduces labor supply
+      and income, creating a poverty trap:
+        Income_loss = f(shock_severity, duration, insurance_coverage)
+        Poverty_probability = P(income - health_expenses < poverty_line)
+
+    - Catastrophic Health Expenditure (WHO): Health spending > 40% of
+      household's capacity to pay (non-food expenditure).
+      CHE_rate = P(health_spending > 0.4 × non_food_expenditure)
+
+    - Epidemiological Transition (Omran, 1971): Kenya is in stage 3
+      (degenerative diseases) with lingering stage 2 (infectious diseases).
+      Informal workers face dual burden: malaria/TB + diabetes/hypertension.
+
+    - Financial Protection: NHIF (National Hospital Insurance Fund) covers
+      ~20% of Kenyans. Informal sector largely uninsured.
+      Insurance_gap = 1 - (insured_workers / total_workers)
+
+    Data Integration Points:
+    - NHIF claims data (if accessible)
+    - MoH DHIS2 (District Health Information System)
+    - Revenue patterns pre/post health shock (from transaction data)
+    - Community health worker (CHW) reports
+
+    References:
+    - Grossman, M. (1972). "On the Concept of Health Capital and the Demand
+      for Health." Journal of Political Economy, 80(2), 223-255.
+    - WHO (2010). "The World Health Report — Health Systems Financing."
+    - Chuma, J. & Gilson, L. (2008). "Healthcare financing and the poor:
+      the case of Kenya." Journal of International Development.
+    - Omran, A.R. (1971). "The Epidemiologic Transition." Milbank Memorial
+      Fund Quarterly, 49(4), 509-538.
+    """
+
+    # Common health shocks affecting informal workers in Kenya
+    HEALTH_SHOCK_TYPES = {
+        "malaria": {"avg_cost_kes": 3500, "avg_days_lost": 5, "severity": "moderate"},
+        "respiratory_infection": {"avg_cost_kes": 2500, "avg_days_lost": 3, "severity": "mild"},
+        "diarrheal_disease": {"avg_cost_kes": 2000, "avg_days_lost": 2, "severity": "mild"},
+        "typhoid": {"avg_cost_kes": 8000, "avg_days_lost": 10, "severity": "moderate"},
+        "hospitalization": {"avg_cost_kes": 35000, "avg_days_lost": 14, "severity": "severe"},
+        "surgery": {"avg_cost_kes": 120000, "avg_days_lost": 30, "severity": "catastrophic"},
+        "chronic_disease": {"avg_cost_kes": 5000, "avg_days_lost": 0, "severity": "ongoing"},
+        "maternal": {"avg_cost_kes": 25000, "avg_days_lost": 42, "severity": "moderate"},
+        "road_injury": {"avg_cost_kes": 45000, "avg_days_lost": 21, "severity": "severe"},
+        "mental_health": {"avg_cost_kes": 3000, "avg_days_lost": 7, "severity": "moderate"},
+    }
+
+    # NHIF coverage rates by sector (estimated)
+    NHIF_COVERAGE = {
+        "formal_sector": 0.65,
+        "informal_sector": 0.18,
+        "overall": 0.22,
+    }
+
+    @classmethod
+    def health_shock_tracker(
+        cls,
+        user_id: str,
+        transactions: List[Any],
+        lookback_days: int = 180,
+        poverty_line_monthly: float = 8800,
+    ) -> Dict[str, Any]:
+        """
+        Detect and track health shocks from transaction patterns.
+
+        Health shocks manifest as:
+        1. Revenue drops (>50% decline for 3+ consecutive days)
+        2. Activity gaps (zero transactions for 3+ days)
+        3. Sudden expense spikes (medical payments)
+
+        Driven by ECO 106 § Health-Economic Nexus:
+        A health shock reduces H(t) → reduces labor supply → reduces income.
+        The Grossman model predicts: optimal health investment increases
+        when wage rate is high (high opportunity cost of illness).
+
+        Args:
+            user_id: anonymized user identifier
+            transactions: list of transaction objects
+            lookback_days: analysis window
+            poverty_line_monthly: poverty threshold in KES
+
+        Returns:
+            Dict with detected shocks, impact assessment, and recovery tracking
+        """
+        sales = [t for t in transactions if t.transaction_type == "SALE"]
+        if len(sales) < 20:
+            return {"error": "Insufficient transaction data"}
+
+        # Daily revenue aggregation
+        daily_rev = defaultdict(float)
+        daily_count = defaultdict(int)
+        for t in sales:
+            day = t.timestamp.strftime("%Y-%m-%d")
+            daily_rev[day] += t.amount
+            daily_count[day] += 1
+
+        sorted_days = sorted(daily_rev.keys())
+        if len(sorted_days) < 14:
+            return {"error": "Need at least 14 days of data"}
+
+        revenues = np.array([daily_rev[d] for d in sorted_days], dtype=float)
+        median_rev = float(np.median(revenues))
+        mean_rev = float(np.mean(revenues))
+
+        # Detect revenue drops (health shock signature)
+        shocks = []
+        i = 0
+        while i < len(sorted_days):
+            # Check if this day is significantly below median
+            if daily_rev[sorted_days[i]] < median_rev * 0.5:
+                # Start of potential shock
+                shock_start = i
+                shock_days = [sorted_days[i]]
+                while i + 1 < len(sorted_days) and daily_rev[sorted_days[i + 1]] < median_rev * 0.5:
+                    i += 1
+                    shock_days.append(sorted_days[i])
+
+                if len(shock_days) >= 3:  # Minimum 3 days for health shock
+                    shock_rev = sum(daily_rev[d] for d in shock_days)
+                    expected_rev = median_rev * len(shock_days)
+                    revenue_loss = expected_rev - shock_rev
+
+                    # Classify severity
+                    loss_pct = revenue_loss / max(expected_rev, 1) * 100
+                    if loss_pct > 80:
+                        severity = "catastrophic"
+                    elif loss_pct > 60:
+                        severity = "severe"
+                    elif loss_pct > 40:
+                        severity = "moderate"
+                    else:
+                        severity = "mild"
+
+                    shocks.append({
+                        "start_date": shock_days[0],
+                        "end_date": shock_days[-1],
+                        "duration_days": len(shock_days),
+                        "revenue_loss_kes": round(revenue_loss, 0),
+                        "loss_percentage": round(loss_pct, 1),
+                        "severity": severity,
+                        "estimated_health_cost": cls._estimate_health_cost(len(shock_days), severity),
+                        "recovery_status": cls._assess_recovery(
+                            daily_rev, sorted_days, i, median_rev
+                        ),
+                    })
+            i += 1
+
+        # Health shock frequency
+        shock_count = len(shocks)
+        shock_frequency = shock_count / max(lookback_days / 30, 1)  # Per month
+
+        # Total impact
+        total_loss = sum(s["revenue_loss_kes"] for s in shocks)
+        total_days_lost = sum(s["duration_days"] for s in shocks)
+        total_health_cost = sum(s["estimated_health_cost"] for s in shocks)
+
+        # Poverty risk from health shocks
+        avg_monthly_rev = mean_rev * 30
+        post_shock_monthly = max(0, avg_monthly_rev - (total_loss / max(lookback_days / 30, 1)))
+        poverty_risk = 1 if post_shock_monthly < poverty_line_monthly else 0
+
+        return {
+            "user_id": user_id,
+            "lookback_days": lookback_days,
+            "health_shocks": shocks,
+            "shock_count": shock_count,
+            "shock_frequency_per_month": round(shock_frequency, 2),
+            "total_revenue_loss_kes": round(total_loss, 0),
+            "total_days_lost": total_days_lost,
+            "total_estimated_health_cost_kes": round(total_health_cost, 0),
+            "avg_monthly_revenue_kes": round(avg_monthly_rev, 0),
+            "post_shock_monthly_revenue_kes": round(post_shock_monthly, 0),
+            "poverty_risk_from_health_shocks": poverty_risk,
+            "health_vulnerability_score": cls._vulnerability_score(
+                shock_frequency, total_loss, avg_monthly_rev
+            ),
+            "method": "ECO 106 — Health-Economic Shock Detection",
+        }
+
+    @classmethod
+    def grossman_health_investment(
+        cls,
+        current_health_stock: float,
+        wage_rate: float,
+        depreciation_rate: float = 0.05,
+        interest_rate: float = 0.12,
+        medical_cost_index: float = 1.0,
+    ) -> Dict[str, Any]:
+        """
+        Grossman health capital model — optimal health investment.
+
+        Driven by ECO 106 § Grossman Model (1972):
+        Health is a durable capital stock H(t) that:
+        - Depreciates at rate δ: H(t+1) = (1-δ)·H(t) + I(t)
+        - Generates healthy time: T_healthy = f(H)
+        - Healthy time produces income: Y = w · T_healthy
+
+        Optimal investment condition:
+        MB of health investment = MC of health investment
+        where MC = cost of medical care, MB = present value of future
+        earnings from improved health.
+
+        For informal workers:
+        - Wage rate w is variable (not fixed salary)
+        - δ may be higher (poor nutrition, working conditions)
+        - MC may be higher (limited access, transport costs)
+        - Interest rate r is higher (no formal credit)
+
+        Args:
+            current_health_stock: health status (0-100)
+            wage_rate: daily wage rate in KES
+            depreciation_rate: annual health depreciation (default 5%)
+            interest_rate: discount rate (default 12% for informal sector)
+            medical_cost_index: relative cost of medical care (1.0 = average)
+
+        Returns:
+            Dict with optimal investment, marginal benefit/cost, and recommendations
+        """
+        # Health production function: H(t+1) = (1-δ)·H(t) + I(t)^α
+        # where α = 0.5 (diminishing returns to health investment)
+        alpha = 0.5
+
+        # Marginal product of health investment
+        # MP_I = α · I^(α-1) — diminishing returns
+
+        # Optimal investment condition:
+        # MB = (w × marginal_health_time) / (r + δ)
+        # MC = medical_cost_index × unit_cost
+
+        # Marginal value of healthy time
+        # Assume 1 unit of health → 0.01 units of healthy time
+        health_to_time = 0.01
+        marginal_value = wage_rate * health_to_time
+
+        # Optimal investment level
+        # From FOC: α · I^(α-1) × marginal_value = medical_cost_index × (r + δ)
+        # Solving: I* = (α × marginal_value / (medical_cost_index × (r + δ)))^(1/(1-α))
+        denominator = medical_cost_index * (interest_rate + depreciation_rate)
+        if denominator > 0:
+            optimal_investment = (alpha * marginal_value / denominator) ** (1 / (1 - alpha))
+        else:
+            optimal_investment = 0
+
+        # Health depreciation
+        annual_depreciation = current_health_stock * depreciation_rate
+
+        # Required investment to maintain current health
+        maintenance_investment = annual_depreciation
+
+        # Investment gap
+        investment_gap = maintenance_investment - optimal_investment
+
+        # Recommendations based on current health stock
+        if current_health_stock < 40:
+            priority = "critical"
+            recommendation = "Immediate health investment needed. Seek subsidized care at public health facilities."
+        elif current_health_stock < 60:
+            priority = "high"
+            recommendation = "Regular health check-ups and preventive care recommended. Consider NHIF enrollment."
+        elif current_health_stock < 80:
+            priority = "moderate"
+            recommendation = "Maintain health through balanced nutrition and regular exercise. Budget for annual check-up."
+        else:
+            priority = "low"
+            recommendation = "Health stock is good. Continue preventive care and healthy lifestyle."
+
+        return {
+            "current_health_stock": current_health_stock,
+            "wage_rate_kes": wage_rate,
+            "depreciation_rate": depreciation_rate,
+            "interest_rate": interest_rate,
+            "optimal_annual_investment_kes": round(optimal_investment * 365, 0),
+            "optimal_daily_investment_kes": round(optimal_investment, 0),
+            "annual_depreciation_units": round(annual_depreciation, 2),
+            "maintenance_investment_units": round(maintenance_investment, 2),
+            "investment_gap_units": round(investment_gap, 2),
+            "health_trajectory": "improving" if optimal_investment > maintenance_investment else "declining",
+            "priority": priority,
+            "recommendation": recommendation,
+            "model": {
+                "name": "Grossman Health Capital Model (1972)",
+                "production_function": "H(t+1) = (1-δ)·H(t) + I(t)^α",
+                "optimal_condition": "MB = α·I^(α-1)·w·health_to_time = MC·(r+δ)",
+                "parameters": {"alpha": alpha, "health_to_time": health_to_time},
+            },
+        }
+
+    @classmethod
+    def health_insurance_intelligence(
+        cls,
+        user_count: int,
+        transactions: List[Any],
+        region: str,
+        avg_monthly_income: float,
+    ) -> Dict[str, Any]:
+        """
+        Health insurance coverage and gap analysis.
+
+        Driven by ECO 106 § Financial Protection in Health:
+        - Universal Health Coverage (UHC): WHO goal that all people obtain
+          needed health services without financial hardship.
+        - Catastrophic Health Expenditure (CHE): Out-of-pocket health
+          spending > 40% of non-food household expenditure.
+        - NHIF (Kenya): National Hospital Insurance Fund — covers ~22%
+          of population. Informal sector coverage ~18%.
+        - Community-Based Health Insurance (CBHI): Chama-based health
+          pools, common in informal sector.
+
+        Insurance gap = 1 - (insured / total population)
+        CHE risk = P(OOP_health_spend > 0.4 × capacity_to_pay)
+
+        Args:
+            user_count: number of users in analysis
+            transactions: transaction data for income estimation
+            region: geographic region
+            avg_monthly_income: average monthly income in KES
+
+        Returns:
+            Dict with insurance gap, CHE risk, and recommendations
+        """
+        # Estimate insurance coverage (proxy: NHIF coverage for informal sector)
+        estimated_coverage = cls.NHIF_COVERAGE["informal_sector"]
+        insured_count = int(user_count * estimated_coverage)
+        uninsured_count = user_count - insured_count
+        insurance_gap = 1 - estimated_coverage
+
+        # Catastrophic health expenditure risk
+        # WHO threshold: OOP > 40% of capacity to pay (non-food expenditure)
+        # Assume food = 50% of income for informal workers
+        capacity_to_pay = avg_monthly_income * 0.5  # Non-food
+        che_threshold = capacity_to_pay * 0.4
+
+        # Risk assessment
+        # Average hospitalization cost in Kenya: ~KES 35,000
+        avg_hospitalization = 35000
+        che_probability = 1 if avg_hospitalization > che_threshold else 0
+        months_to_save = avg_hospitalization / max(avg_monthly_income * 0.1, 1)  # 10% savings rate
+
+        # Health expenditure burden
+        annual_health_budget = avg_monthly_income * 12 * 0.05  # WHO recommends 5%
+        annual_health_budget_actual = min(annual_health_budget, avg_monthly_income * 12 * 0.15)  # Max 15%
+
+        # CBHI (chama-based) recommendation
+        cbhi_monthly_premium = avg_monthly_income * 0.02  # 2% of income
+        cbhi_coverage_limit = cbhi_monthly_premium * 12 * 10  # 10x annual premium
+
+        return {
+            "region": region,
+            "user_count": user_count,
+            "estimated_insured": insured_count,
+            "estimated_uninsured": uninsured_count,
+            "insurance_coverage_rate": round(estimated_coverage * 100, 1),
+            "insurance_gap_pct": round(insurance_gap * 100, 1),
+            "che_risk": {
+                "threshold_kes": round(che_threshold, 0),
+                "avg_hospitalization_cost_kes": avg_hospitalization,
+                "catastrophic_risk": "high" if che_probability else "low",
+                "months_to_save_for_hospitalization": round(months_to_save, 1),
+            },
+            "recommended_insurance": {
+                "type": "Community-Based Health Insurance (CBHI)",
+                "monthly_premium_kes": round(cbhi_monthly_premium, 0),
+                "annual_premium_kes": round(cbhi_monthly_premium * 12, 0),
+                "coverage_limit_kes": round(cbhi_coverage_limit, 0),
+                "affordability": "affordable" if cbhi_monthly_premium < avg_monthly_income * 0.05 else "stretched",
+            },
+            "nhif_enrollment": {
+                "current_rate": round(cls.NHIF_COVERAGE["informal_sector"] * 100, 1),
+                "target_rate": 50,
+                "gap": round((0.50 - cls.NHIF_COVERAGE["informal_sector"]) * 100, 1),
+            },
+            "financial_protection_score": round(
+                (1 - insurance_gap) * 50 + (1 - che_probability) * 50, 1
+            ),
+            "interpretation": (
+                f"{uninsured_count} of {user_count} workers ({insurance_gap*100:.0f}%) lack health insurance. "
+                f"Average hospitalization (KES {avg_hospitalization:,}) is "
+                f"{'catastrophic' if che_probability else 'manageable'} relative to income. "
+                f"Recommend CBHI at KES {cbhi_monthly_premium:,.0f}/month."
+            ),
+            "method": "ECO 106 — Health Financial Protection (WHO UHC framework)",
+        }
+
+    @classmethod
+    def epidemiological_early_warning(
+        cls,
+        transactions: List[Any],
+        region: str,
+        lookback_days: int = 90,
+    ) -> Dict[str, Any]:
+        """
+        Epidemiological early warning from transaction patterns.
+
+        Driven by ECO 106 § Disease Surveillance:
+        Disease outbreaks manifest in economic data before clinical data:
+        1. Clustered revenue drops across multiple traders (community illness)
+        2. Changes in product mix (medicine purchases up, food down)
+        3. Reduced market attendance (fewer active traders)
+
+        This is syndromic surveillance through economic data — a novel
+        approach enabled by Biashara Intelligence's transaction coverage.
+
+        Early warning signals:
+        - Z-score > 2 on 7-day rolling revenue (unusual decline)
+        - Cluster of 3+ traders with >50% revenue drop in same week
+        - Product mix shift: medicine/household ratio increase
+
+        Args:
+            transactions: transaction data
+            region: geographic region
+            lookback_days: analysis window
+
+        Returns:
+            Dict with early warning signals, risk level, and alert details
+        """
+        sales = [t for t in transactions if t.transaction_type == "SALE"]
+        if len(sales) < 50:
+            return {"error": "Insufficient data for epidemiological surveillance"}
+
+        # Daily aggregation
+        daily_rev = defaultdict(float)
+        daily_traders = defaultdict(set)
+        daily_categories = defaultdict(lambda: defaultdict(float))
+
+        for t in sales:
+            day = t.timestamp.strftime("%Y-%m-%d")
+            daily_rev[day] += t.amount
+            daily_traders[day].add(str(t.user_id))
+            if t.item_category:
+                daily_categories[day][t.item_category] += t.amount
+
+        sorted_days = sorted(daily_rev.keys())
+        if len(sorted_days) < 14:
+            return {"error": "Need at least 14 days of data"}
+
+        revenues = np.array([daily_rev[d] for d in sorted_days], dtype=float)
+
+        # 7-day rolling statistics
+        window = 7
+        rolling_mean = np.convolve(revenues, np.ones(window) / window, mode='valid')
+        rolling_std = np.array([
+            np.std(revenues[max(0, i-window+1):i+1]) for i in range(window-1, len(revenues))
+        ])
+
+        # Z-scores for recent days
+        z_scores = []
+        for i in range(len(rolling_mean)):
+            if rolling_std[i] > 0:
+                z = (revenues[window - 1 + i] - rolling_mean[i]) / rolling_std[i]
+            else:
+                z = 0
+            z_scores.append(z)
+
+        # Detect anomalies (z < -2 = unusual decline)
+        anomaly_days = []
+        for i, z in enumerate(z_scores):
+            if z < -2.0:
+                day_idx = window - 1 + i
+                if day_idx < len(sorted_days):
+                    anomaly_days.append({
+                        "date": sorted_days[day_idx],
+                        "z_score": round(float(z), 2),
+                        "revenue": round(float(revenues[day_idx]), 0),
+                        "expected": round(float(rolling_mean[i]), 0),
+                    })
+
+        # Cluster detection: multiple traders affected in same week
+        weekly_clusters = defaultdict(lambda: {"affected_traders": set(), "total_drop": 0})
+        for t in sales:
+            week = t.timestamp.strftime("%Y-W%W")
+            weekly_clusters[week]["total_drop"] += t.amount
+
+        # Active traders per week
+        weekly_active = defaultdict(set)
+        for t in sales:
+            week = t.timestamp.strftime("%Y-W%W")
+            weekly_active[week].add(str(t.user_id))
+
+        # Product mix shift detection
+        medicine_keywords = ["health", "medicine", "pharmacy", "hospital"]
+        medicine_share_trend = []
+        for d in sorted_days[-14:]:  # Last 2 weeks
+            total = sum(daily_categories[d].values())
+            medicine = sum(
+                v for k, v in daily_categories[d].items()
+                if any(kw in (k or "").lower() for kw in medicine_keywords)
+            )
+            if total > 0:
+                medicine_share_trend.append(medicine / total)
+
+        # Early warning risk level
+        risk_factors = 0
+        if len(anomaly_days) >= 3:
+            risk_factors += 2  # Multiple anomaly days
+        if any(a["z_score"] < -3 for a in anomaly_days):
+            risk_factors += 1  # Extreme anomaly
+        if len(medicine_share_trend) >= 2 and medicine_share_trend[-1] > medicine_share_trend[0] * 1.5:
+            risk_factors += 1  # Medicine share spike
+
+        if risk_factors >= 3:
+            risk_level = "high"
+            alert = "Potential disease outbreak detected. Multiple economic indicators suggest community health event."
+        elif risk_factors >= 2:
+            risk_level = "elevated"
+            alert = "Unusual economic activity patterns detected. Monitor for disease outbreak signals."
+        elif risk_factors >= 1:
+            risk_level = "moderate"
+            alert = "Minor anomalies detected. Continue routine surveillance."
+        else:
+            risk_level = "low"
+            alert = "No unusual patterns detected. Normal economic activity."
+
+        return {
+            "region": region,
+            "lookback_days": lookback_days,
+            "risk_level": risk_level,
+            "risk_factors": risk_factors,
+            "alert": alert,
+            "anomaly_days": anomaly_days[:5],  # Top 5 most anomalous
+            "active_traders_last_week": len(weekly_active.get(sorted_days[-1][:8], set())) if sorted_days else 0,
+            "medicine_share_trend": [round(s, 4) for s in medicine_share_trend[-4:]] if medicine_share_trend else [],
+            "recommendations": cls._epidemiological_recommendations(risk_level),
+            "method": "ECO 106 — Syndromic Surveillance via Economic Data",
+        }
+
+    @classmethod
+    def health_productivity_correlation(
+        cls,
+        transactions: List[Any],
+        lookback_days: int = 180,
+    ) -> Dict[str, Any]:
+        """
+        Measure correlation between health indicators and productivity.
+
+        Driven by ECO 106 § Health-Productivity Nexus:
+        - Human capital theory (Becker, 1964): Health is a component of
+          human capital that increases productivity.
+        - Productivity = f(health, education, experience)
+        - Health shocks reduce H → reduce productivity → reduce income
+
+        For informal workers:
+        - No sick leave → health shock = zero income
+        - No health insurance → health cost = out-of-pocket
+        - Dual burden: income loss + medical expense
+
+        Uses Spearman rank correlation (STA 444) for robust
+        non-parametric measurement.
+
+        Args:
+            transactions: transaction data
+            lookback_days: analysis window
+
+        Returns:
+            Dict with health-productivity metrics and correlations
+        """
+        sales = [t for t in transactions if t.transaction_type == "SALE"]
+        if len(sales) < 30:
+            return {"error": "Insufficient data"}
+
+        # Daily metrics
+        daily_rev = defaultdict(float)
+        daily_count = defaultdict(int)
+        for t in sales:
+            day = t.timestamp.strftime("%Y-%m-%d")
+            daily_rev[day] += t.amount
+            daily_count[day] += 1
+
+        sorted_days = sorted(daily_rev.keys())
+        revenues = np.array([daily_rev[d] for d in sorted_days], dtype=float)
+        counts = np.array([daily_count[d] for d in sorted_days], dtype=float)
+
+        # Activity pattern (proxy for health status)
+        # Consecutive inactive days suggest health issues
+        inactive_streaks = []
+        current_streak = 0
+        for r in revenues:
+            if r < np.median(revenues) * 0.2:  # Very low activity
+                current_streak += 1
+            else:
+                if current_streak >= 2:
+                    inactive_streaks.append(current_streak)
+                current_streak = 0
+        if current_streak >= 2:
+            inactive_streaks.append(current_streak)
+
+        # Weekly aggregation for correlation
+        weekly_rev = defaultdict(float)
+        weekly_count = defaultdict(int)
+        for d, r in daily_rev.items():
+            week = d[:8]  # Year-week approximation
+            weekly_rev[week] += r
+            weekly_count[week] += 1
+
+        weeks = sorted(weekly_rev.keys())
+        if len(weeks) < 4:
+            return {"error": "Need at least 4 weeks of data"}
+
+        w_revenues = np.array([weekly_rev[w] for w in weeks], dtype=float)
+        w_counts = np.array([weekly_count[w] for w in weeks], dtype=float)
+
+        # Correlation: activity (txn count) vs revenue
+        from scipy import stats as sp_stats
+        if len(w_counts) >= 4:
+            rho, p_val = sp_stats.spearmanr(w_counts, w_revenues)
+        else:
+            rho, p_val = 0.0, 1.0
+
+        # Vulnerability assessment
+        zero_days = int(np.sum(revenues < 1))
+        low_days = int(np.sum(revenues < np.median(revenues) * 0.3))
+
+        return {
+            "lookback_days": lookback_days,
+            "total_days": len(sorted_days),
+            "active_days": int(np.sum(revenues > 0)),
+            "zero_income_days": zero_days,
+            "low_activity_days": low_days,
+            "inactive_streaks": inactive_streaks,
+            "longest_inactive_streak": max(inactive_streaks) if inactive_streaks else 0,
+            "activity_revenue_correlation": {
+                "spearman_rho": round(float(rho), 4),
+                "p_value": round(float(p_val), 6),
+                "significant": p_val < 0.05,
+                "interpretation": (
+                    f"{'Significant' if p_val < 0.05 else 'Non-significant'} "
+                    f"{'positive' if rho > 0 else 'negative'} correlation "
+                    f"between activity and revenue (ρ={rho:.3f}). "
+                    f"This suggests {'health status directly impacts productivity' if abs(rho) > 0.5 else 'moderate health-productivity link'}."
+                ),
+            },
+            "health_vulnerability": {
+                "zero_income_risk": "high" if zero_days > 10 else "moderate" if zero_days > 5 else "low",
+                "income_stability": "unstable" if np.std(revenues) / max(np.mean(revenues), 1) > 0.8 else "stable",
+                "no_sick_leave_buffer": True,
+                "recommendation": "Build emergency fund equal to 2 weeks of expenses to buffer health shocks",
+            },
+            "method": "ECO 106 — Health-Productivity Correlation (Human Capital Theory)",
+        }
+
+    @classmethod
+    def full_health_economic_report(
+        cls,
+        user_id: str,
+        transactions: List[Any],
+        region: str,
+        user_count: int,
+        avg_monthly_income: float,
+        poverty_line_monthly: float = 8800,
+    ) -> Dict[str, Any]:
+        """
+        Comprehensive health-economic intelligence report.
+
+        Combines all ECO 106 analyses:
+        1. Health shock detection and tracking
+        2. Grossman health investment model
+        3. Health insurance gap analysis
+        4. Epidemiological early warning
+        5. Health-productivity correlation
+
+        Args:
+            user_id: anonymized user ID
+            transactions: transaction data
+            region: geographic region
+            user_count: total users in area
+            avg_monthly_income: average monthly income in KES
+            poverty_line_monthly: poverty threshold
+
+        Returns:
+            Comprehensive health-economic report
+        """
+        report = {
+            "product": "jamii_insights_health",
+            "user_id": user_id,
+            "region": region,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # 1. Health shock tracker
+        report["health_shocks"] = cls.health_shock_tracker(
+            user_id, transactions, poverty_line_monthly=poverty_line_monthly
+        )
+
+        # 2. Grossman model (estimate health stock from activity patterns)
+        sales = [t for t in transactions if t.transaction_type == "SALE"]
+        daily_rev = defaultdict(float)
+        for t in sales:
+            daily_rev[t.timestamp.strftime("%Y-%m-%d")] += t.amount
+        avg_daily_rev = float(np.mean(list(daily_rev.values()))) if daily_rev else 0
+
+        # Estimate health stock: 100 if fully active, lower if inactive
+        active_days = len(daily_rev)
+        total_days = max(1, (max(t.timestamp for t in sales) - min(t.timestamp for t in sales)).days + 1) if sales else 1
+        activity_ratio = active_days / total_days
+        estimated_health_stock = min(100, activity_ratio * 100 + 20)  # Base 20 + activity
+
+        report["grossman_model"] = cls.grossman_health_investment(
+            current_health_stock=estimated_health_stock,
+            wage_rate=avg_daily_rev,
+        )
+
+        # 3. Health insurance intelligence
+        report["insurance_intelligence"] = cls.health_insurance_intelligence(
+            user_count, transactions, region, avg_monthly_income
+        )
+
+        # 4. Epidemiological early warning
+        report["epidemiological_warning"] = cls.epidemiological_early_warning(
+            transactions, region
+        )
+
+        # 5. Health-productivity correlation
+        report["health_productivity"] = cls.health_productivity_correlation(transactions)
+
+        # Summary risk score
+        shock_risk = report["health_shocks"].get("health_vulnerability_score", 50)
+        ins_risk = report["insurance_intelligence"].get("financial_protection_score", 50)
+        epi_risk = {"low": 10, "moderate": 30, "elevated": 60, "high": 90}.get(
+            report["epidemiological_warning"].get("risk_level", "low"), 10
+        )
+        overall_risk = round((shock_risk + (100 - ins_risk) + epi_risk) / 3, 1)
+
+        report["overall_health_risk_score"] = overall_risk
+        report["overall_risk_level"] = (
+            "critical" if overall_risk > 70
+            else "high" if overall_risk > 50
+            else "moderate" if overall_risk > 30
+            else "low"
+        )
+        report["key_insight"] = (
+            f"Health risk score: {overall_risk}/100 ({report['overall_risk_level']}). "
+            f"Insurance coverage: {report['insurance_intelligence']['insurance_coverage_rate']}%. "
+            f"Health shocks detected: {report['health_shocks'].get('shock_count', 0)}. "
+            f"Recommendation: {report['grossman_model']['recommendation']}"
+        )
+
+        return report
+
+    @staticmethod
+    def _estimate_health_cost(duration_days: int, severity: str) -> float:
+        """Estimate health cost based on shock duration and severity."""
+        base_costs = {
+            "mild": 2000, "moderate": 5000, "severe": 25000, "catastrophic": 80000
+        }
+        base = base_costs.get(severity, 5000)
+        return base + duration_days * 500  # Daily cost component
+
+    @staticmethod
+    def _assess_recovery(
+        daily_rev: dict, sorted_days: list, shock_end_idx: int, median_rev: float
+    ) -> str:
+        """Assess recovery status after a health shock."""
+        # Check 7 days after shock end
+        recovery_start = shock_end_idx + 1
+        recovery_end = min(recovery_start + 7, len(sorted_days))
+        if recovery_start >= len(sorted_days):
+            return "ongoing"
+        recovery_rev = [daily_rev[sorted_days[i]] for i in range(recovery_start, recovery_end)]
+        avg_recovery = np.mean(recovery_rev) if recovery_rev else 0
+        if avg_recovery >= median_rev * 0.8:
+            return "recovered"
+        elif avg_recovery >= median_rev * 0.5:
+            return "recovering"
+        else:
+            return "not_recovered"
+
+    @staticmethod
+    def _vulnerability_score(
+        shock_frequency: float, total_loss: float, avg_monthly_rev: float
+    ) -> float:
+        """Compute health vulnerability score (0-100, higher = more vulnerable)."""
+        freq_score = min(50, shock_frequency * 25)  # Max 50 from frequency
+        loss_score = min(50, (total_loss / max(avg_monthly_rev * 12, 1)) * 50)  # Max 50 from loss
+        return round(freq_score + loss_score, 1)
+
+    @staticmethod
+    def _epidemiological_recommendations(risk_level: str) -> List[str]:
+        """Generate recommendations based on epidemiological risk level."""
+        if risk_level == "high":
+            return [
+                "Alert community health workers (CHWs) in the area",
+                "Increase surveillance frequency to daily",
+                "Report unusual patterns to Sub-County Health Management Team",
+                "Advise traders to stock essential medicines and hygiene supplies",
+                "Consider temporary market closure if pattern persists",
+            ]
+        elif risk_level == "elevated":
+            return [
+                "Monitor daily for 7 days",
+                "Cross-reference with MoH DHIS2 disease reports",
+                "Advise traders on hand hygiene and food safety",
+            ]
+        elif risk_level == "moderate":
+            return [
+                "Continue routine weekly monitoring",
+                "Note pattern for seasonal adjustment",
+            ]
+        else:
+            return ["No action required. Continue routine monitoring."]

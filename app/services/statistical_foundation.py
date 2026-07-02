@@ -1539,6 +1539,741 @@ class MCMCSampler:
         }
 
 
+# ---------------------------------------------------------------------------
+# Principal Component Analysis (STA 442)
+# ---------------------------------------------------------------------------
+
+
+class PCAAnalyzer:
+    """
+    Principal Component Analysis (STA 442 — Applied Multivariate Analysis).
+
+    Reduces dimensionality by projecting data onto directions of maximum
+    variance via eigendecomposition of the covariance matrix.
+
+    Model:
+        Σ = PΛP'  (eigendecomposition)
+        Z = XP    (projection onto principal components)
+
+    where Σ = covariance matrix, Λ = diagonal eigenvalue matrix,
+    P = eigenvector matrix, Z = scores (reduced data).
+
+    Proportion of variance explained by PCₖ = λₖ / Σλⱼ.
+
+    Used by:
+    - Alama Score: Dimensionality reduction of borrower feature vectors
+      (activity, stability, growth, consistency, diversity) into
+      uncorrelated principal components for credit scoring
+    - Biashara Pulse: Composite index construction from correlated
+      economic indicators
+    - Jamii Insights: Socioeconomic dimension reduction for community
+      profiling
+
+    References:
+    - Jolliffe, I.T. (2002). Principal Component Analysis. 2nd ed. Springer.
+    - Hotelling, H. (1933). Analysis of a complex of statistical variables
+      into principal components. Journal of Educational Psychology, 24(6), 417-441.
+    """
+
+    @staticmethod
+    def fit_transform(
+        X: np.ndarray,
+        n_components: int = 3,
+        standardize: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Fit PCA and transform data.
+
+        Steps:
+        1. Center data (subtract mean)
+        2. Compute covariance matrix Σ = (1/(n-1)) X'X
+        3. Eigendecomposition: Σ = PΛP'
+        4. Sort eigenvalues descending
+        5. Project: Z = X_centered @ P[:, :k]
+
+        Args:
+            X: data matrix (n × p)
+            n_components: number of components to retain
+            standardize: if True, standardize to unit variance before PCA
+
+        Returns:
+            Dict with reduced_data, eigenvalues, loadings, variance_explained,
+            cumulative_variance, and reconstruction
+        """
+        X = np.asarray(X, dtype=float)
+        n, p = X.shape
+
+        # Center
+        mean = np.mean(X, axis=0)
+        X_centered = X - mean
+
+        # Optional standardization (correlation PCA vs covariance PCA)
+        scale = None
+        if standardize:
+            scale = np.std(X, axis=0, ddof=1)
+            scale = np.maximum(scale, 1e-10)
+            X_centered = X_centered / scale
+
+        # Covariance matrix
+        cov = np.cov(X_centered, rowvar=False)
+        if cov.ndim == 1:
+            cov = cov.reshape(1, 1)
+
+        # Eigendecomposition
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+
+        # Sort descending
+        idx = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[idx]
+        eigenvectors = eigenvectors[:, idx]
+
+        # Ensure non-negative eigenvalues (numerical noise)
+        eigenvalues = np.maximum(eigenvalues, 0)
+
+        # Take first k components
+        k = min(n_components, p)
+        loadings = eigenvectors[:, :k]  # p × k
+        reduced = X_centered @ loadings  # n × k
+
+        # Variance explained
+        total_var = np.sum(eigenvalues)
+        var_explained = eigenvalues[:k] / max(total_var, 1e-10)
+        cum_var = np.cumsum(var_explained)
+
+        # Reconstruction (inverse transform)
+        reconstructed = reduced @ loadings.T + mean
+        if scale is not None:
+            reconstructed = reconstructed * scale + mean
+
+        return {
+            "reduced_data": reduced,
+            "eigenvalues": eigenvalues,
+            "loadings": loadings,
+            "variance_explained": var_explained,
+            "cumulative_variance": cum_var,
+            "mean": mean,
+            "scale": scale,
+            "n_components": k,
+            "n_features": p,
+            "total_variance": total_var,
+            "reconstructed": reconstructed,
+        }
+
+    @staticmethod
+    def select_n_components(
+        X: np.ndarray,
+        variance_threshold: float = 0.90,
+        standardize: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Select number of components to retain a given variance proportion.
+
+        Uses the cumulative variance threshold method:
+        Choose smallest k such that Σⱼ₌₁ᵏ λⱼ / Σλⱼ ≥ threshold.
+
+        Args:
+            X: data matrix (n × p)
+            variance_threshold: minimum cumulative variance to retain (default 0.90)
+            standardize: whether to standardize first
+
+        Returns:
+            Dict with recommended k, cumulative variance curve, and elbow info
+        """
+        result = PCAAnalyzer.fit_transform(X, n_components=X.shape[1], standardize=standardize)
+        cum_var = result["cumulative_variance"]
+        eigenvalues = result["eigenvalues"]
+
+        # Find k for threshold
+        k_threshold = int(np.searchsorted(cum_var, variance_threshold) + 1)
+        k_threshold = min(k_threshold, len(cum_var))
+
+        # Elbow: maximize second difference of eigenvalues
+        if len(eigenvalues) >= 3:
+            diffs = np.diff(eigenvalues)
+            diffs2 = np.diff(diffs)
+            k_elbow = int(np.argmax(diffs2) + 2)  # +2 because two diffs
+        else:
+            k_elbow = 1
+
+        return {
+            "recommended_k": k_threshold,
+            "variance_threshold": variance_threshold,
+            "cumulative_variance": [round(float(v), 4) for v in cum_var],
+            "eigenvalues": [round(float(v), 4) for v in eigenvalues],
+            "k_elbow": k_elbow,
+            "method": "cumulative_variance_threshold + elbow",
+        }
+
+    @staticmethod
+    def interpret_loadings(
+        loadings: np.ndarray,
+        feature_names: List[str],
+        n_components: int = 3,
+        threshold: float = 0.3,
+    ) -> List[Dict[str, Any]]:
+        """
+        Interpret PCA loadings to label components.
+
+        For each component, identifies features with highest absolute
+        loadings (above threshold) to provide economic interpretation.
+
+        Args:
+            loadings: p × k loading matrix
+            feature_names: names for each feature
+            n_components: number of components to interpret
+            threshold: minimum |loading| to include in interpretation
+
+        Returns:
+            List of component interpretations
+        """
+        interpretations = []
+        k = min(n_components, loadings.shape[1])
+
+        for j in range(k):
+            col = loadings[:, j]
+            # Sort by absolute loading
+            sorted_idx = np.argsort(np.abs(col))[::-1]
+            top_features = []
+            for idx in sorted_idx:
+                if abs(col[idx]) >= threshold and idx < len(feature_names):
+                    top_features.append({
+                        "feature": feature_names[idx],
+                        "loading": round(float(col[idx]), 4),
+                        "direction": "positive" if col[idx] > 0 else "negative",
+                    })
+            interpretations.append({
+                "component": j,
+                "top_features": top_features,
+                "variance_explained_pct": round(float(np.sum(col ** 2) / len(col) * 100), 1),
+            })
+
+        return interpretations
+
+
+# ---------------------------------------------------------------------------
+# Factor Analysis (STA 442)
+# ---------------------------------------------------------------------------
+
+
+class FactorAnalyzer:
+    """
+    Factor Analysis (STA 442 — Applied Multivariate Analysis).
+
+    Models observed variables as linear combinations of latent factors
+    plus unique (error) terms:
+
+        X = μ + Λf + ε
+
+    where Λ = factor loadings (p × m), f = common factors (Var(f) = I),
+    ε = unique factors (Var(ε) = Ψ, diagonal).
+
+    Cov(X) = ΛΛ' + Ψ
+
+    Extraction: Iterative principal axis factoring
+    Rotation: Varimax (orthogonal) maximizes variance of squared loadings
+
+    Used by:
+    - Alama Score: Extract latent creditworthiness factors (Transaction
+      Intensity, Financial Discipline, Market Position) from correlated
+      borrower features
+    - Biashara Pulse: Identify latent economic factors driving
+      observed indicators
+    - Jamii Insights: Extract latent development factors from
+      correlated socioeconomic indicators
+
+    References:
+    - Spearman, C. (1904). "General Intelligence," objectively determined
+      and measured. American Journal of Psychology, 15(2), 201-292.
+    - Kaiser, H.F. (1958). The varimax criterion for analytic rotation in
+      factor analysis. Psychometrika, 23(3), 187-200.
+    """
+
+    @staticmethod
+    def fit(
+        X: np.ndarray,
+        n_factors: int = 3,
+        max_iter: int = 50,
+        rotation: str = "varimax",
+    ) -> Dict[str, Any]:
+        """
+        Fit factor analysis model.
+
+        Extraction via iterative principal axis factoring:
+        1. Initial communalities from PCA
+        2. Replace diagonal of correlation matrix with communalities
+        3. Eigendecompose adjusted matrix
+        4. Extract loadings for top k factors
+        5. Update communalities
+        6. Repeat until convergence
+
+        Then apply rotation (varimax by default).
+
+        Args:
+            X: data matrix (n × p)
+            n_factors: number of latent factors to extract
+            max_iter: maximum iterations for communality estimation
+            rotation: 'varimax' (orthogonal) or 'none'
+
+        Returns:
+            Dict with loadings, communalities, variance explained,
+            uniquenesses, and factor correlations
+        """
+        X = np.asarray(X, dtype=float)
+        n, p = X.shape
+        X_c = X - np.mean(X, axis=0)
+
+        # Correlation matrix
+        R = np.corrcoef(X_c, rowvar=False)
+        if R.ndim == 1:
+            R = R.reshape(1, 1)
+
+        # Handle NaN in correlation matrix
+        R = np.nan_to_num(R, nan=0.0)
+        np.fill_diagonal(R, 1.0)
+
+        # Initial communalities from PCA
+        eigvals, eigvecs = np.linalg.eigh(R)
+        idx = np.argsort(eigvals)[::-1]
+        eigvals = eigvals[idx]
+        eigvecs = eigvecs[:, idx]
+
+        k = min(n_factors, p)
+        loadings = eigvecs[:, :k] * np.sqrt(np.maximum(eigvals[:k], 0))
+
+        # Iterative principal axis factoring
+        communalities = np.sum(loadings ** 2, axis=1)
+        converged = False
+        for iteration in range(max_iter):
+            R_adj = R.copy()
+            np.fill_diagonal(R_adj, communalities)
+            eigvals_i, eigvecs_i = np.linalg.eigh(R_adj)
+            idx_i = np.argsort(eigvals_i)[::-1]
+            eigvals_i = eigvals_i[idx_i]
+            eigvecs_i = eigvecs_i[:, idx_i]
+            loadings = eigvecs_i[:, :k] * np.sqrt(np.maximum(eigvals_i[:k], 0))
+            new_comm = np.sum(loadings ** 2, axis=1)
+            if np.max(np.abs(new_comm - communalities)) < 1e-6:
+                communalities = new_comm
+                converged = True
+                break
+            communalities = new_comm
+
+        # Rotation
+        if rotation == "varimax" and k > 1:
+            rotated_loadings = FactorAnalyzer._varimax(loadings)
+        else:
+            rotated_loadings = loadings
+
+        # Variance explained
+        var_explained = np.sum(rotated_loadings ** 2, axis=0)
+        total_var = p
+        var_pct = var_explained / max(total_var, 1) * 100
+
+        # Uniquenesses (1 - communality)
+        rotated_communalities = np.sum(rotated_loadings ** 2, axis=1)
+        uniquenesses = 1 - rotated_communalities
+
+        return {
+            "loadings": rotated_loadings,
+            "communalities": rotated_communalities,
+            "uniquenesses": uniquenesses,
+            "variance_explained_pct": var_pct,
+            "total_variance_explained_pct": float(np.sum(var_pct)),
+            "n_factors": k,
+            "n_features": p,
+            "converged": converged,
+            "rotation": rotation,
+        }
+
+    @staticmethod
+    def _varimax(loadings: np.ndarray, max_iter: int = 100, tol: float = 1e-6) -> np.ndarray:
+        """
+        Varimax rotation (Kaiser, 1958).
+
+        Orthogonal rotation that maximizes the variance of squared
+        loadings in each column, producing simpler, more interpretable
+        factor structure.
+
+        Args:
+            loadings: p × k unrotated loading matrix
+            max_iter: maximum iterations
+            tol: convergence tolerance
+
+        Returns:
+            Rotated loading matrix
+        """
+        p, k = loadings.shape
+        R = np.eye(k)
+
+        for _ in range(max_iter):
+            rotated = loadings @ R
+            B = rotated ** 2
+            # Gradient for varimax
+            u = np.sum(rotated ** 2, axis=0) * rotated - rotated * np.sum(B, axis=0) / p
+            M = loadings.T @ u
+            svd_U, _, svd_Vt = np.linalg.svd(M)
+            R_new = svd_U @ svd_Vt
+            if np.max(np.abs(R_new - R)) < tol:
+                R = R_new
+                break
+            R = R_new
+
+        return loadings @ R
+
+    @staticmethod
+    def interpret_factors(
+        loadings: np.ndarray,
+        feature_names: List[str],
+        factor_names: Optional[List[str]] = None,
+        threshold: float = 0.3,
+    ) -> List[Dict[str, Any]]:
+        """
+        Interpret factor loadings for economic meaning.
+
+        For each factor, identifies features with highest loadings
+        and provides economic interpretation.
+
+        Args:
+            loadings: p × k rotated loading matrix
+            feature_names: names for each observed variable
+            factor_names: optional labels for each factor
+            threshold: minimum |loading| to include
+
+        Returns:
+            List of factor interpretations
+        """
+        k = loadings.shape[1]
+        if factor_names is None:
+            factor_names = [f"Factor_{j+1}" for j in range(k)]
+
+        interpretations = []
+        for j in range(k):
+            col = loadings[:, j]
+            sorted_idx = np.argsort(np.abs(col))[::-1]
+            markers = []
+            for idx in sorted_idx:
+                if abs(col[idx]) >= threshold and idx < len(feature_names):
+                    markers.append({
+                        "feature": feature_names[idx],
+                        "loading": round(float(col[idx]), 4),
+                        "direction": "positive" if col[idx] > 0 else "negative",
+                    })
+            interpretations.append({
+                "factor": factor_names[j] if j < len(factor_names) else f"Factor_{j+1}",
+                "marker_variables": markers,
+                "variance_explained_pct": round(float(np.sum(col ** 2) / len(col) * 100), 1),
+            })
+
+        return interpretations
+
+
+# ---------------------------------------------------------------------------
+# Linear Discriminant Analysis (STA 442)
+# ---------------------------------------------------------------------------
+
+
+class DiscriminantAnalyzer:
+    """
+    Linear Discriminant Analysis (STA 442 — Applied Multivariate Analysis).
+
+    Fisher's LDA finds the projection that maximizes the ratio of
+    between-group variance to within-group variance:
+
+        J(w) = (w'S_Bw) / (w'S_Ww)
+
+    where S_B = between-group scatter, S_W = within-group scatter.
+
+    Solution: w = S_W⁻¹(μ₁ - μ₂) for two-group case.
+
+    Used by:
+    - Alama Score: Classify borrowers into default/non-default groups
+      based on multivariate transaction features
+    - Worker Classifier: Discriminate between worker types
+      (boda_boda, mama_mboga, vendor, etc.)
+
+    References:
+    - Fisher, R.A. (1936). "The use of multiple measurements in taxonomic
+      problems." Annals of Eugenics, 7(2), 179-188.
+    """
+
+    @staticmethod
+    def fit_predict(
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_test: np.ndarray,
+    ) -> Dict[str, Any]:
+        """
+        Fit Fisher's LDA and predict test labels.
+
+        For binary classification (groups 0 and 1):
+        1. Compute group means μ₀, μ₁
+        2. Compute pooled within-group covariance S_W
+        3. Discriminant coefficients: a = S_W⁻¹(μ₁ - μ₀)
+        4. Project: d(x) = a'x
+        5. Classify: group 1 if d(x) > threshold (midpoint of projected means)
+
+        Args:
+            X_train: training features (n × p)
+            y_train: training labels (0/1 for binary, or multi-class)
+            X_test: test features (m × p)
+
+        Returns:
+            Dict with predicted_labels, discriminant_scores, coefficients,
+            accuracy, and group statistics
+        """
+        X_train = np.asarray(X_train, dtype=float)
+        y_train = np.asarray(y_train)
+        X_test = np.asarray(X_test, dtype=float)
+
+        classes = np.unique(y_train)
+        n_classes = len(classes)
+
+        if n_classes < 2:
+            return {
+                "predicted_labels": np.zeros(len(X_test), dtype=int),
+                "discriminant_scores": np.zeros(len(X_test)),
+                "error": "Need at least 2 classes",
+            }
+
+        # Overall mean
+        mu_total = np.mean(X_train, axis=0)
+        p = X_train.shape[1]
+
+        # Within-class scatter S_W and between-class scatter S_B
+        S_W = np.zeros((p, p))
+        S_B = np.zeros((p, p))
+        group_stats = {}
+
+        for c in classes:
+            mask = y_train == c
+            X_c = X_train[mask]
+            n_c = len(X_c)
+            mu_c = np.mean(X_c, axis=0)
+            S_W += (X_c - mu_c).T @ (X_c - mu_c)
+            diff = (mu_c - mu_total).reshape(-1, 1)
+            S_B += n_c * (diff @ diff.T)
+            group_stats[int(c)] = {
+                "n": int(n_c),
+                "mean": [round(float(v), 4) for v in mu_c],
+            }
+
+        # Regularize S_W for invertibility
+        S_W += np.eye(p) * 1e-6
+
+        if n_classes == 2:
+            # Binary case: single discriminant function
+            mu0 = np.mean(X_train[y_train == classes[0]], axis=0)
+            mu1 = np.mean(X_train[y_train == classes[1]], axis=0)
+            try:
+                S_W_inv = np.linalg.inv(S_W)
+                a = S_W_inv @ (mu1 - mu0)
+            except np.linalg.LinAlgError:
+                a = mu1 - mu0
+
+            scores_train = X_train @ a
+            scores_test = X_test @ a
+            threshold = 0.5 * (mu0 @ a + mu1 @ a)
+            predicted = (scores_test > threshold).astype(int)
+
+            # Training accuracy
+            train_pred = (scores_train > threshold).astype(int)
+            y_binary = (y_train == classes[1]).astype(int)
+            accuracy = float(np.mean(train_pred == y_binary))
+
+            return {
+                "predicted_labels": predicted,
+                "discriminant_scores": scores_test,
+                "coefficients": a,
+                "threshold": float(threshold),
+                "training_accuracy": round(accuracy, 4),
+                "group_stats": group_stats,
+                "method": "fisher_linear_discriminant",
+            }
+        else:
+            # Multi-class: use eigendecomposition of S_W⁻¹ S_B
+            try:
+                eigvals, eigvecs = np.linalg.eigh(np.linalg.inv(S_W) @ S_B)
+                idx = np.argsort(eigvals)[::-1]
+                eigvals = eigvals[idx]
+                eigvecs = eigvecs[:, idx]
+                # Take top (n_classes - 1) discriminant functions
+                n_disc = min(n_classes - 1, p)
+                W = eigvecs[:, :n_disc]
+            except np.linalg.LinAlgError:
+                W = np.eye(p)[:, :min(n_classes - 1, p)]
+
+            # Project training and test data
+            proj_train = X_train @ W
+            proj_test = X_test @ W
+
+            # Classify by nearest projected class mean
+            proj_means = {}
+            for c in classes:
+                proj_means[int(c)] = np.mean(proj_train[y_train == c], axis=0)
+
+            predicted = np.zeros(len(X_test), dtype=int)
+            for i in range(len(X_test)):
+                best_c = classes[0]
+                best_dist = np.inf
+                for c in classes:
+                    d = np.linalg.norm(proj_test[i] - proj_means[int(c)])
+                    if d < best_dist:
+                        best_dist = d
+                        best_c = c
+                predicted[i] = int(best_c)
+
+            # Training accuracy
+            train_pred = np.zeros(len(X_train), dtype=int)
+            for i in range(len(X_train)):
+                best_c = classes[0]
+                best_dist = np.inf
+                for c in classes:
+                    d = np.linalg.norm(proj_train[i] - proj_means[int(c)])
+                    if d < best_dist:
+                        best_dist = d
+                        best_c = c
+                train_pred[i] = int(best_c)
+            accuracy = float(np.mean(train_pred == y_train))
+
+            return {
+                "predicted_labels": predicted,
+                "discriminant_scores": proj_test,
+                "discriminant_functions": W,
+                "eigenvalues": [round(float(v), 4) for v in eigvals[:n_disc]],
+                "training_accuracy": round(accuracy, 4),
+                "group_stats": group_stats,
+                "method": "fisher_multiclass_lda",
+            }
+
+
+# ---------------------------------------------------------------------------
+# MANOVA — Multivariate Analysis of Variance (STA 442)
+# ---------------------------------------------------------------------------
+
+
+class MANOVA:
+    """
+    Multivariate Analysis of Variance (STA 442 — Applied Multivariate Analysis).
+
+    Tests whether group means differ significantly across multiple
+    dependent variables simultaneously.
+
+    H₀: μ₁ = μ₂ = ... = μₖ (all group mean vectors are equal)
+    H₁: at least one μᵢ differs
+
+    Test statistics:
+    - Wilks' Λ = |W| / |T| (ratio of within to total sum of squares)
+    - Pillai's trace = Σ vᵢ/(1+vᵢ)
+    - Hotelling-Lawley trace = Σ vᵢ
+
+    where vᵢ are eigenvalues of W⁻¹B.
+
+    Used by:
+    - Alama Score: Test whether borrower groups differ significantly
+      across multiple financial features
+    - Soko Pulse: Test whether market segments differ in price-volume
+      profiles
+    """
+
+    @staticmethod
+    def fit(
+        X: np.ndarray,
+        groups: np.ndarray,
+    ) -> Dict[str, Any]:
+        """
+        Fit one-way MANOVA.
+
+        Args:
+            X: data matrix (n × p) — p dependent variables
+            groups: group labels (n,) — k groups
+
+        Returns:
+            Dict with Wilks' Lambda, Pillai trace, F-approximation,
+            and significance
+        """
+        X = np.asarray(X, dtype=float)
+        groups = np.asarray(groups)
+        n, p = X.shape
+        classes = np.unique(groups)
+        k = len(classes)
+
+        if k < 2:
+            return {"error": "Need at least 2 groups"}
+
+        # Grand mean
+        mu = np.mean(X, axis=0)
+
+        # Within-groups SSCP matrix W
+        W = np.zeros((p, p))
+        B = np.zeros((p, p))
+        for c in classes:
+            mask = groups == c
+            X_c = X[mask]
+            n_c = len(X_c)
+            mu_c = np.mean(X_c, axis=0)
+            W += (X_c - mu_c).T @ (X_c - mu_c)
+            diff = (mu_c - mu).reshape(-1, 1)
+            B += n_c * (diff @ diff.T)
+
+        # Total SSCP
+        T_mat = W + B
+
+        # Wilks' Lambda
+        try:
+            wilks = np.linalg.det(W) / max(np.linalg.det(T_mat), 1e-30)
+        except np.linalg.LinAlgError:
+            wilks = 1.0
+
+        # Eigenvalues of W⁻¹B
+        W_reg = W + np.eye(p) * 1e-10
+        try:
+            eigvals = np.abs(np.linalg.eigvalsh(np.linalg.inv(W_reg) @ B))
+            eigvals = np.sort(eigvals)[::-1]
+        except np.linalg.LinAlgError:
+            eigvals = np.zeros(p)
+
+        # Pillai's trace
+        pillai = float(np.sum(eigvals / (1 + eigvals)))
+
+        # Hotelling-Lawley trace
+        hotelling = float(np.sum(eigvals))
+
+        # Roy's largest root
+        roy = float(eigvals[0]) if len(eigvals) > 0 else 0.0
+
+        # F-approximation for Wilks' Lambda (Rao's approximation)
+        df_hypo = p * (k - 1)
+        df_error = n - k
+        s_val = min(p, k - 1)
+        if wilks > 0 and df_error > 0:
+            wilks_f = ((1 - wilks ** (1 / s_val)) / max(wilks ** (1 / s_val), 1e-10)) * (df_error / df_hypo) if df_hypo > 0 else 0
+        else:
+            wilks_f = 0
+
+        from scipy import stats as sp_stats
+        f_pvalue = 1 - sp_stats.f.cdf(max(wilks_f, 0), df_hypo, max(df_error, 1))
+
+        return {
+            "wilks_lambda": round(float(wilks), 6),
+            "pillai_trace": round(pillai, 6),
+            "hotelling_lawley_trace": round(hotelling, 6),
+            "roys_largest_root": round(roy, 6),
+            "f_approximation": round(float(wilks_f), 4),
+            "df_hypothesis": int(df_hypo),
+            "df_error": int(df_error),
+            "p_value": round(float(f_pvalue), 6),
+            "significant_at_05": f_pvalue < 0.05,
+            "n_groups": k,
+            "n_samples": n,
+            "n_variables": p,
+            "group_sizes": {int(c): int(np.sum(groups == c)) for c in classes},
+            "interpretation": (
+                f"{'Reject' if f_pvalue < 0.05 else 'Fail to reject'} null hypothesis "
+                f"that all group means are equal (Wilks' Λ={wilks:.4f}, F={wilks_f:.2f}, p={f_pvalue:.4f})"
+            ),
+        }
+
+
 # Singleton instances for use across services
 bayesian_updater = BayesianUpdater()
 kde_estimator = KernelDensityEstimator()
@@ -1548,3 +2283,6 @@ distribution_fitter = DistributionFitter()
 mc_engine = MonteCarloEngine()
 mcmc_sampler = MCMCSampler()
 cluster_analyzer = ClusterAnalyzer()
+pca_analyzer = PCAAnalyzer()
+factor_analyzer = FactorAnalyzer()
+discriminant_analyzer = DiscriminantAnalyzer()

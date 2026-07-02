@@ -46,8 +46,11 @@ from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIn
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
     BootstrapInference,
+    DiscriminantAnalyzer,
+    FactorAnalyzer,
     KernelDensityEstimator,
     MonteCarloEngine,
+    PCAAnalyzer,
     bootstrap,
     kde_estimator,
 )
@@ -185,203 +188,7 @@ def _bayesian_credit_update(
     return round(posterior_mean, 4), (round(ci_lower, 4), round(ci_upper, 4))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STA 442 — Principal Component Analysis helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
-def _pca_reduce(X: np.ndarray, n_components: int = 3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    PCA via eigendecomposition of the covariance matrix.
-
-    Driven by STA 442 § Principal Component Analysis:
-    - Compute Σ = (1/n) X'X (after centering)
-    - Eigendecomposition: Σ = PΛP'
-    - Principal components: Z = XP (first n_components columns)
-    - Proportion of variance explained: λₖ / Σλⱼ
-
-    Args:
-        X: data matrix (n × p), will be centered
-        n_components: number of components to retain
-
-    Returns:
-        (reduced_data, eigenvalues, loadings_matrix)
-    """
-    # Center
-    X_centered = X - np.mean(X, axis=0)
-    n, p = X_centered.shape
-
-    # Covariance matrix
-    cov = np.cov(X_centered, rowvar=False)
-    if cov.ndim == 1:
-        cov = cov.reshape(1, 1)
-
-    # Eigendecomposition
-    eigenvalues, eigenvectors = np.linalg.eigh(cov)
-
-    # Sort descending
-    idx = np.argsort(eigenvalues)[::-1]
-    eigenvalues = eigenvalues[idx]
-    eigenvectors = eigenvectors[:, idx]
-
-    # Take first n_components
-    k = min(n_components, p)
-    loadings = eigenvectors[:, :k]
-    reduced = X_centered @ loadings
-
-    return reduced, eigenvalues, loadings
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STA 442 — Factor Analysis helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _factor_analysis_extract(
-    X: np.ndarray, n_factors: int = 3, max_iter: int = 50
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Factor analysis via principal axis factoring with varimax rotation.
-
-    Driven by STA 442 § Factor Analysis:
-    - Model: X = μ + Λf + ε
-    - Λ = factor loadings (p × m)
-    - f = common factors (m × 1), Var(f) = I
-    - ε = unique factors, Var(ε) = Ψ (diagonal)
-    - Cov(X) = ΛΛ' + Ψ
-    - Extraction: iteratively estimate communalities
-    - Rotation: varimax maximises variance of squared loadings
-
-    Args:
-        X: data matrix (n × p)
-        n_factors: number of latent factors
-        max_iter: iterations for communality estimation
-
-    Returns:
-        (rotated_loadings, communalities, variance_explained)
-    """
-    n, p = X.shape
-    X_c = X - np.mean(X, axis=0)
-    R = np.corrcoef(X_c, rowvar=False)
-    if R.ndim == 1:
-        R = R.reshape(1, 1)
-
-    # Initial communalities from PCA
-    eigvals, eigvecs = np.linalg.eigh(R)
-    idx = np.argsort(eigvals)[::-1]
-    eigvals = eigvals[idx]
-    eigvecs = eigvecs[:, idx]
-
-    k = min(n_factors, p)
-    loadings = eigvecs[:, :k] * np.sqrt(np.maximum(eigvals[:k], 0))
-
-    # Iterative principal axis factoring
-    communalities = np.sum(loadings**2, axis=1)
-    for _ in range(max_iter):
-        R_adj = R.copy()
-        np.fill_diagonal(R_adj, communalities)
-        eigvals_i, eigvecs_i = np.linalg.eigh(R_adj)
-        idx_i = np.argsort(eigvals_i)[::-1]
-        eigvals_i = eigvals_i[idx_i]
-        eigvecs_i = eigvecs_i[:, idx_i]
-        loadings = eigvecs_i[:, :k] * np.sqrt(np.maximum(eigvals_i[:k], 0))
-        new_comm = np.sum(loadings**2, axis=1)
-        if np.max(np.abs(new_comm - communalities)) < 1e-6:
-            communalities = new_comm
-            break
-        communalities = new_comm
-
-    # Varimax rotation
-    rotated = _varimax_rotation(loadings)
-
-    # Variance explained
-    var_explained = np.sum(rotated**2, axis=0)
-    total_var = p
-    var_pct = var_explained / total_var * 100
-
-    return rotated, communalities, var_pct
-
-
-def _varimax_rotation(loadings: np.ndarray, max_iter: int = 100, tol: float = 1e-6) -> np.ndarray:
-    """
-    Varimax rotation: orthogonal rotation maximising variance of
-    squared loadings in each column.
-
-    Driven by STA 442 § Factor Analysis — Rotation.
-    """
-    p, k = loadings.shape
-    R = np.eye(k)
-
-    for _ in range(max_iter):
-        rotated = loadings @ R
-        B = rotated**2
-        # Gradient
-        u = np.sum(rotated**2, axis=0) * rotated - rotated * np.sum(B, axis=0) / p
-        # SVD for optimal rotation
-        M = loadings.T @ u
-        svd_U, _, svd_Vt = np.linalg.svd(M)
-        R_new = svd_U @ svd_Vt
-        if np.max(np.abs(R_new - R)) < tol:
-            R = R_new
-            break
-        R = R_new
-
-    return loadings @ R
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STA 442 — Linear Discriminant Analysis helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _lda_classify(
-    X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Fisher's Linear Discriminant Analysis for binary classification.
-
-    Driven by STA 442 § Discriminant Analysis:
-    - Discriminant function: d(x) = (μ₁ - μ₂)'Σ⁻¹x
-    - Classification: assign to group 1 if d(x) > threshold
-    - Fisher's criterion: maximises between-group / within-group variance
-
-    Args:
-        X_train: training features (n × p)
-        y_train: training labels (0/1)
-        X_test: test features (m × p)
-
-    Returns:
-        (predicted_labels, discriminant_scores)
-    """
-    group0 = X_train[y_train == 0]
-    group1 = X_train[y_train == 1]
-
-    if len(group0) < 2 or len(group1) < 2:
-        return np.zeros(len(X_test)), np.zeros(len(X_test))
-
-    mu0 = np.mean(group0, axis=0)
-    mu1 = np.mean(group1, axis=0)
-
-    # Pooled covariance
-    n0, n1 = len(group0), len(group1)
-    S0 = np.cov(group0, rowvar=False) * (n0 - 1)
-    S1 = np.cov(group1, rowvar=False) * (n1 - 1)
-    S_pooled = (S0 + S1) / (n0 + n1 - 2)
-
-    if S_pooled.ndim == 0:
-        S_pooled = S_pooled.reshape(1, 1)
-
-    try:
-        S_inv = np.linalg.inv(S_pooled + np.eye(S_pooled.shape[0]) * 1e-6)
-    except np.linalg.LinAlgError:
-        return np.zeros(len(X_test)), np.zeros(len(X_test))
-
-    # Discriminant coefficients
-    a = S_inv @ (mu1 - mu0)
-    scores = X_test @ a
-
-    # Threshold: midpoint of projected means
-    threshold = 0.5 * (mu0 @ a + mu1 @ a)
-    labels = (scores > threshold).astype(int)
-
-    return labels, scores
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -716,26 +523,26 @@ class AlamaScoreService:
         pca_result = None
         if features_matrix.shape[0] >= 3 and features_matrix.shape[1] >= 3:
             try:
-                reduced, eigenvalues, loadings = _pca_reduce(features_matrix, n_components=3)
-                total_var = np.sum(eigenvalues)
+                pca_fit = PCAAnalyzer.fit_transform(features_matrix, n_components=3)
+                eigenvalues = pca_fit["eigenvalues"]
+                loadings = pca_fit["loadings"]
+                total_var = pca_fit["total_variance"]
                 pca_result = {
                     "n_components": 3,
                     "variance_explained_pct": [
-                        round(float(eigenvalues[i] / total_var * 100), 1)
+                        round(float(pca_fit["variance_explained"][i] * 100), 1)
                         for i in range(min(3, len(eigenvalues)))
                     ],
                     "total_variance_explained_pct": round(
-                        float(np.sum(eigenvalues[:3]) / total_var * 100), 1
+                        float(pca_fit["cumulative_variance"][-1] * 100), 1
                     ),
                     "loadings": {
                         feature_names[i]: [round(float(loadings[i, j]), 3) for j in range(loadings.shape[1])]
                         for i in range(min(len(feature_names), loadings.shape[0]))
                     },
-                    "interpretation": [
-                        "PC1: Overall business activity level",
-                        "PC2: Revenue stability and consistency",
-                        "PC3: Growth and diversification",
-                    ],
+                    "interpretation": PCAAnalyzer.interpret_loadings(
+                        loadings, feature_names, n_components=3
+                    ),
                 }
             except Exception as e:
                 logger.debug("pca_failed", error=str(e))
@@ -744,9 +551,10 @@ class AlamaScoreService:
         factor_result = None
         if features_matrix.shape[0] >= 10:
             try:
-                loadings_fa, communalities, var_pct = _factor_analysis_extract(
-                    features_matrix, n_factors=3
-                )
+                fa_fit = FactorAnalyzer.fit(features_matrix, n_factors=3)
+                loadings_fa = fa_fit["loadings"]
+                communalities = fa_fit["communalities"]
+                var_pct = fa_fit["variance_explained_pct"]
                 factor_names = ["Transaction Intensity", "Financial Discipline", "Market Position"]
                 factor_result = {
                     "n_factors": 3,
@@ -912,14 +720,15 @@ class AlamaScoreService:
                 median_activity = np.median(features_matrix[:, 0])
                 y_binary = (features_matrix[:, 0] > median_activity).astype(int)
                 # Only classify the target business (first row)
-                labels, scores = _lda_classify(
+                lda_result = DiscriminantAnalyzer.fit_predict(
                     features_matrix[1:], y_binary[1:],
                     features_matrix[:1]
                 )
                 lda_classification = {
-                    "predicted_class": "good" if labels[0] == 1 else "at_risk",
-                    "discriminant_score": round(float(scores[0]), 3),
-                    "method": "fisher_linear_discriminant",
+                    "predicted_class": "good" if lda_result["predicted_labels"][0] == 1 else "at_risk",
+                    "discriminant_score": round(float(lda_result["discriminant_scores"][0]), 3),
+                    "training_accuracy": lda_result.get("training_accuracy"),
+                    "method": lda_result.get("method", "fisher_linear_discriminant"),
                 }
             except Exception as e:
                 logger.debug("lda_failed", error=str(e))

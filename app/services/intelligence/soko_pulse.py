@@ -31,7 +31,9 @@ SUPPORTING UNITS:
 - ECO 210 (Quantitative Methods): Optimization for inventory management,
   break-even analysis, linear programming for supply chain routing
 - ECO 305/313 (International Economics): Cross-border price intelligence,
-  exchange rate pass-through, gravity model for trade flows
+  exchange rate pass-through, gravity model for trade flows,
+  comparative advantage (Ricardian model), AfCFTA tariff analysis,
+  balance of payments, exchange rate modeling
 
 Data Flow: Raw Transaction → Price Distribution (STA 241) → Seasonal
   Decomposition (STA 244) → Time Series Model (STA 244) → Elasticity
@@ -867,6 +869,39 @@ class SokoPulseService:
             except Exception as e:
                 logger.debug("competition_analysis_failed", error=str(e))
 
+        # ── ECO 305/313: Cross-border trade intelligence ───────────────
+        cross_border_intelligence = None
+        if tier == "enterprise":
+            try:
+                # Default to Kenya-Uganda cross-border analysis (largest EAC corridor)
+                origin = "KE"
+                dest = "UG"
+                # Estimate current tariff rate for this product category
+                tariff_rates = {
+                    "food": 0.25, "household": 0.30, "health": 0.10,
+                    "clothing": 0.35, "electronics": 0.25, "beauty": 0.30,
+                    "agriculture": 0.15, "services": 0.0, "other": 0.25,
+                }
+                tariff = tariff_rates.get(product_category, 0.25)
+                est_trade_volume = float(total_volume * avg_price) if avg_price > 0 else 1000000
+
+                # Use unit_prices for PPP if available
+                domestic_prices = [float(p) for p in unit_prices[:50]] if unit_prices else None
+                # Estimate foreign prices as domestic * 0.85 (PPP approximation)
+                foreign_prices = [p * 0.85 for p in domestic_prices] if domestic_prices else None
+
+                cross_border_intelligence = CrossBorderTradeIntelligence.full_cross_border_analysis(
+                    origin=origin,
+                    destination=dest,
+                    product_category=product_category,
+                    domestic_prices=domestic_prices,
+                    foreign_prices=foreign_prices,
+                    current_tariff_rate=tariff,
+                    current_trade_volume=est_trade_volume,
+                )
+            except Exception as e:
+                logger.debug("cross_border_intelligence_failed", error=str(e))
+
         # ── Apply differential privacy ──────────────────────────────────────
         dp_total_volume = round(self.anonymizer.add_laplace_noise(total_volume, sensitivity=100), 0)
         dp_avg_daily = round(self.anonymizer.add_laplace_noise(avg_daily_volume, sensitivity=50), 2)
@@ -931,6 +966,8 @@ class SokoPulseService:
             "market_segmentation": market_segmentation,
             # ECO 422: Competition analysis (Cournot & Bertrand)
             "competition_analysis": competition_analysis,
+            # ECO 305/313: Cross-border trade intelligence (enterprise only)
+            "cross_border_trade": cross_border_intelligence,
             "vendor_count": k,
             "stockout_frequency": None,  # Would need inventory data
             "seasonal_factor": seasonal_factor,
@@ -1151,3 +1188,649 @@ class SokoPulseService:
             ),
             "interpretation": result.interpretation,
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ECO 305/313 — International Economics: Cross-Border Trade Intelligence
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class CrossBorderTradeIntelligence:
+    """
+    Cross-border trade intelligence for EAC informal markets.
+
+    Driven by ECO 305 § Introduction to International Economics and
+    ECO 313 § International Economics:
+
+    - Gravity Model (Tinbergen, 1962): Trade flow between countries i
+      and j is proportional to their economic sizes (GDP) and inversely
+      proportional to the distance between them:
+        T_ij = A × (GDP_i × GDP_j) / D_ij^β
+      In log-log form: ln(T_ij) = α + β₁ln(GDP_i) + β₂ln(GDP_j) - β₃ln(D_ij) + ε
+
+    - Comparative Advantage (Ricardo, 1817): A country exports goods in
+      which it has the lowest opportunity cost. Revealed comparative
+      advantage (RCA) index measures this empirically:
+        RCA = (X_ij/X_i) / (X_wj/X_w) where X = exports, j = commodity
+      RCA > 1 → country has comparative advantage in commodity j.
+
+    - Exchange Rate Pass-Through (ERPT): The degree to which exchange
+      rate changes are transmitted to domestic prices:
+        ΔP_domestic = α + β × ΔER + ε
+      β = ERPT coefficient (0 = no pass-through, 1 = full pass-through)
+
+    - AfCFTA Integration: African Continental Free Trade Area aims to
+      reduce tariffs on 90% of goods. For informal cross-border traders,
+      this means reduced barriers and expanded market access.
+
+    - Purchasing Power Parity (PPP): Long-run equilibrium where
+      identical goods have the same price across countries:
+        P_KES = P_UGX × ER(KES/UGX)
+      Deviations from PPP indicate arbitrage opportunities.
+
+    Data Sources:
+    - Kenya National Bureau of Statistics (KNBS)
+    - Uganda Bureau of Statistics (UBOS)
+    - Tanzania National Bureau of Statistics (NBS)
+    - World Bank WITS (World Integrated Trade Solution)
+    - UN COMTRADE
+
+    References:
+    - Tinbergen, J. (1962). Shaping the World Economy. Twentieth Century Fund.
+    - Ricardo, D. (1817). On the Principles of Political Economy and Taxation.
+    - Anderson, J.E. & van Wincoop, E. (2003). "Gravity with Gravitas." AER.
+    - Krugman, P. (1980). "Scale Economies, Product Differentiation, and the
+      Pattern of Trade." AER.
+    """
+
+    # EAC member states with approximate coordinates (lat, lon) and GDP (USD billions, 2024 est.)
+    EAC_COUNTRIES = {
+        "KE": {"name": "Kenya", "lat": -1.29, "lon": 36.82, "gdp_billion_usd": 113.0, "currency": "KES"},
+        "UG": {"name": "Uganda", "lat": 0.35, "lon": 32.58, "gdp_billion_usd": 45.5, "currency": "UGX"},
+        "TZ": {"name": "Tanzania", "lat": -6.17, "lon": 35.74, "gdp_billion_usd": 75.7, "currency": "TZS"},
+        "RW": {"name": "Rwanda", "lat": -1.94, "lon": 29.87, "gdp_billion_usd": 14.1, "currency": "RWF"},
+        "BI": {"name": "Burundi", "lat": -3.37, "lon": 29.36, "gdp_billion_usd": 3.1, "currency": "BIF"},
+        "SS": {"name": "South Sudan", "lat": 4.86, "lon": 31.58, "gdp_billion_usd": 5.3, "currency": "SSP"},
+        "CD": {"name": "DRC", "lat": -4.32, "lon": 15.31, "gdp_billion_usd": 66.4, "currency": "CDF"},
+    }
+
+    # Approximate distances between capital cities (km)
+    DISTANCE_MATRIX = {
+        ("KE", "UG"): 660, ("KE", "TZ"): 740, ("KE", "RW"): 1050,
+        ("KE", "BI"): 1450, ("KE", "SS"): 1100, ("KE", "CD"): 1700,
+        ("UG", "TZ"): 1100, ("UG", "RW"): 510, ("UG", "BI"): 850,
+        ("UG", "SS"): 650, ("UG", "CD"): 1600,
+        ("TZ", "RW"): 1100, ("TZ", "BI"): 1300, ("TZ", "CD"): 1900,
+        ("RW", "BI"): 230, ("RW", "CD"): 1200,
+        ("BI", "SS"): 1300, ("BI", "CD"): 1100,
+        ("SS", "CD"): 1400,
+    }
+
+    # AfCFTA tariff reduction schedule (% of base tariff)
+    AFFECTED_TARIFF_REDUCTION = {
+        "90pct_goods": 0.0,      # 90% of goods: tariff-free
+        "sensitive_7pct": 0.5,   # 7% sensitive goods: 50% reduction
+        "exclusion_3pct": 1.0,   # 3% exclusion list: no reduction
+    }
+
+    @classmethod
+    def gravity_model_estimate(
+        cls,
+        origin: str,
+        destination: str,
+        product_category: str,
+        observed_flow: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Estimate bilateral trade flow using the gravity model.
+
+        Driven by ECO 305 § Gravity Model of Trade:
+        ln(T_ij) = α + β₁ln(GDP_i) + β₂ln(GDP_j) - β₃ln(D_ij) + ε
+
+        Standard estimates (from meta-analysis):
+        β₁ ≈ 0.8-1.0 (GDP elasticity of exporter)
+        β₂ ≈ 0.8-1.0 (GDP elasticity of importer)
+        β₃ ≈ 0.6-1.2 (distance elasticity)
+
+        Args:
+            origin: origin country code (e.g., "KE")
+            destination: destination country code (e.g., "UG")
+            product_category: product category for trade
+            observed_flow: actual trade flow value (optional, for residual)
+
+        Returns:
+            Dict with predicted flow, gravity components, and trade potential
+        """
+        origin = origin.upper()
+        dest = destination.upper()
+
+        if origin not in cls.EAC_COUNTRIES or dest not in cls.EAC_COUNTRIES:
+            return {"error": f"Unknown country code: {origin} or {dest}"}
+
+        gdp_i = cls.EAC_COUNTRIES[origin]["gdp_billion_usd"]
+        gdp_j = cls.EAC_COUNTRIES[dest]["gdp_billion_usd"]
+
+        # Get distance (symmetric)
+        key = (origin, dest) if (origin, dest) in cls.DISTANCE_MATRIX else (dest, origin)
+        distance = cls.DISTANCE_MATRIX.get(key, 2000)  # Default 2000km
+
+        # Log-log gravity model with standard coefficients
+        alpha = -2.5  # Intercept
+        beta_gdp_exporter = 0.9  # GDP elasticity of exporter
+        beta_gdp_importer = 0.9  # GDP elasticity of importer
+        beta_distance = 0.8     # Distance elasticity
+
+        log_flow = (
+            alpha
+            + beta_gdp_exporter * np.log(max(gdp_i, 1))
+            + beta_gdp_importer * np.log(max(gdp_j, 1))
+            - beta_distance * np.log(max(distance, 1))
+        )
+        predicted_flow = np.exp(log_flow)
+
+        # Trade potential (ratio of actual to predicted)
+        trade_potential = None
+        residual = None
+        if observed_flow is not None:
+            trade_potential = round(observed_flow / max(predicted_flow, 1e-6), 4)
+            residual = round(np.log(max(observed_flow, 1e-6)) - log_flow, 4)
+
+        # Border effect (EAC common market reduces trade barriers)
+        border_bonus = 1.35  # EAC integration bonus ~35%
+        adjusted_flow = predicted_flow * border_bonus
+
+        return {
+            "origin": origin,
+            "origin_name": cls.EAC_COUNTRIES[origin]["name"],
+            "destination": dest,
+            "destination_name": cls.EAC_COUNTRIES[dest]["name"],
+            "product_category": product_category,
+            "gravity_model": {
+                "gdp_origin_billion_usd": gdp_i,
+                "gdp_destination_billion_usd": gdp_j,
+                "distance_km": distance,
+                "predicted_flow_million_usd": round(predicted_flow, 2),
+                "adjusted_flow_million_usd": round(adjusted_flow, 2),
+                "eac_border_bonus": border_bonus,
+                "coefficients": {
+                    "intercept": alpha,
+                    "gdp_exporter_elasticity": beta_gdp_exporter,
+                    "gdp_importer_elasticity": beta_gdp_importer,
+                    "distance_elasticity": beta_distance,
+                },
+            },
+            "trade_potential": trade_potential,
+            "residual": residual,
+            "interpretation": cls._interpret_gravity(
+                trade_potential, origin, dest
+            ),
+            "method": "ECO 305 — Gravity Model (Tinbergen, 1962)",
+        }
+
+    @classmethod
+    def comparative_advantage_index(
+        cls,
+        country: str,
+        product_category: str,
+        domestic_share: float,
+        world_share: float,
+    ) -> Dict[str, Any]:
+        """
+        Compute Revealed Comparative Advantage (RCA) index.
+
+        Driven by ECO 313 § Comparative Advantage:
+        RCA = (X_ij / X_i) / (X_wj / X_w)
+
+        where X_ij = country i's exports of commodity j
+              X_i = country i's total exports
+              X_wj = world exports of commodity j
+              X_w = world total exports
+
+        RCA > 1 → country has revealed comparative advantage
+        RCA < 1 → country has revealed comparative disadvantage
+
+        Balassa (1965) definition, widely used in trade policy analysis.
+
+        Args:
+            country: country code
+            product_category: commodity/product category
+            domestic_share: share of this product in country's total trade (0-1)
+            world_share: share of this product in world trade (0-1)
+
+        Returns:
+            Dict with RCA index and interpretation
+        """
+        country = country.upper()
+        if country not in cls.EAC_COUNTRIES:
+            return {"error": f"Unknown country: {country}"}
+
+        rca = domestic_share / max(world_share, 1e-10)
+
+        # Interpretation
+        if rca > 2.5:
+            strength = "strong_comparative_advantage"
+        elif rca > 1.0:
+            strength = "comparative_advantage"
+        elif rca > 0.5:
+            strength = "comparative_disadvantage"
+        else:
+            strength = "strong_comparative_disadvantage"
+
+        # Opportunity cost interpretation (Ricardian model)
+        if rca > 1:
+            opportunity_cost = "low"  # Low opportunity cost → export
+            trade_recommendation = "export"
+        else:
+            opportunity_cost = "high"  # High opportunity cost → import
+            trade_recommendation = "import"
+
+        return {
+            "country": country,
+            "country_name": cls.EAC_COUNTRIES[country]["name"],
+            "product_category": product_category,
+            "rca_index": round(rca, 4),
+            "domestic_share": round(domestic_share, 4),
+            "world_share": round(world_share, 4),
+            "strength": strength,
+            "opportunity_cost": opportunity_cost,
+            "trade_recommendation": trade_recommendation,
+            "interpretation": (
+                f"{cls.EAC_COUNTRIES[country]['name']} has {'a' if rca > 1 else 'no'} "
+                f"revealed comparative advantage in {product_category} "
+                f"(RCA = {rca:.2f}). "
+                f"Recommendation: {trade_recommendation}."
+            ),
+            "method": "ECO 313 — Revealed Comparative Advantage (Balassa, 1965)",
+        }
+
+    @classmethod
+    def exchange_rate_pass_through(
+        cls,
+        origin: str,
+        destination: str,
+        exchange_rate_changes: List[float],
+        domestic_price_changes: List[float],
+    ) -> Dict[str, Any]:
+        """
+        Estimate exchange rate pass-through to domestic prices.
+
+        Driven by ECO 313 § Exchange Rate Economics:
+        ΔP_domestic = α + β × ΔER + ε
+
+        where β = ERPT coefficient:
+        - β = 0: no pass-through (prices insulated from FX)
+        - β = 1: full pass-through (FX fully reflected in prices)
+        - 0 < β < 1: partial pass-through (typical for EAC)
+
+        Uses OLS with heteroskedasticity-robust SE (White/HC1).
+
+        Args:
+            origin: origin country code
+            destination: destination country code
+            exchange_rate_changes: list of % changes in bilateral exchange rate
+            domestic_price_changes: list of % changes in domestic prices
+
+        Returns:
+            Dict with ERPT coefficient, SE, R², and interpretation
+        """
+        er = np.array(exchange_rate_changes, dtype=float)
+        dp = np.array(domestic_price_changes, dtype=float)
+
+        if len(er) < 5 or len(dp) < 5:
+            return {"error": "Need at least 5 observations for ERPT estimation"}
+
+        # OLS: dp = α + β·er
+        X = np.column_stack([np.ones(len(er)), er])
+        try:
+            beta_hat = np.linalg.lstsq(X, dp, rcond=None)[0]
+        except np.linalg.LinAlgError:
+            return {"error": "OLS estimation failed"}
+
+        residuals = dp - X @ beta_hat
+        n, k = X.shape
+        if n <= k:
+            return {"error": "Insufficient degrees of freedom"}
+
+        # HC1 robust SE
+        bread = np.linalg.inv(X.T @ X)
+        meat = X.T @ np.diag(residuals ** 2) @ X
+        robust_var = bread @ meat @ bread * (n / (n - k))
+        se = np.sqrt(np.diag(robust_var))
+
+        # R²
+        ss_res = np.sum(residuals ** 2)
+        ss_tot = np.sum((dp - np.mean(dp)) ** 2)
+        r_sq = 1 - ss_res / max(ss_tot, 1e-10)
+
+        erpt_coeff = float(beta_hat[1])
+        erpt_se = float(se[1])
+        t_stat = erpt_coeff / max(erpt_se, 1e-10)
+
+        # 95% CI
+        from scipy import stats as sp_stats
+        t_crit = sp_stats.t.ppf(0.975, max(n - k, 1))
+        ci_lower = erpt_coeff - t_crit * erpt_se
+        ci_upper = erpt_coeff + t_crit * erpt_se
+
+        # Interpretation
+        if erpt_coeff > 0.8:
+            erpt_level = "high"
+            policy_implication = "FX movements significantly affect consumer prices"
+        elif erpt_coeff > 0.4:
+            erpt_level = "moderate"
+            policy_implication = "Partial FX transmission to consumer prices"
+        else:
+            erpt_level = "low"
+            policy_implication = "Prices largely insulated from FX movements"
+
+        return {
+            "origin": origin,
+            "destination": destination,
+            "erpt_coefficient": round(erpt_coeff, 4),
+            "standard_error": round(erpt_se, 4),
+            "t_statistic": round(t_stat, 4),
+            "ci_95": (round(ci_lower, 4), round(ci_upper, 4)),
+            "r_squared": round(r_sq, 4),
+            "n_observations": n,
+            "erpt_level": erpt_level,
+            "policy_implication": policy_implication,
+            "interpretation": (
+                f"A 1% depreciation of {origin}/{destination} exchange rate "
+                f"leads to a {erpt_coeff:.2f}% change in domestic prices "
+                f"(ERPT = {erpt_coeff:.2f}, {'significant' if abs(t_stat) > 2 else 'not significant'})."
+            ),
+            "method": "ECO 313 — Exchange Rate Pass-Through (OLS with HC1 SE)",
+        }
+
+    @classmethod
+    def ppp_deviation(
+        cls,
+        origin: str,
+        destination: str,
+        domestic_price: float,
+        foreign_price: float,
+        exchange_rate: float,
+    ) -> Dict[str, Any]:
+        """
+        Compute Purchasing Power Parity deviation.
+
+        Driven by ECO 313 § Purchasing Power Parity:
+        PPP exchange rate = P_domestic / P_foreign
+        Deviation = (Actual ER - PPP ER) / PPP ER × 100
+
+        Positive deviation → domestic currency overvalued
+        Negative deviation → domestic currency undervalued
+
+        Args:
+            origin: domestic country code
+            destination: foreign country code
+            domestic_price: price of representative basket in domestic currency
+            foreign_price: price of representative basket in foreign currency
+            exchange_rate: actual exchange rate (domestic per foreign)
+
+        Returns:
+            Dict with PPP rate, deviation, and arbitrage signal
+        """
+        ppp_rate = domestic_price / max(foreign_price, 1e-10)
+        deviation_pct = (exchange_rate - ppp_rate) / max(ppp_rate, 1e-10) * 100
+
+        # Arbitrage signal
+        if abs(deviation_pct) > 20:
+            arbitrage_signal = "strong"
+        elif abs(deviation_pct) > 10:
+            arbitrage_signal = "moderate"
+        else:
+            arbitrage_signal = "weak"
+
+        if deviation_pct > 10:
+            direction = "domestic_overvalued"
+            trade_signal = "import"  # Cheaper to import
+        elif deviation_pct < -10:
+            direction = "domestic_undervalued"
+            trade_signal = "export"  # Cheaper to export
+        else:
+            direction = "near_equilibrium"
+            trade_signal = "neutral"
+
+        return {
+            "origin": origin,
+            "destination": destination,
+            "domestic_price": domestic_price,
+            "foreign_price": foreign_price,
+            "actual_exchange_rate": exchange_rate,
+            "ppp_exchange_rate": round(ppp_rate, 4),
+            "deviation_pct": round(deviation_pct, 2),
+            "direction": direction,
+            "arbitrage_signal": arbitrage_signal,
+            "trade_signal": trade_signal,
+            "interpretation": (
+                f"{'Overvalued' if deviation_pct > 0 else 'Undervalued'} by {abs(deviation_pct):.1f}%. "
+                f"PPP rate: {ppp_rate:.2f}, Actual: {exchange_rate:.2f}. "
+                f"Signal: {trade_signal}."
+            ),
+            "method": "ECO 313 — Purchasing Power Parity (absolute PPP)",
+        }
+
+    @classmethod
+    def afcfta_tariff_analysis(
+        cls,
+        origin: str,
+        destination: str,
+        product_category: str,
+        current_tariff_rate: float,
+        current_trade_volume: float,
+        price_elasticity_of_demand: float = -1.2,
+    ) -> Dict[str, Any]:
+        """
+        Analyze impact of AfCFTA tariff reductions on trade.
+
+        Driven by ECO 305 § Trade Policy and ECO 313 § Trade Agreements:
+
+        Tariff reduction → lower import price → increased quantity demanded
+        (law of demand, ECO 201).
+
+        Welfare effects:
+        - Consumer surplus gain: ΔCS = ½ × ΔP × (Q₁ + Q₀)
+        - Government revenue loss: ΔRev = t₁ × Q₁ - t₀ × Q₀
+        - Producer surplus loss: ΔPS = ½ × ΔP × (Q₀ + Q₁)
+        - Net welfare = ΔCS - ΔPS - ΔRev + terms_of_trade_gain
+
+        AfCFTA coverage:
+        - 90% of tariff lines: fully eliminated
+        - 7% sensitive products: reduced by 50%
+        - 3% exclusion list: no change
+
+        Args:
+            origin: exporting country code
+            destination: importing country code
+            product_category: product category
+            current_tariff_rate: current tariff rate (0-1)
+            current_trade_volume: current trade volume (USD)
+            price_elasticity_of_demand: PED for this product (default -1.2)
+
+        Returns:
+            Dict with tariff scenarios, welfare effects, and trade creation
+        """
+        # Determine AfCFTA treatment
+        # Assume product is in 90% liberalized goods
+        treatment = "90pct_goods"
+        tariff_reduction = 1.0  # Full elimination
+
+        new_tariff = current_tariff_rate * (1 - tariff_reduction)
+        price_reduction_pct = current_tariff_rate * tariff_reduction
+
+        # Trade creation effect (Viner, 1950)
+        # % change in quantity = PED × % change in price
+        ped = abs(price_elasticity_of_demand)
+        quantity_change_pct = ped * price_reduction_pct * 100
+        new_volume = current_trade_volume * (1 + quantity_change_pct / 100)
+        trade_creation = new_volume - current_trade_volume
+
+        # Consumer surplus gain (approximate)
+        cs_gain = 0.5 * price_reduction_pct * (current_trade_volume + new_volume)
+
+        # Government revenue loss
+        revenue_loss = current_tariff_rate * current_trade_volume - new_tariff * new_volume
+
+        # Net welfare effect
+        net_welfare = cs_gain - revenue_loss
+
+        # Sensitive products scenario (50% reduction)
+        sensitive_new_tariff = current_tariff_rate * 0.5
+        sensitive_quantity_change = ped * (current_tariff_rate * 0.5) * 100
+        sensitive_new_volume = current_trade_volume * (1 + sensitive_quantity_change / 100)
+
+        return {
+            "origin": origin,
+            "destination": destination,
+            "product_category": product_category,
+            "current_tariff_rate_pct": round(current_tariff_rate * 100, 1),
+            "scenarios": {
+                "full_liberalization": {
+                    "new_tariff_rate_pct": round(new_tariff * 100, 1),
+                    "price_reduction_pct": round(price_reduction_pct * 100, 1),
+                    "quantity_change_pct": round(quantity_change_pct, 1),
+                    "new_trade_volume_usd": round(new_volume, 0),
+                    "trade_creation_usd": round(trade_creation, 0),
+                    "consumer_surplus_gain_usd": round(cs_gain, 0),
+                    "government_revenue_loss_usd": round(revenue_loss, 0),
+                    "net_welfare_effect_usd": round(net_welfare, 0),
+                    "treatment": "90% of goods (AfCFTA)",
+                },
+                "sensitive_products": {
+                    "new_tariff_rate_pct": round(sensitive_new_tariff * 100, 1),
+                    "quantity_change_pct": round(sensitive_quantity_change, 1),
+                    "new_trade_volume_usd": round(sensitive_new_volume, 0),
+                    "treatment": "7% sensitive goods (50% reduction)",
+                },
+                "exclusion_list": {
+                    "new_tariff_rate_pct": round(current_tariff_rate * 100, 1),
+                    "trade_volume_usd": current_trade_volume,
+                    "treatment": "3% exclusion list (no change)",
+                },
+            },
+            "price_elasticity_used": -ped,
+            "interpretation": (
+                f"AfCFTA liberalization would increase {product_category} trade "
+                f"from {origin} to {destination} by ~{quantity_change_pct:.0f}%, "
+                f"creating ~${trade_creation:,.0f} in new trade and "
+                f"~${cs_gain:,.0f} in consumer surplus. "
+                f"Government revenue loss: ~${revenue_loss:,.0f}. "
+                f"Net welfare: {'positive' if net_welfare > 0 else 'negative'} (${net_welfare:,.0f})."
+            ),
+            "method": "ECO 305/313 — AfCFTA Tariff Impact Analysis (Viner trade creation)",
+        }
+
+    @classmethod
+    def full_cross_border_analysis(
+        cls,
+        origin: str,
+        destination: str,
+        product_category: str,
+        domestic_prices: Optional[List[float]] = None,
+        foreign_prices: Optional[List[float]] = None,
+        exchange_rate_changes: Optional[List[float]] = None,
+        domestic_price_changes: Optional[List[float]] = None,
+        current_tariff_rate: float = 0.25,
+        current_trade_volume: float = 1000000,
+    ) -> Dict[str, Any]:
+        """
+        Comprehensive cross-border trade intelligence report.
+
+        Combines all ECO 305/313 analyses into a single report:
+        1. Gravity model trade flow prediction
+        2. Comparative advantage assessment
+        3. Exchange rate pass-through estimation
+        4. PPP deviation analysis
+        5. AfCFTA tariff impact analysis
+
+        Args:
+            origin: exporting country code
+            destination: importing country code
+            product_category: product category
+            domestic_prices: list of domestic prices (for PPP)
+            foreign_prices: list of foreign prices (for PPP)
+            exchange_rate_changes: ER changes (for ERPT)
+            domestic_price_changes: price changes (for ERPT)
+            current_tariff_rate: current tariff (0-1)
+            current_trade_volume: current volume (USD)
+
+        Returns:
+            Comprehensive cross-border intelligence report
+        """
+        report = {
+            "product": "soko_pulse_cross_border",
+            "origin": origin,
+            "destination": destination,
+            "product_category": product_category,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # 1. Gravity model
+        report["gravity_model"] = cls.gravity_model_estimate(
+            origin, destination, product_category
+        )
+
+        # 2. Comparative advantage (requires domestic/world shares)
+        # Use estimated shares based on EAC trade patterns
+        domestic_share = 0.15  # Placeholder: 15% of country's trade
+        world_share = 0.05     # Placeholder: 5% of world trade
+        report["comparative_advantage"] = cls.comparative_advantage_index(
+            origin, product_category, domestic_share, world_share
+        )
+
+        # 3. Exchange rate pass-through
+        if exchange_rate_changes and domestic_price_changes:
+            report["exchange_rate_pass_through"] = cls.exchange_rate_pass_through(
+                origin, destination, exchange_rate_changes, domestic_price_changes
+            )
+
+        # 4. PPP deviation
+        if domestic_prices and foreign_prices:
+            avg_domestic = float(np.mean(domestic_prices))
+            avg_foreign = float(np.mean(foreign_prices))
+            # Estimate ER from price ratio
+            est_er = avg_domestic / max(avg_foreign, 1e-10)
+            report["ppp_analysis"] = cls.ppp_deviation(
+                origin, destination, avg_domestic, avg_foreign, est_er
+            )
+
+        # 5. AfCFTA tariff analysis
+        report["afcfta_impact"] = cls.afcfta_tariff_analysis(
+            origin, destination, product_category,
+            current_tariff_rate, current_trade_volume,
+        )
+
+        # Summary
+        report["summary"] = {
+            "eac_trade_partner": cls.EAC_COUNTRIES.get(destination, {}).get("name", destination),
+            "distance_km": cls.DISTANCE_MATRIX.get(
+                (origin, destination) if (origin, destination) in cls.DISTANCE_MATRIX
+                else (destination, origin), "unknown"
+            ),
+            "recommendation": "expand" if report.get("gravity_model", {}).get("trade_potential", 1) > 0.8 else "monitor",
+            "key_insight": (
+                f"{product_category} trade from {origin} to {destination}: "
+                f"Gravity model predicts ${report.get('gravity_model', {}).get('gravity_model', {}).get('adjusted_flow_million_usd', 0):.1f}M "
+                f"flow. AfCFTA could boost volume by "
+                f"~{report.get('afcfta_impact', {}).get('scenarios', {}).get('full_liberalization', {}).get('quantity_change_pct', 0):.0f}%."
+            ),
+        }
+
+        return report
+
+    @staticmethod
+    def _interpret_gravity(
+        trade_potential: Optional[float], origin: str, dest: str,
+    ) -> str:
+        """Interpret gravity model trade potential ratio."""
+        if trade_potential is None:
+            return "No observed flow data for comparison."
+        if trade_potential > 1.5:
+            return f"Trade between {origin} and {dest} exceeds gravity prediction — strong trade link."
+        elif trade_potential > 0.8:
+            return f"Trade between {origin} and {dest} is near gravity prediction — normal trade link."
+        elif trade_potential > 0.3:
+            return f"Trade between {origin} and {dest} is below prediction — untapped potential."
+        else:
+            return f"Trade between {origin} and {dest} is well below prediction — significant barriers exist."
