@@ -29,6 +29,12 @@ from app.models.infrastructure import (
     FederatedUpdate,
     CostTracking,
 )
+from app.models.agent_models import (
+    WorkerType,
+    AgentConfig,
+    AgentInsight,
+    AgentRecommendation,
+)
 
 __all__ = [
     "User",
@@ -57,4 +63,8 @@ __all__ = [
     "ModelVersion",
     "FederatedUpdate",
     "CostTracking",
+    "WorkerType",
+    "AgentConfig",
+    "AgentInsight",
+    "AgentRecommendation",
 ]

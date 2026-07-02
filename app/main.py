@@ -324,6 +324,9 @@ from app.api.infrastructure_v2 import router as infrastructure_v2_router
 # Worker features (tithe, goals, loans, mindset)
 from app.api.worker_features import router as worker_features_router
 
+# Multi-agent architecture (domain agent routing, worker classification)
+from app.api.agent_router import router as agent_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -341,6 +344,7 @@ app.include_router(fmcg_router, prefix=settings.API_V1_PREFIX)
 app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
 app.include_router(infrastructure_v2_router, prefix=settings.API_V1_PREFIX)
 app.include_router(worker_features_router, prefix=settings.API_V1_PREFIX)
+app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
