@@ -44,18 +44,22 @@ def _ols(
     """
     OLS regression returning coefficients, SEs, residuals, fitted values.
 
-    When *cluster* is provided, computes cluster-robust (CR1) standard errors.
-    Otherwise, if *robust*, uses HC1 (White) standard errors.
+    Uses np.linalg.lstsq for numerically stable coefficient estimation
+    (avoids explicit inversion of X'X which is ill-conditioned when
+    columns are near-collinear). When *cluster* is provided, computes
+    cluster-robust (CR1) standard errors. Otherwise, if *robust*, uses
+    HC1 (White) standard errors.
     """
     n, k = X.shape
     # Flatten y to 1D if single-column
     if y.ndim > 1:
         y = y.ravel()
-    XtX_inv = np.linalg.inv(X.T @ X)
-    beta = XtX_inv @ (X.T @ y)
+    beta = np.linalg.lstsq(X, y, rcond=None)[0]
     resid = y - X @ beta
     fitted = X @ beta
     mse = np.sum(resid ** 2) / (n - k)
+    # Compute (X'X)^{-1} for standard error estimation only
+    XtX_inv = np.linalg.inv(X.T @ X)
 
     if cluster is not None:
         # Cluster-robust (CR1) variance estimator

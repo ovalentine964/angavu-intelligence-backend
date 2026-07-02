@@ -34,6 +34,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
+from app.services.statistical_foundation import ClusterAnalyzer
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -563,6 +564,48 @@ class JamiiInsightsService:
             digital_adoption, credit_access, savings_score, user_count
         )
 
+        # ── STA 442: Cluster Analysis for community segmentation ───────
+        community_segmentation = None
+        if user_count >= 15:
+            try:
+                user_features = []
+                for u in users:
+                    uid = u.id
+                    u_sales = [t for t in sales if t.user_id == uid]
+                    u_rev = sum(t.amount for t in u_sales)
+                    u_mpesa = sum(1 for t in u_sales if t.payment_method == "mpesa")
+                    u_txn_count = len(u_sales)
+                    u_digital = 1 if u_mpesa > len(u_sales) * 0.5 else 0
+                    user_features.append([
+                        u_rev / max(months_in_period, 1),
+                        u_txn_count / max(months_in_period, 1),
+                        u_digital,
+                        1.0 if u_mpesa > 0 else 0.0,
+                    ])
+
+                if len(user_features) >= 15:
+                    seg_data = np.array(user_features, dtype=float)
+                    seg_result = ClusterAnalyzer.segment_market(
+                        seg_data,
+                        feature_names=["monthly_revenue", "monthly_txns", "digital_adoption", "has_mpesa"],
+                        max_k=min(5, len(user_features) // 4),
+                    )
+                    community_segmentation = {
+                        "optimal_k": seg_result["optimal_k"],
+                        "silhouette_score": seg_result["silhouette_score"],
+                        "segments": [
+                            {
+                                "segment_id": s["segment_id"],
+                                "size": s["size"],
+                                "proportion": s["proportion"],
+                                "profile": s["profile"],
+                            }
+                            for s in seg_result["segments"]
+                        ],
+                    }
+            except Exception as e:
+                logger.debug("community_segmentation_failed", error=str(e))
+
         # Program impact
         program_impact = None
         if program_name:
@@ -630,6 +673,8 @@ class JamiiInsightsService:
             "livelihoods_supported": livelihoods,
             "program_impact": program_impact,
             "barriers": barriers,
+            # STA 442: Cluster analysis for community segmentation
+            "community_segmentation": community_segmentation,
             "sample_size": user_count,
         }
 

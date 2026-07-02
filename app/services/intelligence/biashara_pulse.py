@@ -74,6 +74,7 @@ from app.config import get_settings
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
+from app.services.game_theory import NashEquilibriumSolver
 from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 
@@ -629,6 +630,46 @@ class BiasharaPulseService:
         county_rank = None
         vs_national = None
 
+        # ── ECO 321: Nash equilibrium for policy game analysis ────────────
+        policy_game_analysis = None
+        if len(sector_breakdown) >= 2:
+            try:
+                # Model policy interaction as a 2-player game:
+                # Player 1: Government (tax/subsidy policy)
+                # Player 2: MSME sector (formalize/informal)
+                # Payoffs based on revenue shares and formalization rates
+                top2 = sector_breakdown[:2]
+                s1_share = top2[0]["revenue_share_pct"] / 100
+                s2_share = top2[1]["revenue_share_pct"] / 100
+
+                # Government payoff matrix: rows = {subsidy, tax}, cols = {formalize, informal}
+                # Higher revenue share = more to gain from formalization
+                p1_matrix = np.array([
+                    [s1_share * 80, s1_share * 40],   # subsidy: high if formalize, low if informal
+                    [s1_share * 60, s1_share * 50],   # tax: moderate both ways
+                ])
+                # MSME payoff matrix
+                p2_matrix = np.array([
+                    [s2_share * 70, s2_share * 30],   # formalize: high under subsidy, low under tax
+                    [s2_share * 50, s2_share * 60],   # informal: moderate
+                ])
+
+                nash_result = NashEquilibriumSolver.solve(p1_matrix, p2_matrix)
+                policy_game_analysis = {
+                    "equilibrium": nash_result.to_dict(),
+                    "players": ["government", "msme_sector"],
+                    "strategies": {
+                        "government": ["subsidy", "tax"],
+                        "msme_sector": ["formalize", "informal"],
+                    },
+                    "interpretation": (
+                        "Nash equilibrium suggests optimal policy mix for "
+                        "formalization incentive design"
+                    ),
+                }
+            except Exception as e:
+                logger.debug("nash_policy_analysis_failed", error=str(e))
+
         response = {
             "product": "biashara_pulse",
             "version": "2.0",
@@ -673,6 +714,8 @@ class BiasharaPulseService:
             "county_rank": county_rank,
             # STA 341: Bootstrap confidence intervals
             "bootstrap_estimates": bootstrap_results,
+            # ECO 321: Nash equilibrium for policy game analysis
+            "policy_game_analysis": policy_game_analysis,
             "users_included": user_count,
             # STA 342: Confidence intervals for key metrics
             "confidence_intervals": {

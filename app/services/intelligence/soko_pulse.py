@@ -72,9 +72,12 @@ from app.models.intelligence_products import SokoPulseReport
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
+from app.services.econometric_engine import ARIMAModel, CointegrationTester, VARModel
+from app.services.game_theory import CournotDuopoly, BertrandDuopoly
 from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.statistical_foundation import ClusterAnalyzer
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -686,10 +689,15 @@ class SokoPulseService:
                 n_forecast=3,
             )
 
-            # ARIMA (STA 244)
-            arima_result = _simple_arima_forecast(
-                volumes, order=(1, 1, 0), n_forecast=3
-            )
+            # ARIMA (STA 244) — using full ARIMAModel from econometric_engine
+            arima_model = ARIMAModel(p=1, d=1, q=0)
+            arima_fit = arima_model.fit(volumes)
+            arima_fc_result = arima_model.forecast(steps=3)
+            arima_result = {
+                "forecast": [round(f["forecast"]) for f in arima_fc_result["forecasts"]],
+                "aic": arima_fit.get("aic"),
+                "ljung_box_q": arima_fit.get("ljung_box", {}).get("Q_statistic"),
+            }
 
             # Simple exponential smoothing (original)
             alpha = 0.3
@@ -730,6 +738,127 @@ class SokoPulseService:
             daily_volumes[t.timestamp.strftime("%Y-%m-%d")] += t.quantity or 0
         sorted_days = sorted(daily_volumes.items(), key=lambda x: x[1], reverse=True)
         peak_days = [d[0] for d in sorted_days[:5]]
+
+        # ── STA 244: VAR Model for multi-market dynamics ────────────────
+        var_analysis = None
+        if tier in ("premium", "enterprise") and len(monthly_trend) >= 4:
+            try:
+                volumes_arr = np.array([m["volume"] for m in monthly_trend], dtype=float)
+                revenues_arr = np.array([m["revenue"] for m in monthly_trend], dtype=float)
+                if len(volumes_arr) >= 4:
+                    var_data = np.column_stack([volumes_arr, revenues_arr])
+                    var_model = VARModel(p=1)
+                    var_fit = var_model.fit(var_data, variable_names=["volume", "revenue"])
+                    if "error" not in var_fit:
+                        irf = var_model.impulse_response(periods=6)
+                        var_analysis = {
+                            "model_order": var_fit["order"],
+                            "equations": var_fit["equations"],
+                            "granger_causality": var_fit.get("granger_causality", []),
+                            "aic": var_fit["aic"],
+                            "bic": var_fit["bic"],
+                            "impulse_response": irf.get("impulse_responses", []),
+                        }
+            except Exception as e:
+                logger.debug("var_analysis_failed", error=str(e))
+
+        # ── STA 244: Cointegration for cross-border price analysis ──────
+        cointegration_analysis = None
+        if tier == "enterprise" and unit_prices and len(unit_prices) >= 20:
+            try:
+                mid = len(unit_prices) // 2
+                prices_a = np.array(unit_prices[:mid], dtype=float)
+                prices_b = np.array(unit_prices[mid:2*mid], dtype=float)
+                if len(prices_a) >= 10 and len(prices_b) >= 10:
+                    cg_tester = CointegrationTester()
+                    cg_result = cg_tester.engle_granger(prices_a, prices_b)
+                    if "error" not in cg_result:
+                        cointegration_analysis = {
+                            "test": cg_result["engle_granger_test"],
+                            "cointegrating_vector": cg_result["cointegrating_vector"],
+                            "error_correction_model": cg_result.get("error_correction_model"),
+                            "interpretation": cg_result["engle_granger_test"]["conclusion"],
+                        }
+            except Exception as e:
+                logger.debug("cointegration_analysis_failed", error=str(e))
+
+        # ── STA 442: Cluster Analysis for market segmentation ───────────
+        market_segmentation = None
+        if tier in ("premium", "enterprise") and len(transactions) >= 30:
+            try:
+                trader_data = defaultdict(lambda: {"prices": [], "quantities": [], "revenue": 0, "count": 0})
+                for t in transactions:
+                    uid = str(t.user_id)
+                    if t.unit_price and t.unit_price > 0:
+                        trader_data[uid]["prices"].append(t.unit_price)
+                    trader_data[uid]["quantities"].append(t.quantity or 0)
+                    trader_data[uid]["revenue"] += t.amount
+                    trader_data[uid]["count"] += 1
+
+                feature_rows = []
+                for uid, d in trader_data.items():
+                    if len(d["prices"]) >= 3:
+                        feature_rows.append([
+                            float(np.mean(d["prices"])),
+                            float(np.sum(d["quantities"])),
+                            d["revenue"],
+                            d["count"],
+                        ])
+
+                if len(feature_rows) >= 10:
+                    seg_data = np.array(feature_rows, dtype=float)
+                    seg_result = ClusterAnalyzer.segment_market(
+                        seg_data,
+                        feature_names=["avg_price", "total_volume", "total_revenue", "txn_count"],
+                        max_k=min(5, len(feature_rows) // 3),
+                    )
+                    market_segmentation = {
+                        "optimal_k": seg_result["optimal_k"],
+                        "silhouette_score": seg_result["silhouette_score"],
+                        "segments": [
+                            {
+                                "segment_id": s["segment_id"],
+                                "size": s["size"],
+                                "proportion": s["proportion"],
+                                "profile": s["profile"],
+                            }
+                            for s in seg_result["segments"]
+                        ],
+                    }
+            except Exception as e:
+                logger.debug("market_segmentation_failed", error=str(e))
+
+        # ── ECO 422: Competition analysis (Cournot & Bertrand) ──────────
+        competition_analysis = None
+        if tier in ("premium", "enterprise") and avg_price > 0:
+            try:
+                demand_intercept = avg_price * 2.5
+                demand_slope = 0.001
+                est_marginal_cost = avg_price * 0.6
+
+                cournot_result = CournotDuopoly.solve_linear(
+                    demand_intercept=demand_intercept,
+                    demand_slope=demand_slope,
+                    marginal_cost_1=est_marginal_cost,
+                    marginal_cost_2=est_marginal_cost * 1.1,
+                )
+
+                bertrand_result = BertrandDuopoly.solve_differentiated(
+                    demand_intercept=demand_intercept,
+                    own_price_sensitivity=1.0 / avg_price,
+                    cross_price_sensitivity=0.3 / avg_price,
+                    marginal_cost_1=est_marginal_cost,
+                    marginal_cost_2=est_marginal_cost * 1.1,
+                )
+
+                competition_analysis = {
+                    "cournot_quantity_competition": cournot_result.to_dict(),
+                    "bertrand_price_competition": bertrand_result.to_dict(),
+                    "estimated_marginal_cost": round(est_marginal_cost, 2),
+                    "market_structure": bertrand_result.to_dict()["market_structure"],
+                }
+            except Exception as e:
+                logger.debug("competition_analysis_failed", error=str(e))
 
         # ── Apply differential privacy ──────────────────────────────────────
         dp_total_volume = round(self.anonymizer.add_laplace_noise(total_volume, sensitivity=100), 0)
@@ -776,6 +905,14 @@ class SokoPulseService:
             "day_of_week_pattern": dow_pattern,
             "monthly_trend": monthly_trend,
             "peak_demand_days": peak_days,
+            # STA 244: VAR model for multi-market dynamics
+            "var_multi_market_dynamics": var_analysis,
+            # STA 244: Cointegration for cross-border price analysis
+            "cointegration_cross_border": cointegration_analysis,
+            # STA 442: Cluster analysis for market segmentation
+            "market_segmentation": market_segmentation,
+            # ECO 422: Competition analysis (Cournot & Bertrand)
+            "competition_analysis": competition_analysis,
             "vendor_count": k,
             "stockout_frequency": None,  # Would need inventory data
             "seasonal_factor": seasonal_factor,

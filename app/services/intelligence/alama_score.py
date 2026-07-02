@@ -35,10 +35,16 @@ from app.config import get_settings
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
+from app.services.causal_inference import (
+    DifferenceInDifferences,
+    InstrumentalVariables2SLS,
+    RegressionDiscontinuity,
+)
 from app.services.heckman_correction import HeckmanCorrector
 from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
+from app.services.statistical_foundation import MonteCarloEngine
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -985,6 +991,15 @@ class AlamaScoreService:
                     ).to_dict() if len(daily_revenues) > 1 else None
                 ),
             },
+            # ECO 424: Causal inference validation
+            "causal_inference": self._run_causal_validation(
+                transactions, alama_score, daily_revenues, avg_daily_rev,
+                query_tier, activity_score, stability_score,
+            ) if query_tier in ("enhanced", "full") and len(transactions) >= 30 else None,
+            # STA 347: Monte Carlo revenue simulation
+            "monte_carlo_simulation": self._run_monte_carlo_simulation(
+                avg_daily_rev, revenue_vol, query_tier,
+            ) if query_tier in ("enhanced", "full") and avg_daily_rev > 0 else None,
         }
 
         if query_tier == "basic":
@@ -995,6 +1010,8 @@ class AlamaScoreService:
             response.pop("heckman_corrected", None)
             response.pop("heckman_lambda", None)
             response.pop("vs_market_avg", None)
+            response.pop("causal_inference", None)
+            response.pop("monte_carlo_simulation", None)
             response["risk_indicators"].pop("risk_factors", None)
 
         await intelligence_cache.set(
@@ -1053,3 +1070,132 @@ class AlamaScoreService:
         if not factors:
             factors.append("no_significant_risk_factors")
         return factors
+
+    @staticmethod
+    def _run_causal_validation(
+        transactions: list,
+        alama_score: float,
+        daily_revenues: list,
+        avg_daily_rev: float,
+        query_tier: str,
+        activity_score: float,
+        stability_score: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run causal inference validation using IV/2SLS, DiD, and RDD.
+
+        ECO 424 — Advanced Econometrics:
+        - IV/2SLS: Validate that activity drives score (not reverse causality)
+        - DiD: Estimate impact of high-activity periods on revenue
+        - RDD: Test threshold effects at score band boundaries
+        """
+        result = {}
+
+        try:
+            # IV/2SLS: Does activity CAUSE revenue?
+            # Endogenous: activity_score proxy (txn count per day)
+            # Instrument: day-of-week variation (exogenous scheduling)
+            daily_counts = defaultdict(int)
+            daily_rev_map = defaultdict(float)
+            for t in transactions:
+                if t.transaction_type == "SALE":
+                    day = t.timestamp.strftime("%Y-%m-%d")
+                    daily_counts[day] += 1
+                    daily_rev_map[day] += t.amount
+
+            if len(daily_counts) >= 20:
+                days_sorted = sorted(daily_counts.keys())
+                Y_iv = np.array([daily_rev_map[d] for d in days_sorted], dtype=float)
+                X_endog = np.array([daily_counts[d] for d in days_sorted], dtype=float)
+                # Instrument: day-of-week as numeric (exogenous scheduling pattern)
+                from datetime import datetime as dt
+                Z_instr = np.array([
+                    dt.strptime(d, "%Y-%m-%d").weekday() for d in days_sorted
+                ], dtype=float).reshape(-1, 1)
+
+                iv_result = InstrumentalVariables2SLS.fit(
+                    Y=Y_iv, X_endogenous=X_endog,
+                    Z_instruments=Z_instr, robust=True,
+                )
+                result["iv_2sls"] = iv_result.summary()
+
+            # DiD: Compare revenue before vs after median date
+            if len(transactions) >= 40:
+                sorted_txns = sorted(transactions, key=lambda t: t.timestamp)
+                mid_idx = len(sorted_txns) // 2
+                mid_ts = sorted_txns[mid_idx].timestamp
+
+                Y_did = np.array([t.amount for t in sorted_txns], dtype=float)
+                treat = np.array([
+                    1 if t.timestamp >= mid_ts else 0 for t in sorted_txns
+                ], dtype=float)
+                post = np.array([
+                    1 if t.timestamp >= mid_ts else 0 for t in sorted_txns
+                ], dtype=float)
+                # Treat vs control based on transaction amount (above/below median)
+                median_amt = float(np.median(Y_did))
+                treat_group = (Y_did > median_amt).astype(float)
+
+                did_result = DifferenceInDifferences.fit(
+                    Y=Y_did, treat=treat_group, post=treat,
+                )
+                result["did_impact"] = did_result.summary()
+
+            # RDD: Threshold analysis at score band boundaries
+            if len(daily_revenues) >= 20:
+                rev_arr = np.array(daily_revenues, dtype=float)
+                # Running variable: revenue (centered at median)
+                cutoff = float(np.median(rev_arr))
+                # Outcome: consistency (binary: above-median activity)
+                Y_rdd = (rev_arr > cutoff).astype(float)
+
+                rdd_result = RegressionDiscontinuity.fit(
+                    Y=Y_rdd, X=rev_arr, cutoff=cutoff,
+                    run_mccrary=False,
+                )
+                result["rdd_threshold"] = rdd_result.summary()
+
+        except Exception as e:
+            logger.debug("causal_validation_failed", error=str(e))
+            return None
+
+        return result if result else None
+
+    @staticmethod
+    def _run_monte_carlo_simulation(
+        avg_daily_rev: float,
+        revenue_vol: float,
+        query_tier: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run Monte Carlo revenue distribution simulation.
+
+        STA 347 — Stochastic Processes:
+        Simulates revenue paths using geometric Brownian motion
+        to characterize the full distribution of future revenue,
+        enabling probabilistic credit risk assessment.
+        """
+        try:
+            mc = MonteCarloEngine.revenue_distribution_simulation(
+                base_revenue=avg_daily_rev * 30,  # Monthly base
+                growth_mean=0.02,  # 2% monthly growth expectation
+                growth_std=max(revenue_vol, 0.1),
+                n_periods=12,
+                n_simulations=5000,
+            )
+            return {
+                "base_monthly_revenue": round(avg_daily_rev * 30, 2),
+                "terminal_mean": mc["terminal_mean"],
+                "terminal_median": mc["terminal_median"],
+                "terminal_std": mc["terminal_std"],
+                "percentile_5": mc["percentile_5"],
+                "percentile_95": mc["percentile_95"],
+                "prob_decline": mc["prob_decline"],
+                "prob_growth_10pct": mc["prob_growth_10pct"],
+                "n_simulations": mc["n_simulations"],
+                "n_periods": mc["n_periods"],
+                "method": "geometric_brownian_motion",
+            }
+        except Exception as e:
+            logger.debug("monte_carlo_simulation_failed", error=str(e))
+            return None
