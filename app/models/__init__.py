@@ -12,6 +12,17 @@ from app.models.intelligence_products import (
     TaxBaseEstimation,
     DistributionGapReport,
 )
+from app.models.worker_features import (
+    TitheRecord,
+    GoalRecord,
+    GoalContribution,
+    LoanRecord,
+    LoanRepayment,
+    LoanROICheckin,
+    MindsetLesson,
+    MindsetLessonProgress,
+    RichHabitScore,
+)
 
 __all__ = [
     "User",
@@ -27,4 +38,13 @@ __all__ = [
     "JamiiInsightsReport",
     "TaxBaseEstimation",
     "DistributionGapReport",
+    "TitheRecord",
+    "GoalRecord",
+    "GoalContribution",
+    "LoanRecord",
+    "LoanRepayment",
+    "LoanROICheckin",
+    "MindsetLesson",
+    "MindsetLessonProgress",
+    "RichHabitScore",
 ]
