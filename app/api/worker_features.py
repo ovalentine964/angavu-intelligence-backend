@@ -136,7 +136,7 @@ async def record_giving(
 @router.get("/tithe/report")
 async def giving_report(
     user_id: UUID,
-    period: str = Query("monthly", regex="^(monthly|annual)$"),
+    period: str = Query("monthly", pattern="^(monthly|annual)$"),
     year: Optional[int] = None,
     month: Optional[int] = None,
     db: AsyncSession = Depends(get_db),

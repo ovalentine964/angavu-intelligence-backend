@@ -2,17 +2,23 @@
 
 # Biashara Intelligence — Cloud Platform
 
-**Africa's economic nervous system. Processing data from 600M+ informal workers into economic intelligence.**
+**Africa's operating system for the informal economy. Processing data from 600M+ informal workers into economic intelligence.**
+
+**"The monopoly that serves 600M+ informal workers. Not competing. Just operating."**
 
 **Version:** 0.1.0
+
+---
+
+## Vision
+
+Biashara Intelligence is the vertically integrated AI platform for Africa's informal economy. We own the data, the models, and the infrastructure. Every informal worker has an AI CFO. Africa's answer to China's AI factories.
+
+> *"What used to take months, we do in days."*
 
 ## Mission
 
 Provide economic intelligence to Africa's 600M+ informal workers. Make invisible workers visible. Fix market inefficiencies, information asymmetry, and coordination failures.
-
-## Vision
-
-The platform that forces good governance through data. The CFO for every informal worker in Africa.
 
 ## Architecture
 
@@ -24,7 +30,7 @@ Msaidizi (Android) → Voice/Transaction Data → Biashara Intelligence (Cloud) 
   Offline-first                            Degree-driven (42 units)              Outcome-based pricing
 ```
 
-### Multi-Agent Architecture
+### Multi-Agent Architecture (33 Agents, 6 Swarms)
 
 The platform uses a **multi-agent runtime** with an **event bus** for loose coupling between agents:
 
@@ -53,7 +59,7 @@ The platform uses a **multi-agent runtime** with an **event bus** for loose coup
 - **Event Bus** — pub/sub message passing between agents, with dead letter queue for failed events
 - **Observability** — metrics, tracing, and health checks for all agents
 
-### Multi-Agentic Swarms (33 agents)
+### Multi-Agentic Swarms
 
 | Swarm | Agents | Role |
 |-------|--------|------|
@@ -96,6 +102,62 @@ Dedicated FMCG intelligence service for tracking informal channel performance:
 - **Distribution gap analysis** for last-mile coverage
 - **Price monitoring** at the informal retail level
 - **Competitor intelligence** from transaction patterns
+
+## Federated Learning v2
+
+Privacy-preserving machine learning that improves models without seeing worker data.
+
+### Privacy Guarantees
+
+| Mechanism | Specification | Purpose |
+|---|---|---|
+| **Differential Privacy** | ε=0.1, δ=1e-5 | Mathematical guarantee that no one can reverse-engineer individual data |
+| **K-Anonymity** | k≥10 | Data only used when at least 10 workers have similar patterns |
+| **On-Device Training** | Local model updates | Data never leaves the worker's phone |
+| **Secure Aggregation** | Encrypted model updates | Server cannot see individual contributions |
+| **Data Sovereignty** | African data in Africa | Compliant with Kenya DPA, Nigeria NDPR, South Africa POPIA |
+
+### How It Works
+
+```
+Worker's phone trains model locally
+    → Anonymous model gradients computed
+    → Encrypted update sent to server
+    → Server aggregates across thousands of workers
+    → Improved global model distributed
+    → Worker gets better AI, data never exposed
+```
+
+## Infrastructure Health Monitoring
+
+Real-time monitoring of all platform components:
+
+| Metric | Target | Alert Threshold |
+|---|---|---|
+| API Response Time | <200ms p95 | >500ms |
+| Agent Health | 100% uptime | Any agent down |
+| Event Bus Latency | <50ms | >200ms |
+| Federated Learning Round | <30min | >60min |
+| Data Pipeline Throughput | 10K transactions/min | <1K/min |
+| ClickHouse Query Time | <1s | >5s |
+
+## Data Center Roadmap
+
+Infrastructure evolves based on worker value — each phase unlocks when workers generate enough data to justify the investment.
+
+| Phase | Trigger | Infrastructure | Capacity |
+|---|---|---|---|
+| **Phase 1** | 1,000 workers | Single Oracle Cloud Free Tier server | 10K transactions/day |
+| **Phase 2** | 10,000 workers | ARM server + solar panels + ClickHouse | 100K transactions/day |
+| **Phase 3** | 100,000 workers | Mini DC (3-5 ARM servers, 10-20 kW solar array) | 1M transactions/day |
+| **Phase 4** | 1,000,000 workers | Containerized pan-African DC network | 10M+ transactions/day |
+
+### Why Solar + ARM?
+
+- Kenya solar: $0.03-0.04/kWh (vs US $0.10-0.15/kWh)
+- ARM servers: 3-5x better performance/watt, 70-80% lower cost
+- Geothermal (Olkaria): $0.05/kWh — cheaper than China's coal
+- Data sovereignty: African data processed in Africa, by African infrastructure
 
 ## API Endpoints
 
@@ -171,10 +233,10 @@ Full mapping: [ARCHITECTURE_MAPPING.md](ARCHITECTURE_MAPPING.md)
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| Language | Python 3.12 | Backend development |
-| Framework | FastAPI | Async REST API |
-| Data Processing | Polars | High-performance DataFrames (replaces pandas) |
-| Analytics DB | ClickHouse | OLAP queries on 600M+ records |
+| Language | **Python 3.12** | Backend development |
+| Framework | **FastAPI** | Async REST API |
+| Data Processing | **Polars** | High-performance DataFrames (replaces pandas) |
+| Analytics DB | **ClickHouse** | OLAP queries on 600M+ records |
 | Production DB | PostgreSQL 15 | Transactional data |
 | Development DB | SQLite | Local development |
 | Cache | Redis | Caching, rate limiting, session store |
@@ -186,19 +248,6 @@ Full mapping: [ARCHITECTURE_MAPPING.md](ARCHITECTURE_MAPPING.md)
 | Reverse Proxy | Nginx | SSL termination, rate limiting |
 | Logging | structlog | Structured logging |
 | Monitoring | Sentry | Error tracking |
-
-## Data Center Roadmap
-
-The platform's infrastructure evolves based on worker value — each phase unlocks when workers generate enough data to justify the investment.
-
-| Phase | Trigger | Infrastructure | Capacity |
-|-------|---------|---------------|----------|
-| **Phase 1** | 1,000 workers | Single Oracle Cloud Free Tier server | 10K transactions/day |
-| **Phase 2** | 10,000 workers | Dedicated server + ClickHouse | 100K transactions/day |
-| **Phase 3** | 100,000 workers | Multi-region deployment | 1M transactions/day |
-| **Phase 4** | 1,000,000 workers | Continental data center network | 10M+ transactions/day |
-
-Each phase is **worker-value driven** — infrastructure scales when the data justifies it, not before.
 
 ## Security
 
