@@ -942,6 +942,267 @@ class DataValidator:
 
 
 # ---------------------------------------------------------------------------
+# EWMA Analyzer with Optimal λ Selection (STA 346)
+# ---------------------------------------------------------------------------
+
+
+class EWMAAnalyzer:
+    """
+    EWMA Control Chart with optimal smoothing parameter selection.
+
+    From STA 346 (Statistical Quality Control):
+
+    EWMA statistic:
+        Z_t = λ X_t + (1 - λ) Z_{t-1}
+
+    Control limits (time-varying, exact):
+        UCL_t = μ₀ + L √(λ / (2 - λ) × (1 - (1-λ)^(2t))) σ
+        LCL_t = μ₀ - L √(λ / (2 - λ) × (1 - (1-λ)^(2t))) σ
+
+    Steady-state limits (t → ∞):
+        UCL = μ₀ + L √(λ / (2 - λ)) σ
+        LCL = μ₀ - L √(λ / (2 - λ)) σ
+
+    Optimal λ selection:
+        λ is chosen to minimize ARL₁ (average run length under shift δ)
+        for a given ARL₀ (in-control ARL). Approximate optimal values:
+        - Small shifts (δ < 0.5σ): λ ≈ 0.05–0.10
+        - Medium shifts (0.5σ < δ < 1.5σ): λ ≈ 0.10–0.25
+        - Large shifts (δ > 1.5σ): λ ≈ 0.25–0.40 (use Shewhart instead)
+
+    Use case: Detect gradual quality drift in data feeds (e.g., slow
+    price drift, incremental data corruption, systematic measurement bias).
+    """
+
+    def __init__(
+        self,
+        target_mean: Optional[float] = None,
+        target_std: Optional[float] = None,
+        lambda_: Optional[float] = None,
+        L: float = 3.0,
+    ):
+        """
+        Args:
+            target_mean: In-control mean μ₀ (estimated from data if None)
+            target_std: In-control std σ (estimated from data if None)
+            lambda_: Smoothing parameter λ ∈ (0, 1]. If None, auto-select.
+            L: Control limit width in σ units (default: 3.0)
+        """
+        self.target_mean = target_mean
+        self.target_std = target_std
+        self.lambda_ = lambda_
+        self.L = L
+
+        self._ewma_value: Optional[float] = None
+        self._values: List[float] = []
+        self._ewma_history: List[float] = []
+        self._signals: List[ControlChartSignal] = []
+
+    @property
+    def signals(self) -> List[ControlChartSignal]:
+        return list(self._signals)
+
+    @staticmethod
+    def optimal_lambda(
+        delta: float,
+        L: float = 3.0,
+        ARL0_target: float = 370.0,
+    ) -> Dict[str, Any]:
+        """
+        Select optimal λ for detecting a shift of size δ.
+
+        Uses numerical search over λ ∈ [0.01, 0.50] to find λ that
+        minimizes ARL₁ (average run length under shift δ) while
+        maintaining desired ARL₀ (in-control ARL).
+
+        ARL₁ approximation based on signal probability:
+            P(signal | shift δ) ≈ 1 - Φ(L√(λ/(2-λ)) - δ/√(λ/(2-λ)))
+            ARL₁ = 1 / P(signal)
+
+        Args:
+            delta: Shift size in σ units (e.g., 0.5 means 0.5σ shift)
+            L: Control limit width
+            ARL0_target: Desired in-control ARL (default: 370 ≈ 3σ limits)
+
+        Returns:
+            Dict with optimal λ, expected ARL₁, and analysis
+        """
+        if delta <= 0:
+            return {
+                "optimal_lambda": 0.1,
+                "ARL1": ARL0_target,
+                "message": "No shift to detect; default λ=0.1",
+            }
+
+        best_lambda = 0.1
+        best_ARL1 = ARL0_target
+
+        candidates = []
+        for lam_100 in range(1, 51):  # λ from 0.01 to 0.50
+            lam = lam_100 / 100.0
+            ewma_factor = math.sqrt(lam / (2 - lam))
+            threshold = L * ewma_factor
+            noncentrality = delta / ewma_factor if ewma_factor > 0 else 0
+            p_signal = 1 - sp_stats.norm.cdf(threshold - noncentrality)
+            p_signal = max(p_signal, 1e-10)
+            ARL1 = 1.0 / p_signal
+
+            candidates.append({
+                "lambda": round(lam, 2),
+                "ARL1": round(ARL1, 1),
+                "ewma_factor": round(ewma_factor, 4),
+                "p_signal": round(p_signal, 6),
+            })
+
+            if ARL1 < best_ARL1:
+                best_ARL1 = ARL1
+                best_lambda = lam
+
+        candidates.sort(key=lambda x: x["ARL1"])
+
+        return {
+            "optimal_lambda": best_lambda,
+            "ARL1": round(best_ARL1, 1),
+            "ARL0_target": ARL0_target,
+            "delta_sigma": delta,
+            "L": L,
+            "message": (
+                f"λ={best_lambda} minimizes ARL₁={best_ARL1:.0f} "
+                f"for detecting {delta}σ shift"
+            ),
+            "top_5_candidates": candidates[:5],
+        }
+
+    @staticmethod
+    def select_lambda_for_shift_size(
+        small_shift: bool = True,
+        medium_shift: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Quick λ selection based on expected shift magnitude.
+
+        Rules of thumb from STA 346 (Montgomery):
+        - Small shifts (0.25σ–0.50σ): λ = 0.05–0.10
+        - Medium shifts (0.50σ–1.50σ): λ = 0.10–0.25
+        - Large shifts (>1.50σ): λ = 0.25–0.40 or use Shewhart
+        """
+        if small_shift:
+            lam = 0.05
+            rationale = "Small shift detection (λ=0.05): high sensitivity to gradual drift"
+            typical_delta = "0.25σ–0.50σ"
+        elif medium_shift:
+            lam = 0.20
+            rationale = "Medium shift detection (λ=0.20): balanced sensitivity"
+            typical_delta = "0.50σ–1.50σ"
+        else:
+            lam = 0.40
+            rationale = "Large shift detection (λ=0.40): faster response"
+            typical_delta = ">1.50σ (consider Shewhart instead)"
+
+        return {
+            "recommended_lambda": lam,
+            "rationale": rationale,
+            "typical_detectable_shift": typical_delta,
+            "L_recommended": 3.0,
+            "note": "For mixed shifts, use λ=0.10–0.15 as compromise",
+        }
+
+    def update(self, value: float) -> Optional[ControlChartSignal]:
+        """
+        Process a new observation through the EWMA chart.
+
+        Updates: Z_t = λ X_t + (1-λ) Z_{t-1}
+        Control limits: μ₀ ± L √(λ/(2-λ) × (1-(1-λ)^(2t))) σ
+        """
+        self._values.append(value)
+        n = len(self._values)
+
+        # Estimate target parameters from first batch if not set
+        calibration_size = 25
+        if self.target_mean is None and n >= calibration_size:
+            self.target_mean = float(np.mean(self._values[:calibration_size]))
+        if self.target_std is None and n >= calibration_size:
+            self.target_std = float(np.std(self._values[:calibration_size], ddof=1))
+
+        if self.target_mean is None or self.target_std is None:
+            self._ewma_value = value
+            self._ewma_history.append(value)
+            return None
+
+        if self.lambda_ is None:
+            self.lambda_ = 0.10
+
+        lam = self.lambda_
+        mu0 = self.target_mean
+        sigma = self.target_std
+
+        # Update EWMA: Z_t = λ X_t + (1-λ) Z_{t-1}
+        if self._ewma_value is None:
+            self._ewma_value = value
+        else:
+            self._ewma_value = lam * value + (1 - lam) * self._ewma_value
+
+        self._ewma_history.append(self._ewma_value)
+
+        # Time-varying control limits (exact)
+        ewma_var_factor = (lam / (2 - lam)) * (1 - (1 - lam) ** (2 * n))
+        ewma_std = sigma * math.sqrt(max(ewma_var_factor, 0))
+        ucl = mu0 + self.L * ewma_std
+        lcl = mu0 - self.L * ewma_std
+
+        if self._ewma_value > ucl or self._ewma_value < lcl:
+            direction = "above" if self._ewma_value > ucl else "below"
+            signal = ControlChartSignal(
+                chart_type=ControlChartType.EWMA,
+                signal_type=f"ewma_beyond_limits_{direction}",
+                point_index=n - 1,
+                value=self._ewma_value,
+                ucl=ucl,
+                lcl=lcl,
+                cl=mu0,
+                severity="action",
+                message=(
+                    f"EWMA Z_{n}={self._ewma_value:.4f} {direction} "
+                    f"control limits [{lcl:.4f}, {ucl:.4f}] "
+                    f"(λ={lam}, L={self.L})"
+                ),
+            )
+            self._signals.append(signal)
+            return signal
+
+        return None
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get current EWMA chart status."""
+        n = len(self._values)
+        mu = self.target_mean
+        sigma = self.target_std
+        lam = self.lambda_
+
+        limits = None
+        if mu is not None and sigma is not None and lam is not None:
+            ewma_var_factor = (lam / (2 - lam)) * (1 - (1 - lam) ** (2 * max(n, 1)))
+            ewma_std = sigma * math.sqrt(max(ewma_var_factor, 0))
+            limits = {
+                "ucl": round(mu + self.L * ewma_std, 4),
+                "lcl": round(mu - self.L * ewma_std, 4),
+                "cl": round(mu, 4),
+            }
+
+        return {
+            "n_observations": n,
+            "lambda": lam,
+            "L": self.L,
+            "target_mean": round(mu, 4) if mu else None,
+            "target_std": round(sigma, 4) if sigma else None,
+            "current_ewma": round(self._ewma_value, 4) if self._ewma_value else None,
+            "control_limits": limits,
+            "total_signals": len(self._signals),
+            "recent_signals": [s.to_dict() for s in self._signals[-5:]],
+        }
+
+
+# ---------------------------------------------------------------------------
 # Data Quality Framework (integrates all components)
 # ---------------------------------------------------------------------------
 

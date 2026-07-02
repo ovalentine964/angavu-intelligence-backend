@@ -510,9 +510,427 @@ class DistributionFitter:
         }
 
 
+# ---------------------------------------------------------------------------
+# Cluster Analysis (STA 442)
+# ---------------------------------------------------------------------------
+
+
+class ClusterAnalyzer:
+    """
+    Cluster Analysis (STA 442 — Multivariate Analysis).
+
+    Implements K-means clustering with k-means++ initialization,
+    silhouette score evaluation, and elbow method for optimal k.
+
+    K-means partitions n observations into k clusters by minimizing
+    the within-cluster sum of squares (WCSS):
+
+        argmin Σᵢ Σₓ∈Cᵢ ‖x - μᵢ‖²
+
+    where μᵢ is the centroid of cluster Cᵢ.
+
+    Used by:
+    - Soko Pulse: Market segmentation (group similar trader behaviors)
+    - Alama Score: Risk grouping (cluster borrowers by risk profile)
+    - Jamii Insights: Socioeconomic segmentation
+
+    Algorithm: Lloyd's algorithm with k-means++ initialization.
+    k-means++ selects initial centroids that are spread out,
+    improving convergence and final clustering quality.
+    """
+
+    @staticmethod
+    def _kmeans_plus_plus_init(
+        data: np.ndarray, k: int, rng: np.random.RandomState,
+    ) -> np.ndarray:
+        """
+        k-means++ initialization (Arthur & Vassilvitskii, 2007).
+
+        Selects initial centroids that are well-separated:
+        1. Choose first centroid uniformly at random.
+        2. For each subsequent centroid, choose point x with probability
+           proportional to D(x)², where D(x) is distance to nearest
+           existing centroid.
+
+        This gives O(log k)-competitive approximation vs optimal.
+
+        Args:
+            data: (n, d) data matrix
+            k: Number of clusters
+            rng: Random state for reproducibility
+
+        Returns:
+            (k, d) array of initial centroids
+        """
+        n, d = data.shape
+        centroids = np.empty((k, d), dtype=data.dtype)
+
+        # Step 1: first centroid chosen uniformly at random
+        idx = rng.randint(n)
+        centroids[0] = data[idx]
+
+        # Step 2: choose remaining centroids proportional to D(x)²
+        for i in range(1, k):
+            # Compute min distance squared to any existing centroid
+            dists = np.min(
+                np.linalg.norm(data[:, np.newaxis] - centroids[:i], axis=2) ** 2,
+                axis=1,
+            )
+            # Probability proportional to distance squared
+            probs = dists / dists.sum()
+            cumprobs = np.cumsum(probs)
+            r = rng.random()
+            idx = int(np.searchsorted(cumprobs, r))
+            idx = min(idx, n - 1)
+            centroids[i] = data[idx]
+
+        return centroids
+
+    @staticmethod
+    def kmeans(
+        data: np.ndarray,
+        k: int,
+        max_iter: int = 300,
+        tol: float = 1e-6,
+        n_init: int = 10,
+        seed: int = 42,
+    ) -> Dict[str, Any]:
+        """
+        K-means clustering (Lloyd's algorithm with k-means++ init).
+
+        Lloyd's algorithm:
+        1. Initialize k centroids (k-means++)
+        2. Assign each point to nearest centroid
+        3. Recompute centroids as cluster means
+        4. Repeat 2-3 until convergence (centroid shift < tol)
+        5. Repeat 1-4 for n_init runs, keep best
+
+        Args:
+            data: (n, d) data matrix
+            k: Number of clusters
+            max_iter: Maximum iterations per run
+            tol: Convergence tolerance (centroid shift)
+            n_init: Number of independent runs (best kept)
+            seed: Random seed
+
+        Returns:
+            Dict with labels, centroids, inertia, iterations, converged
+        """
+        data = np.asarray(data, dtype=float)
+        n, d = data.shape
+
+        if k < 1:
+            raise ValueError("k must be >= 1")
+        if k > n:
+            raise ValueError("k cannot exceed number of data points")
+
+        best_result = None
+        best_inertia = np.inf
+        rng = np.random.RandomState(seed)
+
+        for run in range(n_init):
+            # Initialize centroids with k-means++
+            centroids = ClusterAnalyzer._kmeans_plus_plus_init(data, k, rng)
+
+            labels = np.zeros(n, dtype=int)
+            converged = False
+
+            for iteration in range(max_iter):
+                # Assignment step: assign each point to nearest centroid
+                dists = np.linalg.norm(
+                    data[:, np.newaxis] - centroids[np.newaxis, :], axis=2
+                )
+                new_labels = np.argmin(dists, axis=1)
+
+                # Update step: recompute centroids
+                new_centroids = np.empty_like(centroids)
+                for j in range(k):
+                    members = data[new_labels == j]
+                    if len(members) > 0:
+                        new_centroids[j] = members.mean(axis=0)
+                    else:
+                        # Empty cluster: reinitialize randomly
+                        new_centroids[j] = data[rng.randint(n)]
+
+                # Check convergence
+                shift = float(np.linalg.norm(new_centroids - centroids))
+                centroids = new_centroids
+                labels = new_labels
+
+                if shift < tol:
+                    converged = True
+                    break
+
+            # Compute inertia (WCSS)
+            inertia = 0.0
+            for j in range(k):
+                members = data[labels == j]
+                if len(members) > 0:
+                    inertia += float(np.sum((members - centroids[j]) ** 2))
+
+            if inertia < best_inertia:
+                best_inertia = inertia
+                best_result = {
+                    "labels": labels.copy(),
+                    "centroids": centroids.copy(),
+                    "inertia": round(inertia, 4),
+                    "iterations": iteration + 1,
+                    "converged": converged,
+                    "k": k,
+                    "n": n,
+                    "n_init": n_init,
+                }
+
+        # Compute cluster sizes
+        labels = best_result["labels"]
+        best_result["cluster_sizes"] = {
+            int(j): int(np.sum(labels == j)) for j in range(k)
+        }
+
+        return best_result
+
+    @staticmethod
+    def silhouette_score(
+        data: np.ndarray, labels: np.ndarray,
+    ) -> Dict[str, Any]:
+        """
+        Silhouette score for cluster quality evaluation.
+
+        For each point i:
+            a(i) = mean distance to other points in same cluster
+            b(i) = min mean distance to points in other clusters
+            s(i) = (b(i) - a(i)) / max(a(i), b(i))
+
+        Overall score = mean s(i) ∈ [-1, 1]
+        - Near +1: well-clustered (point closer to own cluster)
+        - Near 0: on boundary between clusters
+        - Near -1: possibly mis-clustered
+
+        Args:
+            data: (n, d) data matrix
+            labels: (n,) cluster assignments
+
+        Returns:
+            Dict with overall score, per-cluster scores, per-sample scores
+        """
+        data = np.asarray(data, dtype=float)
+        labels = np.asarray(labels)
+        n = len(data)
+        k = len(set(labels))
+
+        if k < 2:
+            return {
+                "overall_score": 0.0,
+                "cluster_scores": {},
+                "n_clusters": k,
+                "message": "Silhouette requires at least 2 clusters",
+            }
+
+        # Compute pairwise distance matrix
+        dist_matrix = np.linalg.norm(
+            data[:, np.newaxis] - data[np.newaxis, :], axis=2
+        )
+
+        sample_scores = np.zeros(n)
+        cluster_scores = {}
+
+        for i in range(n):
+            own_cluster = labels[i]
+            mask_own = labels == own_cluster
+            mask_own[i] = False  # Exclude self
+            n_own = np.sum(mask_own)
+
+            # a(i): mean intra-cluster distance
+            if n_own > 0:
+                a_i = float(np.mean(dist_matrix[i, mask_own]))
+            else:
+                a_i = 0.0
+
+            # b(i): min mean distance to other clusters
+            b_i = np.inf
+            for j in range(k):
+                if j == own_cluster:
+                    continue
+                mask_other = labels == j
+                if np.sum(mask_other) > 0:
+                    mean_dist = float(np.mean(dist_matrix[i, mask_other]))
+                    b_i = min(b_i, mean_dist)
+
+            if b_i == np.inf:
+                b_i = 0.0
+
+            denom = max(a_i, b_i)
+            sample_scores[i] = (b_i - a_i) / denom if denom > 0 else 0.0
+
+        # Per-cluster average
+        for j in range(k):
+            mask = labels == j
+            if np.sum(mask) > 0:
+                cluster_scores[int(j)] = round(float(np.mean(sample_scores[mask])), 4)
+
+        return {
+            "overall_score": round(float(np.mean(sample_scores)), 4),
+            "cluster_scores": cluster_scores,
+            "n_clusters": k,
+            "n_samples": n,
+            "per_sample_scores": sample_scores,
+        }
+
+    @staticmethod
+    def elbow_method(
+        data: np.ndarray,
+        k_range: Optional[List[int]] = None,
+        max_k: int = 10,
+        n_init: int = 10,
+        seed: int = 42,
+    ) -> Dict[str, Any]:
+        """
+        Elbow method for selecting optimal number of clusters.
+
+        Runs K-means for k = 1, 2, ..., max_k and plots WCSS (inertia)
+        vs k. The "elbow" — the point where marginal WCSS reduction
+        drops sharply — indicates the optimal k.
+
+        Quantified by computing the rate of change ("delta") and finding
+        the k where the second derivative ("acceleration") is maximized.
+
+        Args:
+            data: (n, d) data matrix
+            k_range: Specific k values to try (default: 2 to max_k)
+            max_k: Maximum k to try if k_range not given
+            n_init: Number of K-means runs per k
+            seed: Random seed
+
+        Returns:
+            Dict with WCSS per k, recommended k, and all scores
+        """
+        data = np.asarray(data, dtype=float)
+        n = data.shape[0]
+
+        if k_range is None:
+            max_k_eff = min(max_k, n - 1)
+            k_range = list(range(2, max_k_eff + 1))
+
+        results = []
+        for k in k_range:
+            result = ClusterAnalyzer.kmeans(data, k=k, n_init=n_init, seed=seed)
+            sil = ClusterAnalyzer.silhouette_score(data, result["labels"])
+            results.append({
+                "k": k,
+                "inertia": result["inertia"],
+                "silhouette": sil["overall_score"],
+                "cluster_sizes": result["cluster_sizes"],
+            })
+
+        # Compute deltas (marginal WCSS reduction)
+        for i in range(len(results)):
+            if i == 0:
+                results[i]["delta"] = None
+                results[i]["acceleration"] = None
+            else:
+                delta = results[i - 1]["inertia"] - results[i]["inertia"]
+                results[i]["delta"] = round(delta, 4)
+                if i >= 2:
+                    accel = results[i - 1]["delta"] - delta
+                    results[i]["acceleration"] = round(accel, 4)
+                else:
+                    results[i]["acceleration"] = None
+
+        # Recommended k: maximize acceleration (elbow point)
+        # Fallback to best silhouette if no clear elbow
+        accels = [
+            (r["k"], r["acceleration"])
+            for r in results
+            if r["acceleration"] is not None
+        ]
+        if accels:
+            recommended_k = max(accels, key=lambda x: x[1])[0]
+        else:
+            recommended_k = max(results, key=lambda x: x["silhouette"])["k"]
+
+        return {
+            "results": results,
+            "recommended_k": recommended_k,
+            "method": "elbow + silhouette fallback",
+            "n_samples": n,
+            "k_range_tested": [r["k"] for r in results],
+        }
+
+    @staticmethod
+    def segment_market(
+        data: np.ndarray,
+        feature_names: Optional[List[str]] = None,
+        max_k: int = 8,
+        seed: int = 42,
+    ) -> Dict[str, Any]:
+        """
+        Market segmentation using K-means clustering.
+
+        High-level API for Soko Pulse market segmentation.
+        Automatically selects optimal k, runs clustering,
+        and produces interpretable segment profiles.
+
+        Args:
+            data: (n, d) feature matrix (e.g., trader metrics)
+            feature_names: Names for each feature dimension
+            max_k: Maximum clusters to try
+            seed: Random seed
+
+        Returns:
+            Dict with segments, profiles, quality metrics
+        """
+        data = np.asarray(data, dtype=float)
+        n, d = data.shape
+
+        if feature_names is None:
+            feature_names = [f"feature_{i}" for i in range(d)]
+
+        # Find optimal k
+        elbow = ClusterAnalyzer.elbow_method(data, max_k=max_k, seed=seed)
+        optimal_k = elbow["recommended_k"]
+
+        # Run clustering with optimal k
+        result = ClusterAnalyzer.kmeans(data, k=optimal_k, seed=seed)
+        sil = ClusterAnalyzer.silhouette_score(data, result["labels"])
+
+        # Build segment profiles
+        segments = []
+        for j in range(optimal_k):
+            mask = result["labels"] == j
+            members = data[mask]
+            profile = {}
+            for fi, fname in enumerate(feature_names):
+                col = members[:, fi]
+                profile[fname] = {
+                    "mean": round(float(np.mean(col)), 4),
+                    "std": round(float(np.std(col)), 4),
+                    "min": round(float(np.min(col)), 4),
+                    "max": round(float(np.max(col)), 4),
+                    "median": round(float(np.median(col)), 4),
+                }
+            segments.append({
+                "segment_id": j,
+                "size": int(np.sum(mask)),
+                "proportion": round(float(np.mean(mask)), 4),
+                "centroid": [round(float(c), 4) for c in result["centroids"][j]],
+                "profile": profile,
+            })
+
+        return {
+            "optimal_k": optimal_k,
+            "silhouette_score": sil["overall_score"],
+            "inertia": result["inertia"],
+            "converged": result["converged"],
+            "segments": segments,
+            "elbow_analysis": elbow,
+            "labels": result["labels"].tolist(),
+        }
+
+
 # Singleton instances for use across services
 bayesian_updater = BayesianUpdater()
 kde_estimator = KernelDensityEstimator()
 bootstrap = BootstrapInference()
 hypothesis_tester = HypothesisTester()
 distribution_fitter = DistributionFitter()
+cluster_analyzer = ClusterAnalyzer()
