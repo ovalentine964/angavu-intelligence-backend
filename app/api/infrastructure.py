@@ -15,10 +15,31 @@ The flywheel:
               → Better performance → More workers
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timezone
 from typing import Optional
 import os
+
+from app.services.infrastructure.roadmap import DataCenterRoadmap
+from app.services.infrastructure.worker_value import WorkerValueTracker
+
+# Singleton instances (initialized lazily)
+_roadmap: Optional[DataCenterRoadmap] = None
+_worker_tracker: Optional[WorkerValueTracker] = None
+
+
+def _get_roadmap() -> DataCenterRoadmap:
+    global _roadmap
+    if _roadmap is None:
+        _roadmap = DataCenterRoadmap()
+    return _roadmap
+
+
+def _get_worker_tracker() -> WorkerValueTracker:
+    global _worker_tracker
+    if _worker_tracker is None:
+        _worker_tracker = WorkerValueTracker()
+    return _worker_tracker
 
 router = APIRouter(tags=["Infrastructure"])
 
@@ -296,6 +317,120 @@ async def infrastructure_revenue_model():
             "Intelligence generates revenue → Revenue builds infrastructure → "
             "Better infrastructure serves more workers."
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Data Center Roadmap Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/v1/infrastructure/roadmap")
+async def infrastructure_roadmap():
+    """
+    Show the data center roadmap and current progress.
+
+    Returns:
+    - Current phase (Cloud / Home Server / Mini DC / DC / Pan-African)
+    - Progress to next phase (workers, revenue, fund)
+    - All phase details with worker benefits
+    - Timeline estimates
+    """
+    roadmap = _get_roadmap()
+    current = roadmap.get_current_phase()
+    progress = roadmap.get_progress_to_next_phase()
+    all_phases = roadmap.get_all_phases()
+
+    return {
+        "current_phase": current,
+        "progress_to_next": progress,
+        "all_phases": all_phases["phases"],
+        "timeline": all_phases["timeline"],
+        "message": (
+            "Every transaction you record in Msaidizi helps build Africa's "
+            "first data center for the informal economy. Your data creates "
+            "intelligence that funds better infrastructure — which means "
+            "faster service, better credit access, and more opportunities for you."
+        ),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/v1/infrastructure/worker-value/{worker_id}")
+async def worker_value(worker_id: str):
+    """
+    Show how much value this worker has received from Msaidizi.
+
+    Returns:
+    - Time saved (voice bookkeeping, automated reports)
+    - Money saved (better prices, less spoilage, stockout prevention)
+    - Money earned (credit access, market intelligence, business growth)
+    - Value-to-data ratio (worker value vs. data revenue generated)
+    """
+    tracker = _get_worker_tracker()
+    summary = tracker.get_value_summary(worker_id)
+
+    if summary.get("status") == "not_found":
+        return {
+            "worker_id": worker_id,
+            "status": "new_worker",
+            "message": (
+                "Welcome! Start recording your sales with Msaidizi to see "
+                "how much value you're getting. Every transaction counts."
+            ),
+            "potential_monthly_value_kes": {
+                "time_saved": 2_000,
+                "money_saved": 3_000,
+                "money_earned": 5_000,
+                "total": 10_000,
+            },
+        }
+
+    return summary
+
+
+@router.get("/api/v1/infrastructure/fund")
+async def infrastructure_fund():
+    """
+    Show the infrastructure fund: revenue allocated, progress to next phase.
+
+    Returns:
+    - Total fund balance
+    - Monthly allocation rate
+    - Progress to next phase threshold
+    - Breakdown of what the fund buys at each phase
+    """
+    roadmap = _get_roadmap()
+    current = roadmap.get_current_phase()
+    progress = roadmap.get_progress_to_next_phase()
+    metrics = roadmap.get_infrastructure_metrics()
+
+    return {
+        "fund": {
+            "balance_usd": current["infra_fund_usd"],
+            "balance_kes": round(current["infra_fund_usd"] * 135, 0),
+            "monthly_allocation_usd": round(current["monthly_revenue_usd"] * 0.15, 2),
+            "allocation_rate_pct": 15,
+        },
+        "current_phase": {
+            "name": current["phase_name"],
+            "cost_monthly_usd": current["cost_monthly_usd"],
+        },
+        "next_phase": {
+            "name": progress.get("next_phase_name"),
+            "budget_needed_usd": progress.get("barriers", [{}])[0].get("target_usd") if progress.get("barriers") else None,
+            "progress_pct": progress.get("progress_pct", 0),
+            "barriers": progress.get("barriers", []),
+        },
+        "infrastructure_metrics": metrics,
+        "revenue_model": REVENUE_MODEL,
+        "principle": (
+            "Infrastructure is funded by revenue, not external investment. "
+            "Workers generate data → Data creates intelligence → "
+            "Intelligence generates revenue → Revenue builds infrastructure → "
+            "Better infrastructure serves more workers."
+        ),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
