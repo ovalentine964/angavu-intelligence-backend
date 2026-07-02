@@ -4,6 +4,8 @@
 
 **Africa's economic nervous system. Processing data from 600M+ informal workers into economic intelligence.**
 
+**Version:** 0.1.0
+
 ## Mission
 
 Provide economic intelligence to Africa's 600M+ informal workers. Make invisible workers visible. Fix market inefficiencies, information asymmetry, and coordination failures.
@@ -18,9 +20,49 @@ The platform that forces good governance through data. The CFO for every informa
 Msaidizi (Android) → Voice/Transaction Data → Biashara Intelligence (Cloud) → Intelligence Products → Buyers
      ↓                                            ↓                                        ↓
   600M+ workers                            15 intelligence products              12 buyer segments
-  13+ dialects                             6 multi-agentic swarms                $89M-$400M TAM
+  14 dialects                              Multi-agent runtime                   $89M-$400M TAM
   Offline-first                            Degree-driven (42 units)              Outcome-based pricing
 ```
+
+### Multi-Agent Architecture
+
+The platform uses a **multi-agent runtime** with an **event bus** for loose coupling between agents:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Agent Runtime                           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Data     │  │Intelligence│  │ Report   │  │ Self-    │   │
+│  │Processing│  │  Agents   │  │ Agents   │  │Evolution │   │
+│  │ (7)      │  │  (7)      │  │  (5)     │  │  (6)     │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │              │              │              │          │
+│  ┌────┴──────────────┴──────────────┴──────────────┴─────┐  │
+│  │                    Event Bus                           │  │
+│  │   Pub/Sub · Message routing · Dead letter queue        │  │
+│  └───────────────────────────────────────────────────────┘  │
+│  ┌──────────┐  ┌──────────┐                                 │
+│  │ Learning │  │Governance│                                 │
+│  │  (4)     │  │  (4)     │                                 │
+│  └──────────┘  └──────────┘                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key components:**
+- **Agent Runtime** — manages agent lifecycle, health monitoring, and orchestration
+- **Event Bus** — pub/sub message passing between agents, with dead letter queue for failed events
+- **Observability** — metrics, tracing, and health checks for all agents
+
+### Multi-Agentic Swarms (33 agents)
+
+| Swarm | Agents | Role |
+|-------|--------|------|
+| 🔄 Data Processing | 7 | Transaction, voice, pattern, quality, geo, receipt + coordinator |
+| 🧠 Intelligence | 7 | Market, credit, economic, community, tax, distribution + coordinator |
+| 📋 Reports | 5 | Worker, buyer, formal, WhatsApp, insight narrator |
+| 🧬 Self-Evolution | 6 | Feedback, feature design, training, dialect, quality, experiments |
+| 🎓 Learning | 4 | Federated, active learner, model evaluator, knowledge distiller |
+| 🛡️ Governance | 4 | Security, privacy, compliance, audit |
 
 ## Intelligence Products (15)
 
@@ -47,16 +89,68 @@ Msaidizi (Android) → Voice/Transaction Data → Biashara Intelligence (Cloud) 
 | **Supply Chain** | Agricultural supply optimization | Twiga, commodity traders |
 | **Research Data** | Anonymized datasets for research | MIT, Oxford, J-PAL |
 
-## Multi-Agentic Swarms (33 agents)
+### FMCG Intelligence (Pwani Oil Pilot)
+Dedicated FMCG intelligence service for tracking informal channel performance:
+- **Brand tracking** across informal retail outlets
+- **Demand signals** from mama mbogas and dukawallahs
+- **Distribution gap analysis** for last-mile coverage
+- **Price monitoring** at the informal retail level
+- **Competitor intelligence** from transaction patterns
 
-| Swarm | Agents | Role |
-|-------|--------|------|
-| 🔄 Data Processing | 7 | Transaction, voice, pattern, quality, geo, receipt + coordinator |
-| 🧠 Intelligence | 7 | Market, credit, economic, community, tax, distribution + coordinator |
-| 📋 Reports | 5 | Worker, buyer, formal, WhatsApp, insight narrator |
-| 🧬 Self-Evolution | 6 | Feedback, feature design, training, dialect, quality, experiments |
-| 🎓 Learning | 4 | Federated, active learner, model evaluator, knowledge distiller |
-| 🛡️ Governance | 4 | Security, privacy, compliance, audit |
+## API Endpoints
+
+### Core
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register` | Worker registration |
+| POST | `/api/v1/auth/login` | Authentication |
+| POST | `/api/v1/sync/upload` | Transaction batch upload |
+| GET | `/api/v1/sync/intelligence/{worker_id}` | Pull intelligence for worker |
+| POST | `/api/v1/analysis/deep` | Deep analysis via cloud model |
+
+### Intelligence Products
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/intelligence/gdp/{county}/{period}` | GDP estimation |
+| GET | `/api/v1/intelligence/inflation/{county}/{period}` | Inflation tracking |
+| POST | `/api/v1/intelligence/alama/score` | Credit score calculation |
+| GET | `/api/v1/intelligence/soko/pulse` | Market intelligence |
+| GET | `/api/v1/intelligence/jamii/insights` | Community intelligence |
+| GET | `/api/v1/intelligence/tax-base/{county}` | Tax compliance estimation |
+| GET | `/api/v1/intelligence/distribution-gap` | Market coverage analysis |
+| POST | `/api/v1/intelligence/fmcg/track` | FMCG brand tracking |
+
+### Worker & Reports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/onboarding/register` | Worker onboarding |
+| GET | `/api/v1/dashboard/critical-mass` | Worker acquisition dashboard |
+| POST | `/api/v1/reports/formal/{user_id}/bank` | Bank-presentable report |
+| POST | `/api/v1/reports/formal/{user_id}/government` | Government report |
+| POST | `/api/v1/reports/formal/{user_id}/insurance` | Insurance report |
+
+### Federated Learning
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/fl/upload-update` | Federated learning update |
+| GET | `/api/v1/fl/global-model/{dialect}` | Get aggregated model |
+
+### Infrastructure
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/infrastructure/roadmap` | Data center roadmap status |
+| GET | `/api/v1/infrastructure/worker-value` | Worker value metrics |
+| GET | `/api/v1/pricing/outcome/{product}` | Outcome-based pricing |
+
+### WhatsApp
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/whatsapp/connect` | Connect WhatsApp number |
+| POST | `/api/v1/whatsapp/verify` | Verify WhatsApp connection |
+| POST | `/api/v1/whatsapp/send-report` | Send report via WhatsApp |
+| POST | `/api/v1/whatsapp/webhook` | Incoming message webhook |
+
+Full API documentation: [API.md](API.md)
 
 ## Degree Integration (42 units)
 
@@ -75,31 +169,36 @@ Full mapping: [ARCHITECTURE_MAPPING.md](ARCHITECTURE_MAPPING.md)
 
 ## Tech Stack
 
-- **Python 3.12** + FastAPI 2.0
-- **PostgreSQL 15** (production) / SQLite (development)
-- **Redis** (caching, rate limiting)
-- **Celery** (background tasks)
-- **OpenWA** (WhatsApp — unlimited, not Meta API)
-- **ONNX Runtime** (ML inference)
-- **NVIDIA NIM** (free cloud LLM endpoints)
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Language | Python 3.12 | Backend development |
+| Framework | FastAPI | Async REST API |
+| Data Processing | Polars | High-performance DataFrames (replaces pandas) |
+| Analytics DB | ClickHouse | OLAP queries on 600M+ records |
+| Production DB | PostgreSQL 15 | Transactional data |
+| Development DB | SQLite | Local development |
+| Cache | Redis | Caching, rate limiting, session store |
+| Task Queue | Celery | Background task processing |
+| WhatsApp | OpenWA | WhatsApp integration (unlimited, not Meta API) |
+| ML Inference | ONNX Runtime | Statistical models |
+| LLM | NVIDIA NIM | Free cloud LLM endpoints |
+| Containers | Docker + Docker Compose | Deployment |
+| Reverse Proxy | Nginx | SSL termination, rate limiting |
+| Logging | structlog | Structured logging |
+| Monitoring | Sentry | Error tracking |
 
-## API Endpoints
+## Data Center Roadmap
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/sync/upload` | Transaction batch upload |
-| GET | `/api/v1/sync/intelligence/{worker_id}` | Pull intelligence for worker |
-| POST | `/api/v1/analysis/deep` | Deep analysis via cloud model |
-| GET | `/api/v1/intelligence/gdp/{county}/{period}` | GDP estimation |
-| GET | `/api/v1/intelligence/inflation/{county}/{period}` | Inflation tracking |
-| POST | `/api/v1/onboarding/register` | Worker onboarding |
-| GET | `/api/v1/dashboard/critical-mass` | Worker acquisition dashboard |
-| GET | `/api/v1/pricing/outcome/{product}` | Outcome-based pricing |
-| POST | `/api/v1/reports/formal/{user_id}/bank` | Bank-presentable report |
-| POST | `/api/v1/fl/upload-update` | Federated learning update |
-| GET | `/api/v1/fl/global-model/{dialect}` | Get aggregated model |
+The platform's infrastructure evolves based on worker value — each phase unlocks when workers generate enough data to justify the investment.
 
-Full API documentation: [API.md](API.md)
+| Phase | Trigger | Infrastructure | Capacity |
+|-------|---------|---------------|----------|
+| **Phase 1** | 1,000 workers | Single Oracle Cloud Free Tier server | 10K transactions/day |
+| **Phase 2** | 10,000 workers | Dedicated server + ClickHouse | 100K transactions/day |
+| **Phase 3** | 100,000 workers | Multi-region deployment | 1M transactions/day |
+| **Phase 4** | 1,000,000 workers | Continental data center network | 10M+ transactions/day |
+
+Each phase is **worker-value driven** — infrastructure scales when the data justifies it, not before.
 
 ## Security
 
@@ -110,6 +209,8 @@ Full API documentation: [API.md](API.md)
 - HMAC-SHA256 for data anonymization
 - Rate limiting (per-endpoint)
 - CORS (localhost default, configurable)
+- Path traversal protection
+- Input validation on all endpoints
 
 ## Deployment
 
@@ -120,7 +221,23 @@ curl -sSL https://raw.githubusercontent.com/ovalentine964/biashara-intelligence-
 
 ### Docker
 ```bash
+# Standard deployment
 docker-compose up -d
+
+# Oracle Cloud optimized
+docker-compose -f docker-compose.oracle.yml up -d
+```
+
+### Local Development
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with hot reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Run tests
+pytest tests/ -v
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [DEPLOYMENT_ORACLE.md](DEPLOYMENT_ORACLE.md) for details.
