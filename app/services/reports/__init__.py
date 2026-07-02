@@ -23,6 +23,11 @@ from .worker_reports import (
     PriceData,
     CustomerData,
 )
+from .formal_reports import (
+    BankReport,
+    GovernmentReport,
+    InsuranceReport,
+)
 
 __all__ = [
     "DailyReport",
@@ -37,4 +42,7 @@ __all__ = [
     "InventoryStatus",
     "PriceData",
     "CustomerData",
+    "BankReport",
+    "GovernmentReport",
+    "InsuranceReport",
 ]
