@@ -1,13 +1,17 @@
 """
-Intelligence product services for the 6 cloud intelligence products.
+Intelligence product services for the cloud intelligence platform.
 
-Services:
+Services (Original 6):
 - SokoPulseService: FMCG demand forecasting
 - BiasharaPulseService: Government MSME Activity Index
 - AlamaScoreService: Bank credit scoring (300-850)
 - JamiiInsightsService: NGO financial inclusion
 - TaxBaseService: Government revenue estimation
 - DistributionGapService: FMCG market coverage gaps
+
+Services (Phase 1 — New):
+- GDPEstimatorService: Real-time informal GDP estimation
+- InflationTrackerService: Daily price indices across 47 counties
 """
 
 from app.services.intelligence.soko_pulse import SokoPulseService
@@ -16,6 +20,8 @@ from app.services.intelligence.alama_score import AlamaScoreService
 from app.services.intelligence.jamii_insights import JamiiInsightsService
 from app.services.intelligence.tax_base import TaxBaseService
 from app.services.intelligence.distribution_gap import DistributionGapService
+from app.services.intelligence.gdp_estimator import GDPEstimatorService
+from app.services.intelligence.inflation_tracker import InflationTrackerService
 
 __all__ = [
     "SokoPulseService",
@@ -24,4 +30,6 @@ __all__ = [
     "JamiiInsightsService",
     "TaxBaseService",
     "DistributionGapService",
+    "GDPEstimatorService",
+    "InflationTrackerService",
 ]
