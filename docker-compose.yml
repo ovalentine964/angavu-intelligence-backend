@@ -13,16 +13,38 @@ services:
       - PORT=8000
       - JWT_SECRET=${JWT_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
+      - DATABASE_POOL_SIZE=20
+      - DATABASE_MAX_OVERFLOW=10
+      - DATABASE_POOL_TIMEOUT=30
+      - DATABASE_POOL_RECYCLE=1800
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - OPENWA_URL=http://openwa:3000
       - OPENWA_WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET}
     volumes:
       - ./logs:/app/logs
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
     restart: unless-stopped
+    networks:
+      - biashara-net
 
   openwa:
     build:
@@ -40,9 +62,27 @@ services:
     volumes:
       - openwa-data:/app/data
     depends_on:
-      - backend
-      - whisper
+      backend:
+        condition: service_healthy
+      whisper:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
     restart: unless-stopped
+    networks:
+      - biashara-net
 
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:latest
@@ -54,7 +94,23 @@ services:
       - ASR_ENGINE=openai_whisper
     volumes:
       - whisper-models:/root/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
     restart: unless-stopped
+    networks:
+      - biashara-net
 
   postgres:
     image: postgres:15-alpine
@@ -66,15 +122,95 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msaidizi -d msaidizi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
     restart: unless-stopped
+    networks:
+      - biashara-net
 
   redis:
     image: redis:7-alpine
     container_name: msaidizi-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
     restart: unless-stopped
+    networks:
+      - biashara-net
+
+  # ---------------------------------------------------------------
+  # Task worker — processes background jobs from Redis queue
+  # ---------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: biashara-task-worker
+    command: python -m app.worker
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
+      - DATABASE_POOL_SIZE=10
+      - DATABASE_MAX_OVERFLOW=5
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r = redis.Redis.from_url('${REDIS_URL}'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    restart: unless-stopped
+    networks:
+      - biashara-net
+
+networks:
+  biashara-net:
+    driver: bridge
 
 volumes:
   postgres-data:

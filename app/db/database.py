@@ -32,12 +32,13 @@ if _is_sqlite:
     # SQLite: no connection pooling, allow multi-threaded access
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    # PostgreSQL: connection pooling
+    # PostgreSQL: connection pooling (Tier 2 — Growth)
     _engine_kwargs.update({
-        "pool_size": settings.DATABASE_POOL_SIZE,
-        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
-        "pool_pre_ping": True,
-        "pool_recycle": 3600,
+        "pool_size": settings.DATABASE_POOL_SIZE,        # 20 max connections in pool
+        "max_overflow": settings.DATABASE_MAX_OVERFLOW,   # 10 extra when pool full
+        "pool_timeout": settings.DATABASE_POOL_TIMEOUT,   # 30s wait timeout
+        "pool_recycle": settings.DATABASE_POOL_RECYCLE,   # recycle every 30 min
+        "pool_pre_ping": True,                            # verify before use
     })
 
 # Create async engine

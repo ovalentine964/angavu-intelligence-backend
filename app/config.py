@@ -26,8 +26,10 @@ class Settings(BaseSettings):
     # === Database ===
     # Default to SQLite for zero-config micro deployment
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/biashara.db"
-    DATABASE_POOL_SIZE: int = 5
-    DATABASE_MAX_OVERFLOW: int = 2
+    DATABASE_POOL_SIZE: int = 20
+    DATABASE_MAX_OVERFLOW: int = 10
+    DATABASE_POOL_TIMEOUT: int = 30
+    DATABASE_POOL_RECYCLE: int = 1800
     DATABASE_ECHO: bool = False
 
     # === Redis (empty = in-memory cache fallback) ===

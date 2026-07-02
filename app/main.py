@@ -26,6 +26,8 @@ from slowapi.util import get_remote_address
 
 from app.config import get_settings
 from app.db.database import close_db, init_db
+from app.services.cache import get_cache
+from app.services.task_queue import get_task_queue
 
 settings = get_settings()
 
@@ -69,8 +71,8 @@ async def lifespan(app: FastAPI):
     """
     Application lifecycle management.
 
-    Startup: Initialize database, log configuration
-    Shutdown: Close database connections
+    Startup: Initialize database, Redis cache, and task queue
+    Shutdown: Close all connections gracefully
     """
     # Startup
     logger.info(
@@ -82,10 +84,24 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("database_initialized")
 
+    # Initialize Redis cache (Tier 2)
+    cache = get_cache()
+    await cache.connect()
+    logger.info("cache_initialized", available=cache.is_available)
+
+    # Initialize task queue (Tier 2)
+    task_queue = get_task_queue()
+    await task_queue.connect()
+    logger.info("task_queue_initialized")
+
     yield
 
     # Shutdown
     logger.info("application_shutting_down")
+    await task_queue.close()
+    logger.info("task_queue_closed")
+    await cache.close()
+    logger.info("cache_closed")
     await close_db()
     logger.info("database_connections_closed")
 
@@ -223,16 +239,24 @@ async def health_check():
     """
     Health check endpoint.
 
-    Returns basic application status. Used by:
-    - Docker health checks
-    - Load balancers
-    - Monitoring systems
+    Returns application status including cache and task queue health.
+    Used by Docker health checks, load balancers, and monitoring.
     """
+    cache = get_cache()
+    components = {
+        "database": "ok",
+        "cache": "ok" if cache.is_available else "unavailable",
+        "task_queue": "ok" if get_task_queue()._connected else "unavailable",
+    }
+    overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+
     return {
-        "status": "ok",
+        "status": overall,
         "service": "biashara-intelligence-backend",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "environment": settings.APP_ENV,
+        "components": components,
+        "tier": "2-growth",
     }
 
 
