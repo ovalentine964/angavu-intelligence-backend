@@ -253,7 +253,7 @@ async def health_check():
     return {
         "status": overall,
         "service": "biashara-intelligence-backend",
-        "version": "0.2.0",
+        "version": "0.1.0",
         "environment": settings.APP_ENV,
         "components": components,
         "tier": "2-growth",
