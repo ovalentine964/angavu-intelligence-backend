@@ -1349,7 +1349,8 @@ class VARModel:
             A_mats.append(self.coefficients[:, 1 + (lag - 1) * k: 1 + lag * k])
 
         # Cholesky decomposition of Σ for orthogonalized IRFs
-        try:\            P = np.linalg.cholesky(self.sigma)
+        try:
+            P = np.linalg.cholesky(self.sigma)
         except np.linalg.LinAlgError:
             P = np.eye(k)
 

@@ -927,10 +927,624 @@ class ClusterAnalyzer:
         }
 
 
+class MonteCarloEngine:
+    """
+    Monte Carlo simulation methods (STA 347 — Stochastic Processes).
+
+    Provides simulation-based inference when analytical solutions are
+    intractable or when full distributional characterisation is needed.
+
+    Methods:
+    - Crude Monte Carlo integration
+    - Importance sampling for variance reduction
+    - Bootstrap hypothesis testing (extends BootstrapInference)
+    - Simulation-based confidence intervals
+
+    Use Cases:
+    - Alama Score: Revenue distribution simulation for credit risk assessment
+    - Soko Pulse: Price volatility simulation under uncertainty
+    - Jamii Insights: Population-level metric simulation
+
+    References:
+    - Robert, C.P. & Casella, G. (2004). Monte Carlo Statistical Methods.
+      2nd ed. Springer.
+    - Kroese, D.P., Taimre, T., & Botev, Z.I. (2011). Handbook of Monte Carlo
+      Methods. Wiley.
+    - Efron, B. & Tibshirani, R.J. (1993). An Introduction to the Bootstrap.
+      Chapman & Hall.
+    """
+
+    @staticmethod
+    def crude_integration(
+        func: callable,
+        lower: float,
+        upper: float,
+        n_samples: int = 100000,
+        seed: int = 42,
+    ) -> Dict[str, float]:
+        """
+        Crude Monte Carlo integration.
+
+        Estimates ∫_a^b f(x) dx ≈ (b-a)/n Σᵢ f(Xᵢ)
+        where Xᵢ ~ Uniform(a, b).
+
+        Args:
+            func: Integrand f(x)
+            lower: Lower bound of integration
+            upper: Upper bound of integration
+            n_samples: Number of Monte Carlo samples
+            seed: Random seed
+
+        Returns:
+            Dict with estimate, standard error, and 95% CI
+        """
+        rng = np.random.RandomState(seed)
+        samples = rng.uniform(lower, upper, size=n_samples)
+        func_values = np.array([func(x) for x in samples])
+
+        interval_length = upper - lower
+        estimate = interval_length * np.mean(func_values)
+        se = interval_length * np.std(func_values) / np.sqrt(n_samples)
+
+        return {
+            "estimate": round(float(estimate), 6),
+            "standard_error": round(float(se), 6),
+            "ci_lower": round(float(estimate - 1.96 * se), 6),
+            "ci_upper": round(float(estimate + 1.96 * se), 6),
+            "n_samples": n_samples,
+            "method": "crude_monte_carlo",
+        }
+
+    @staticmethod
+    def importance_sampling(
+        func: callable,
+        proposal_sampler: callable,
+        proposal_pdf: callable,
+        target_pdf: Optional[callable] = None,
+        n_samples: int = 100000,
+        seed: int = 42,
+    ) -> Dict[str, float]:
+        """
+        Importance sampling for variance reduction.
+
+        Estimates E_p[f(X)] ≈ (1/n) Σᵢ f(Xᵢ)·w(Xᵢ)
+        where w(x) = p(x)/q(x) and Xᵢ ~ q (proposal).
+
+        When target_pdf is None, estimates ∫ f(x) dx using
+        the proposal distribution.
+
+        Args:
+            func: Function f(x) to integrate/average
+            proposal_sampler: Function that returns n samples from proposal q
+            proposal_pdf: Proposal density q(x)
+            target_pdf: Target density p(x). If None, estimates ∫f(x)dx.
+            n_samples: Number of samples
+            seed: Random seed
+
+        Returns:
+            Dict with estimate, effective sample size, and diagnostics
+        """
+        rng = np.random.RandomState(seed)
+        samples = proposal_sampler(n_samples, rng)
+
+        func_values = np.array([func(x) for x in samples])
+        proposal_vals = np.array([proposal_pdf(x) for x in samples])
+
+        # Avoid division by zero
+        proposal_vals = np.maximum(proposal_vals, 1e-300)
+
+        if target_pdf is not None:
+            target_vals = np.array([target_pdf(x) for x in samples])
+            weights = target_vals / proposal_vals
+        else:
+            # Estimating integral: weight = 1/q(x)
+            weights = 1.0 / proposal_vals
+
+        # Normalised importance weights
+        weights_normalized = weights / weights.sum()
+
+        estimate = np.sum(weights_normalized * func_values)
+
+        # Effective sample size: ESS = 1/Σw̃ᵢ²
+        ess = 1.0 / np.sum(weights_normalized ** 2)
+
+        # Weighted variance for SE
+        weighted_var = np.sum(weights_normalized * (func_values - estimate) ** 2)
+        se = np.sqrt(weighted_var / ess)
+
+        return {
+            "estimate": round(float(estimate), 6),
+            "standard_error": round(float(se), 6),
+            "ci_lower": round(float(estimate - 1.96 * se), 6),
+            "ci_upper": round(float(estimate + 1.96 * se), 6),
+            "effective_sample_size": round(float(ess), 1),
+            "efficiency": round(float(ess / n_samples), 4),
+            "n_samples": n_samples,
+            "method": "importance_sampling",
+        }
+
+    @staticmethod
+    def bootstrap_hypothesis_test(
+        sample1: np.ndarray,
+        sample2: np.ndarray,
+        statistic_func: callable,
+        n_bootstrap: int = 10000,
+        alternative: str = "two-sided",
+        seed: int = 42,
+    ) -> Dict[str, Any]:
+        """
+        Bootstrap hypothesis test.
+
+        Tests H₀: θ₁ = θ₂ against H₁: θ₁ ≠ θ₂ (or one-sided).
+        Uses the permutation/bootstrap distribution of the test statistic
+        to compute p-values without distributional assumptions.
+
+        Procedure:
+        1. Compute observed test statistic T_obs = stat(sample1) - stat(sample2)
+        2. Pool samples and resample under H₀ (permutation)
+        3. Compute bootstrap distribution of T
+        4. p-value = P(|T| ≥ |T_obs|) under H₀
+
+        Args:
+            sample1: First sample
+            sample2: Second sample
+            statistic_func: Function computing the statistic of interest
+            n_bootstrap: Number of bootstrap/permutation resamples
+            alternative: 'two-sided', 'greater', 'less'
+            seed: Random seed
+
+        Returns:
+            Dict with test statistic, p-value, and bootstrap distribution info
+        """
+        sample1 = np.asarray(sample1, dtype=float)
+        sample2 = np.asarray(sample2, dtype=float)
+        rng = np.random.RandomState(seed)
+
+        n1 = len(sample1)
+        n2 = len(sample2)
+        observed_diff = statistic_func(sample1) - statistic_func(sample2)
+
+        # Permutation test: pool and resample
+        pooled = np.concatenate([sample1, sample2])
+        n_total = n1 + n2
+
+        perm_stats = np.zeros(n_bootstrap)
+        for i in range(n_bootstrap):
+            perm = rng.permutation(n_total)
+            s1_perm = pooled[perm[:n1]]
+            s2_perm = pooled[perm[n1:]]
+            perm_stats[i] = statistic_func(s1_perm) - statistic_func(s2_perm)
+
+        # Compute p-value
+        if alternative == "two-sided":
+            p_value = np.mean(np.abs(perm_stats) >= np.abs(observed_diff))
+        elif alternative == "greater":
+            p_value = np.mean(perm_stats >= observed_diff)
+        elif alternative == "less":
+            p_value = np.mean(perm_stats <= observed_diff)
+        else:
+            raise ValueError(f"Unknown alternative: {alternative}")
+
+        return {
+            "observed_statistic": round(float(observed_diff), 4),
+            "p_value": round(float(p_value), 6),
+            "significant_at_05": p_value < 0.05,
+            "significant_at_01": p_value < 0.01,
+            "n_bootstrap": n_bootstrap,
+            "alternative": alternative,
+            "permutation_mean": round(float(np.mean(perm_stats)), 4),
+            "permutation_std": round(float(np.std(perm_stats)), 4),
+            "test_name": "Permutation/bootstrap hypothesis test",
+            "interpretation": (
+                f"{'Reject' if p_value < 0.05 else 'Fail to reject'} null hypothesis "
+                f"at 5% significance (p={p_value:.4f})"
+            ),
+        }
+
+    @staticmethod
+    def simulation_confidence_interval(
+        data: np.ndarray,
+        statistic_func: callable,
+        n_simulations: int = 10000,
+        confidence: float = 0.95,
+        method: str = "percentile",
+        seed: int = 42,
+    ) -> Dict[str, float]:
+        """
+        Simulation-based confidence intervals.
+
+        Supports multiple methods:
+        - 'percentile': Direct percentile of bootstrap distribution
+        - 'bc': Bias-corrected (BC) percentile interval
+        - 'bca': Bias-corrected and accelerated (BCa) interval
+
+        Args:
+            data: Observed data
+            statistic_func: Function computing the statistic
+            n_simulations: Number of bootstrap simulations
+            confidence: Confidence level
+            method: CI method ('percentile', 'bc', 'bca')
+            seed: Random seed
+
+        Returns:
+            Dict with estimate, CI bounds, method, and diagnostics
+        """
+        data = np.asarray(data, dtype=float)
+        rng = np.random.RandomState(seed)
+        n = len(data)
+        alpha = 1 - confidence
+
+        original_stat = statistic_func(data)
+        boot_stats = np.zeros(n_simulations)
+
+        for i in range(n_simulations):
+            sample = rng.choice(data, size=n, replace=True)
+            boot_stats[i] = statistic_func(sample)
+
+        if method == "percentile":
+            ci_lower = np.percentile(boot_stats, 100 * alpha / 2)
+            ci_upper = np.percentile(boot_stats, 100 * (1 - alpha / 2))
+
+        elif method == "bc":
+            # Bias-corrected
+            z0 = stats.norm.ppf(np.mean(boot_stats < original_stat))
+            z_alpha = stats.norm.ppf([alpha / 2, 1 - alpha / 2])
+            p_vals = stats.norm.cdf(2 * z0 + z_alpha)
+            ci_lower = np.percentile(boot_stats, 100 * p_vals[0])
+            ci_upper = np.percentile(boot_stats, 100 * p_vals[1])
+
+        elif method == "bca":
+            # Bias-corrected and accelerated
+            z0 = stats.norm.ppf(np.mean(boot_stats < original_stat))
+
+            # Acceleration factor via jackknife
+            jackknife_stats = np.zeros(n)
+            for i in range(n):
+                jack_sample = np.delete(data, i)
+                jackknife_stats[i] = statistic_func(jack_sample)
+            jack_mean = np.mean(jackknife_stats)
+            numer = np.sum((jack_mean - jackknife_stats) ** 3)
+            denom = 6 * (np.sum((jack_mean - jackknife_stats) ** 2) ** 1.5)
+            a_hat = numer / denom if abs(denom) > 1e-12 else 0.0
+
+            z_alpha = stats.norm.ppf([alpha / 2, 1 - alpha / 2])
+            p_vals = stats.norm.cdf(z0 + (z0 + z_alpha) / (1 - a_hat * (z0 + z_alpha)))
+            ci_lower = np.percentile(boot_stats, 100 * p_vals[0])
+            ci_upper = np.percentile(boot_stats, 100 * p_vals[1])
+
+        else:
+            raise ValueError(f"Unknown CI method: {method}")
+
+        return {
+            "estimate": round(float(original_stat), 4),
+            "ci_lower": round(float(ci_lower), 4),
+            "ci_upper": round(float(ci_upper), 4),
+            "bootstrap_se": round(float(np.std(boot_stats)), 4),
+            "confidence": confidence,
+            "method": method,
+            "n_simulations": n_simulations,
+        }
+
+    @staticmethod
+    def revenue_distribution_simulation(
+        base_revenue: float,
+        growth_mean: float,
+        growth_std: float,
+        n_periods: int = 12,
+        n_simulations: int = 10000,
+        seed: int = 42,
+    ) -> Dict[str, Any]:
+        """
+        Simulate revenue distribution over multiple periods.
+
+        Models revenue as a geometric Brownian motion:
+            R(t+1) = R(t) · exp((μ - σ²/2)·dt + σ·√dt·Z)
+        where Z ~ N(0,1).
+
+        Use case: Alama Score — revenue distribution simulation for credit
+        risk assessment of small businesses.
+
+        Args:
+            base_revenue: Starting revenue
+            growth_mean: Expected log revenue growth rate (annualised)
+            growth_std: Volatility of log revenue growth
+            n_periods: Number of periods to simulate
+            n_simulations: Number of simulation paths
+            seed: Random seed
+
+        Returns:
+            Dict with terminal distribution statistics and percentiles
+        """
+        rng = np.random.RandomState(seed)
+
+        # Simulate paths
+        dt = 1.0 / 12  # Monthly steps if n_periods is months
+        paths = np.zeros((n_simulations, n_periods + 1))
+        paths[:, 0] = base_revenue
+
+        for t in range(n_periods):
+            z = rng.randn(n_simulations)
+            paths[:, t + 1] = paths[:, t] * np.exp(
+                (growth_mean - 0.5 * growth_std ** 2) * dt + growth_std * np.sqrt(dt) * z
+            )
+
+        terminal = paths[:, -1]
+
+        return {
+            "base_revenue": base_revenue,
+            "terminal_mean": round(float(np.mean(terminal)), 2),
+            "terminal_median": round(float(np.median(terminal)), 2),
+            "terminal_std": round(float(np.std(terminal)), 2),
+            "percentile_5": round(float(np.percentile(terminal, 5)), 2),
+            "percentile_25": round(float(np.percentile(terminal, 25)), 2),
+            "percentile_75": round(float(np.percentile(terminal, 75)), 2),
+            "percentile_95": round(float(np.percentile(terminal, 95)), 2),
+            "prob_decline": round(float(np.mean(terminal < base_revenue)), 4),
+            "prob_growth_10pct": round(float(np.mean(terminal > base_revenue * 1.1)), 4),
+            "n_periods": n_periods,
+            "n_simulations": n_simulations,
+            "growth_mean": growth_mean,
+            "growth_std": growth_std,
+        }
+
+
+class MCMCSampler:
+    """
+    Markov Chain Monte Carlo sampling (STA 347 — Stochastic Processes).
+
+    Implements Metropolis-Hastings algorithm for drawing samples from
+    arbitrary (unnormalised) posterior distributions. Enables full
+    Bayesian inference beyond conjugate prior models.
+
+    The Metropolis-Hastings algorithm:
+    1. Start at θ₀
+    2. Propose θ* ~ q(θ*|θₜ)
+    3. Accept with probability α = min(1, [π(θ*)q(θₜ|θ*)] / [π(θₜ)q(θ*|θₜ)])
+    4. θₜ₊₁ = θ* if accepted, else θₜ
+
+    Use Cases:
+    - Alama Score: Full posterior inference for credit scoring models with
+      non-conjugate likelihoods (e.g., logistic regression with informative priors)
+    - Soko Pulse: Bayesian demand estimation with complex priors
+    - Jamii Insights: Hierarchical models for financial inclusion
+
+    References:
+    - Metropolis, N. et al. (1953). "Equation of State Calculations by Fast
+      Computing Machines." J. Chem. Phys., 21(6), 1087-1092.
+    - Hastings, W.K. (1970). "Monte Carlo Sampling Methods Using Markov
+      Chains and Their Applications." Biometrika, 57(1), 97-109.
+    - Gelman, A. & Rubin, D.B. (1992). "Inference from Iterative Simulation
+      Using Multiple Sequences." Statistical Science, 7(4), 457-472.
+    - Brooks, S. et al. (2011). Handbook of Markov Chain Monte Carlo. CRC Press.
+    """
+
+    def __init__(self, seed: int = 42):
+        self.rng = np.random.RandomState(seed)
+
+    def metropolis_hastings(
+        self,
+        log_target: callable,
+        initial_state: np.ndarray,
+        n_samples: int = 10000,
+        proposal_std: Optional[np.ndarray] = None,
+        burn_in: int = 1000,
+        thin: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Metropolis-Hastings sampler with random walk proposal.
+
+        Proposal: θ* = θₜ + ε, where ε ~ N(0, Σ)
+        This is a symmetric random walk, so the Hastings ratio reduces to
+        α = min(1, π(θ*) / π(θₜ)).
+
+        Args:
+            log_target: Log of the (unnormalised) target density π(θ)
+            initial_state: Starting parameter vector θ₀
+            n_samples: Total number of MCMC iterations (before burn-in/thinning)
+            proposal_std: Std dev of Gaussian proposal for each dimension.
+                          If None, uses 0.1 * |initial_state| (min 0.1)
+            burn_in: Number of initial samples to discard
+            thin: Keep every thin-th sample (to reduce autocorrelation)
+
+        Returns:
+            Dict with samples, acceptance rate, diagnostics, and summary
+        """
+        initial_state = np.asarray(initial_state, dtype=float)
+        dim = len(initial_state)
+
+        if proposal_std is None:
+            proposal_std = np.maximum(0.1 * np.abs(initial_state), 0.1)
+        else:
+            proposal_std = np.asarray(proposal_std, dtype=float)
+
+        # Storage
+        all_samples = np.zeros((n_samples, dim))
+        current = initial_state.copy()
+        current_log_prob = log_target(current)
+        n_accepted = 0
+
+        for i in range(n_samples):
+            # Propose
+            proposal = current + self.rng.randn(dim) * proposal_std
+            proposal_log_prob = log_target(proposal)
+
+            # Acceptance ratio (log scale)
+            log_alpha = proposal_log_prob - current_log_prob
+
+            # Accept/reject
+            if np.log(self.rng.rand()) < log_alpha:
+                current = proposal
+                current_log_prob = proposal_log_prob
+                n_accepted += 1
+
+            all_samples[i] = current
+
+        # Apply burn-in and thinning
+        post_burnin = all_samples[burn_in:]
+        thinned = post_burnin[::thin]
+
+        acceptance_rate = n_accepted / n_samples
+
+        # Summary statistics per dimension
+        summary = []
+        for d in range(dim):
+            chain = thinned[:, d]
+            summary.append({
+                "mean": round(float(np.mean(chain)), 4),
+                "std": round(float(np.std(chain)), 4),
+                "median": round(float(np.median(chain)), 4),
+                "ci_95": (
+                    round(float(np.percentile(chain, 2.5)), 4),
+                    round(float(np.percentile(chain, 97.5)), 4),
+                ),
+            })
+
+        return {
+            "samples": thinned,
+            "n_samples_effective": len(thinned),
+            "acceptance_rate": round(float(acceptance_rate), 4),
+            "burn_in": burn_in,
+            "thin": thin,
+            "n_total_iterations": n_samples,
+            "summary": summary,
+            "convergence": self._check_convergence_single(thinned),
+        }
+
+    @staticmethod
+    def gelman_rubin_rhat(chains: List[np.ndarray]) -> Dict[str, Any]:
+        """
+        Gelman-Rubin R-hat convergence diagnostic.
+
+        Compares within-chain and between-chain variance.
+        R-hat < 1.1 generally indicates convergence.
+
+        Formula:
+            W = mean of within-chain variances
+            B = n × variance of chain means
+            R-hat = sqrt((W·(n-1)/n + B/n) / W)
+
+        Args:
+            chains: List of arrays, each a separate MCMC chain
+                    Shape: (n_chains,) each with (n_samples, dim)
+                    All chains must have the same shape.
+
+        Returns:
+            Dict with R-hat per dimension and overall diagnostic
+        """
+        if len(chains) < 2:
+            raise ValueError("Need at least 2 chains for R-hat diagnostic")
+
+        chains = [np.asarray(c) for c in chains]
+        n_chains = len(chains)
+        n_samples = chains[0].shape[0]
+        dim = chains[0].shape[1] if chains[0].ndim > 1 else 1
+
+        rhat_values = []
+
+        for d in range(dim):
+            if dim > 1:
+                chain_data = [c[:, d] for c in chains]
+            else:
+                chain_data = [c.ravel() for c in chains]
+
+            chain_means = [np.mean(c) for c in chain_data]
+            chain_vars = [np.var(c, ddof=1) for c in chain_data]
+
+            W = np.mean(chain_vars)  # Within-chain variance
+            B = n_samples * np.var(chain_means, ddof=1)  # Between-chain variance
+
+            # Pooled variance estimate
+            var_hat = ((n_samples - 1) / n_samples) * W + B / n_samples
+
+            rhat = np.sqrt(var_hat / W) if W > 0 else float("inf")
+            rhat_values.append(round(float(rhat), 4))
+
+        max_rhat = max(rhat_values)
+        converged = max_rhat < 1.1
+
+        return {
+            "rhat_per_dimension": rhat_values,
+            "rhat_max": round(max_rhat, 4),
+            "converged": converged,
+            "threshold": 1.1,
+            "n_chains": n_chains,
+            "n_samples_per_chain": n_samples,
+            "diagnostic": "Gelman-Rubin (1992)",
+            "interpretation": (
+                f"{'Converged' if converged else 'NOT converged'}: "
+                f"max R-hat = {max_rhat:.4f} ({'< 1.1 ✓' if converged else '≥ 1.1 ✗'})"
+            ),
+        }
+
+    @staticmethod
+    def _check_convergence_single(samples: np.ndarray) -> Dict[str, Any]:
+        """
+        Basic convergence diagnostics for a single chain.
+
+        Checks:
+        - Effective sample size (ESS) via initial positive autocorrelation sequence
+        - Geweke diagnostic: compares first 10% vs last 50% of chain
+        """
+        n, dim = samples.shape if samples.ndim > 1 else (len(samples), 1)
+        if samples.ndim == 1:
+            samples = samples.reshape(-1, 1)
+
+        diagnostics = []
+        for d in range(dim):
+            chain = samples[:, d]
+            n = len(chain)
+
+            # ESS approximation via initial monotone sequence estimator
+            # (simple autocorrelation truncation)
+            max_lag = min(n // 2, 200)
+            acf_vals = []
+            mean = np.mean(chain)
+            var = np.var(chain, ddof=1)
+            if var > 0:
+                for lag in range(max_lag):
+                    acf = np.mean((chain[:n - lag] - mean) * (chain[lag:] - mean)) / var
+                    acf_vals.append(acf)
+                    if acf < 0:
+                        break
+                # ESS = n / (1 + 2·Σ τₖ)
+                tau = 1 + 2 * sum(acf_vals[1:]) if len(acf_vals) > 1 else 1.0
+                ess = n / max(tau, 1.0)
+            else:
+                ess = float(n)
+
+            # Geweke diagnostic
+            n1 = max(int(0.1 * n), 10)
+            n2 = max(int(0.5 * n), 10)
+            first_part = chain[:n1]
+            last_part = chain[-n2:]
+            mean_diff = np.mean(first_part) - np.mean(last_part)
+            se_diff = np.sqrt(
+                np.var(first_part, ddof=1) / n1 + np.var(last_part, ddof=1) / n2
+            )
+            geweke_z = mean_diff / se_diff if se_diff > 0 else 0.0
+            geweke_p = 2 * (1 - stats.norm.cdf(abs(geweke_z)))
+
+            diagnostics.append({
+                "dimension": d,
+                "effective_sample_size": round(float(ess), 1),
+                "ess_ratio": round(float(ess / n), 4),
+                "geweke_z": round(float(geweke_z), 4),
+                "geweke_p_value": round(float(geweke_p), 4),
+                "geweke_converged": geweke_p > 0.05,
+            })
+
+        return {
+            "per_dimension": diagnostics,
+            "all_converged": all(d["geweke_converged"] for d in diagnostics),
+        }
+
+
 # Singleton instances for use across services
 bayesian_updater = BayesianUpdater()
 kde_estimator = KernelDensityEstimator()
 bootstrap = BootstrapInference()
 hypothesis_tester = HypothesisTester()
 distribution_fitter = DistributionFitter()
+mc_engine = MonteCarloEngine()
+mcmc_sampler = MCMCSampler()
 cluster_analyzer = ClusterAnalyzer()
