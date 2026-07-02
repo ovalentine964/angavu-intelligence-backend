@@ -315,6 +315,9 @@ from app.api.formal_reports import router as formal_reports_router
 # FMCG intelligence (Pwani Oil, Unilever, Bidco)
 from app.api.fmcg import router as fmcg_router
 
+# Infrastructure dashboard (data center flywheel)
+from app.api.infrastructure import router as infrastructure_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -329,6 +332,7 @@ app.include_router(dashboard_router, prefix=settings.API_V1_PREFIX)
 app.include_router(phase1_router, prefix=settings.API_V1_PREFIX)
 app.include_router(formal_reports_router, prefix=settings.API_V1_PREFIX)
 app.include_router(fmcg_router, prefix=settings.API_V1_PREFIX)
+app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
