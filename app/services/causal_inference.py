@@ -48,6 +48,9 @@ def _ols(
     Otherwise, if *robust*, uses HC1 (White) standard errors.
     """
     n, k = X.shape
+    # Flatten y to 1D if single-column
+    if y.ndim > 1:
+        y = y.ravel()
     XtX_inv = np.linalg.inv(X.T @ X)
     beta = XtX_inv @ (X.T @ y)
     resid = y - X @ beta
@@ -467,24 +470,24 @@ class DifferenceInDifferences:
                 pre_treat_interaction = pre_treat_interaction.reshape(-1, 1)
 
             X_pt = np.column_stack([X, pre_treat_interaction])
-            result_pt = _ols(X_pt, Y, robust=True, cluster=cluster)
+            try:
+                result_pt = _ols(X_pt, Y, robust=True, cluster=cluster)
 
-            # F-test: joint significance of pre-treat interactions
-            k_pre = pre_treat_interaction.shape[1]
-            n_params = X_pt.shape[1]
-            beta_pre = result_pt["coefficients"][-k_pre:]
+                # F-test: joint significance of pre-treat interactions
+                k_pre = pre_treat_interaction.shape[1]
+                n_params = X_pt.shape[1]
 
-            # Use Wald test with robust VCV
-            V_pre = np.zeros((k_pre, k_pre))  # placeholder
-            # Simplified: compute F from restricted vs unrestricted R²
-            r2_u = result_pt["r_squared"]
-            r2_r = result["r_squared"]
-            df1 = k_pre
-            df2 = n - n_params
-            if df2 > 0 and (1 - r2_u) > 0:
-                pt_f = ((r2_u - r2_r) / df1) / ((1 - r2_u) / df2)
-                pt_p = 1 - stats.f.cdf(pt_f, df1, df2)
-                pt_satisfied = pt_p > 0.05  # Fail to reject = parallel trends OK
+                # Use F-test from restricted vs unrestricted R²
+                r2_u = result_pt["r_squared"]
+                r2_r = result["r_squared"]
+                df1 = k_pre
+                df2 = n - n_params
+                if df2 > 0 and (1 - r2_u) > 0:
+                    pt_f = ((r2_u - r2_r) / df1) / ((1 - r2_u) / df2)
+                    pt_p = 1 - stats.f.cdf(pt_f, df1, df2)
+                    pt_satisfied = pt_p > 0.05  # Fail to reject = parallel trends OK
+            except np.linalg.LinAlgError:
+                logger.warning("Parallel trends test: singular matrix, skipping")
 
         n_treated = int(np.sum(treat == 1))
         n_control = int(np.sum(treat == 0))
