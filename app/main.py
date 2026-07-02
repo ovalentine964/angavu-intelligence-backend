@@ -114,10 +114,11 @@ app = FastAPI(
 # Middleware
 # =========================================================================
 
-# CORS
+# CORS — default to localhost origins if none configured
+_cors_origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["http://localhost:3000", "http://localhost:8080"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Device-ID", "X-OpenWA-Signature"],
@@ -127,7 +128,7 @@ app.add_middleware(
 # Trusted host middleware (prevents Host header attacks)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.CORS_ORIGINS if settings.is_production else ["*"],
+    allowed_hosts=_cors_origins if settings.is_production else ["*"],
 )
 
 # Rate limiting

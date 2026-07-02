@@ -41,6 +41,7 @@ from app.schemas.federated_learning import (
     UploadResponse,
     VocabularyUpdate,
 )
+from app.services.fl_persistence import FLPersistence
 
 logger = structlog.get_logger(__name__)
 
@@ -109,6 +110,7 @@ class _FLState:
 
 
 _state = _FLState()
+_persistence = FLPersistence()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -537,6 +539,21 @@ class FederatedLearningService:
         _state.total_updates += 1
         _state.seen_devices.add(update.device_id)
 
+        # Persist to SQLite
+        calibration_data = None
+        if update.calibration_params:
+            calibration_data = {
+                "temperature": update.calibration_params.temperature,
+                "platt_a": update.calibration_params.platt_a,
+                "platt_b": update.calibration_params.platt_b,
+                "prior": update.calibration_params.prior,
+            }
+        phoneme_data = [p.phoneme_pattern for p in update.correction_patterns if p.phoneme_pattern]
+        _persistence.save_update(
+            update.device_id, dialect, calibration_data, phoneme_data, update.timestamp
+        )
+        _persistence.save_device_info(update.device_id, dialect)
+
         # ── Step 5: Check if aggregation should trigger ──
         aggregated = False
         next_version = None
@@ -567,6 +584,20 @@ class FederatedLearningService:
         dialect = dialect.lower().strip()
         model = _state.global_models.get(dialect)
 
+        # If not in memory, try loading from SQLite
+        if model is None:
+            persisted = _persistence.get_latest_model(dialect)
+            if persisted:
+                version, params_json, phonemes_json = persisted
+                params = json.loads(params_json) if params_json else {}
+                phonemes = json.loads(phonemes_json) if phonemes_json else []
+                model = {
+                    "version": version,
+                    "calibration_params": CalibrationParams(**params) if params else CalibrationParams(),
+                    "vocabulary_updates": [VocabularyUpdate(word=p, frequency=1, confidence=1.0) for p in phonemes] if isinstance(phonemes, list) else [],
+                }
+                _state.global_models[dialect] = model
+
         if model is None:
             # Try to return a default/empty model for known dialects
             if dialect in DIALECT_REGIONS:
@@ -595,10 +626,16 @@ class FederatedLearningService:
         Returns:
             FLStatusResponse with system-wide metrics
         """
+        # Merge in-memory counts with persisted counts
+        persisted_updates = _persistence.get_total_update_count()
+        persisted_devices = _persistence.get_device_count()
+        total_updates = max(_state.total_updates, persisted_updates)
+        active_devices = max(len(_state.seen_devices), persisted_devices)
+
         return FLStatusResponse(
             status="ok",
-            total_updates_received=_state.total_updates,
-            active_devices=len(_state.seen_devices),
+            total_updates_received=total_updates,
+            active_devices=active_devices,
             languages_supported=list(DIALECT_REGIONS.keys()),
             current_global_versions={
                 lang: model["version"]
@@ -662,6 +699,17 @@ class FederatedLearningService:
 
         _state.aggregation_round += 1
         _state.last_aggregation_at = datetime.now(timezone.utc).isoformat()
+
+        # Persist aggregated model to SQLite
+        agg_params_dict = {
+            "temperature": agg_calibration.temperature,
+            "platt_a": agg_calibration.platt_a,
+            "platt_b": agg_calibration.platt_b,
+            "prior": agg_calibration.prior,
+        } if agg_calibration else {}
+        agg_phonemes = [vu.word for vu in agg_vocab]
+        _persistence.save_global_model(dialect, version, agg_params_dict, agg_phonemes)
+        _persistence.mark_processed(dialect)
 
         logger.info(
             "fl_aggregation_complete",
