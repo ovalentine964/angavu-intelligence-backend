@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     DEEPSEEK_API_KEY: str = ""
 
+    # === ClickHouse (OLAP analytics) ===
+    CLICKHOUSE_URL: str = "http://clickhouse:8123"
+    CLICKHOUSE_DATABASE: str = "biashara"
+    CLICKHOUSE_USER: str = "admin"
+    CLICKHOUSE_PASSWORD: str = ""
+
     # === S3 Compatible Storage ===
     S3_ENDPOINT: str = ""
     S3_BUCKET: str = "msaidizi-data"
@@ -155,6 +161,11 @@ class Settings(BaseSettings):
     def database_url_sync(self) -> str:
         """Get synchronous database URL for Alembic migrations."""
         return self.DATABASE_URL.replace("+asyncpg", "+psycopg2").replace("+aiosqlite", "")
+
+    @property
+    def has_clickhouse(self) -> bool:
+        """Check if ClickHouse is configured."""
+        return bool(self.CLICKHOUSE_URL and self.CLICKHOUSE_PASSWORD)
 
     class Config:
         env_file = ".env"

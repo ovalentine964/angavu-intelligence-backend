@@ -21,6 +21,10 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - OPENWA_URL=http://openwa:3000
       - OPENWA_WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET}
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_DATABASE=biashara
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
     volumes:
       - ./logs:/app/logs
     depends_on:
@@ -208,6 +212,41 @@ services:
     networks:
       - biashara-net
 
+  # ---------------------------------------------------------------
+  # ClickHouse — analytical queries on 600M+ records
+  # 30-200x faster than PostgreSQL for aggregations, time-series,
+  # and dashboard queries.
+  # ---------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: biashara-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - CLICKHOUSE_DB=biashara
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    restart: unless-stopped
+    networks:
+      - biashara-net
+
 networks:
   biashara-net:
     driver: bridge
@@ -217,3 +256,4 @@ volumes:
   redis-data:
   openwa-data:
   whisper-models:
+  clickhouse_data:

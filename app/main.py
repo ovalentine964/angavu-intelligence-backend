@@ -26,6 +26,7 @@ from slowapi.util import get_remote_address
 
 from app.config import get_settings
 from app.db.database import close_db, init_db
+from app.db.clickhouse import close_clickhouse, get_clickhouse
 from app.services.cache import get_cache
 from app.services.task_queue import get_task_queue
 
@@ -94,10 +95,21 @@ async def lifespan(app: FastAPI):
     await task_queue.connect()
     logger.info("task_queue_initialized")
 
+    # Initialize ClickHouse (OLAP analytics)
+    if settings.has_clickhouse:
+        try:
+            await get_clickhouse()
+            logger.info("clickhouse_initialized")
+        except Exception as e:
+            logger.warning("clickhouse_init_failed", error=str(e))
+
     yield
 
     # Shutdown
     logger.info("application_shutting_down")
+    if settings.has_clickhouse:
+        await close_clickhouse()
+        logger.info("clickhouse_closed")
     await task_queue.close()
     logger.info("task_queue_closed")
     await cache.close()
@@ -243,9 +255,17 @@ async def health_check():
     Used by Docker health checks, load balancers, and monitoring.
     """
     cache = get_cache()
+    ch_ok = False
+    if settings.has_clickhouse:
+        try:
+            from app.db.clickhouse import ClickHouseClient
+            ch_ok = await ClickHouseClient().health_check()
+        except Exception:
+            pass
     components = {
         "database": "ok",
         "cache": "ok" if cache.is_available else "unavailable",
+        "clickhouse": "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured"),
         "task_queue": "ok" if get_task_queue()._connected else "unavailable",
     }
     overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
