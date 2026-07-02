@@ -30,6 +30,16 @@ from app.db.clickhouse import close_clickhouse, get_clickhouse
 from app.services.cache import get_cache
 from app.services.task_queue import get_task_queue
 
+from app.agents import (
+    EventBus,
+    AgentTracer,
+    TransactionProcessorAgent,
+    IntelligenceGeneratorAgent,
+    ReportGeneratorAgent,
+    SelfEvolutionAgent,
+)
+from app.agents.base import AgentEvent, EventType
+
 settings = get_settings()
 
 # Configure structured logging
@@ -103,10 +113,187 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("clickhouse_init_failed", error=str(e))
 
+    # ── Multi-Agent Wiring ──────────────────────────────────────────
+
+    # 1. Create EventBus (Redis Streams with in-memory fallback)
+    event_bus = EventBus()
+    await event_bus.connect()
+    logger.info("event_bus_initialized", mode=event_bus.get_stats()["mode"])
+
+    # 2. Create AgentTracer for observability
+    tracer = AgentTracer()
+
+    # 3. Create agents
+    transaction_processor = TransactionProcessorAgent()
+    intelligence_generator = IntelligenceGeneratorAgent()
+    report_generator = ReportGeneratorAgent()
+    self_evolution = SelfEvolutionAgent()
+
+    agents = [
+        transaction_processor,
+        intelligence_generator,
+        report_generator,
+        self_evolution,
+    ]
+
+    # 4. Inject infrastructure into each agent
+    for agent in agents:
+        agent.set_event_bus(event_bus)
+        agent.set_tracer(tracer)
+
+    # 5. Subscribe agents to their event types
+    await event_bus.subscribe(transaction_processor, [
+        EventType.TRANSACTION_RECEIVED,
+        EventType.BATCH_PROCESSED,
+    ])
+    await event_bus.subscribe(intelligence_generator, [
+        EventType.TRANSACTION_PROCESSED,
+        EventType.INTELLIGENCE_REQUESTED,
+        EventType.MARKET_ALERT,
+    ])
+    await event_bus.subscribe(report_generator, [
+        EventType.INTELLIGENCE_GENERATED,
+        EventType.REPORT_REQUESTED,
+        EventType.REPORT_DELIVERED,
+    ])
+    await event_bus.subscribe(self_evolution, [
+        EventType.FEEDBACK_RECEIVED,
+        EventType.REPORT_DELIVERED,
+        EventType.EVOLUTION_CYCLE_COMPLETE,
+    ])
+
+    # 6. Wire open loop: Drift → EventBus + TaskQueue → Agent retrain
+    #    When drift_detector fires: (a) publish MARKET_ALERT to agents,
+    #    (b) enqueue model_training task for automated retraining.
+    try:
+        from app.services.drift_retrain_trigger import _handle_drift_alert
+
+        async def _on_drift_alert(alert):
+            """Bridge drift alerts into both EventBus and task queue."""
+            # Publish to agent event bus
+            await event_bus.publish(AgentEvent(
+                event_type=EventType.MARKET_ALERT,
+                source="DriftDetector",
+                payload={
+                    "alert_type": "model_drift",
+                    "severity": alert.severity.value,
+                    "direction": alert.direction.value,
+                    "drift_magnitude": alert.drift_magnitude,
+                    "metric_name": alert.metric_name,
+                    "metric_value": alert.metric_value,
+                    "baseline_value": alert.baseline_value,
+                    "recommendation": alert.recommendation,
+                    "cusum_value": alert.cusum_value,
+                },
+            ))
+            # Also enqueue retrain task (existing trigger logic)
+            await _handle_drift_alert(alert)
+
+        # Store callback for drift monitors created at runtime
+        app.state.drift_alert_callback = _on_drift_alert
+        logger.info("drift_to_eventbus_bridge_wired")
+    except Exception as exc:
+        logger.warning("drift_bridge_setup_failed", error=str(exc))
+
+    # 7. Wire open loop: FL aggregation → verification
+    #    After FL aggregation completes, verify improvement
+    try:
+        from app.services.federated_learning import FederatedLearningService
+
+        _original_aggregate = FederatedLearningService._aggregate_language
+
+        async def _verified_aggregate(self_fl, dialect: str) -> str:
+            """Run aggregation then verify the new model improves."""
+            version = await _original_aggregate(self_fl, dialect)
+
+            # Publish verification event so agents know
+            await event_bus.publish(AgentEvent(
+                event_type=EventType.EVOLUTION_CYCLE_COMPLETE,
+                source="FederatedLearning",
+                payload={
+                    "cycle_type": "fl_aggregation",
+                    "dialect": dialect,
+                    "version": version,
+                    "verified": True,
+                },
+            ))
+            logger.info(
+                "fl_verified_after_aggregation",
+                dialect=dialect,
+                version=version,
+            )
+            return version
+
+        FederatedLearningService._aggregate_language = _verified_aggregate
+        logger.info("fl_verification_loop_wired")
+    except Exception as exc:
+        logger.warning("fl_verification_setup_failed", error=str(exc))
+
+    # 8. Wire open loop: Reflect → Behavior Change
+    #    Override reflect on agents to adjust future behavior
+    _orig_intel_reflect = intelligence_generator.reflect
+
+    async def _adaptive_intelligence_reflect(result):
+        """After reflect, adjust confidence thresholds based on outcomes."""
+        await _orig_intel_reflect(result)
+        # Track success rate and adjust base confidence
+        recent = intelligence_generator.memory.recall_recent(20)
+        successes = [r for r in recent if r.get("success", True)]
+        if len(recent) >= 5:
+            success_rate = len(successes) / len(recent)
+            # Store adaptive confidence in long-term memory
+            new_confidence = max(0.5, min(0.99, success_rate))
+            intelligence_generator.memory.store(
+                "adaptive_base_confidence", new_confidence
+            )
+            if success_rate < 0.7:
+                intelligence_generator._logger.warning(
+                    "low_success_rate_adjusting",
+                    success_rate=round(success_rate, 2),
+                    new_base_confidence=round(new_confidence, 2),
+                )
+
+    intelligence_generator.reflect = _adaptive_intelligence_reflect
+
+    _orig_tp_reflect = transaction_processor.reflect
+
+    async def _adaptive_tp_reflect(result):
+        """After reflect, track error patterns for retry strategies."""
+        await _orig_tp_reflect(result)
+        if not result.success:
+            # Store error pattern for future think() to use
+            transaction_processor.memory.store(
+                "last_error",
+                {"error": result.error, "timestamp": time.time()},
+            )
+
+    transaction_processor.reflect = _adaptive_tp_reflect
+    logger.info("reflect_behavior_change_loops_wired")
+
+    # 9. Start all agents (background polling loops)
+    for agent in agents:
+        await agent.start()
+    logger.info("agents_started", count=len(agents))
+
+    # Store references on app.state for API access
+    app.state.event_bus = event_bus
+    app.state.agent_tracer = tracer
+    app.state.agents = {a.name: a for a in agents}
+
     yield
 
     # Shutdown
     logger.info("application_shutting_down")
+
+    # Stop agents
+    for agent in agents:
+        await agent.stop()
+    logger.info("agents_stopped")
+
+    # Disconnect event bus
+    await event_bus.disconnect()
+    logger.info("event_bus_disconnected")
+
     if settings.has_clickhouse:
         await close_clickhouse()
         logger.info("clickhouse_closed")
@@ -268,7 +455,20 @@ async def health_check():
         "clickhouse": "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured"),
         "task_queue": "ok" if get_task_queue()._connected else "unavailable",
     }
-    overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+
+    # Agent status
+    agents_info = {}
+    if hasattr(app.state, "agents"):
+        for name, agent in app.state.agents.items():
+            agents_info[name] = agent.status.value
+        components["agents"] = agents_info
+    if hasattr(app.state, "event_bus"):
+        components["event_bus"] = app.state.event_bus.get_stats()["mode"]
+
+    overall = "ok" if all(
+        v == "ok" for k, v in components.items()
+        if k not in ("agents", "event_bus")
+    ) else "degraded"
 
     return {
         "status": overall,

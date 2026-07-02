@@ -77,6 +77,8 @@ class EventBus:
         # In-memory fallback (when Redis is unavailable)
         self._in_memory_streams: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         self._in_memory_enabled: bool = False
+        # Buffer for events to be picked up by polling (no immediate dispatch)
+        self._pending_buffer: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
         # Dead letter queue for events that fail processing
         self._dead_letters: List[Dict[str, Any]] = []
@@ -157,14 +159,11 @@ class EventBus:
                 )
                 # Fall through to in-memory
 
-        # In-memory fallback
-        self._in_memory_streams[stream_key].append(event_data)
+        # In-memory fallback — buffer for polling, no immediate dispatch
+        self._pending_buffer[stream_key].append(event_data)
         # Trim to max length
-        if len(self._in_memory_streams[stream_key]) > MAX_STREAM_LENGTH:
-            self._in_memory_streams[stream_key] = self._in_memory_streams[stream_key][-MAX_STREAM_LENGTH:]
-
-        # Trigger in-memory handlers
-        await self._dispatch_in_memory(event)
+        if len(self._pending_buffer[stream_key]) > MAX_STREAM_LENGTH:
+            self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-MAX_STREAM_LENGTH:]
 
         self._logger.debug(
             "event_published_in_memory",
@@ -298,17 +297,17 @@ class EventBus:
         event_types: List[str],
         limit: int,
     ) -> List[AgentEvent]:
-        """Pull events from in-memory buffers."""
+        """Pull events from in-memory pending buffer."""
         from app.agents.base import AgentEvent
 
         results = []
         for etype in event_types:
             stream_key = f"{STREAM_PREFIX}{etype}"
-            buffer = self._in_memory_streams.get(stream_key, [])
+            buffer = self._pending_buffer.get(stream_key, [])
             # Take up to limit events from the buffer
             taken = buffer[:limit - len(results)]
             remaining = buffer[len(taken):]
-            self._in_memory_streams[stream_key] = remaining
+            self._pending_buffer[stream_key] = remaining
 
             for data in taken:
                 try:
@@ -351,7 +350,7 @@ class EventBus:
                 etype: agents for etype, agents in self._subscriptions.items()
             },
             "in_memory_streams": {
-                k: len(v) for k, v in self._in_memory_streams.items()
+                k: len(v) for k, v in self._pending_buffer.items()
             },
             "dead_letter_count": len(self._dead_letters),
             "dead_letters_recent": self._dead_letters[-5:],
