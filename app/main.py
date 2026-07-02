@@ -590,6 +590,9 @@ from app.api.agent_loops import set_loop_infrastructure
 # MCP (Model Context Protocol) server
 from app.mcp.router import router as mcp_router
 
+# 12-Factor: Multi-channel triggers (WhatsApp, USSD, SMS, Voice)
+from app.api.trigger_router import router as trigger_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -612,6 +615,7 @@ app.include_router(model_router_api, prefix=settings.API_V1_PREFIX)
 app.include_router(skills_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
+app.include_router(trigger_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================

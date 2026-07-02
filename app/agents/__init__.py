@@ -32,6 +32,9 @@ from app.agents.implementations import (
     ReportGeneratorAgent,
     SelfEvolutionAgent,
 )
+from app.agents.context_manager import ContextManager, AgentContextManager
+from app.agents.error_compactor import ErrorCompactor, ErrorSeverity
+from app.agents.unified_state import UnifiedStateManager
 from app.agents.loops import (
     ReActAgent,
     ReflexionAgent,
@@ -73,4 +76,10 @@ __all__ = [
     "PlanStep",
     "SupervisionPolicy",
     "SupervisedExecution",
+    # 12-Factor: Context, Errors, State
+    "ContextManager",
+    "AgentContextManager",
+    "ErrorCompactor",
+    "ErrorSeverity",
+    "UnifiedStateManager",
 ]
