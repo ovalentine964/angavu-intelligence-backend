@@ -51,6 +51,44 @@ from app.agents.loops import (
     SupervisedExecution,
 )
 
+# Long-horizon orchestration (DeerFlow-inspired)
+from app.agents.long_horizon import (
+    LongHorizonOrchestrator,
+    TaskPlanner,
+    SubAgentDelegator,
+    ProgressTracker,
+    ResultAggregator,
+    LongHorizonTask,
+    SubTask,
+    TaskCheckpoint,
+    TaskStatus,
+    SubTaskStatus,
+)
+
+# Research flow agents
+from app.agents.research_flow import (
+    ResearchPlanner,
+    DataCollector,
+    ResearchAnalyzer,
+    ResearchReportGenerator,
+    QualityValidator,
+    ResearchResultAggregator,
+    create_research_orchestrator,
+)
+
+# Intelligence pipeline flows
+from app.agents.intelligence_pipeline import (
+    MarketDataAgent,
+    CreditAnalysisAgent,
+    DistributionAgent,
+    CompetitorAgent,
+    create_market_analysis_flow,
+    create_credit_scoring_flow,
+    create_distribution_analysis_flow,
+    create_competitor_analysis_flow,
+    create_all_intelligence_flows,
+)
+
 __all__ = [
     # Base
     "BiasharaAgent",
@@ -76,6 +114,35 @@ __all__ = [
     "PlanStep",
     "SupervisionPolicy",
     "SupervisedExecution",
+    # Long-horizon orchestration
+    "LongHorizonOrchestrator",
+    "TaskPlanner",
+    "SubAgentDelegator",
+    "ProgressTracker",
+    "ResultAggregator",
+    "LongHorizonTask",
+    "SubTask",
+    "TaskCheckpoint",
+    "TaskStatus",
+    "SubTaskStatus",
+    # Research flow
+    "ResearchPlanner",
+    "DataCollector",
+    "ResearchAnalyzer",
+    "ResearchReportGenerator",
+    "QualityValidator",
+    "ResearchResultAggregator",
+    "create_research_orchestrator",
+    # Intelligence pipeline agents
+    "MarketDataAgent",
+    "CreditAnalysisAgent",
+    "DistributionAgent",
+    "CompetitorAgent",
+    "create_market_analysis_flow",
+    "create_credit_scoring_flow",
+    "create_distribution_analysis_flow",
+    "create_competitor_analysis_flow",
+    "create_all_intelligence_flows",
     # 12-Factor: Context, Errors, State
     "ContextManager",
     "AgentContextManager",

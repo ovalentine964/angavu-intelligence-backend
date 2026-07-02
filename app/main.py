@@ -324,6 +324,56 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("loop_patterns_setup_failed", error=str(exc))
 
+# ── Long-Horizon Orchestration (DeerFlow-Inspired) ────────────────────
+    try:
+        from app.agents.intelligence_pipeline import create_all_intelligence_flows
+        from app.agents.research_flow import create_research_orchestrator
+
+        # Create intelligence pipeline orchestrators
+        intelligence_flows = create_all_intelligence_flows(event_store=loop_event_store if hasattr(app.state, 'loop_event_store') else None)
+
+        # Create generic research orchestrator
+        research_orchestrator = create_research_orchestrator(
+            event_store=loop_event_store if hasattr(app.state, 'loop_event_store') else None,
+        )
+
+        # Wire intelligence flow agents into EventBus
+        for flow_name, orch in intelligence_flows.items():
+            for agent_name, agent in orch.delegator._agents.items():
+                agent.set_event_bus(event_bus)
+                agent.set_tracer(tracer)
+                # Subscribe to intelligence request events
+                await event_bus.subscribe(agent, [
+                    EventType.INTELLIGENCE_REQUESTED,
+                    EventType.MARKET_ALERT,
+                ])
+
+        # Wire research flow agents into EventBus
+        for agent_name, agent in research_orchestrator.delegator._agents.items():
+            agent.set_event_bus(event_bus)
+            agent.set_tracer(tracer)
+            await event_bus.subscribe(agent, [
+                EventType.INTELLIGENCE_REQUESTED,
+                EventType.MARKET_ALERT,
+            ])
+
+        # Set API infrastructure
+        set_long_horizon_infrastructure(
+            intelligence_flows=intelligence_flows,
+            research_orchestrator=research_orchestrator,
+        )
+
+        app.state.intelligence_flows = intelligence_flows
+        app.state.research_orchestrator = research_orchestrator
+
+        logger.info(
+            "long_horizon_initialized",
+            flows=list(intelligence_flows.keys()),
+            research_agents=len(research_orchestrator.delegator._agents),
+        )
+    except Exception as exc:
+        logger.warning("long_horizon_setup_failed", error=str(exc))
+
     # Initialize MCP server
     from app.mcp.server import get_mcp_server
     mcp_server = get_mcp_server()
@@ -587,6 +637,10 @@ from app.api.skills import router as skills_router
 from app.api.agent_loops import router as agent_loops_router
 from app.api.agent_loops import set_loop_infrastructure
 
+# Long-horizon research (DeerFlow-inspired orchestration)
+from app.api.long_horizon import router as long_horizon_router
+from app.api.long_horizon import set_long_horizon_infrastructure
+
 # MCP (Model Context Protocol) server
 from app.mcp.router import router as mcp_router
 
@@ -614,6 +668,7 @@ app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
 app.include_router(model_router_api, prefix=settings.API_V1_PREFIX)
 app.include_router(skills_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
+app.include_router(long_horizon_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
 app.include_router(trigger_router, prefix=settings.API_V1_PREFIX)
 
