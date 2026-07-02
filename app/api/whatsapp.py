@@ -1,8 +1,17 @@
 """
-WhatsApp webhook endpoint.
+WhatsApp webhook endpoint — Pure Report Delivery Channel.
 
 Handles incoming messages from OpenWA (self-hosted WhatsApp Web API).
-Routes messages to the WhatsAppBot service for processing.
+Routes report requests to the WhatsAppBot service.
+
+WhatsApp is ONLY for:
+- Sending scheduled reports (daily, weekly, monthly, 6-month, yearly)
+- Sending alerts (restock, price, credit, unusual activity)
+- Receiving report requests ("Ripoti ya leo")
+
+WhatsApp is NOT for:
+- Transaction recording (Msaidizi app, offline)
+- Interactive business advice (Msaidizi app → Biashara Intelligence cloud)
 """
 
 import hashlib
@@ -58,9 +67,14 @@ async def whatsapp_webhook(
     for processing and returns the response.
 
     **Supported message types:**
-    - text: Direct text messages
-    - voice: Voice notes (transcribed by OpenWA/Whisper)
-    - image: Images with optional caption
+    - text: Report requests ("Ripoti ya leo", "Ripoti ya wiki")
+    - help: Show available commands
+    - Other messages: Redirected to Msaidizi App
+
+    **NOT handled here:**
+    - Transaction recording (Msaidizi app)
+    - Voice commands for transactions (Msaidizi app)
+    - Interactive business advice (Msaidizi app → cloud)
 
     **Security:**
     Validates HMAC signature from OpenWA to ensure authenticity.

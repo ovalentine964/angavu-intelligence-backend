@@ -258,6 +258,7 @@ from app.api.intelligence import router as intelligence_router
 from app.api.intelligence_products import router as intelligence_products_router
 from app.api.whatsapp import router as whatsapp_router
 from app.api.federated_learning import router as fl_router
+from app.api.analysis import router as analysis_router
 
 # Phase 1 routers
 from app.api.onboarding import router as onboarding_router
@@ -272,6 +273,7 @@ app.include_router(intelligence_router, prefix=settings.API_V1_PREFIX)
 app.include_router(intelligence_products_router, prefix=settings.API_V1_PREFIX)
 app.include_router(whatsapp_router, prefix=settings.API_V1_PREFIX)
 app.include_router(fl_router, prefix=settings.API_V1_PREFIX)
+app.include_router(analysis_router, prefix=settings.API_V1_PREFIX)
 app.include_router(onboarding_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dashboard_router, prefix=settings.API_V1_PREFIX)
 app.include_router(phase1_router, prefix=settings.API_V1_PREFIX)
