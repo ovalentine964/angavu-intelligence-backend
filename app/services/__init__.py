@@ -47,3 +47,14 @@ __all__ += [
     "TaxBaseService",
     "DistributionGapService",
 ]
+
+# Training multi-agentic loop
+from app.services.training import TrainingLoop
+from app.services.nvidia_client import NVIDIAClient
+from app.services.self_evolution import SelfEvolutionService
+
+__all__ += [
+    "TrainingLoop",
+    "NVIDIAClient",
+    "SelfEvolutionService",
+]
