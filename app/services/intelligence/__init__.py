@@ -12,6 +12,10 @@ Services (Original 6):
 Services (Phase 1 — New):
 - GDPEstimatorService: Real-time informal GDP estimation
 - InflationTrackerService: Daily price indices across 47 counties
+
+Services (Phase 2 — New):
+- GivingInsightsService: Financial giving and tithing patterns
+- LoanIntelligenceService: Loan purpose verification and repayment tracking
 """
 
 from app.services.intelligence.soko_pulse import SokoPulseService
@@ -23,6 +27,7 @@ from app.services.intelligence.distribution_gap import DistributionGapService
 from app.services.intelligence.gdp_estimator import GDPEstimatorService
 from app.services.intelligence.inflation_tracker import InflationTrackerService
 from app.services.intelligence.giving_insights import GivingInsightsService
+from app.services.intelligence.loan_intelligence import LoanIntelligenceService
 
 __all__ = [
     "SokoPulseService",
@@ -34,4 +39,5 @@ __all__ = [
     "GDPEstimatorService",
     "InflationTrackerService",
     "GivingInsightsService",
+    "LoanIntelligenceService",
 ]
