@@ -30,6 +30,7 @@ from app.agents.base import (
     BiasharaAgent,
     EventType,
 )
+from app.services.skill_registry import get_skill_registry
 
 logger = structlog.get_logger(__name__)
 
@@ -66,6 +67,10 @@ class TransactionProcessorAgent(BiasharaAgent):
                 "data_quality_validation",
             ],
         )
+        # Wire skills
+        registry = get_skill_registry()
+        for skill in registry.get_skills_for_agent(self.name):
+            self.tools.register(skill.name, skill.safe_execute, skill.description)
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -229,6 +234,10 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                 "econometric_modeling",
             ],
         )
+        # Wire skills
+        registry = get_skill_registry()
+        for skill in registry.get_skills_for_agent(self.name):
+            self.tools.register(skill.name, skill.safe_execute, skill.description)
 
     async def observe(self, event: AgentEvent) -> None:
         """Process transaction-processed events and market alerts."""
@@ -411,6 +420,10 @@ class ReportGeneratorAgent(BiasharaAgent):
                 "multilingual_support",
             ],
         )
+        # Wire skills
+        registry = get_skill_registry()
+        for skill in registry.get_skills_for_agent(self.name):
+            self.tools.register(skill.name, skill.safe_execute, skill.description)
 
     async def observe(self, event: AgentEvent) -> None:
         """Filter for intelligence and report events."""
@@ -585,6 +598,10 @@ class SelfEvolutionAgent(BiasharaAgent):
                 "evolution_reporting",
             ],
         )
+        # Wire all skills for learning
+        registry = get_skill_registry()
+        for skill in registry.get_skills_for_agent(self.name):
+            self.tools.register(skill.name, skill.safe_execute, skill.description)
 
     async def observe(self, event: AgentEvent) -> None:
         """Process feedback and delivery events."""
