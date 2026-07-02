@@ -160,3 +160,217 @@ class SyncResponse(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Current server time for clock sync",
     )
+
+
+# =========================================================================
+# Msaidizi ↔ Biashara Intelligence Sync Pipeline Schemas
+# =========================================================================
+
+
+class AnonymizedTransaction(BaseModel):
+    """
+    Transaction with PII stripped for sync.
+
+    KEEP: type, category, amount, timestamp, worker_type, dialect, coarse_location
+    REMOVE: customer_name, exact_location, personal_notes
+    HASH: worker_id (one-way hash for privacy)
+    """
+
+    transaction_type: str
+    item: Optional[str] = None
+    item_category: Optional[str] = None
+    amount: float
+    timestamp: datetime
+    worker_type: Optional[str] = None
+    location_geohash: Optional[str] = Field(
+        None,
+        description="Coarsened to geohash-5 (~5km²)",
+    )
+    worker_id_hash: str = Field(
+        ...,
+        description="HMAC-SHA256 hashed worker ID (one-way)",
+    )
+    recorded_via: Optional[str] = None
+    confidence_score: Optional[float] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    profit: Optional[float] = None
+    payment_method: Optional[str] = None
+    dialect: Optional[str] = Field(
+        None,
+        description="Language dialect detected from voice input",
+    )
+
+
+class TransactionBatch(BaseModel):
+    """
+    Batch of anonymized transactions from Msaidizi device.
+
+    Sent as gzipped, encrypted payload. Checksum ensures integrity.
+    """
+
+    worker_id_hash: str = Field(
+        ...,
+        max_length=64,
+        description="HMAC-SHA256 of worker ID",
+    )
+    device_id: str = Field(
+        ...,
+        max_length=100,
+        description="Unique device identifier",
+    )
+    batch_id: str = Field(
+        ...,
+        max_length=64,
+        description="Unique batch ID for idempotency",
+    )
+    transactions: List[AnonymizedTransaction] = Field(
+        ...,
+        max_length=200,
+        description="Batch of anonymized transactions",
+    )
+    checksum: str = Field(
+        ...,
+        max_length=64,
+        description="SHA-256 checksum of serialized transactions for integrity",
+    )
+    is_compressed: bool = Field(
+        True,
+        description="Whether the batch is gzip compressed",
+    )
+    sync_timestamp: datetime = Field(
+        ...,
+        description="When the device created this batch",
+    )
+    device_metadata: Optional[DeviceMetadata] = None
+
+    @field_validator("transactions")
+    @classmethod
+    def validate_batch_size(cls, v):
+        if len(v) > 200:
+            raise ValueError("Maximum 200 transactions per batch")
+        return v
+
+
+class TransactionBatchResponse(BaseModel):
+    """
+    Response after receiving a transaction batch.
+    """
+
+    status: str = Field("ok", description="ok | error | partial")
+    batch_id: str
+    sync_id: str = Field(..., description="Unique sync operation ID")
+    transactions_accepted: int = 0
+    transactions_rejected: int = 0
+    rejection_reasons: Optional[List[str]] = None
+    intelligence_updates_available: bool = Field(
+        False,
+        description="Whether new intelligence is available for this worker",
+    )
+    next_sync_recommended_seconds: int = 3600
+    server_time: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+
+
+class AlertItem(BaseModel):
+    """An urgent alert for a worker."""
+
+    alert_type: str = Field(
+        ...,
+        description="restock | price_drop | credit_opportunity | demand_spike | seasonal_tip",
+    )
+    severity: str = Field(
+        ...,
+        description="critical | warning | info",
+    )
+    title: str
+    message: str
+    action_label: Optional[str] = Field(
+        None,
+        description="Suggested action button text",
+    )
+    action_payload: Optional[dict] = None
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Optional[datetime] = None
+
+
+class DailyBriefing(BaseModel):
+    """Daily business briefing for a worker."""
+
+    worker_id_hash: str
+    date: str = Field(..., description="YYYY-MM-DD")
+    language: str = Field("sw", description="sw | en | sh")
+    summary: str = Field(..., description="One-line summary in local language")
+    profit_today: Optional[float] = Field(
+        None,
+        description="Today's profit in KES",
+    )
+    revenue_today: Optional[float] = None
+    transactions_today: Optional[int] = None
+    top_item: Optional[str] = Field(
+        None,
+        description="Best-selling item today",
+    )
+    alerts: List[AlertItem] = Field(default_factory=list)
+    recommendations: List[str] = Field(
+        default_factory=list,
+        description="Actionable recommendations in local language",
+    )
+    market_trend: Optional[str] = Field(
+        None,
+        description="Brief market trend note",
+    )
+
+
+class IntelligenceUpdate(BaseModel):
+    """
+    Intelligence update formatted for device display.
+    """
+
+    worker_id_hash: str
+    language: str = "sw"
+    briefing: Optional[DailyBriefing] = None
+    alerts: List[AlertItem] = Field(default_factory=list)
+    alama_score: Optional[int] = Field(
+        None,
+        description="Credit score 300-850, if available",
+    )
+    alama_score_band: Optional[str] = None
+    market_insights: Optional[dict] = Field(
+        None,
+        description="Relevant market intelligence for worker's area/product",
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+
+
+class SyncStatusResponse(BaseModel):
+    """
+    Sync status for a worker — tracks last sync, pending data, freshness.
+    """
+
+    worker_id_hash: str
+    last_sync_at: Optional[datetime] = None
+    last_intelligence_update: Optional[datetime] = None
+    pending_transactions: int = Field(
+        0,
+        description="Number of transactions awaiting sync",
+    )
+    intelligence_freshness_hours: Optional[float] = Field(
+        None,
+        description="Hours since last intelligence update",
+    )
+    sync_health: str = Field(
+        "healthy",
+        description="healthy | stale | critical",
+    )
+    total_synced_transactions: int = 0
+    next_sync_recommended_seconds: int = 3600
+    server_time: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+    )

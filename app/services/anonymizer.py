@@ -451,6 +451,111 @@ class Anonymizer:
     # Data Minimization
     # =========================================================================
 
+    # =========================================================================
+    # Sync Pipeline Anonymization
+    # =========================================================================
+
+    @staticmethod
+    def anonymize_for_sync(transaction: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Anonymize a transaction before sending to backend.
+
+        Privacy rules for the Msaidizi ↔ Biashara Intelligence sync pipeline:
+
+        KEEP: type, category, amount, timestamp, worker_type, dialect, coarse_location
+        REMOVE: customer_name, exact_location, personal_notes
+        HASH: worker_id (one-way hash for privacy)
+
+        This ensures that raw data leaving the device never contains PII.
+        The backend only ever sees anonymized data.
+
+        Args:
+            transaction: Raw transaction dictionary from the device
+
+        Returns:
+            Anonymized transaction dictionary safe for sync
+        """
+        import hmac as _hmac
+
+        PII_REMOVE = {
+            "customer_name",
+            "customer_phone",
+            "customer_phone_hash",
+            "exact_location",
+            "exact_latitude",
+            "exact_longitude",
+            "gps_coordinates",
+            "personal_notes",
+            "voice_recording",
+            "source_text",
+            "mpesa_receipt",
+            "national_id",
+            "email",
+            "date_of_birth",
+            "name",
+            "phone",
+        }
+
+        # Fields to keep (allowlist)
+        KEEP_FIELDS = {
+            "transaction_type",
+            "item",
+            "item_category",
+            "amount",
+            "quantity",
+            "unit",
+            "unit_price",
+            "profit",
+            "payment_method",
+            "recorded_via",
+            "confidence_score",
+            "timestamp",
+            "location_geohash",
+            "worker_type",
+            "dialect",
+        }
+
+        anonymized = {}
+        for key, value in transaction.items():
+            if key in PII_REMOVE:
+                continue  # Strip PII
+            if key in KEEP_FIELDS:
+                anonymized[key] = value
+
+        # Coarsen location to geohash-5 (~5km²) for privacy
+        if "location_geohash" in anonymized and anonymized["location_geohash"]:
+            anonymized["location_geohash"] = anonymized["location_geohash"][:5]
+
+        # Hash worker_id with HMAC-SHA256 (one-way, consistent)
+        worker_id = transaction.get("worker_id") or transaction.get("user_id")
+        if worker_id:
+            salt = settings.DATA_ENCRYPTION_SALT
+            anonymized["worker_id_hash"] = _hmac.new(
+                salt.encode(),
+                str(worker_id).encode(),
+                hashlib.sha256,
+            ).hexdigest()[:16]
+
+        return anonymized
+
+    @staticmethod
+    def anonymize_transaction_batch(
+        transactions: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Anonymize a batch of transactions for sync.
+
+        Args:
+            transactions: List of raw transaction dictionaries
+
+        Returns:
+            List of anonymized transaction dictionaries
+        """
+        return [
+            Anonymizer.anonymize_for_sync(txn)
+            for txn in transactions
+        ]
+
     @staticmethod
     def minimize_for_export(
         data: Dict[str, Any],
