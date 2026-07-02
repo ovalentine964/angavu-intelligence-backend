@@ -11,8 +11,8 @@
     <!-- Kanga-inspired geometric pattern -->
     <pattern id="kanga" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
       <rect width="24" height="24" fill="none"/>
-      <path d="M12,0 L24,12 L12,24 L0,12Z" fill="none" stroke="#E8853D" stroke-width="0.4" opacity="0.07"/>
-      <circle cx="12" cy="12" r="1.5" fill="#F5A623" opacity="0.05"/>
+      <path d="M12,0 L24,12 L12,24 L0,12Z" fill="none" stroke="#E8853D" stroke-width="0.4" opacity="0.18"/>
+      <circle cx="12" cy="12" r="1.5" fill="#F5A623" opacity="0.15"/>
     </pattern>
   </defs>
 
@@ -21,11 +21,11 @@
   <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#kanga)"/>
 
   <!-- Warm circle — Africa, community, wholeness -->
-  <circle cx="256" cy="258" r="200" fill="none" stroke="#E8853D" stroke-width="1.2" opacity="0.06"/>
-  <circle cx="256" cy="258" r="180" fill="none" stroke="#F5A623" stroke-width="0.6" opacity="0.04"/>
+  <circle cx="256" cy="258" r="200" fill="none" stroke="#E8853D" stroke-width="1.2" opacity="0.15"/>
+  <circle cx="256" cy="258" r="180" fill="none" stroke="#F5A623" stroke-width="0.6" opacity="0.15"/>
 
   <!-- Africa continent silhouette — subtle warm accent behind the B -->
-  <g opacity="0.07" fill="#F5A623">
+  <g opacity="0.22" fill="#F5A623">
     <path d="M252,118 C258,114 266,112 274,114 C280,116 284,120 286,126
              C288,132 290,140 294,148 C298,156 304,162 310,168
              C316,174 320,182 322,192 C324,202 322,212 318,220
@@ -57,13 +57,13 @@
   <circle cx="260" cy="228" r="7" fill="#F5A623"/>
 
   <!-- Corner accent dots — kanga-inspired -->
-  <circle cx="52" cy="52" r="3.5" fill="#E8853D" opacity="0.12"/>
-  <circle cx="460" cy="52" r="3.5" fill="#E8853D" opacity="0.12"/>
-  <circle cx="52" cy="460" r="3.5" fill="#E8853D" opacity="0.12"/>
-  <circle cx="460" cy="460" r="3.5" fill="#E8853D" opacity="0.12"/>
+  <circle cx="52" cy="52" r="3.5" fill="#E8853D" opacity="0.30"/>
+  <circle cx="460" cy="52" r="3.5" fill="#E8853D" opacity="0.30"/>
+  <circle cx="52" cy="460" r="3.5" fill="#E8853D" opacity="0.30"/>
+  <circle cx="460" cy="460" r="3.5" fill="#E8853D" opacity="0.30"/>
   <!-- Inner corner dots -->
-  <circle cx="72" cy="72" r="2" fill="#F5A623" opacity="0.08"/>
-  <circle cx="440" cy="72" r="2" fill="#F5A623" opacity="0.08"/>
-  <circle cx="72" cy="440" r="2" fill="#F5A623" opacity="0.08"/>
-  <circle cx="440" cy="440" r="2" fill="#F5A623" opacity="0.08"/>
+  <circle cx="72" cy="72" r="2" fill="#F5A623" opacity="0.30"/>
+  <circle cx="440" cy="72" r="2" fill="#F5A623" opacity="0.30"/>
+  <circle cx="72" cy="440" r="2" fill="#F5A623" opacity="0.30"/>
+  <circle cx="440" cy="440" r="2" fill="#F5A623" opacity="0.30"/>
 </svg>

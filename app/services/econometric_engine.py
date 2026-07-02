@@ -1736,7 +1736,12 @@ class CointegrationTester:
         p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=max(df, 1)))
 
         gamma = ecm_beta[0]  # speed of adjustment
-        half_life = np.log(0.5) / np.log(1 + gamma) if -1 < gamma < 0 else float("inf")
+        if abs(gamma) < 1e-10:
+            half_life = float('inf')  # No mean reversion
+        elif gamma >= 0:
+            half_life = float('inf')  # Not stationary
+        else:
+            half_life = np.log(0.5) / np.log(1 + gamma)
 
         # R²
         ss_res = np.sum(residuals_ecm ** 2)

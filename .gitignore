@@ -19,3 +19,20 @@ tmp/
 temp/
 *.sqlite
 *.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Build
+dist/
+build/
+
+# Env
+.env
+
+# Logs
+*.log
