@@ -25,7 +25,7 @@
   <circle cx="256" cy="258" r="180" fill="none" stroke="#F5A623" stroke-width="0.6" opacity="0.15"/>
 
   <!-- Africa continent silhouette — subtle warm accent behind the B -->
-  <g opacity="0.22" fill="#F5A623">
+  <g opacity="0.30" fill="#F5A623">
     <path d="M252,118 C258,114 266,112 274,114 C280,116 284,120 286,126
              C288,132 290,140 294,148 C298,156 304,162 310,168
              C316,174 320,182 322,192 C324,202 322,212 318,220
