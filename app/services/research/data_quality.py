@@ -1203,8 +1203,149 @@ class EWMAAnalyzer:
 
 
 # ---------------------------------------------------------------------------
-# Data Quality Framework (integrates all components)
+# EWMA Control Chart — Batch Compute (STA 346)
 # ---------------------------------------------------------------------------
+
+class EWMAChart:
+    """
+    Exponentially Weighted Moving Average control chart (batch mode).
+
+    Z_t = λ × X_t + (1 - λ) × Z_{t-1}
+    Control limits (exact, time-varying):
+        UCL_t = μ₀ + L × √(λ / (2 - λ) × (1 - (1 - λ)^(2t))) × σ
+        LCL_t = μ₀ - L × √(λ / (2 - λ) × (1 - (1 - λ)^(2t))) × σ
+    Steady-state limits (t → ∞):
+        UCL = μ₀ + L × √(λ / (2 - λ)) × σ
+        LCL = μ₀ - L × √(λ / (2 - λ)) × σ
+
+    Detects small sustained shifts that Shewhart charts miss.
+    Optimal for shifts of 0.25σ–1.50σ (STA 346: Montgomery).
+
+    References:
+    - Lucas, J.M. & Saccucci, M.S. (1990). Exponentially weighted
+      moving average control schemes: Properties and enhancements.
+      JQT, 22(1), 1-12.
+    - Montgomery, D.C. (2020). Statistical Quality Control. 8th ed.
+    """
+
+    def __init__(self):
+        pass
+
+    def compute(self, data: list, lambda_: float = 0.2, L: float = 3.0) -> dict:
+        """
+        Compute EWMA statistics and control limits for a batch of data.
+
+        Args:
+            data: List of numeric observations
+            lambda_: Smoothing parameter λ ∈ (0, 1].
+                     Small λ (0.05–0.10): sensitive to small shifts.
+                     Large λ (0.25–0.40): faster response to large shifts.
+            L: Control limit width in σ units (default 3.0 ≈ ARL₀ ≈ 370)
+
+        Returns:
+            Dict with EWMA values, control limits, signals, and diagnostics.
+        """
+        if not data:
+            return {
+                "error": "Empty data",
+                "ewma_values": [],
+                "control_limits": {"ucl": [], "lcl": [], "cl": None},
+                "signals": [],
+            }
+
+        arr = np.array(data, dtype=float)
+        n = len(arr)
+
+        # In-control parameters (estimated from data)
+        mu0 = float(np.mean(arr))
+        sigma = float(np.std(arr, ddof=1)) if n > 1 else 0.0
+
+        if sigma < 1e-15:
+            return {
+                "n": n,
+                "lambda": lambda_,
+                "L": L,
+                "mu0": round(mu0, 6),
+                "sigma": 0.0,
+                "ewma_values": [round(mu0, 6)] * n,
+                "control_limits": {
+                    "ucl": [round(mu0, 6)] * n,
+                    "lcl": [round(mu0, 6)] * n,
+                    "cl": round(mu0, 6),
+                },
+                "signals": [],
+                "current_ewma": round(mu0, 6),
+                "steady_state_ucl": round(mu0, 6),
+                "steady_state_lcl": round(mu0, 6),
+            }
+
+        # Compute EWMA values: Z_t = λ X_t + (1-λ) Z_{t-1}
+        ewma_values = np.zeros(n)
+        ewma_values[0] = arr[0]
+        for t in range(1, n):
+            ewma_values[t] = lambda_ * arr[t] + (1 - lambda_) * ewma_values[t - 1]
+
+        # Time-varying control limits (exact formula)
+        ucl = np.zeros(n)
+        lcl = np.zeros(n)
+        for t in range(1, n + 1):
+            ewma_var_factor = (lambda_ / (2 - lambda_)) * (1 - (1 - lambda_) ** (2 * t))
+            ewma_std = sigma * math.sqrt(max(ewma_var_factor, 0))
+            ucl[t - 1] = mu0 + L * ewma_std
+            lcl[t - 1] = mu0 - L * ewma_std
+
+        # Steady-state limits
+        ss_factor = math.sqrt(lambda_ / (2 - lambda_))
+        steady_ucl = mu0 + L * sigma * ss_factor
+        steady_lcl = mu0 - L * sigma * ss_factor
+
+        # Detect signals (EWMA beyond control limits)
+        signals = []
+        for t in range(n):
+            if ewma_values[t] > ucl[t]:
+                signals.append({
+                    "index": t,
+                    "ewma_value": round(float(ewma_values[t]), 6),
+                    "ucl": round(float(ucl[t]), 6),
+                    "lcl": round(float(lcl[t]), 6),
+                    "direction": "above",
+                    "message": (
+                        f"EWMA Z_{t+1}={ewma_values[t]:.4f} above "
+                        f"UCL={ucl[t]:.4f} — upward shift detected"
+                    ),
+                })
+            elif ewma_values[t] < lcl[t]:
+                signals.append({
+                    "index": t,
+                    "ewma_value": round(float(ewma_values[t]), 6),
+                    "ucl": round(float(ucl[t]), 6),
+                    "lcl": round(float(lcl[t]), 6),
+                    "direction": "below",
+                    "message": (
+                        f"EWMA Z_{t+1}={ewma_values[t]:.4f} below "
+                        f"LCL={lcl[t]:.4f} — downward shift detected"
+                    ),
+                })
+
+        return {
+            "n": n,
+            "lambda": lambda_,
+            "L": L,
+            "mu0": round(mu0, 6),
+            "sigma": round(sigma, 6),
+            "ewma_values": [round(float(v), 6) for v in ewma_values],
+            "control_limits": {
+                "ucl": [round(float(v), 6) for v in ucl],
+                "lcl": [round(float(v), 6) for v in lcl],
+                "cl": round(mu0, 6),
+            },
+            "steady_state_ucl": round(steady_ucl, 6),
+            "steady_state_lcl": round(steady_lcl, 6),
+            "signals": signals,
+            "n_signals": len(signals),
+            "current_ewma": round(float(ewma_values[-1]), 6),
+            "process_in_control": len(signals) == 0,
+        }
 
 class DataQualityFramework:
     """
