@@ -13,6 +13,14 @@ Infrastructure:
     EventBus    — Redis Streams for inter-agent communication
     AgentTracer — Observability for every agent decision
     BiasharaAgent — Base class with observe / think / act / reflect lifecycle
+
+Loop Patterns (from agentic AI research):
+    ReActAgent       — Reasoning + Acting with explicit trace
+    ReflexionAgent   — Self-improvement through self-critique
+    PlanExecuteAgent — Multi-step task planning with re-planning
+    EventSourcedAgent — Event sourcing for auditability and replay
+    SupervisorAgent  — Multi-agent coordination and supervision
+    EventStore       — Append-only event store for full audit trail
 """
 
 from app.agents.base import BiasharaAgent
@@ -24,13 +32,45 @@ from app.agents.implementations import (
     ReportGeneratorAgent,
     SelfEvolutionAgent,
 )
+from app.agents.loops import (
+    ReActAgent,
+    ReflexionAgent,
+    PlanExecuteAgent,
+    EventSourcedAgent,
+    SupervisorAgent,
+    EventStore,
+    ReActTrace,
+    ReasoningStep,
+    Critique,
+    ExecutionPlan,
+    PlanStep,
+    SupervisionPolicy,
+    SupervisedExecution,
+)
 
 __all__ = [
+    # Base
     "BiasharaAgent",
     "EventBus",
     "AgentTracer",
+    # Implementations
     "TransactionProcessorAgent",
     "IntelligenceGeneratorAgent",
     "ReportGeneratorAgent",
     "SelfEvolutionAgent",
+    # Loop Patterns
+    "ReActAgent",
+    "ReflexionAgent",
+    "PlanExecuteAgent",
+    "EventSourcedAgent",
+    "SupervisorAgent",
+    "EventStore",
+    # Data classes
+    "ReActTrace",
+    "ReasoningStep",
+    "Critique",
+    "ExecutionPlan",
+    "PlanStep",
+    "SupervisionPolicy",
+    "SupervisedExecution",
 ]

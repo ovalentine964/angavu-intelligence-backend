@@ -280,6 +280,50 @@ async def lifespan(app: FastAPI):
     app.state.agent_tracer = tracer
     app.state.agents = {a.name: a for a in agents}
 
+    # ── Loop Pattern Infrastructure ────────────────────────────────────
+    # Set up loop-enhanced agents and supervisor alongside the original agents
+    try:
+        from app.agents.loops import EventStore
+        from app.agents.loop_implementations import create_loop_enhanced_agents
+
+        loop_event_store = EventStore()
+        loop_infra = create_loop_enhanced_agents(event_store=loop_event_store)
+
+        # Inject event bus and tracer into loop-enhanced agents
+        for agent in loop_infra["agents"]:
+            agent.set_event_bus(event_bus)
+            agent.set_tracer(tracer)
+
+        # Subscribe loop-enhanced agents to the same event types
+        for agent in loop_infra["agents"]:
+            if agent.name == "TransactionProcessor":
+                await event_bus.subscribe(agent, [EventType.TRANSACTION_RECEIVED, EventType.BATCH_PROCESSED])
+            elif agent.name == "IntelligenceGenerator":
+                await event_bus.subscribe(agent, [EventType.TRANSACTION_PROCESSED, EventType.INTELLIGENCE_REQUESTED, EventType.MARKET_ALERT])
+            elif agent.name == "ReportGenerator":
+                await event_bus.subscribe(agent, [EventType.INTELLIGENCE_GENERATED, EventType.REPORT_REQUESTED, EventType.REPORT_DELIVERED])
+            elif agent.name == "SelfEvolution":
+                await event_bus.subscribe(agent, [EventType.FEEDBACK_RECEIVED, EventType.REPORT_DELIVERED, EventType.EVOLUTION_CYCLE_COMPLETE])
+
+        # Start loop-enhanced agents
+        for agent in loop_infra["agents"]:
+            await agent.start()
+
+        # Wire loop infrastructure into the API
+        set_loop_infrastructure(
+            supervisor=loop_infra["supervisor"],
+            event_store=loop_event_store,
+            agents=loop_infra["agents"],
+        )
+
+        app.state.loop_event_store = loop_event_store
+        app.state.loop_supervisor = loop_infra["supervisor"]
+        app.state.loop_agents = {a.name: a for a in loop_infra["agents"]}
+
+        logger.info("loop_patterns_initialized", agents=len(loop_infra["agents"]))
+    except Exception as exc:
+        logger.warning("loop_patterns_setup_failed", error=str(exc))
+
     yield
 
     # Shutdown
@@ -527,6 +571,10 @@ from app.api.worker_features import router as worker_features_router
 # Multi-agent architecture (domain agent routing, worker classification)
 from app.api.agent_router import router as agent_router
 
+# Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
+from app.api.agent_loops import router as agent_loops_router
+from app.api.agent_loops import set_loop_infrastructure
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -545,6 +593,7 @@ app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
 app.include_router(infrastructure_v2_router, prefix=settings.API_V1_PREFIX)
 app.include_router(worker_features_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
+app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
