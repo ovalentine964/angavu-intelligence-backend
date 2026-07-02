@@ -1,24 +1,69 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0D1929"/>
+      <stop offset="0%" stop-color="#162038"/>
       <stop offset="100%" stop-color="#1B2A4A"/>
     </linearGradient>
+    <linearGradient id="pulse" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E8853D"/>
+      <stop offset="100%" stop-color="#F5A623"/>
+    </linearGradient>
+    <!-- Kanga-inspired geometric pattern -->
+    <pattern id="kanga" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="none"/>
+      <path d="M12,0 L24,12 L12,24 L0,12Z" fill="none" stroke="#E8853D" stroke-width="0.4" opacity="0.07"/>
+      <circle cx="12" cy="12" r="1.5" fill="#F5A623" opacity="0.05"/>
+    </pattern>
   </defs>
-  
+
   <!-- Rounded square background -->
   <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
-  
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#kanga)"/>
+
+  <!-- Warm circle — Africa, community, wholeness -->
+  <circle cx="256" cy="258" r="200" fill="none" stroke="#E8853D" stroke-width="1.2" opacity="0.06"/>
+  <circle cx="256" cy="258" r="180" fill="none" stroke="#F5A623" stroke-width="0.6" opacity="0.04"/>
+
+  <!-- Africa continent silhouette — subtle warm accent behind the B -->
+  <g opacity="0.07" fill="#F5A623">
+    <path d="M252,118 C258,114 266,112 274,114 C280,116 284,120 286,126
+             C288,132 290,140 294,148 C298,156 304,162 310,168
+             C316,174 320,182 322,192 C324,202 322,212 318,220
+             C314,228 308,234 304,242 C300,250 298,260 296,270
+             C294,280 290,288 284,296 C278,304 272,312 268,322
+             C264,332 262,342 258,352 C254,362 248,370 242,376
+             C236,382 230,388 226,396 C222,404 220,410 216,414
+             C212,418 206,418 202,412 C198,406 198,398 200,390
+             C202,382 206,374 208,366 C210,358 210,350 208,342
+             C206,334 202,328 198,322 C194,316 192,308 192,300
+             C192,292 194,284 198,278 C202,272 206,266 208,258
+             C210,250 210,242 208,234 C206,226 204,218 204,210
+             C204,202 206,194 210,188 C214,182 218,176 222,170
+             C226,164 228,156 230,148 C232,140 234,132 238,126
+             C242,120 246,118 252,118Z"/>
+  </g>
+
   <!-- B letterform -->
   <rect x="120" y="120" width="56" height="272" rx="14" fill="#FFFFFF"/>
   <path d="M176,120 L268,120 C314,120 352,158 352,200 C352,242 314,264 268,264 L176,264Z" fill="#FFFFFF"/>
   <path d="M176,280 L274,280 C318,280 356,314 356,352 C356,390 318,396 274,396 L176,396Z" fill="#FFFFFF"/>
-  
-  <!-- Pulse line — the signature accent -->
+
+  <!-- Pulse line — heartbeat meets market chart -->
   <polyline points="176,272 208,272 224,238 244,304 260,228 278,280 300,272 370,272"
-            fill="none" stroke="#E8853D" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  
-  <!-- Data node dots on pulse peaks -->
+            fill="none" stroke="url(#pulse)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Data node dots -->
   <circle cx="224" cy="238" r="7" fill="#F5A623"/>
   <circle cx="260" cy="228" r="7" fill="#F5A623"/>
+
+  <!-- Corner accent dots — kanga-inspired -->
+  <circle cx="52" cy="52" r="3.5" fill="#E8853D" opacity="0.12"/>
+  <circle cx="460" cy="52" r="3.5" fill="#E8853D" opacity="0.12"/>
+  <circle cx="52" cy="460" r="3.5" fill="#E8853D" opacity="0.12"/>
+  <circle cx="460" cy="460" r="3.5" fill="#E8853D" opacity="0.12"/>
+  <!-- Inner corner dots -->
+  <circle cx="72" cy="72" r="2" fill="#F5A623" opacity="0.08"/>
+  <circle cx="440" cy="72" r="2" fill="#F5A623" opacity="0.08"/>
+  <circle cx="72" cy="440" r="2" fill="#F5A623" opacity="0.08"/>
+  <circle cx="440" cy="440" r="2" fill="#F5A623" opacity="0.08"/>
 </svg>
