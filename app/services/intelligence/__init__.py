@@ -22,6 +22,7 @@ from app.services.intelligence.tax_base import TaxBaseService
 from app.services.intelligence.distribution_gap import DistributionGapService
 from app.services.intelligence.gdp_estimator import GDPEstimatorService
 from app.services.intelligence.inflation_tracker import InflationTrackerService
+from app.services.intelligence.giving_insights import GivingInsightsService
 
 __all__ = [
     "SokoPulseService",
@@ -32,4 +33,5 @@ __all__ = [
     "DistributionGapService",
     "GDPEstimatorService",
     "InflationTrackerService",
+    "GivingInsightsService",
 ]
