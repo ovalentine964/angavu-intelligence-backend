@@ -256,6 +256,7 @@ from app.api.reports import router as reports_router
 from app.api.intelligence import router as intelligence_router
 from app.api.intelligence_products import router as intelligence_products_router
 from app.api.whatsapp import router as whatsapp_router
+from app.api.federated_learning import router as fl_router
 
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
@@ -264,6 +265,7 @@ app.include_router(reports_router, prefix=settings.API_V1_PREFIX)
 app.include_router(intelligence_router, prefix=settings.API_V1_PREFIX)
 app.include_router(intelligence_products_router, prefix=settings.API_V1_PREFIX)
 app.include_router(whatsapp_router, prefix=settings.API_V1_PREFIX)
+app.include_router(fl_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
