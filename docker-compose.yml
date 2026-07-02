@@ -15,28 +15,45 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
       - REDIS_URL=redis://redis:6379/0
-      - OPENWA_API_URL=http://openwa:8080
-      - OPENWA_API_KEY=${OPENWA_API_KEY}
-      - OPENWA_SESSION_ID=msaidizi
+      - OPENWA_URL=http://openwa:3000
+      - OPENWA_WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET}
     volumes:
       - ./logs:/app/logs
     depends_on:
       - postgres
       - redis
-      - openwa
     restart: unless-stopped
 
   openwa:
-    image: openwa/wa-automate:latest
+    build:
+      context: ./openwa
+      dockerfile: Dockerfile
     container_name: msaidizi-openwa
     ports:
-      - "8080:8080"
+      - "3000:3000"
     environment:
-      - PORT=8080
-      - API_KEY=${OPENWA_API_KEY}
-      - SESSION_ID=msaidizi
+      - OPENWA_PORT=3000
+      - OPENWA_BACKEND_URL=http://backend:8000
+      - OPENWA_WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET}
+      - WHISPER_API_URL=http://whisper:9000
+      - LOG_LEVEL=info
     volumes:
-      - openwa-data:/app/session-data
+      - openwa-data:/app/data
+    depends_on:
+      - backend
+      - whisper
+    restart: unless-stopped
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: msaidizi-whisper
+    ports:
+      - "9000:9000"
+    environment:
+      - ASR_MODEL=base
+      - ASR_ENGINE=openai_whisper
+    volumes:
+      - whisper-models:/root/.cache
     restart: unless-stopped
 
   postgres:
@@ -63,3 +80,4 @@ volumes:
   postgres-data:
   redis-data:
   openwa-data:
+  whisper-models:

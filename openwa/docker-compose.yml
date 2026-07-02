@@ -14,6 +14,7 @@ services:
       OPENWA_PORT: "3000"
       OPENWA_BACKEND_URL: http://host.docker.internal:8000
       OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:?Set OPENWA_WEBHOOK_SECRET in .env}
+      WHISPER_API_URL: http://whisper:9000
       LOG_LEVEL: info
     ports:
       - "3000:3000"

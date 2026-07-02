@@ -19,6 +19,7 @@ const express = require('express');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
+const FormData = require('form-data');
 require('dotenv').config();
 
 // =========================================================================
@@ -33,9 +34,41 @@ const CONFIG = {
     logLevel: process.env.LOG_LEVEL || 'info',
     maxRetries: 5,
     retryDelay: 5000,
+    whisperUrl: process.env.WHISPER_API_URL || 'http://whisper:9000',
 };
 
 const logger = pino({ level: CONFIG.logLevel });
+
+/**
+ * Transcribe audio buffer using Whisper STT.
+ * Sends audio to a local Whisper API endpoint for transcription.
+ * Supports Swahili, English, and Sheng.
+ *
+ * @param {Buffer} audioBuffer - Audio data (OGG/Opus from WhatsApp)
+ * @returns {Promise<string>} Transcribed text
+ */
+async function transcribeAudio(audioBuffer) {
+    try {
+        const form = new FormData();
+        form.append('audio_file', audioBuffer, {
+            filename: 'voice.ogg',
+            contentType: 'audio/ogg',
+        });
+        form.append('language', 'sw');  // Prefer Swahili
+
+        const response = await axios.post(`${CONFIG.whisperUrl}/asr`, form, {
+            headers: form.getHeaders(),
+            timeout: 30000,
+        });
+
+        const text = response.data?.text || response.data?.transcription || '';
+        logger.info({ length: text.length }, 'Voice transcribed');
+        return text.trim();
+    } catch (err) {
+        logger.error({ error: err.message }, 'Whisper transcription failed');
+        return '';
+    }
+}
 
 // =========================================================================
 // Express API (for sending messages from backend)
@@ -248,9 +281,29 @@ async function handleIncomingMessage(msg) {
         mediaUrl = messageContent.imageMessage.url;
     } else if (messageContent.audioMessage) {
         messageType = 'voice';
-        // Voice messages need transcription
-        // Baileys doesn't transcribe — would need Whisper integration
-        messageText = '[voice note]';
+        // Download audio buffer and transcribe via Whisper STT
+        try {
+            const buffer = await sock.downloadMediaMessage(msg);
+            const transcription = await transcribeAudio(buffer);
+            messageText = transcription || '';
+        } catch (err) {
+            logger.error({ error: err.message }, 'Voice transcription failed');
+            messageText = '';
+        }
+        if (!messageText.trim()) {
+            // Send helpful fallback instead of "I don't understand"
+            const fallbackMsg = '🎤 Sijaweza kusikia voice note yako vizuri.
+
+' +
+                'Tafadhali:
+' +
+                '• Tuma voice note kwa utulivu
+' +
+                '• Au andika ujumbe: "Nimeuza sukari 5 kwa 500"';
+            const jid = msg.key.remoteJid;
+            try { await sock.sendMessage(jid, { text: fallbackMsg }); } catch (e) {}
+            return;
+        }
     } else if (messageContent.documentMessage) {
         messageType = 'document';
         messageText = messageContent.documentMessage.caption || '';
