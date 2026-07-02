@@ -75,6 +75,27 @@
     <text x="0" y="320" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="18" font-weight="500" fill="url(#tagline-grad)" letter-spacing="3">ECONOMIC INTELLIGENCE FOR AFRICA</text>
   </g>
 
+  <!-- === AFRICA CONTINENT — prominent on right side === -->
+  <g transform="translate(900, 40)" opacity="0.18" fill="none" stroke="#E8853D" stroke-width="2">
+    <!-- Africa continent outline -->
+    <path d="M120,20 C130,15 145,12 158,18 C168,24 175,35 178,48
+             C182,65 185,82 192,95 C198,108 208,118 215,130
+             C222,142 225,155 224,170 C223,185 218,198 212,210
+             C206,222 202,235 200,250 C198,265 194,278 188,290
+             C182,302 175,312 168,322 C161,332 156,342 152,355
+             C148,368 140,378 132,385 C124,392 118,398 114,405
+             C110,412 108,418 104,420 C100,422 95,420 92,414
+             C89,408 88,400 90,390 C92,380 96,370 98,358
+             C100,346 100,334 98,322 C96,310 92,300 90,290
+             C88,280 88,268 90,256 C92,244 96,234 98,222
+             C100,210 100,198 98,186 C96,174 94,164 94,152
+             C94,140 96,128 100,118 C104,108 108,98 112,86
+             C116,74 118,62 120,50 C122,38 122,28 120,20Z"/>
+    <!-- Madagascar -->
+    <path d="M230,280 C235,275 240,278 242,285 C244,292 240,302 235,308
+             C230,314 225,312 224,305 C223,298 225,290 230,280Z"/>
+  </g>
+
   <!-- Decorative accent line under tagline -->
   <rect x="420" y="340" width="80" height="3" rx="1.5" fill="#E8853D" opacity="0.5"/>
 
