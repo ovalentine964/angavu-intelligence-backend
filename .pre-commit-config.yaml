@@ -1,4 +1,4 @@
-# Pre-commit hooks for Biashara Intelligence Backend
+# Pre-commit hooks for Angavu Intelligence Backend
 # Install: pip install pre-commit && pre-commit install
 # Run all: pre-commit run --all-files
 
