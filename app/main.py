@@ -650,6 +650,9 @@ from app.api.v1.goals import router as goals_router
 # 12-Factor: Multi-channel triggers (WhatsApp, USSD, SMS, Voice)
 from app.api.trigger_router import router as trigger_router
 
+# Stickiness / Engagement (gamification, badges, streaks, social proof)
+from app.api.stickiness import router as stickiness_router
+
 # Tithe Tracker — dedicated giving tracking API
 from app.api.v1.tithe import router as tithe_router
 
@@ -678,6 +681,7 @@ app.include_router(long_horizon_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
 app.include_router(goals_router, prefix=settings.API_V1_PREFIX)
 app.include_router(trigger_router, prefix=settings.API_V1_PREFIX)
+app.include_router(stickiness_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tithe_router, prefix=settings.API_V1_PREFIX)
 
 

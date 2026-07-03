@@ -41,6 +41,13 @@ from app.models.agent_models import (
     AgentInsight,
     AgentRecommendation,
 )
+from app.models.stickiness import (
+    UserEngagement,
+    Badge,
+    UserBadge,
+    UserLevel,
+    Streak,
+)
 
 __all__ = [
     "User",
@@ -78,4 +85,9 @@ __all__ = [
     "AgentConfig",
     "AgentInsight",
     "AgentRecommendation",
+    "UserEngagement",
+    "Badge",
+    "UserBadge",
+    "UserLevel",
+    "Streak",
 ]
