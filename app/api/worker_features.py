@@ -114,16 +114,16 @@ async def record_giving(
     and an encouragement message in Swahili and English.
     """
     try:
-        result = await tithe_service.record_giving(
+        result = await tithe_service.record_tithe(
             db=db,
             user_id=request.user_id,
             amount=request.amount,
-            category=request.category,
             currency=request.currency,
-            custom_category_name=request.custom_category_name,
+            method=request.input_method,
             recipient=request.recipient,
+            purpose=request.category,
             giving_date=request.giving_date,
-            input_method=request.input_method,
+            custom_category_name=request.custom_category_name,
             voice_transcript=request.voice_transcript,
             notes=request.notes,
         )
@@ -148,7 +148,7 @@ async def giving_report(
     comparison with previous period, and best month (for annual).
     """
     try:
-        result = await tithe_service.get_giving_report(
+        result = await tithe_service.get_tithe_report(
             db=db,
             user_id=user_id,
             period=period,

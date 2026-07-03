@@ -12,8 +12,9 @@ from app.models.intelligence_products import (
     TaxBaseEstimation,
     DistributionGapReport,
 )
+from app.models.tithe import TitheRecord, TitheReport, AbundancePattern
 from app.models.worker_features import (
-    TitheRecord,
+    # TitheRecord is re-exported from app.models.tithe
     GoalRecord,
     GoalContribution,
     LoanRecord,
@@ -22,6 +23,11 @@ from app.models.worker_features import (
     MindsetLesson,
     MindsetLessonProgress,
     RichHabitScore,
+)
+from app.models.goal import (
+    Goal,
+    GoalMilestone,
+    GoalProgressEntry,
 )
 from app.models.infrastructure import (
     ServerMetric,
@@ -51,6 +57,8 @@ __all__ = [
     "TaxBaseEstimation",
     "DistributionGapReport",
     "TitheRecord",
+    "TitheReport",
+    "AbundancePattern",
     "GoalRecord",
     "GoalContribution",
     "LoanRecord",
@@ -59,6 +67,9 @@ __all__ = [
     "MindsetLesson",
     "MindsetLessonProgress",
     "RichHabitScore",
+    "Goal",
+    "GoalMilestone",
+    "GoalProgressEntry",
     "ServerMetric",
     "ModelVersion",
     "FederatedUpdate",

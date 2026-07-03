@@ -644,8 +644,14 @@ from app.api.long_horizon import set_long_horizon_infrastructure
 # MCP (Model Context Protocol) server
 from app.mcp.router import router as mcp_router
 
+# Goal Planner (accountability-driven goal tracking)
+from app.api.v1.goals import router as goals_router
+
 # 12-Factor: Multi-channel triggers (WhatsApp, USSD, SMS, Voice)
 from app.api.trigger_router import router as trigger_router
+
+# Tithe Tracker — dedicated giving tracking API
+from app.api.v1.tithe import router as tithe_router
 
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
@@ -670,7 +676,9 @@ app.include_router(skills_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
 app.include_router(long_horizon_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
+app.include_router(goals_router, prefix=settings.API_V1_PREFIX)
 app.include_router(trigger_router, prefix=settings.API_V1_PREFIX)
+app.include_router(tithe_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================

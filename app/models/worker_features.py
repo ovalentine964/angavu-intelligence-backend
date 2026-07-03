@@ -34,70 +34,9 @@ from app.db.database import Base
 # =========================================================================
 # 1. TitheRecord — Giving & Tithe Tracking
 # =========================================================================
-
-
-class TitheRecord(Base):
-    """
-    Individual giving record — tithe, offering, zakat, harambee, charity.
-
-    Tracks giving for consistency scoring, abundance pattern analysis,
-    and monthly/annual reporting. Data is confession-level sensitive.
-    """
-
-    __tablename__ = "tithe_records"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    amount = Column(Float, nullable=False, doc="Giving amount in local currency")
-    currency = Column(
-        String(3), nullable=False, default="KES",
-        doc="ISO currency code (KES, UGX, TZS, NGN)",
-    )
-    category = Column(
-        Enum(
-            "tithe", "offering", "zakat", "harambee", "charity",
-            "building_fund", "missions", "custom",
-            name="giving_category_enum",
-        ),
-        nullable=False,
-        default="offering",
-        doc="Giving category",
-    )
-    custom_category_name = Column(
-        String(100), nullable=True,
-        doc="Custom category label when category=custom",
-    )
-    recipient = Column(
-        String(200), nullable=True,
-        doc="Church, mosque, person, or community name",
-    )
-    giving_date = Column(
-        Date, nullable=False,
-        doc="Date the giving occurred",
-    )
-    input_method = Column(
-        Enum("voice", "manual", "mpesa_parse", name="giving_input_method_enum"),
-        nullable=False,
-        default="manual",
-    )
-    voice_transcript = Column(Text, nullable=True, doc="Raw voice input if applicable")
-    notes = Column(Text, nullable=True)
-    created_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        Index("idx_tithe_user_date", "user_id", "giving_date"),
-        Index("idx_tithe_user_category", "user_id", "category"),
-        Index("idx_tithe_created", "created_at"),
-    )
+# Canonical definition lives in app.models.tithe; re-exported here for
+# backward compatibility with existing imports.
+from app.models.tithe import TitheRecord  # noqa: F401
 
 
 # =========================================================================
