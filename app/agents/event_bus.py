@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TYPE_CHECKING
 
 import structlog
@@ -54,6 +56,9 @@ CONSUMER_GROUP = "biashara_agents"
 # Default max length for streams (prevents unbounded growth)
 MAX_STREAM_LENGTH = 10_000
 
+# Event persistence directory (relative to workspace)
+_PERSIST_DIR = Path(".openclaw/tmp/event_bus")
+
 
 class EventBus:
     """
@@ -67,7 +72,7 @@ class EventBus:
     - Event correlation for request/response patterns
     """
 
-    def __init__(self):
+    def __init__(self, persist_events: bool = True):
         self._redis: Any = None  # aioredis.Redis | None
         self._subscriptions: Dict[str, List[str]] = defaultdict(list)
         # event_type → [agent_name, ...]
@@ -83,6 +88,12 @@ class EventBus:
         # Dead letter queue for events that fail processing
         self._dead_letters: List[Dict[str, Any]] = []
 
+        # Event persistence (append-only JSONL for audit/replay)
+        self._persist_events = persist_events
+        self._persist_dir: Optional[Path] = None
+        self._persist_handles: Dict[str, Any] = {}  # stream_key → file handle
+        self._persisted_count: int = 0
+
         self._logger = logger.bind(component="event_bus")
 
     # ── Lifecycle ───────────────────────────────────────────────────
@@ -92,7 +103,18 @@ class EventBus:
         Connect to Redis. Falls back to in-memory mode if unavailable.
 
         Mirrors the graceful degradation pattern in task_queue.py.
+        Also initializes event persistence directory.
         """
+        # Set up persistence directory
+        if self._persist_events:
+            try:
+                self._persist_dir = _PERSIST_DIR
+                self._persist_dir.mkdir(parents=True, exist_ok=True)
+                self._logger.info("event_persistence_enabled", path=str(self._persist_dir))
+            except Exception as exc:
+                self._logger.warning("event_persistence_setup_failed", error=str(exc))
+                self._persist_dir = None
+
         redis_url = settings.REDIS_URL
         if not redis_url:
             self._logger.info("no_redis_url_fallback_in_memory")
@@ -108,6 +130,10 @@ class EventBus:
             )
             # Verify connection
             await self._redis.ping()
+
+            # Auto-create consumer groups for all known event types
+            await self._ensure_consumer_groups()
+
             self._logger.info("event_bus_connected", redis_url=redis_url.split("@")[-1])
         except Exception as exc:
             self._logger.warning(
@@ -117,12 +143,45 @@ class EventBus:
             self._redis = None
             self._in_memory_enabled = True
 
+    async def _ensure_consumer_groups(self) -> None:
+        """
+        Auto-create Redis Streams consumer groups for all known event types.
+
+        Called once on connect. Uses mkstream=True so streams are created
+        on demand if they don't exist yet.
+        """
+        if not self._redis:
+            return
+
+        from app.agents.base import EventType
+
+        for event_type in EventType:
+            stream_key = f"{STREAM_PREFIX}{event_type.value}"
+            try:
+                await self._redis.xgroup_create(
+                    stream_key, CONSUMER_GROUP, id="0", mkstream=True,
+                )
+                self._logger.debug("consumer_group_created", stream=stream_key)
+            except Exception:
+                pass  # Group already exists — idempotent
+
     async def disconnect(self) -> None:
-        """Clean up Redis connection."""
+        """Clean up Redis connection and close persistence handles."""
+        # Close persistence file handles
+        for handle in self._persist_handles.values():
+            try:
+                handle.close()
+            except Exception:
+                pass
+        self._persist_handles.clear()
+
         if self._redis:
             await self._redis.close()
             self._redis = None
-        self._logger.info("event_bus_disconnected")
+        self._logger.info(
+            "event_bus_disconnected",
+            events_persisted=self._persisted_count,
+        )
 
     # ── Publish ─────────────────────────────────────────────────────
 
@@ -144,6 +203,9 @@ class EventBus:
                     maxlen=MAX_STREAM_LENGTH,
                     approximate=True,
                 )
+                # Persist event to disk for audit/replay
+                self._persist_event(stream_key, event_data)
+
                 self._logger.debug(
                     "event_published",
                     event_type=event.event_type.value,
@@ -164,6 +226,9 @@ class EventBus:
         # Trim to max length
         if len(self._pending_buffer[stream_key]) > MAX_STREAM_LENGTH:
             self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-MAX_STREAM_LENGTH:]
+
+        # Persist event to disk for audit/replay
+        self._persist_event(stream_key, event_data)
 
         self._logger.debug(
             "event_published_in_memory",
@@ -340,6 +405,65 @@ class EventBus:
                     "timestamp": time.time(),
                 })
 
+    # ── Event Persistence ────────────────────────────────────────────
+
+    def _persist_event(self, stream_key: str, event_data: Dict[str, Any]) -> None:
+        """
+        Append an event to a JSONL file for audit and replay.
+
+        One file per event type, stored in .openclaw/tmp/event_bus/.
+        Each line is a JSON object with the full event data.
+        """
+        if not self._persist_dir:
+            return
+
+        try:
+            # Derive filename from stream key
+            etype = stream_key.replace(STREAM_PREFIX, "").replace(".", "_")
+            filepath = self._persist_dir / f"{etype}.jsonl"
+
+            with open(filepath, "a") as f:
+                f.write(json.dumps(event_data, default=str) + "\n")
+
+            self._persisted_count += 1
+        except Exception as exc:
+            self._logger.debug("persist_event_failed", error=str(exc))
+
+    def get_persisted_events(
+        self,
+        event_type: str,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Read persisted events from disk for replay or debugging.
+
+        Args:
+            event_type: The event type (e.g. "transaction.processed")
+            limit: Maximum number of events to return
+
+        Returns:
+            List of event dictionaries, most recent last
+        """
+        if not self._persist_dir:
+            return []
+
+        etype = event_type.replace(".", "_")
+        filepath = self._persist_dir / f"{etype}.jsonl"
+        if not filepath.exists():
+            return []
+
+        events = []
+        try:
+            with open(filepath) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        events.append(json.loads(line))
+        except Exception as exc:
+            self._logger.warning("read_persisted_events_failed", error=str(exc))
+
+        return events[-limit:]
+
     # ── Monitoring ──────────────────────────────────────────────────
 
     def get_stats(self) -> Dict[str, Any]:
@@ -354,6 +478,8 @@ class EventBus:
             },
             "dead_letter_count": len(self._dead_letters),
             "dead_letters_recent": self._dead_letters[-5:],
+            "persisted_count": self._persisted_count,
+            "persistence_enabled": self._persist_dir is not None,
         }
 
     def get_dead_letters(self) -> List[Dict[str, Any]]:

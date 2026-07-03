@@ -174,5 +174,33 @@ class IntelligenceCache:
             self._redis = None
 
 
+    def __call__(self, ttl: int = 3600):
+        """
+        Allow using the cache instance as a decorator.
+
+        Usage:
+            @intelligence_cache(ttl=300)
+            async def my_function(...):
+                ...
+        """
+        import functools
+
+        def decorator(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                # Try cache first
+                product = func.__name__
+                cached = await self.get(product, **kwargs)
+                if cached is not None:
+                    return cached
+                # Execute and cache
+                result = await func(*args, **kwargs)
+                if result is not None:
+                    await self.set(product, result, ttl_override=ttl, **kwargs)
+                return result
+            return wrapper
+        return decorator
+
+
 # Singleton cache instance
 intelligence_cache = IntelligenceCache()

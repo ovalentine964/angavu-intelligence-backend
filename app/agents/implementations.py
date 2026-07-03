@@ -55,7 +55,7 @@ class TransactionProcessorAgent(BiasharaAgent):
     - Validate data quality
     """
 
-    def __init__(self):
+    def __init__(self, pipeline: Any = None):
         super().__init__(
             name="TransactionProcessor",
             role="Data cleaning and structuring specialist",
@@ -67,10 +67,17 @@ class TransactionProcessorAgent(BiasharaAgent):
                 "data_quality_validation",
             ],
         )
+        # Real service dependency (injected by factory or main)
+        self._pipeline: Any = pipeline  # DataPipeline | None
+
         # Wire skills
         registry = get_skill_registry()
         for skill in registry.get_skills_for_agent(self.name):
             self.tools.register(skill.name, skill.safe_execute, skill.description)
+
+    def set_pipeline(self, pipeline: Any) -> None:
+        """Inject the DataPipeline service."""
+        self._pipeline = pipeline
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -149,15 +156,34 @@ class TransactionProcessorAgent(BiasharaAgent):
         """
         Execute transaction processing via the DataPipeline.
 
-        In production, this calls DataPipeline.clean_transactions().
-        For the agent runtime, we emit the downstream event that
-        triggers the intelligence generation pipeline.
+        When a real DataPipeline is injected, calls clean_transactions()
+        to normalize product names, categorize, and validate data quality.
+        Always emits downstream events for the IntelligenceGenerator.
         """
         start = time.time()
 
         try:
             user_id = decision.parameters.get("user_id", "unknown")
             is_batch = decision.parameters.get("is_batch", False)
+
+            # Call real service if available
+            cleaned_records = []
+            if self._pipeline:
+                try:
+                    cleaned_records = await self._pipeline.clean_transactions(
+                        user_id=user_id,
+                    )
+                    self._logger.info(
+                        "pipeline_clean_transactions",
+                        user_id=user_id,
+                        records_cleaned=len(cleaned_records),
+                    )
+                except Exception as pipeline_exc:
+                    self._logger.warning(
+                        "pipeline_call_failed",
+                        error=str(pipeline_exc),
+                        fallback=True,
+                    )
 
             # Build downstream event for the IntelligenceGenerator
             downstream_event = AgentEvent(
@@ -168,6 +194,7 @@ class TransactionProcessorAgent(BiasharaAgent):
                     "is_batch": is_batch,
                     "processed_at": datetime.now(timezone.utc).isoformat(),
                     "status": "cleaned_and_validated",
+                    "records_cleaned": len(cleaned_records),
                 },
             )
 
@@ -179,6 +206,7 @@ class TransactionProcessorAgent(BiasharaAgent):
                     "user_id": user_id,
                     "is_batch": is_batch,
                     "status": "processed",
+                    "records_cleaned": len(cleaned_records),
                 },
                 duration_ms=duration_ms,
                 events_to_publish=[downstream_event],
@@ -221,7 +249,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
     - Anomaly detection and alerting
     """
 
-    def __init__(self):
+    def __init__(self, soko_pulse: Any = None, alama_score: Any = None):
         super().__init__(
             name="IntelligenceGenerator",
             role="Economic intelligence analyst",
@@ -234,10 +262,22 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                 "econometric_modeling",
             ],
         )
+        # Real service dependencies (injected by factory or main)
+        self._soko_pulse: Any = soko_pulse  # SokoPulseService | None
+        self._alama_score: Any = alama_score  # AlamaScoreService | None
+
         # Wire skills
         registry = get_skill_registry()
         for skill in registry.get_skills_for_agent(self.name):
             self.tools.register(skill.name, skill.safe_execute, skill.description)
+
+    def set_soko_pulse(self, service: Any) -> None:
+        """Inject the SokoPulseService for price forecasting."""
+        self._soko_pulse = service
+
+    def set_alama_score(self, service: Any) -> None:
+        """Inject the AlamaScoreService for credit scoring."""
+        self._alama_score = service
 
     async def observe(self, event: AgentEvent) -> None:
         """Process transaction-processed events and market alerts."""
@@ -312,15 +352,48 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         """
         Generate intelligence products.
 
-        In production, this calls SokoPulseService and AlamaScoreService.
-        For the agent runtime, we emit the downstream events that
-        trigger report generation and alert delivery.
+        Calls real SokoPulseService and AlamaScoreService when available.
+        Always emits downstream events for ReportGenerator.
         """
         start = time.time()
 
         try:
             user_id = decision.parameters.get("user_id", "unknown")
             products = decision.parameters.get("products", [])
+
+            # Call real services when available
+            forecast_result = None
+            score_result = None
+
+            if "price_forecast" in products and self._soko_pulse:
+                try:
+                    forecast_result = await self._soko_pulse.generate_demand_forecast(
+                        user_id=user_id,
+                    )
+                    self._logger.info(
+                        "soko_pulse_forecast_generated",
+                        user_id=user_id,
+                    )
+                except Exception as svc_exc:
+                    self._logger.warning(
+                        "soko_pulse_failed",
+                        error=str(svc_exc),
+                    )
+
+            if "credit_score" in products and self._alama_score:
+                try:
+                    score_result = await self._alama_score.compute_score(
+                        user_id=user_id,
+                    )
+                    self._logger.info(
+                        "alama_score_computed",
+                        user_id=user_id,
+                    )
+                except Exception as svc_exc:
+                    self._logger.warning(
+                        "alama_score_failed",
+                        error=str(svc_exc),
+                    )
 
             events_to_publish = []
 
@@ -331,6 +404,8 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                 payload={
                     "user_id": user_id,
                     "products_generated": products,
+                    "has_forecast": forecast_result is not None,
+                    "has_credit_score": score_result is not None,
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                 },
             ))
@@ -343,6 +418,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                     payload={
                         "user_id": user_id,
                         "forecast_type": "soko_pulse",
+                        "service_called": self._soko_pulse is not None,
                     },
                 ))
 
@@ -354,6 +430,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                     payload={
                         "user_id": user_id,
                         "score_type": "alama_score",
+                        "service_called": self._alama_score is not None,
                     },
                 ))
 
@@ -365,6 +442,8 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                     "user_id": user_id,
                     "products_generated": products,
                     "product_count": len(products),
+                    "forecast_result": str(forecast_result)[:500] if forecast_result else None,
+                    "score_result": str(score_result)[:500] if score_result else None,
                 },
                 duration_ms=duration_ms,
                 events_to_publish=events_to_publish,
@@ -406,7 +485,7 @@ class ReportGeneratorAgent(BiasharaAgent):
     - Schedule recurring reports
     """
 
-    def __init__(self):
+    def __init__(self, report_generator: Any = None):
         super().__init__(
             name="ReportGenerator",
             role="Report creation and delivery specialist",
@@ -420,10 +499,17 @@ class ReportGeneratorAgent(BiasharaAgent):
                 "multilingual_support",
             ],
         )
+        # Real service dependency (injected by factory or main)
+        self._report_generator: Any = report_generator  # ReportGenerator | None
+
         # Wire skills
         registry = get_skill_registry()
         for skill in registry.get_skills_for_agent(self.name):
             self.tools.register(skill.name, skill.safe_execute, skill.description)
+
+    def set_report_generator(self, service: Any) -> None:
+        """Inject the ReportGenerator service."""
+        self._report_generator = service
 
     async def observe(self, event: AgentEvent) -> None:
         """Filter for intelligence and report events."""
@@ -500,9 +586,8 @@ class ReportGeneratorAgent(BiasharaAgent):
         """
         Generate and deliver the report.
 
-        In production, this calls ReportGenerator.generate_*() and
-        WhatsAppDelivery.deliver(). For the agent runtime, we emit
-        the downstream events.
+        Calls the real ReportGenerator service when available.
+        Always emits downstream events for SelfEvolution.
         """
         start = time.time()
 
@@ -510,6 +595,31 @@ class ReportGeneratorAgent(BiasharaAgent):
             user_id = decision.parameters.get("user_id", "unknown")
             report_type = decision.parameters.get("report_type", "daily")
             language = decision.parameters.get("language", "sw")
+
+            # Call real service if available
+            report_content = None
+            if self._report_generator:
+                try:
+                    generate_fn = {
+                        "daily": self._report_generator.generate_daily,
+                        "weekly": self._report_generator.generate_weekly,
+                        "monthly": self._report_generator.generate_monthly,
+                        "semiannual": self._report_generator.generate_semiannual,
+                        "annual": self._report_generator.generate_annual,
+                    }.get(report_type)
+
+                    if generate_fn:
+                        report_content = generate_fn(user_id=user_id, language=language)
+                        self._logger.info(
+                            "report_generated_via_service",
+                            user_id=user_id,
+                            report_type=report_type,
+                        )
+                except Exception as svc_exc:
+                    self._logger.warning(
+                        "report_service_failed",
+                        error=str(svc_exc),
+                    )
 
             # Report generated event
             report_event = AgentEvent(
@@ -519,11 +629,12 @@ class ReportGeneratorAgent(BiasharaAgent):
                     "user_id": user_id,
                     "report_type": report_type,
                     "language": language,
+                    "service_called": self._report_generator is not None,
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
 
-            # Report delivered event (in production, this happens after WhatsApp delivery)
+            # Report delivered event
             delivery_event = AgentEvent(
                 event_type=EventType.REPORT_DELIVERED,
                 source=self.name,
@@ -544,6 +655,7 @@ class ReportGeneratorAgent(BiasharaAgent):
                     "report_type": report_type,
                     "language": language,
                     "channel": "whatsapp",
+                    "report_content_length": len(report_content) if report_content else 0,
                 },
                 duration_ms=duration_ms,
                 events_to_publish=[report_event, delivery_event],
@@ -585,7 +697,7 @@ class SelfEvolutionAgent(BiasharaAgent):
     - Drive the self-evolution flywheel
     """
 
-    def __init__(self):
+    def __init__(self, evolution_service: Any = None):
         super().__init__(
             name="SelfEvolution",
             role="Self-improvement and feedback analysis specialist",
@@ -598,10 +710,17 @@ class SelfEvolutionAgent(BiasharaAgent):
                 "evolution_reporting",
             ],
         )
+        # Real service dependency (injected by factory or main)
+        self._evolution_service: Any = evolution_service  # SelfEvolutionService | None
+
         # Wire all skills for learning
         registry = get_skill_registry()
         for skill in registry.get_skills_for_agent(self.name):
             self.tools.register(skill.name, skill.safe_execute, skill.description)
+
+    def set_evolution_service(self, service: Any) -> None:
+        """Inject the SelfEvolutionService."""
+        self._evolution_service = service
 
     async def observe(self, event: AgentEvent) -> None:
         """Process feedback and delivery events."""
@@ -676,15 +795,36 @@ class SelfEvolutionAgent(BiasharaAgent):
         """
         Process feedback and optionally generate feature specs.
 
-        In production, this calls SelfEvolutionService.collect_feedback()
-        and SelfEvolutionService.generate_feature_spec().
+        Calls the real SelfEvolutionService when available.
+        Always emits downstream events for the evolution cycle.
         """
         start = time.time()
 
         try:
             worker_id = decision.parameters.get("worker_id", "unknown")
             feedback_type = decision.parameters.get("feedback_type", "unknown")
+            feedback_text = decision.parameters.get("text", "")
             should_cluster = decision.parameters.get("should_cluster", False)
+
+            # Call real service if available
+            feedback_result = None
+            if self._evolution_service and feedback_text:
+                try:
+                    feedback_result = await self._evolution_service.collect_feedback(
+                        worker_id=worker_id,
+                        feedback=feedback_text,
+                        feedback_type=feedback_type,
+                    )
+                    self._logger.info(
+                        "evolution_feedback_collected",
+                        worker_id=worker_id,
+                        feedback_type=feedback_type,
+                    )
+                except Exception as svc_exc:
+                    self._logger.warning(
+                        "evolution_service_failed",
+                        error=str(svc_exc),
+                    )
 
             events_to_publish = []
 
@@ -697,6 +837,7 @@ class SelfEvolutionAgent(BiasharaAgent):
                         "worker_id": worker_id,
                         "feedback_type": feedback_type,
                         "cluster_size": decision.parameters.get("feedback_count", 0),
+                        "service_called": self._evolution_service is not None,
                         "generated_at": datetime.now(timezone.utc).isoformat(),
                     },
                 ))
@@ -719,6 +860,7 @@ class SelfEvolutionAgent(BiasharaAgent):
                     "worker_id": worker_id,
                     "feedback_type": feedback_type,
                     "clustered": should_cluster,
+                    "feedback_stored": feedback_result is not None,
                 },
                 duration_ms=duration_ms,
                 events_to_publish=events_to_publish,
@@ -737,13 +879,31 @@ class SelfEvolutionAgent(BiasharaAgent):
 # ════════════════════════════════════════════════════════════════════
 
 
-def create_all_agents() -> List[BiasharaAgent]:
-    """Create all four agents for the standard pipeline."""
+def create_all_agents(
+    pipeline: Any = None,
+    soko_pulse: Any = None,
+    alama_score: Any = None,
+    report_generator: Any = None,
+    evolution_service: Any = None,
+) -> List[BiasharaAgent]:
+    """
+    Create all four agents for the standard pipeline.
+
+    Args:
+        pipeline: DataPipeline service for TransactionProcessor
+        soko_pulse: SokoPulseService for IntelligenceGenerator
+        alama_score: AlamaScoreService for IntelligenceGenerator
+        report_generator: ReportGenerator for ReportGeneratorAgent
+        evolution_service: SelfEvolutionService for SelfEvolutionAgent
+
+    Returns:
+        List of 4 agents with optional service dependencies injected
+    """
     return [
-        TransactionProcessorAgent(),
-        IntelligenceGeneratorAgent(),
-        ReportGeneratorAgent(),
-        SelfEvolutionAgent(),
+        TransactionProcessorAgent(pipeline=pipeline),
+        IntelligenceGeneratorAgent(soko_pulse=soko_pulse, alama_score=alama_score),
+        ReportGeneratorAgent(report_generator=report_generator),
+        SelfEvolutionAgent(evolution_service=evolution_service),
     ]
 
 

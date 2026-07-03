@@ -39,6 +39,7 @@ from app.agents import (
     SelfEvolutionAgent,
 )
 from app.agents.base import AgentEvent, EventType
+from app.agents.factory import AgentFactory
 
 settings = get_settings()
 
@@ -113,64 +114,54 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("clickhouse_init_failed", error=str(e))
 
-    # ── Multi-Agent Wiring ──────────────────────────────────────────
+    # ── Multi-Agent Wiring (via AgentFactory) ─────────────────────
+    agent_factory = AgentFactory()
+    agent_infra = await agent_factory.create_all(
+        enable_loops=True,
+        enable_long_horizon=True,
+    )
 
-    # 1. Create EventBus (Redis Streams with in-memory fallback)
-    event_bus = EventBus()
-    await event_bus.connect()
-    logger.info("event_bus_initialized", mode=event_bus.get_stats()["mode"])
+    # Unpack for local use and API access
+    event_bus = agent_infra.event_bus
+    tracer = agent_infra.tracer
+    agents = agent_infra.agents
 
-    # 2. Create AgentTracer for observability
-    tracer = AgentTracer()
+    # Store references on app.state for API access
+    app.state.event_bus = event_bus
+    app.state.agent_tracer = tracer
+    app.state.agents = agent_infra.agent_map
+    app.state.agent_factory = agent_factory
+    app.state.agent_infra = agent_infra
 
-    # 3. Create agents
-    transaction_processor = TransactionProcessorAgent()
-    intelligence_generator = IntelligenceGeneratorAgent()
-    report_generator = ReportGeneratorAgent()
-    self_evolution = SelfEvolutionAgent()
+    # Store loop infrastructure on app.state if available
+    if agent_infra.loop_supervisor:
+        app.state.loop_event_store = agent_infra.loop_event_store
+        app.state.loop_supervisor = agent_infra.loop_supervisor
+        app.state.loop_agents = {a.name: a for a in agent_infra.loop_agents}
 
-    agents = [
-        transaction_processor,
-        intelligence_generator,
-        report_generator,
-        self_evolution,
-    ]
+        # Wire loop infrastructure into the API
+        set_loop_infrastructure(
+            supervisor=agent_infra.loop_supervisor,
+            event_store=agent_infra.loop_event_store,
+            agents=agent_infra.loop_agents,
+        )
 
-    # 4. Inject infrastructure into each agent
-    for agent in agents:
-        agent.set_event_bus(event_bus)
-        agent.set_tracer(tracer)
+    # Store long-horizon infrastructure if available
+    if agent_infra.intelligence_flows:
+        app.state.intelligence_flows = agent_infra.intelligence_flows
+        app.state.research_orchestrator = agent_infra.research_orchestrator
 
-    # 5. Subscribe agents to their event types
-    await event_bus.subscribe(transaction_processor, [
-        EventType.TRANSACTION_RECEIVED,
-        EventType.BATCH_PROCESSED,
-    ])
-    await event_bus.subscribe(intelligence_generator, [
-        EventType.TRANSACTION_PROCESSED,
-        EventType.INTELLIGENCE_REQUESTED,
-        EventType.MARKET_ALERT,
-    ])
-    await event_bus.subscribe(report_generator, [
-        EventType.INTELLIGENCE_GENERATED,
-        EventType.REPORT_REQUESTED,
-        EventType.REPORT_DELIVERED,
-    ])
-    await event_bus.subscribe(self_evolution, [
-        EventType.FEEDBACK_RECEIVED,
-        EventType.REPORT_DELIVERED,
-        EventType.EVOLUTION_CYCLE_COMPLETE,
-    ])
+        set_long_horizon_infrastructure(
+            intelligence_flows=agent_infra.intelligence_flows,
+            research_orchestrator=agent_infra.research_orchestrator,
+        )
 
-    # 6. Wire open loop: Drift → EventBus + TaskQueue → Agent retrain
-    #    When drift_detector fires: (a) publish MARKET_ALERT to agents,
-    #    (b) enqueue model_training task for automated retraining.
+    # Wire open loop: Drift → EventBus + TaskQueue → Agent retrain
     try:
         from app.services.drift_retrain_trigger import _handle_drift_alert
 
         async def _on_drift_alert(alert):
             """Bridge drift alerts into both EventBus and task queue."""
-            # Publish to agent event bus
             await event_bus.publish(AgentEvent(
                 event_type=EventType.MARKET_ALERT,
                 source="DriftDetector",
@@ -186,17 +177,14 @@ async def lifespan(app: FastAPI):
                     "cusum_value": alert.cusum_value,
                 },
             ))
-            # Also enqueue retrain task (existing trigger logic)
             await _handle_drift_alert(alert)
 
-        # Store callback for drift monitors created at runtime
         app.state.drift_alert_callback = _on_drift_alert
         logger.info("drift_to_eventbus_bridge_wired")
     except Exception as exc:
         logger.warning("drift_bridge_setup_failed", error=str(exc))
 
-    # 7. Wire open loop: FL aggregation → verification
-    #    After FL aggregation completes, verify improvement
+    # Wire open loop: FL aggregation → verification
     try:
         from app.services.federated_learning import FederatedLearningService
 
@@ -205,8 +193,6 @@ async def lifespan(app: FastAPI):
         async def _verified_aggregate(self_fl, dialect: str) -> str:
             """Run aggregation then verify the new model improves."""
             version = await _original_aggregate(self_fl, dialect)
-
-            # Publish verification event so agents know
             await event_bus.publish(AgentEvent(
                 event_type=EventType.EVOLUTION_CYCLE_COMPLETE,
                 source="FederatedLearning",
@@ -229,150 +215,8 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("fl_verification_setup_failed", error=str(exc))
 
-    # 8. Wire open loop: Reflect → Behavior Change
-    #    Override reflect on agents to adjust future behavior
-    _orig_intel_reflect = intelligence_generator.reflect
-
-    async def _adaptive_intelligence_reflect(result):
-        """After reflect, adjust confidence thresholds based on outcomes."""
-        await _orig_intel_reflect(result)
-        # Track success rate and adjust base confidence
-        recent = intelligence_generator.memory.recall_recent(20)
-        successes = [r for r in recent if r.get("success", True)]
-        if len(recent) >= 5:
-            success_rate = len(successes) / len(recent)
-            # Store adaptive confidence in long-term memory
-            new_confidence = max(0.5, min(0.99, success_rate))
-            intelligence_generator.memory.store(
-                "adaptive_base_confidence", new_confidence
-            )
-            if success_rate < 0.7:
-                intelligence_generator._logger.warning(
-                    "low_success_rate_adjusting",
-                    success_rate=round(success_rate, 2),
-                    new_base_confidence=round(new_confidence, 2),
-                )
-
-    intelligence_generator.reflect = _adaptive_intelligence_reflect
-
-    _orig_tp_reflect = transaction_processor.reflect
-
-    async def _adaptive_tp_reflect(result):
-        """After reflect, track error patterns for retry strategies."""
-        await _orig_tp_reflect(result)
-        if not result.success:
-            # Store error pattern for future think() to use
-            transaction_processor.memory.store(
-                "last_error",
-                {"error": result.error, "timestamp": time.time()},
-            )
-
-    transaction_processor.reflect = _adaptive_tp_reflect
-    logger.info("reflect_behavior_change_loops_wired")
-
-    # 9. Start all agents (background polling loops)
-    for agent in agents:
-        await agent.start()
-    logger.info("agents_started", count=len(agents))
-
-    # Store references on app.state for API access
-    app.state.event_bus = event_bus
-    app.state.agent_tracer = tracer
-    app.state.agents = {a.name: a for a in agents}
-
-    # ── Loop Pattern Infrastructure ────────────────────────────────────
-    # Set up loop-enhanced agents and supervisor alongside the original agents
-    try:
-        from app.agents.loops import EventStore
-        from app.agents.loop_implementations import create_loop_enhanced_agents
-
-        loop_event_store = EventStore()
-        loop_infra = create_loop_enhanced_agents(event_store=loop_event_store)
-
-        # Inject event bus and tracer into loop-enhanced agents
-        for agent in loop_infra["agents"]:
-            agent.set_event_bus(event_bus)
-            agent.set_tracer(tracer)
-
-        # Subscribe loop-enhanced agents to the same event types
-        for agent in loop_infra["agents"]:
-            if agent.name == "TransactionProcessor":
-                await event_bus.subscribe(agent, [EventType.TRANSACTION_RECEIVED, EventType.BATCH_PROCESSED])
-            elif agent.name == "IntelligenceGenerator":
-                await event_bus.subscribe(agent, [EventType.TRANSACTION_PROCESSED, EventType.INTELLIGENCE_REQUESTED, EventType.MARKET_ALERT])
-            elif agent.name == "ReportGenerator":
-                await event_bus.subscribe(agent, [EventType.INTELLIGENCE_GENERATED, EventType.REPORT_REQUESTED, EventType.REPORT_DELIVERED])
-            elif agent.name == "SelfEvolution":
-                await event_bus.subscribe(agent, [EventType.FEEDBACK_RECEIVED, EventType.REPORT_DELIVERED, EventType.EVOLUTION_CYCLE_COMPLETE])
-
-        # Start loop-enhanced agents
-        for agent in loop_infra["agents"]:
-            await agent.start()
-
-        # Wire loop infrastructure into the API
-        set_loop_infrastructure(
-            supervisor=loop_infra["supervisor"],
-            event_store=loop_event_store,
-            agents=loop_infra["agents"],
-        )
-
-        app.state.loop_event_store = loop_event_store
-        app.state.loop_supervisor = loop_infra["supervisor"]
-        app.state.loop_agents = {a.name: a for a in loop_infra["agents"]}
-
-        logger.info("loop_patterns_initialized", agents=len(loop_infra["agents"]))
-    except Exception as exc:
-        logger.warning("loop_patterns_setup_failed", error=str(exc))
-
-# ── Long-Horizon Orchestration (DeerFlow-Inspired) ────────────────────
-    try:
-        from app.agents.intelligence_pipeline import create_all_intelligence_flows
-        from app.agents.research_flow import create_research_orchestrator
-
-        # Create intelligence pipeline orchestrators
-        intelligence_flows = create_all_intelligence_flows(event_store=loop_event_store if hasattr(app.state, 'loop_event_store') else None)
-
-        # Create generic research orchestrator
-        research_orchestrator = create_research_orchestrator(
-            event_store=loop_event_store if hasattr(app.state, 'loop_event_store') else None,
-        )
-
-        # Wire intelligence flow agents into EventBus
-        for flow_name, orch in intelligence_flows.items():
-            for agent_name, agent in orch.delegator._agents.items():
-                agent.set_event_bus(event_bus)
-                agent.set_tracer(tracer)
-                # Subscribe to intelligence request events
-                await event_bus.subscribe(agent, [
-                    EventType.INTELLIGENCE_REQUESTED,
-                    EventType.MARKET_ALERT,
-                ])
-
-        # Wire research flow agents into EventBus
-        for agent_name, agent in research_orchestrator.delegator._agents.items():
-            agent.set_event_bus(event_bus)
-            agent.set_tracer(tracer)
-            await event_bus.subscribe(agent, [
-                EventType.INTELLIGENCE_REQUESTED,
-                EventType.MARKET_ALERT,
-            ])
-
-        # Set API infrastructure
-        set_long_horizon_infrastructure(
-            intelligence_flows=intelligence_flows,
-            research_orchestrator=research_orchestrator,
-        )
-
-        app.state.intelligence_flows = intelligence_flows
-        app.state.research_orchestrator = research_orchestrator
-
-        logger.info(
-            "long_horizon_initialized",
-            flows=list(intelligence_flows.keys()),
-            research_agents=len(research_orchestrator.delegator._agents),
-        )
-    except Exception as exc:
-        logger.warning("long_horizon_setup_failed", error=str(exc))
+    # Loop and long-horizon infrastructure is now managed by AgentFactory
+    # (see agent_factory.create_all() above)
 
     # Initialize MCP server
     from app.mcp.server import get_mcp_server
@@ -385,14 +229,9 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("application_shutting_down")
 
-    # Stop agents
-    for agent in agents:
-        await agent.stop()
-    logger.info("agents_stopped")
-
-    # Disconnect event bus
-    await event_bus.disconnect()
-    logger.info("event_bus_disconnected")
+    # Graceful agent shutdown via factory (reverse order)
+    await agent_factory.shutdown()
+    logger.info("agents_shutdown_complete")
 
     if settings.has_clickhouse:
         await close_clickhouse()

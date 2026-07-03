@@ -25,6 +25,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
@@ -417,6 +418,7 @@ class MindsetLesson(Base):
         UniqueConstraint("module_number", "lesson_number", name="uq_module_lesson"),
         Index("idx_lesson_order", "order_index"),
         Index("idx_lesson_module", "module_number", "lesson_number"),
+        {"extend_existing": True},
     )
 
 

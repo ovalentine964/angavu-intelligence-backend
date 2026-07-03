@@ -32,6 +32,7 @@ from app.agents.implementations import (
     ReportGeneratorAgent,
     SelfEvolutionAgent,
 )
+from app.agents.factory import AgentFactory, AgentInfrastructure
 from app.agents.context_manager import ContextManager, AgentContextManager
 from app.agents.error_compactor import ErrorCompactor, ErrorSeverity
 from app.agents.unified_state import UnifiedStateManager
@@ -94,6 +95,9 @@ __all__ = [
     "BiasharaAgent",
     "EventBus",
     "AgentTracer",
+    # Factory
+    "AgentFactory",
+    "AgentInfrastructure",
     # Implementations
     "TransactionProcessorAgent",
     "IntelligenceGeneratorAgent",
