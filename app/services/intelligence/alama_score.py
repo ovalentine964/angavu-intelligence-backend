@@ -54,6 +54,8 @@ from app.services.statistical_foundation import (
     bootstrap,
     kde_estimator,
 )
+from app.services.intelligence.markov_chains import MarkovChainAnalyzer, markov_analyzer
+from app.services.intelligence.measure_theory import MartingaleAnalyzer, ConditionalExpectation
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -817,6 +819,17 @@ class AlamaScoreService:
             "monte_carlo_simulation": self._run_monte_carlo_simulation(
                 avg_daily_rev, revenue_vol, query_tier,
             ) if query_tier in ("enhanced", "full") and avg_daily_rev > 0 else None,
+            # ECO 103/104: Markov chain credit score transitions
+            "markov_transition_analysis": markov_analyzer.credit_score_transition_report(
+                current_score=alama_score,
+                revenue_growth_pct=growth_pct if growth_pct is not None else 0,
+                consistency_score=consistency_score,
+                months_of_data=max(1, lookback_days // 30),
+            ) if query_tier in ("enhanced", "full") else None,
+            # STA 443: Martingale test (efficient pricing check)
+            "martingale_test": MartingaleAnalyzer.test_martingale_property(
+                np.array(daily_revenues),
+            ) if query_tier == "full" and len(daily_revenues) >= 20 else None,
         }
 
         if query_tier == "basic":

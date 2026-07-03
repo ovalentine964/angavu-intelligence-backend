@@ -66,6 +66,7 @@ from app.services.intelligence.biashara_pulse import (
     _hodrick_prescott_filter,
 )
 from app.services.intelligence.cache import intelligence_cache
+from app.services.intelligence.business_cycles import BusinessCycleAnalyzer
 from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 
 logger = structlog.get_logger(__name__)

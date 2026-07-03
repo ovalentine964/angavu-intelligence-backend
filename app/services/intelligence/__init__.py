@@ -28,6 +28,16 @@ from app.services.intelligence.gdp_estimator import GDPEstimatorService
 from app.services.intelligence.inflation_tracker import InflationTrackerService
 from app.services.intelligence.giving_insights import GivingInsightsService
 from app.services.intelligence.loan_intelligence import LoanIntelligenceService
+from app.services.intelligence.markov_chains import MarkovChainAnalyzer, OptimizationEngine, markov_analyzer, optimization_engine
+from app.services.intelligence.health_economics import HealthEconomicsEngine
+from app.services.intelligence.african_development import AfricanDevelopmentEngine
+from app.services.intelligence.business_cycles import BusinessCycleAnalyzer
+from app.services.intelligence.measure_theory import (
+    ProbabilitySpace,
+    ConditionalExpectation,
+    ConvergenceTheorems,
+    MartingaleAnalyzer,
+)
 
 __all__ = [
     "SokoPulseService",
@@ -40,4 +50,15 @@ __all__ = [
     "InflationTrackerService",
     "GivingInsightsService",
     "LoanIntelligenceService",
+    "MarkovChainAnalyzer",
+    "OptimizationEngine",
+    "markov_analyzer",
+    "optimization_engine",
+    "HealthEconomicsEngine",
+    "AfricanDevelopmentEngine",
+    "BusinessCycleAnalyzer",
+    "ProbabilitySpace",
+    "ConditionalExpectation",
+    "ConvergenceTheorems",
+    "MartingaleAnalyzer",
 ]

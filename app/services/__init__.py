@@ -49,6 +49,15 @@ from app.services.intelligence import (
     JamiiInsightsService,
     TaxBaseService,
     DistributionGapService,
+    MarkovChainAnalyzer,
+    OptimizationEngine,
+    HealthEconomicsEngine,
+    AfricanDevelopmentEngine,
+    BusinessCycleAnalyzer,
+    ProbabilitySpace,
+    ConditionalExpectation,
+    ConvergenceTheorems,
+    MartingaleAnalyzer,
 )
 
 __all__ += [
@@ -58,7 +67,31 @@ __all__ += [
     "JamiiInsightsService",
     "TaxBaseService",
     "DistributionGapService",
+    "MarkovChainAnalyzer",
+    "OptimizationEngine",
+    "HealthEconomicsEngine",
+    "AfricanDevelopmentEngine",
+    "BusinessCycleAnalyzer",
+    "ProbabilitySpace",
+    "ConditionalExpectation",
+    "ConvergenceTheorems",
+    "MartingaleAnalyzer",
 ]
+
+# Quality control (STA 346)
+from app.services.quality_control import SPCChart, DataQualityMonitor
+
+__all__ += ["SPCChart", "DataQualityMonitor"]
+
+# Mathematical foundations (MAT 101/121/124)
+from app.services.math_foundation import AlgebraFoundations, DifferentialCalculus, IntegralCalculus
+
+__all__ += ["AlgebraFoundations", "DifferentialCalculus", "IntegralCalculus"]
+
+# Audience-aware reports (BCB 108)
+from app.services.report_templates.audience_reports import AudienceReportGenerator, AudienceType
+
+__all__ += ["AudienceReportGenerator", "AudienceType"]
 
 # Training multi-agentic loop
 from app.services.training import TrainingLoop

@@ -43,6 +43,7 @@ from app.services.statistical_foundation import (
     bootstrap,
     kde_estimator,
 )
+from app.services.intelligence.health_economics import HealthEconomicsEngine
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -629,10 +630,8 @@ class JamiiInsightsService:
         # ── ECO 106: Health-economic intelligence ──────────────────────
         health_economic = None
         try:
-            # Estimate average monthly income for health module
             avg_monthly_inc = avg_monthly if avg_monthly > 0 else 10000
-            health_economic = HealthEconomicIntelligence.full_health_economic_report(
-                user_id=str(user_ids[0]) if user_ids else "unknown",
+            health_economic = HealthEconomicsEngine.full_health_economic_report(
                 transactions=transactions,
                 region=region,
                 user_count=user_count,

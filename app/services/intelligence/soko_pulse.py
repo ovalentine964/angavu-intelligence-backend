@@ -87,6 +87,7 @@ from app.services.statistical_foundation import (
     bootstrap,
     kde_estimator,
 )
+from app.services.intelligence.african_development import AfricanDevelopmentEngine
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
