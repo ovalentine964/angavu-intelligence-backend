@@ -90,6 +90,11 @@ class EventType(str, Enum):
     CUSTOMER_FEEDBACK_RECEIVED = "customer.feedback.received"
     REVENUE_METRIC_RECORDED = "revenue.metric.recorded"
 
+    # V2: Domain & System Coordination
+    DOMAIN_ANALYSIS_REQUESTED = "domain.analysis.requested"
+    DOMAIN_ANALYSIS_COMPLETED = "domain.analysis.completed"
+    CONFLICT_DETECTED = "conflict.detected"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"
