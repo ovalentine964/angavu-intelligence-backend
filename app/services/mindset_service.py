@@ -2,10 +2,19 @@
 Wealth Mindset Service — 56 voice lessons, progress tracking, rich habits score.
 
 Core capabilities:
-- Serve 56 voice lessons across 6 modules
-- Track lesson delivery and completion
+- Serve 56 voice lessons across 6 modules (Swahili & English)
+- Track lesson delivery and completion with scoring
 - Rich habits score calculation (0-100 daily)
+- Daily affirmations in Swahili and English
+- Habit stacking formulas per worker type
+- Mastermind group recommendations
 - Daily/weekly mindset briefings
+
+Research basis:
+- 12 books analyzed, 56 voice lessons across 6 modules (~134 min total)
+- Key books: Magic of Thinking Big, Think and Grow Rich, Richest Man in Babylon,
+  Atomic Habits, Psychology of Money
+- KSh 50/day → KSh 1.1M in 20 years (compound interest)
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -16,127 +25,32 @@ import structlog
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.worker_features import (
+from app.data.mindset_lessons import (
+    AFFIRMATIONS,
+    COMPOUND_INTEREST_STORY,
+    HABIT_STACKS,
+    MODULE_DEFINITIONS,
+    get_affirmation_by_index,
+    get_affirmations_by_category,
+    get_all_affirmations,
+    get_all_lessons,
+    get_all_worker_types,
+    get_habit_stack,
+)
+from app.models.mindset import (
+    Affirmation,
     MindsetLesson,
-    MindsetLessonProgress,
-    RichHabitScore,
+    RichHabitsScore,
+    UserLessonProgress,
 )
 
 logger = structlog.get_logger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Module & Lesson Definitions (56 lessons across 6 modules)
+# Rich Habits Definitions
 # ─────────────────────────────────────────────────────────────────────────────
 
-MODULE_DEFINITIONS = [
-    {
-        "module_number": 1,
-        "title_en": "Believe You Can",
-        "title_sw": "Iniamini Unaweza",
-        "source_book": "The Magic of Thinking Big — David Schwartz",
-        "lessons": [
-            (1, "The Power of Belief", "Nguvu ya Kuamini", 2, "Success starts in your mind"),
-            (2, "Open the 'I Can't' Door", "Fungua Milango ya 'Siwezi'", 2, "Most limits are self-imposed"),
-            (3, "Think Big", "Fikiri Kubwa", 3, "Size of thinking = size of results"),
-            (4, "Words Have Power", "Neno Lina Nguvu", 2, "Your language shapes your reality"),
-            (5, "Leader or Follower?", "Kiongozi ama Mfuasi?", 2, "Leaders create, followers wait"),
-            (6, "Fear of Failure", "Woga wa Kushindwa", 3, "Failure is education, not death"),
-            (7, "Story of the Dreaming Mama Mboga", "Hadithi ya Mama Mboga Mwenye Ndoto", 3, "Real story of transformation"),
-            (8, "The Day to Believe", "Siku ya Kuamini", 2, "Today is the day you start"),
-            (9, "Daily Practice", "Mazoezi ya Kila Siku", 2, "Morning affirmation routine"),
-        ],
-    },
-    {
-        "module_number": 2,
-        "title_en": "Think and Grow Rich",
-        "title_sw": "Fikiri na Ukuwe Tajiri",
-        "source_book": "Think and Grow Rich — Napoleon Hill",
-        "lessons": [
-            (1, "Desire", "Tamaa ya Kupata", 3, "You must want success with burning desire"),
-            (2, "Faith", "Imani Inayobadilisha", 2, "Visualization of attainment"),
-            (3, "Auto-suggestion", "Zungumza na Nafsi Yako", 2, "Program your subconscious"),
-            (4, "Specialized Knowledge", "Elimu Maalum", 3, "Specific knowledge earns money"),
-            (5, "Imagination", "Uundaji wa Mawazo", 2, "Synthetic and creative imagination"),
-            (6, "Organized Planning", "Mpango wa Kupanga", 3, "Desire without plan is a dream"),
-            (7, "Decision", "Maamuzi ya Haraka", 2, "Decide quickly, change slowly"),
-            (8, "Persistence", "Uvumilivu", 3, "Most quit right before breakthrough"),
-            (9, "Master Mind", "Nguvu ya Kikundi", 2, "Surround yourself with winners"),
-            (10, "Energy Direction", "Nishati ya Malengo", 2, "Channel energy into goals"),
-            (11, "Subconscious Mind", "Akili ya Ndani", 2, "Feed your mind goals, not worries"),
-            (12, "The Brain", "Akili Yako ni Kituo", 2, "Stay tuned to positive frequencies"),
-            (13, "The Sixth Sense", "Hekima ya Muda Mrefu", 2, "Experience creates intuition"),
-        ],
-    },
-    {
-        "module_number": 3,
-        "title_en": "The Richest Man in Babylon",
-        "title_sw": "Mwenye Utajiri Zaidi wa Babylon",
-        "source_book": "The Richest Man in Babylon — George Clason",
-        "lessons": [
-            (1, "The Story of Arkad", "Hadithi ya Arkad", 3, "Part of all you earn is yours to keep"),
-            (2, "Save 10% First", "Weka Akiba Kwanza", 3, "Pay yourself first"),
-            (3, "Control Expenditures", "Dhibiti Matumizi Yako", 2, "Needs vs desires"),
-            (4, "Make Gold Multiply", "Fanya Pesa Ikuzalishe", 3, "Idle money wastes away"),
-            (5, "Guard From Loss", "Linda Mali Zako", 2, "Protect principal first"),
-            (6, "Profitable Dwelling", "Nyumba Yako ni Biashara", 2, "Make your space profitable"),
-            (7, "Insure Future Income", "Bima ya Kesho", 3, "Plan for old age and emergencies"),
-            (8, "Increase Ability to Earn", "Ongeza Uwezo Wako", 3, "Invest in yourself"),
-            (9, "The Chariot Maker", "Hadithi ya Mtu wa Magari", 2, "Working hard isn't enough"),
-        ],
-    },
-    {
-        "module_number": 4,
-        "title_en": "Atomic Habits",
-        "title_sw": "Tabia Ndogo, Matokeo Makubwa",
-        "source_book": "Atomic Habits — James Clear",
-        "lessons": [
-            (1, "1% Daily Improvement", "1% Kila Siku", 2, "Small changes compound dramatically"),
-            (2, "Identity-Based Habits", "Mimi Ni Mtu Gani?", 3, "Focus on who you want to become"),
-            (3, "Make It Obvious", "Fanya Ionekane", 2, "Make desired behavior visible"),
-            (4, "Make It Attractive", "Fanya Ivutie", 2, "Pair habits with enjoyment"),
-            (5, "Make It Easy", "Fanya Rahisi", 2, "Reduce friction for good habits"),
-            (6, "Make It Satisfying", "Fanya Irithishe", 2, "Immediate rewards reinforce habits"),
-            (7, "Habit Stacking", "Mnyororo wa Tabia", 3, "After X, I will do Y"),
-            (8, "Breaking Bad Habits", "Kuvunja Tabia Mbaya", 3, "Invert the 4 laws"),
-            (9, "Money Garden Game", "Bustani ya Pesa Yako", 2, "Visualize your financial growth"),
-        ],
-    },
-    {
-        "module_number": 5,
-        "title_en": "Psychology of Money",
-        "title_sw": "Saikolojia ya Pesa",
-        "source_book": "The Psychology of Money — Morgan Housel",
-        "lessons": [
-            (1, "Compounding", "Nguvu ya Kuzaliana", 3, "Time in market beats timing market"),
-            (2, "Room for Error", "Nafasi ya Makosa", 2, "Survive bad times to enjoy good"),
-            (3, "Wealth Is What You Don't Spend", "Utajiri ni Kile Usichotumia", 3, "True wealth is invisible"),
-            (4, "Reasonable > Rational", "Wastani Bora Zaidi ya Kamili", 2, "Good enough consistently wins"),
-            (5, "Seduction of Pessimism", "Uvivu wa Pesimism", 2, "Pessimism sounds smart but optimism wins"),
-            (6, "Nothing Is Free", "Hakuna Kitu Bure", 2, "Every decision has hidden cost"),
-            (7, "Freedom Is True Wealth", "Uhuru ni Utajiri Halisi", 3, "Wealth = freedom of time"),
-            (8, "Save Without a Reason", "Hifadhi Bila Sababu", 2, "Save for options, not just goals"),
-        ],
-    },
-    {
-        "module_number": 6,
-        "title_en": "Giving and Abundance",
-        "title_sw": "Kutoa na Wingi",
-        "source_book": "Original content — spiritual/philosophical foundation",
-        "lessons": [
-            (1, "The Secret of Giving", "Siri ya Kutoa", 3, "Giving opens the hand to receive"),
-            (2, "Tithe and Taxes", "Zaka na Ushuru", 2, "Systematic proportional giving"),
-            (3, "Giving Creates Space", "Kutoa kunatengeneza Nafasi", 2, "Abundance follows generosity"),
-            (4, "True Generosity", "Ukarimu wa Kweli", 2, "Give from the heart, not obligation"),
-            (5, "The Abundance Cycle", "Mzunguko wa Wingi", 3, "Income and giving grow together"),
-            (6, "Wise Giving", "Kutoa kwa Busara", 2, "Strategic, not reckless, generosity"),
-            (7, "Story of the Giver", "Hadithi ya Mtoaji", 3, "Real transformation through giving"),
-            (8, "End of Journey — New Beginning", "Mwisho wa Safari — Mwanzo Mpya", 3, "This is just the beginning"),
-        ],
-    },
-]
-
-# Rich habits and their point values
 RICH_HABITS = {
     "record_sales": {"points": 10, "en": "Record Sales", "sw": "Rekodi Mauzo"},
     "check_balance": {"points": 5, "en": "Check Balance", "sw": "Angalia Salio"},
@@ -167,6 +81,142 @@ LEVEL_THRESHOLDS = [
     (0, 1, "Seedling"),
 ]
 
+# Mastermind group recommendations by worker type
+MASTERMIND_GROUPS = {
+    "mama_mboga": {
+        "name_en": "Mama Mboga Wealth Circle",
+        "name_sw": "Duara la Utajiri la Mama Mboga",
+        "description_en": "A group of 5-7 vegetable vendors who meet weekly to share savings progress, business tips, and hold each other accountable.",
+        "description_sw": "Kikundi cha wachuuzi 5-7 wa mboga ambao wanakutana kila wiki kushiriki maendeleo ya akiba, vidokezo vya biashara, na kushikamana.",
+        "meeting_frequency": "weekly",
+        "focus_areas": ["savings_consistency", "inventory_management", "price_negotiation", "bulk_buying"],
+        "suggested_members": "Other mama mbogas in your market or neighborhood",
+        "benefits_en": [
+            "Accountability: Someone checks if you saved this week",
+            "Knowledge sharing: Learn what products sell best",
+            "Bulk buying power: Buy stock together for better prices",
+            "Emotional support: You're not alone in the struggle",
+        ],
+        "benefits_sw": [
+            "Uwajibikaji: Mtu anayekagua kama umehifadhi wiki hii",
+            "Kushiriki maarifa: Jifunze bidhaa gani zinauzwa vizuri",
+            "Nguvu ya kununua pamoja: Nunua hisa pamoja kwa bei nzuri",
+            "Msaada wa kihisia: Wewe si peke yako katika changamoto",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+    "boda_boda": {
+        "name_en": "Boda Boda Riders' Investment Club",
+        "name_sw": "Klabu ya Uwekezaji ya Waendesha Boda Boda",
+        "description_en": "5-7 riders pooling savings weekly. Target: each rider owns their motorcycle within 18 months.",
+        "description_sw": "Waendesha boda boda 5-7 wanachangisha akiba kila wiki. Lengo: kila mpanda anamiliki pikipiki yake ndani ya miezi 18.",
+        "meeting_frequency": "weekly",
+        "focus_areas": ["vehicle_ownership", "emergency_fund", "insurance", "savings_discipline"],
+        "suggested_members": "Trusted riders from your stage or route",
+        "benefits_en": [
+            "Group savings: Buy motorcycles through SACCO loans",
+            "Emergency fund: Pool money for breakdowns and accidents",
+            "Insurance awareness: NHIF and motor insurance knowledge",
+            "Debt avoidance: No shylocks, no daily repayment traps",
+        ],
+        "benefits_sw": [
+            "Akiba ya kikundi: Nunua pikipiki kupitia mikopo ya SACCO",
+            "Fedha ya dharura: Changisha pesa kwa ajili ya kuvunjika na ajali",
+            "Ufahamu wa bima: Maarifa ya NHIF na bima ya pikipiki",
+            "Kuepuka madeni: Hakuna wakopeshaji, hakina mitego ya kulipa kila siku",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+    "duka_owner": {
+        "name_en": "Dukawallah Growth Alliance",
+        "name_sw": "Muungano wa Ukuaji wa Wamiliki wa Maduka",
+        "description_en": "Shop owners sharing supplier contacts, best practices, and financial discipline strategies.",
+        "description_sw": "Wamiliki wa maduka wanashiriki mawasiliano ya wauzaji, mazoezi bora, na mikakati ya nidhamu ya kifedha.",
+        "meeting_frequency": "biweekly",
+        "focus_areas": ["supplier_network", "profit_maximization", "record_keeping", "expansion_planning"],
+        "suggested_members": "Non-competing duka owners in your area",
+        "benefits_en": [
+            "Supplier sharing: Get better prices through referrals",
+            "Financial literacy: Learn profit vs revenue thinking",
+            "Record keeping: Peer accountability for daily books",
+            "Growth planning: When and how to open a second location",
+        ],
+        "benefits_sw": [
+            "Kushiriki wauzaji: Pata bei bora kupitia rufaa",
+            "Ujuzi wa kifedha: Jifunze kufikiri faida dhidi ya mapato",
+            "Uhifadhi wa rekodi: Uwajibikaji wa rika kwa vitabu vya kila siku",
+            "Mpango wa ukuaji: Linapofaa na jinsi ya kufungua eneo la pili",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+    "mitumba_vendor": {
+        "name_en": "Mitumba Traders' Savings Group",
+        "name_sw": "Kikundi cha Akiba ya Wachuuzi wa Mitumba",
+        "description_en": "Clothing vendors forming a chama for bulk purchasing and profit sharing.",
+        "description_sw": "Wachuuzi wa nguo wanaunda chama kwa kununua pamoja na kushiriki faida.",
+        "meeting_frequency": "weekly",
+        "focus_areas": ["bulk_import", "market_trends", "quality_assessment", "seasonal_planning"],
+        "suggested_members": "Mitumba vendors from different markets (to avoid direct competition)",
+        "benefits_en": [
+            "Bulk buying: Import containers together, split costs",
+            "Market intelligence: Share what styles are trending",
+            "Quality grading: Learn to assess bale quality",
+            "Seasonal planning: Coordinate stock for holidays and events",
+        ],
+        "benefits_sw": [
+            "Kununua pamoja: Ingiza kontena pamoja, gawanya gharama",
+            "Ujasusi wa soko: Shiriki mitindo inayotrendi",
+            "Ubora wa kiwango: Jifunze kutathmini ubora wa mabale",
+            "Mpango wa msimu: Panga hisa kwa likizo na matukio",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+    "mkono_worker": {
+        "name_en": "Jua Kali Workers' Advancement Circle",
+        "name_sw": "Duara la Kupanda kwa Wafanyakazi wa Mikono",
+        "description_en": "Casual laborers supporting each other in skill development and savings.",
+        "description_sw": "Wafanyakazi wa mkono wanasaidiana katika maendeleo ya ujuzi na akiba.",
+        "meeting_frequency": "weekly",
+        "focus_areas": ["skill_development", "savings_habit", "job_seeking", "health_insurance"],
+        "suggested_members": "Fellow workers from your site or trade",
+        "benefits_en": [
+            "Skill sharing: Learn from each other's trades",
+            "Savings accountability: Save before you spend",
+            "Job networking: Share opportunities with each other",
+            "NHIF awareness: Everyone should have health insurance",
+        ],
+        "benefits_sw": [
+            "Kushiriki ujuzi: Jifunze kutoka kwa kila mmoja",
+            "Uwajibikaji wa akiba: Hifadhi kabla ya kutumia",
+            "Mitandao ya kazi: Shiriki fursa kwa kila mmoja",
+            "Ufahamu wa NHIF: Kila mtu anapaswa kuwa na bima ya afya",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+    "beautician": {
+        "name_en": "Beauty Professionals' Wealth Network",
+        "name_sw": "Mitandao ya Utajiri ya Wataalamu wa Urembo",
+        "description_en": "Salon and barbershop workers building financial literacy together.",
+        "description_sw": "Wafanyakazi wa saluni na kinyozi wanajenga ujuzi wa kifedha pamoja.",
+        "meeting_frequency": "biweekly",
+        "focus_areas": ["client_retention", "product_investment", "savings_discipline", "skill_certification"],
+        "suggested_members": "Beauty professionals in your area (different specializations)",
+        "benefits_en": [
+            "Client referrals: Send overflow to trusted colleagues",
+            "Product knowledge: Share supplier contacts and reviews",
+            "Financial goals: Track savings progress together",
+            "Certification: Pool resources for training courses",
+        ],
+        "benefits_sw": [
+            "Rufaa za wateja: Tuma ziada kwa wenzako unaowaamini",
+            "Ujuzi wa bidhaa: Shiriki mawasiliano ya wauzaji na ukaguzi",
+            "Malengo ya kifedha: Fuatilia maendeleo ya akiba pamoja",
+            "Uthibitisho: Changisha rasilimali kwa kozi za mafunzo",
+        ],
+        "compound_interest": COMPOUND_INTEREST_STORY,
+    },
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lesson Management
@@ -176,70 +226,103 @@ LEVEL_THRESHOLDS = [
 async def seed_lessons(db: AsyncSession) -> int:
     """Seed all 56 lessons into the database. Returns count of new lessons created."""
 
-    # Check if already seeded
     count_result = await db.execute(select(func.count(MindsetLesson.id)))
     existing = count_result.scalar() or 0
     if existing >= 56:
         return 0
 
     created = 0
-    order_index = 1
-    for module in MODULE_DEFINITIONS:
-        for lesson_num, title_en, title_sw, duration, takeaway in module["lessons"]:
-            # Check if exists
-            exists = await db.execute(
-                select(MindsetLesson).where(
-                    and_(
-                        MindsetLesson.module_number == module["module_number"],
-                        MindsetLesson.lesson_number == lesson_num,
-                    )
+    for lesson_data in get_all_lessons():
+        exists = await db.execute(
+            select(MindsetLesson).where(
+                and_(
+                    MindsetLesson.module_number == lesson_data["module_number"],
+                    MindsetLesson.lesson_number == lesson_data["lesson_number"],
                 )
             )
-            if exists.scalar_one_or_none():
-                order_index += 1
-                continue
+        )
+        if exists.scalar_one_or_none():
+            continue
 
-            lesson = MindsetLesson(
-                module_number=module["module_number"],
-                lesson_number=lesson_num,
-                title_en=title_en,
-                title_sw=title_sw,
-                source_book=module["source_book"],
-                key_takeaway=takeaway,
-                duration_minutes=duration,
-                order_index=order_index,
-                is_active=True,
-            )
-            db.add(lesson)
-            created += 1
-            order_index += 1
+        lesson = MindsetLesson(
+            module_number=lesson_data["module_number"],
+            lesson_number=lesson_data["lesson_number"],
+            title_en=lesson_data["title_en"],
+            title_sw=lesson_data["title_sw"],
+            source_book=lesson_data["source_book"],
+            key_takeaway=lesson_data["key_takeaway"],
+            duration_minutes=lesson_data["duration_minutes"],
+            difficulty=lesson_data["difficulty"],
+            order_index=lesson_data["order_index"],
+            is_active=True,
+        )
+        db.add(lesson)
+        created += 1
 
     await db.flush()
+    logger.info("mindset_lessons_seeded", created=created)
     return created
 
 
-async def get_today_lesson(
+async def seed_affirmations(db: AsyncSession) -> int:
+    """Seed all affirmations into the database. Returns count of new affirmations created."""
+
+    count_result = await db.execute(select(func.count(Affirmation.id)))
+    existing = count_result.scalar() or 0
+    if existing >= len(AFFIRMATIONS):
+        return 0
+
+    created = 0
+    for aff_data in AFFIRMATIONS:
+        exists = await db.execute(
+            select(Affirmation).where(
+                and_(
+                    Affirmation.text_en == aff_data["text_en"],
+                    Affirmation.category == aff_data["category"],
+                )
+            )
+        )
+        if exists.scalar_one_or_none():
+            continue
+
+        affirmation = Affirmation(
+            text_en=aff_data["text_en"],
+            text_sw=aff_data["text_sw"],
+            category=aff_data["category"],
+            source_book=aff_data.get("source_book"),
+            is_active=True,
+        )
+        db.add(affirmation)
+        created += 1
+
+    await db.flush()
+    logger.info("affirmations_seeded", created=created)
+    return created
+
+
+async def get_daily_lesson(
     db: AsyncSession,
     user_id: UUID,
 ) -> Dict[str, Any]:
     """
-    Get today's lesson for a user based on their progress.
+    Get personalized daily lesson for a user.
 
-    Returns the next uncompleted lesson in sequence.
+    Returns the next uncompleted lesson in sequence based on user progress.
+    Falls back to cycling through lessons if all are completed.
     """
 
     # Get user's completed lessons
     completed_result = await db.execute(
-        select(MindsetLessonProgress.lesson_id).where(
+        select(UserLessonProgress.lesson_id).where(
             and_(
-                MindsetLessonProgress.user_id == user_id,
-                MindsetLessonProgress.completed == True,
+                UserLessonProgress.user_id == user_id,
+                UserLessonProgress.completed == True,
             )
         )
     )
     completed_ids = set(row[0] for row in completed_result.all())
 
-    # Get next uncompleted lesson
+    # Get all active lessons ordered
     all_lessons_result = await db.execute(
         select(MindsetLesson)
         .where(MindsetLesson.is_active == True)
@@ -254,20 +337,31 @@ async def get_today_lesson(
             break
 
     if not next_lesson:
+        # All completed — cycle back to first lesson for review
+        next_lesson = all_lessons[0] if all_lessons else None
+        if next_lesson:
+            return {
+                "status": "review_mode",
+                "message_sw": "Hongera! Umekamilisha masomo yote 56! Sasa anza tena kwa ukaguzi.",
+                "message_en": "Congratulations! You've completed all 56 lessons! Starting review cycle.",
+                "lesson": _format_lesson(next_lesson),
+                "overall_progress": {
+                    "completed": len(completed_ids),
+                    "total": len(all_lessons),
+                    "pct": 100.0,
+                },
+            }
         return {
-            "status": "all_completed",
-            "message_sw": "Hongera! Umekamilisha masomo yote 56! Wewe ni mtaalamu wa utajiri.",
-            "message_en": "Congratulations! You've completed all 56 lessons! You're a wealth expert.",
-            "total_completed": len(completed_ids),
-            "total_lessons": len(all_lessons),
+            "status": "no_lessons",
+            "message_sw": "Hakuna masomo bado.",
+            "message_en": "No lessons available yet.",
         }
 
     # Get module info
-    module_info = None
-    for m in MODULE_DEFINITIONS:
-        if m["module_number"] == next_lesson.module_number:
-            module_info = m
-            break
+    module_info = next(
+        (m for m in MODULE_DEFINITIONS if m["module_number"] == next_lesson.module_number),
+        None,
+    )
 
     # Module progress
     module_lessons = [l for l in all_lessons if l.module_number == next_lesson.module_number]
@@ -275,23 +369,13 @@ async def get_today_lesson(
 
     return {
         "status": "available",
-        "lesson": {
-            "id": str(next_lesson.id),
-            "module_number": next_lesson.module_number,
-            "lesson_number": next_lesson.lesson_number,
-            "title_en": next_lesson.title_en,
-            "title_sw": next_lesson.title_sw,
-            "source_book": next_lesson.source_book,
-            "key_takeaway": next_lesson.key_takeaway,
-            "duration_minutes": next_lesson.duration_minutes,
-            "audio_url": next_lesson.audio_url,
-            "content_text": next_lesson.content_text,
-            "order_index": next_lesson.order_index,
-        },
+        "lesson": _format_lesson(next_lesson),
         "module": {
             "number": next_lesson.module_number,
             "title_en": module_info["title_en"] if module_info else None,
             "title_sw": module_info["title_sw"] if module_info else None,
+            "description_en": module_info.get("description_en") if module_info else None,
+            "description_sw": module_info.get("description_sw") if module_info else None,
             "progress": f"{module_completed}/{len(module_lessons)}",
         },
         "overall_progress": {
@@ -304,19 +388,56 @@ async def get_today_lesson(
     }
 
 
-async def mark_lesson_complete(
+def _format_lesson(lesson: MindsetLesson) -> Dict[str, Any]:
+    """Format a lesson for API response."""
+    return {
+        "id": str(lesson.id),
+        "module_number": lesson.module_number,
+        "lesson_number": lesson.lesson_number,
+        "title_en": lesson.title_en,
+        "title_sw": lesson.title_sw,
+        "source_book": lesson.source_book,
+        "key_takeaway": lesson.key_takeaway,
+        "duration_minutes": lesson.duration_minutes,
+        "difficulty": lesson.difficulty,
+        "audio_url": lesson.audio_url,
+        "content_text": lesson.content_text,
+        "order_index": lesson.order_index,
+    }
+
+
+async def track_lesson_completion(
     db: AsyncSession,
     user_id: UUID,
     lesson_id: UUID,
+    score: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Mark a lesson as completed for a user."""
+    """
+    Track lesson completion for a user.
+
+    Args:
+        user_id: The user completing the lesson
+        lesson_id: The lesson being completed
+        score: Optional comprehension score (0-100)
+
+    Returns:
+        Completion status with progress info and module completion check
+    """
+
+    # Validate lesson exists
+    lesson_result = await db.execute(
+        select(MindsetLesson).where(MindsetLesson.id == lesson_id)
+    )
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        return {"error": "Lesson not found", "lesson_id": str(lesson_id)}
 
     # Upsert progress
     result = await db.execute(
-        select(MindsetLessonProgress).where(
+        select(UserLessonProgress).where(
             and_(
-                MindsetLessonProgress.user_id == user_id,
-                MindsetLessonProgress.lesson_id == lesson_id,
+                UserLessonProgress.user_id == user_id,
+                UserLessonProgress.lesson_id == lesson_id,
             )
         )
     )
@@ -326,14 +447,17 @@ async def mark_lesson_complete(
         progress.completed = True
         progress.completed_at = datetime.now(timezone.utc)
         progress.listen_count += 1
+        if score is not None:
+            progress.score = score
     else:
-        progress = MindsetLessonProgress(
+        progress = UserLessonProgress(
             user_id=user_id,
             lesson_id=lesson_id,
             completed=True,
             completed_at=datetime.now(timezone.utc),
             last_listened_at=datetime.now(timezone.utc),
             listen_count=1,
+            score=score,
         )
         db.add(progress)
 
@@ -341,10 +465,10 @@ async def mark_lesson_complete(
 
     # Get overall progress
     total_completed_result = await db.execute(
-        select(func.count(MindsetLessonProgress.id)).where(
+        select(func.count(UserLessonProgress.id)).where(
             and_(
-                MindsetLessonProgress.user_id == user_id,
-                MindsetLessonProgress.completed == True,
+                UserLessonProgress.user_id == user_id,
+                UserLessonProgress.completed == True,
             )
         )
     )
@@ -356,31 +480,24 @@ async def mark_lesson_complete(
     total_lessons = total_lessons_result.scalar() or 56
 
     # Check module completion
-    lesson_result = await db.execute(
-        select(MindsetLesson).where(MindsetLesson.id == lesson_id)
+    module_lessons_result = await db.execute(
+        select(MindsetLesson.id).where(
+            MindsetLesson.module_number == lesson.module_number
+        )
     )
-    lesson = lesson_result.scalar_one_or_none()
+    module_lesson_ids = [row[0] for row in module_lessons_result.all()]
 
-    module_complete = False
-    if lesson:
-        module_lessons_result = await db.execute(
-            select(MindsetLesson.id).where(
-                MindsetLesson.module_number == lesson.module_number
+    module_progress_result = await db.execute(
+        select(func.count(UserLessonProgress.id)).where(
+            and_(
+                UserLessonProgress.user_id == user_id,
+                UserLessonProgress.lesson_id.in_(module_lesson_ids),
+                UserLessonProgress.completed == True,
             )
         )
-        module_lesson_ids = [row[0] for row in module_lessons_result.all()]
-
-        module_progress_result = await db.execute(
-            select(func.count(MindsetLessonProgress.id)).where(
-                and_(
-                    MindsetLessonProgress.user_id == user_id,
-                    MindsetLessonProgress.lesson_id.in_(module_lesson_ids),
-                    MindsetLessonProgress.completed == True,
-                )
-            )
-        )
-        module_completed_count = module_progress_result.scalar() or 0
-        module_complete = module_completed_count >= len(module_lesson_ids)
+    )
+    module_completed_count = module_progress_result.scalar() or 0
+    module_complete = module_completed_count >= len(module_lesson_ids)
 
     return {
         "lesson_id": str(lesson_id),
@@ -389,17 +506,23 @@ async def mark_lesson_complete(
         "total_lessons": total_lessons,
         "pct": round(total_completed / max(total_lessons, 1) * 100, 1),
         "module_complete": module_complete,
+        "module_number": lesson.module_number,
         "message_sw": (
-            "Somo limekamilika! Hongera!"
-            if not module_complete
-            else "Moduli imekamilika! Umefungua moduli mpya! Hongera sana!"
+            "Moduli imekamilika! Umefungua moduli mpya! Hongera sana!"
+            if module_complete
+            else "Somo limekamilika! Hongera!"
         ),
         "message_en": (
-            "Lesson complete! Well done!"
-            if not module_complete
-            else "Module complete! You've unlocked a new module! Congratulations!"
+            "Module complete! You've unlocked a new module! Congratulations!"
+            if module_complete
+            else "Lesson complete! Well done!"
         ),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rich Habits Score
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 async def get_rich_habits_score(
@@ -407,24 +530,31 @@ async def get_rich_habits_score(
     user_id: UUID,
     score_date: Optional[date] = None,
 ) -> Dict[str, Any]:
-    """Get or calculate rich habits score for a given date."""
+    """
+    Get or calculate rich habits score for a given date.
+
+    Tracks 10 daily wealth-building habits:
+    record_sales, check_balance, save_money, avoid_waste,
+    give, learn, set_goal, review_day, help_peer, no_debt.
+
+    Returns score (0-100), streak, level, and habit breakdown.
+    """
 
     if score_date is None:
         score_date = date.today()
 
     result = await db.execute(
-        select(RichHabitScore).where(
+        select(RichHabitsScore).where(
             and_(
-                RichHabitScore.user_id == user_id,
-                RichHabitScore.score_date == score_date,
+                RichHabitsScore.user_id == user_id,
+                RichHabitsScore.score_date == score_date,
             )
         )
     )
     score_record = result.scalar_one_or_none()
 
     if not score_record:
-        # Create empty score for today
-        score_record = RichHabitScore(
+        score_record = RichHabitsScore(
             user_id=user_id,
             score_date=score_date,
             total_score=0,
@@ -453,7 +583,7 @@ async def get_rich_habits_score(
             rating_label, rating_msg_sw, rating_color = label, msg, color
             break
 
-    # Streak (consecutive days with score >= 60)
+    # Streak
     streak = await _calculate_streak(db, user_id, score_date)
 
     # Level
@@ -475,6 +605,7 @@ async def get_rich_habits_score(
         "level": level,
         "level_name": level_name,
         "habits": habits,
+        "max_possible": sum(h["points"] for h in RICH_HABITS.values()),
     }
 
 
@@ -488,24 +619,24 @@ async def update_habit(
     """Update a single habit for today and recalculate score."""
 
     if habit_key not in RICH_HABITS:
-        return {"error": f"Unknown habit: {habit_key}"}
+        return {"error": f"Unknown habit: {habit_key}. Valid: {list(RICH_HABITS.keys())}"}
 
     if score_date is None:
         score_date = date.today()
 
     # Get or create today's score
     result = await db.execute(
-        select(RichHabitScore).where(
+        select(RichHabitsScore).where(
             and_(
-                RichHabitScore.user_id == user_id,
-                RichHabitScore.score_date == score_date,
+                RichHabitsScore.user_id == user_id,
+                RichHabitsScore.score_date == score_date,
             )
         )
     )
     score_record = result.scalar_one_or_none()
 
     if not score_record:
-        score_record = RichHabitScore(
+        score_record = RichHabitsScore(
             user_id=user_id,
             score_date=score_date,
         )
@@ -537,11 +668,243 @@ async def update_habit(
 
     return {
         "habit": habit_key,
+        "habit_name_en": RICH_HABITS[habit_key]["en"],
+        "habit_name_sw": RICH_HABITS[habit_key]["sw"],
         "completed": completed,
         "total_score": total,
+        "max_possible": sum(h["points"] for h in RICH_HABITS.values()),
         "streak": streak,
         "level": score_record.level,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily Affirmations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def get_affirmation(
+    db: AsyncSession,
+    language: str = "en",
+    category: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get a daily affirmation in the specified language.
+
+    Uses day-of-year rotation so the same affirmation appears each day,
+    with category filtering optional.
+
+    Args:
+        db: Database session
+        language: "en" for English, "sw" for Swahili
+        category: Optional filter: belief, wealth, habits, savings, giving, compound
+
+    Returns:
+        Affirmation text, source, and category
+    """
+
+    valid_categories = {"belief", "wealth", "habits", "savings", "giving", "compound"}
+
+    if category and category not in valid_categories:
+        return {
+            "error": f"Invalid category: {category}",
+            "valid_categories": sorted(valid_categories),
+        }
+
+    # Use day-of-year for rotation
+    day_index = date.today().timetuple().tm_yday - 1
+
+    if category:
+        pool = get_affirmations_by_category(category)
+    else:
+        pool = get_all_affirmations()
+
+    if not pool:
+        return {
+            "text": "I am building wealth, one day at a time.",
+            "text_sw": "Ninajenga utajiri, siku moja kwa wakati.",
+            "category": "belief",
+            "source_book": "Biashara Intelligence",
+        }
+
+    affirmation = pool[day_index % len(pool)]
+
+    text_key = "text_sw" if language == "sw" else "text_en"
+
+    return {
+        "text": affirmation.get(text_key, affirmation["text_en"]),
+        "text_en": affirmation["text_en"],
+        "text_sw": affirmation["text_sw"],
+        "category": affirmation["category"],
+        "source_book": affirmation.get("source_book", "Unknown"),
+        "language": language,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Habit Stacking Formulas
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def get_habit_stack(
+    db: AsyncSession,
+    user_id: UUID,
+    worker_type: str,
+) -> Dict[str, Any]:
+    """
+    Get habit stacking formula for a specific worker type.
+
+    Habit stacking (from Atomic Habits): "After X, I will do Y."
+    Each worker type has a tailored daily chain of 10-12 habits
+    linked to their specific work routine.
+
+    Args:
+        db: Database session
+        user_id: User requesting the stack
+        worker_type: One of mama_mboga, boda_boda, duka_owner,
+                     mitumba_vendor, mkono_worker, beautician
+
+    Returns:
+        Full habit stack with times, descriptions, and daily affirmation
+    """
+
+    stack = get_habit_stack(worker_type)
+    if not stack:
+        available = get_all_worker_types()
+        return {
+            "error": f"Unknown worker type: {worker_type}",
+            "available_types": available,
+        }
+
+    # Get user's current score to personalize
+    score_result = await db.execute(
+        select(RichHabitsScore).where(
+            and_(
+                RichHabitsScore.user_id == user_id,
+                RichHabitsScore.score_date == date.today(),
+            )
+        )
+    )
+    current_score = score_result.scalar_one_or_none()
+
+    total_points = sum(h["points"] for h in stack["stack"])
+
+    return {
+        "worker_type": stack["worker_type"],
+        "name_en": stack["name_en"],
+        "name_sw": stack["name_sw"],
+        "description_en": stack["description_en"],
+        "description_sw": stack["description_sw"],
+        "total_habits": len(stack["stack"]),
+        "total_points": total_points,
+        "stack": stack["stack"],
+        "daily_affirmation_en": stack["daily_affirmation_en"],
+        "daily_affirmation_sw": stack["daily_affirmation_sw"],
+        "current_score": current_score.total_score if current_score else 0,
+        "tip_en": "Start with the first habit. Build one at a time. Consistency beats intensity.",
+        "tip_sw": "Anza na tabia ya kwanza. Jenga moja kwa wakati. Uthabiti unashinda ukubwa.",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mastermind Group Recommendations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def get_mastermind_group(
+    db: AsyncSession,
+    user_id: UUID,
+    worker_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get mastermind group recommendations for a user.
+
+    Based on Napoleon Hill's Master Mind principle: "No two minds ever
+    come together without creating a third, invisible, intangible force
+    which may be likened to a third mind."
+
+    If worker_type is not provided, tries to detect from user's habit stack
+    history or defaults to a generic recommendation.
+    """
+
+    if not worker_type:
+        # Default to mama_mboga if no type specified
+        worker_type = "mama_mboga"
+
+    group = MASTERMIND_GROUPS.get(worker_type)
+    if not group:
+        available = list(MASTERMIND_GROUPS.keys())
+        return {
+            "error": f"Unknown worker type: {worker_type}",
+            "available_types": available,
+        }
+
+    # Get user's streak for personalization
+    streak_result = await db.execute(
+        select(RichHabitsScore).where(
+            and_(
+                RichHabitsScore.user_id == user_id,
+                RichHabitsScore.score_date >= date.today() - timedelta(days=30),
+                RichHabitsScore.total_score >= 60,
+            )
+        )
+    )
+    recent_scores = streak_result.scalars().all()
+
+    # Find best score
+    best_score = max((s.total_score for s in recent_scores), default=0)
+
+    motivation_message = ""
+    if best_score >= 80:
+        motivation_message = (
+            "You're ready to lead a mastermind group! Your consistency shows discipline."
+            if len(recent_scores) >= 5
+            else "Great scores! Invite others to match your consistency."
+        )
+    elif best_score >= 50:
+        motivation_message = (
+            "You're building the habit. A mastermind group will accelerate your growth."
+        )
+    else:
+        motivation_message = (
+            "Start by finding 2-3 people who share your financial goals. "
+            "You don't need to be perfect — you need to be committed."
+        )
+
+    return {
+        "worker_type": worker_type,
+        "group_name_en": group["name_en"],
+        "group_name_sw": group["name_sw"],
+        "description_en": group["description_en"],
+        "description_sw": group["description_sw"],
+        "meeting_frequency": group["meeting_frequency"],
+        "focus_areas": group["focus_areas"],
+        "suggested_members": group["suggested_members"],
+        "benefits_en": group["benefits_en"],
+        "benefits_sw": group["benefits_sw"],
+        "compound_interest": group["compound_interest"],
+        "motivation_message": motivation_message,
+        "your_best_score": best_score,
+        "how_to_start_en": (
+            "1. Find 4-6 people with similar goals\n"
+            "2. Agree to meet weekly (even 30 minutes)\n"
+            "3. Each person shares: wins, challenges, next week's goal\n"
+            "4. Hold each other accountable with kindness\n"
+            "5. Track savings progress together"
+        ),
+        "how_to_start_sw": (
+            "1. Tafuta watu 4-6 wenye malengo sawa\n"
+            "2. Kubaliana kukutana kila wiki (hata dakika 30)\n"
+            "3. Kila mtu ashiriki: ushindi, changamoto, lengo la wiki ijayo\n"
+            "4. Shikamaneni kwa upole\n"
+            "5. Fuatilia maendeleo ya akiba pamoja"
+        ),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mindset Briefing
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 async def get_mindset_briefing(
@@ -557,17 +920,19 @@ async def get_mindset_briefing(
     score = await get_rich_habits_score(db, user_id, today)
 
     # Today's lesson
-    lesson = await get_today_lesson(db, user_id)
+    lesson = await get_daily_lesson(db, user_id)
+
+    # Today's affirmation
+    affirmation = await get_affirmation(db, language="en")
 
     if briefing_type == "weekly":
-        # Weekly average
         week_start = today - timedelta(days=7)
         week_scores_result = await db.execute(
-            select(RichHabitScore).where(
+            select(RichHabitsScore).where(
                 and_(
-                    RichHabitScore.user_id == user_id,
-                    RichHabitScore.score_date >= week_start,
-                    RichHabitScore.score_date <= today,
+                    RichHabitsScore.user_id == user_id,
+                    RichHabitsScore.score_date >= week_start,
+                    RichHabitsScore.score_date <= today,
                 )
             )
         )
@@ -578,7 +943,6 @@ async def get_mindset_briefing(
             else 0
         )
 
-        # Best day
         best_day = max(week_scores, key=lambda s: s.total_score) if week_scores else None
 
         return {
@@ -594,16 +958,18 @@ async def get_mindset_briefing(
             "level": score.get("level", 1),
             "level_name": score.get("level_name", "Seedling"),
             "today_lesson": lesson,
+            "affirmation": affirmation,
             "message_sw": f"Ripoti ya wiki: Score yako ya wastani ni {avg_score:.0f}. Endelea kujenga!",
             "message_en": f"Weekly report: Your average score is {avg_score:.0f}. Keep building!",
         }
 
-    # Daily briefing
     return {
         "type": "daily",
         "date": str(today),
         "score": score,
         "today_lesson": lesson,
+        "affirmation": affirmation,
+        "compound_interest": COMPOUND_INTEREST_STORY,
         "greeting_sw": "Habari! Leo ni siku mpya ya kujenga utajiri. Anza na Goal yako ya leo.",
         "greeting_en": "Hello! Today is a new day to build wealth. Start with today's goal.",
     }
@@ -621,26 +987,24 @@ async def _calculate_streak(
 ) -> int:
     """Calculate consecutive days with score >= 60 ending at as_of_date."""
 
-    # Get last 365 days of scores
     start = as_of_date - timedelta(days=365)
     result = await db.execute(
-        select(RichHabitScore.score_date, RichHabitScore.total_score)
+        select(RichHabitsScore.score_date, RichHabitsScore.total_score)
         .where(
             and_(
-                RichHabitScore.user_id == user_id,
-                RichHabitScore.score_date >= start,
-                RichHabitScore.score_date <= as_of_date,
-                RichHabitScore.total_score >= 60,
+                RichHabitsScore.user_id == user_id,
+                RichHabitsScore.score_date >= start,
+                RichHabitsScore.score_date <= as_of_date,
+                RichHabitsScore.total_score >= 60,
             )
         )
-        .order_by(RichHabitScore.score_date.desc())
+        .order_by(RichHabitsScore.score_date.desc())
     )
     qualifying_dates = [row[0] for row in result.all()]
 
     if not qualifying_dates:
         return 0
 
-    # Count consecutive days from as_of_date backward
     streak = 0
     expected = as_of_date
     for d in qualifying_dates:
@@ -648,7 +1012,6 @@ async def _calculate_streak(
             streak += 1
             expected -= timedelta(days=1)
         elif d == expected - timedelta(days=1):
-            # Allow 1-day grace
             streak += 1
             expected = d - timedelta(days=1)
         else:
