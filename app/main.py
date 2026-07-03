@@ -133,6 +133,30 @@ async def lifespan(app: FastAPI):
     app.state.agent_factory = agent_factory
     app.state.agent_infra = agent_infra
 
+    # V2: MetaAgent, domain agents, utility agents
+    if agent_infra.meta_agent:
+        app.state.meta_agent = agent_infra.meta_agent
+    if agent_infra.domain_agents:
+        app.state.domain_agents = {a.name: a for a in agent_infra.domain_agents}
+    if agent_infra.utility_agents:
+        app.state.utility_agents = {a.name: a for a in agent_infra.utility_agents}
+    if agent_infra.broadcast_protocol:
+        app.state.broadcast_protocol = agent_infra.broadcast_protocol
+    if agent_infra.p2p_protocol:
+        app.state.p2p_protocol = agent_infra.p2p_protocol
+    if agent_infra.delegation_protocol:
+        app.state.delegation_protocol = agent_infra.delegation_protocol
+
+    # Store DeerFlow integration on app.state if available
+    if agent_infra.deerflow_factory:
+        app.state.deerflow_factory = agent_infra.deerflow_factory
+        app.state.deerflow_lead_agent = agent_infra.deerflow_lead_agent
+        logger.info(
+            "deerflow_agents_ready",
+            domain_agents=agent_infra.deerflow_factory.list_agents(),
+            has_lead=agent_infra.deerflow_lead_agent is not None,
+        )
+
     # Store loop infrastructure on app.state if available
     if agent_infra.loop_supervisor:
         app.state.loop_event_store = agent_infra.loop_event_store

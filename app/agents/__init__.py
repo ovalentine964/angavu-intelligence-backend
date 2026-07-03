@@ -1,18 +1,27 @@
 """
-Biashara Intelligence — Multi-Agent Runtime
+Biashara Intelligence — Multi-Agent Runtime V2
 
-Transforms the monolithic service layer into a true multi-agent system.
+3-Tier Agent Architecture:
+    Tier 1: Core agents + MetaAgent (system orchestrator)
+    Tier 2: Domain agents (industry-specific intelligence)
+    Tier 3: Utility agents (specialized computation)
 
 Agents:
     TransactionProcessor  — Cleans and structures raw M-Pesa / POS data
     IntelligenceGenerator — Runs Soko Pulse, Alama Score, econometrics
     ReportGenerator       — Produces WhatsApp-native reports for workers
     SelfEvolution         — Learns from worker feedback, drives product evolution
+    MetaAgent             — System-wide orchestrator and coordinator
 
 Infrastructure:
     EventBus    — Redis Streams for inter-agent communication
     AgentTracer — Observability for every agent decision
     BiasharaAgent — Base class with observe / think / act / reflect lifecycle
+
+Communication Protocols:
+    BroadcastProtocol    — EventBus pub/sub
+    PointToPointProtocol — Direct agent messaging
+    DelegationProtocol   — Task delegation with timeout
 
 Loop Patterns (from agentic AI research):
     ReActAgent       — Reasoning + Acting with explicit trace
@@ -90,6 +99,44 @@ from app.agents.intelligence_pipeline import (
     create_all_intelligence_flows,
 )
 
+# V2: MetaAgent (Tier 1 system orchestrator)
+from app.agents.meta_agent import (
+    MetaAgent,
+    CapabilityRouter,
+    ConflictResolver,
+    CrossAgentLearningManager,
+    AgentMetrics,
+    ConflictRecord,
+    LearningShare,
+)
+
+# V2: Domain Agents (Tier 2)
+from app.agents.domain import (
+    AgricultureDomainAgent,
+    RetailDomainAgent,
+    TransportDomainAgent,
+    DigitalDomainAgent,
+    ManufacturingDomainAgent,
+    ServiceDomainAgent,
+)
+
+# V2: Utility Agents (Tier 3)
+from app.agents.utility import (
+    DataQualityAgent,
+    AnomalyDetectorAgent,
+    PredictionAgent,
+    CommunicationAgent,
+    LearningAgent,
+    SyncAgent,
+)
+
+# V2: Communication Protocols
+from app.agents.communication import (
+    BroadcastProtocol,
+    PointToPointProtocol,
+    DelegationProtocol,
+)
+
 __all__ = [
     # Base
     "BiasharaAgent",
@@ -153,4 +200,30 @@ __all__ = [
     "ErrorCompactor",
     "ErrorSeverity",
     "UnifiedStateManager",
+    # V2: MetaAgent (Tier 1)
+    "MetaAgent",
+    "CapabilityRouter",
+    "ConflictResolver",
+    "CrossAgentLearningManager",
+    "AgentMetrics",
+    "ConflictRecord",
+    "LearningShare",
+    # V2: Domain Agents (Tier 2)
+    "AgricultureDomainAgent",
+    "RetailDomainAgent",
+    "TransportDomainAgent",
+    "DigitalDomainAgent",
+    "ManufacturingDomainAgent",
+    "ServiceDomainAgent",
+    # V2: Utility Agents (Tier 3)
+    "DataQualityAgent",
+    "AnomalyDetectorAgent",
+    "PredictionAgent",
+    "CommunicationAgent",
+    "LearningAgent",
+    "SyncAgent",
+    # V2: Communication Protocols
+    "BroadcastProtocol",
+    "PointToPointProtocol",
+    "DelegationProtocol",
 ]

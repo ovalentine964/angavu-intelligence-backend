@@ -5,6 +5,9 @@ Centralizes agent construction with proper service dependency injection,
 correct startup ordering, and graceful shutdown. Replaces the inline
 agent creation that was previously scattered across main.py lifespan.
 
+V2: Now includes MetaAgent (Tier 1), Domain Agents (Tier 2),
+and Utility Agents (Tier 3) in a 3-tier architecture.
+
 Usage:
     factory = AgentFactory()
     infrastructure = await factory.create_all()
@@ -40,12 +43,28 @@ class AgentInfrastructure:
 
     Returned by AgentFactory.create_all() and stored on app.state
     for API access and health checks.
+
+    V2: Added meta_agent, domain_agents, utility_agents, communication protocols.
     """
 
     event_bus: EventBus
     tracer: AgentTracer
     agents: List[BiasharaAgent]
     agent_map: Dict[str, BiasharaAgent] = field(default_factory=dict)
+
+    # Tier 1: MetaAgent
+    meta_agent: Any = None  # MetaAgent | None
+
+    # Tier 2: Domain agents
+    domain_agents: List[BiasharaAgent] = field(default_factory=list)
+
+    # Tier 3: Utility agents
+    utility_agents: List[BiasharaAgent] = field(default_factory=list)
+
+    # Communication protocols
+    broadcast_protocol: Any = None
+    p2p_protocol: Any = None
+    delegation_protocol: Any = None
 
     # Optional loop-enhanced infrastructure
     loop_supervisor: Any = None
@@ -56,6 +75,10 @@ class AgentInfrastructure:
     intelligence_flows: Dict[str, Any] = field(default_factory=dict)
     research_orchestrator: Any = None
 
+    # DeerFlow integration (deerflow-harness)
+    deerflow_factory: Any = None
+    deerflow_lead_agent: Any = None
+
     def __post_init__(self):
         if not self.agent_map:
             self.agent_map = {a.name: a for a in self.agents}
@@ -65,21 +88,22 @@ class AgentFactory:
     """
     Creates and wires all Biashara Intelligence agents.
 
-    Responsibilities:
-    - Construct EventBus with Redis Streams (or in-memory fallback)
-    - Create agents with proper service dependencies
-    - Subscribe agents to their event types
-    - Wire reflect→behavior feedback loops
-    - Start agents in correct dependency order
-    - Handle graceful shutdown in reverse order
+    V2 Architecture — 3 Tiers:
+        Tier 1: Core agents (TransactionProcessor, IntelligenceGenerator,
+                ReportGenerator, SelfEvolution) + MetaAgent
+        Tier 2: Domain agents (Agriculture, Retail, Transport, Digital,
+                Manufacturing, Service)
+        Tier 3: Utility agents (DataQuality, AnomalyDetector, Prediction,
+                Communication, Learning, Sync)
 
     Startup order:
         1. EventBus (must exist before agents can subscribe)
         2. AgentTracer (observability from the start)
-        3. TransactionProcessor (first in pipeline)
-        4. IntelligenceGenerator (depends on processed transactions)
-        5. ReportGenerator (depends on intelligence)
-        6. SelfEvolution (depends on report delivery + feedback)
+        3. Communication protocols (broadcast, p2p, delegation)
+        4. Utility agents (Tier 3 — stateless, no dependencies)
+        5. Core agents (Tier 1 — pipeline backbone)
+        6. Domain agents (Tier 2 — activated per request)
+        7. MetaAgent (Tier 1 — monitors and routes everything)
 
     Shutdown order: reverse of startup.
     """
@@ -93,6 +117,7 @@ class AgentFactory:
         *,
         enable_loops: bool = True,
         enable_long_horizon: bool = True,
+        enable_deerflow: bool = True,
     ) -> AgentInfrastructure:
         """
         Create, wire, and start all agents.
@@ -104,7 +129,7 @@ class AgentFactory:
         Returns:
             AgentInfrastructure with all runtime references
         """
-        self._logger.info("creating_agent_infrastructure")
+        self._logger.info("creating_agent_infrastructure_v2")
 
         # 1. EventBus
         event_bus = EventBus()
@@ -114,61 +139,129 @@ class AgentFactory:
         # 2. Tracer
         tracer = AgentTracer()
 
-        # 3. Create core agents
+        # 3. Communication protocols
+        from app.agents.communication.broadcast import BroadcastProtocol
+        from app.agents.communication.point_to_point import PointToPointProtocol
+        from app.agents.communication.delegation import DelegationProtocol
+
+        broadcast_protocol = BroadcastProtocol(event_bus)
+        p2p_protocol = PointToPointProtocol(event_bus)
+        delegation_protocol = DelegationProtocol(event_bus)
+
+        self._logger.info("communication_protocols_ready")
+
+        # 4. Create Tier 3: Utility agents (stateless, no dependencies)
+        utility_agents = self._create_utility_agents()
+        self._logger.info("utility_agents_created", count=len(utility_agents))
+
+        # 5. Create Tier 1: Core agents
         transaction_processor = TransactionProcessorAgent()
         intelligence_generator = IntelligenceGeneratorAgent()
         report_generator = ReportGeneratorAgent()
         self_evolution = SelfEvolutionAgent()
 
-        agents = [
+        core_agents = [
             transaction_processor,
             intelligence_generator,
             report_generator,
             self_evolution,
         ]
 
-        # 4. Inject infrastructure
-        for agent in agents:
+        # 6. Create Tier 2: Domain agents
+        domain_agents = self._create_domain_agents()
+        self._logger.info("domain_agents_created", count=len(domain_agents))
+
+        # 7. Create Tier 1: MetaAgent
+        meta_agent = self._create_meta_agent()
+
+        # 8. Wire all agents together
+        all_agents = core_agents + domain_agents + utility_agents + [meta_agent]
+
+        # Inject infrastructure into all agents
+        for agent in all_agents:
             agent.set_event_bus(event_bus)
             agent.set_tracer(tracer)
 
-        # 5. Subscribe agents to event types
-        await self._subscribe_agents(event_bus, agents)
+        # 9. Register all agents with MetaAgent
+        for agent in all_agents:
+            if agent.name != "MetaAgent":
+                meta_agent.register_agent(agent)
 
-        # 6. Wire reflect→behavior feedback loops
-        self._wire_reflect_loops(agents)
+        # 10. Subscribe agents to event types
+        await self._subscribe_agents(event_bus, core_agents, domain_agents, meta_agent)
 
-        # 7. Start agents in dependency order
-        for agent in agents:
+        # 11. Wire reflect→behavior feedback loops
+        self._wire_reflect_loops(core_agents)
+
+        # 12. Start agents in dependency order
+        # Tier 3 first (stateless)
+        for agent in utility_agents:
             await agent.start()
 
-        self._logger.info("core_agents_started", count=len(agents))
+        # Tier 1 core
+        for agent in core_agents:
+            await agent.start()
+
+        # Tier 2 domain
+        for agent in domain_agents:
+            await agent.start()
+
+        # MetaAgent last (needs all others registered)
+        await meta_agent.start()
+
+        self._logger.info(
+            "all_agents_started",
+            core=len(core_agents),
+            domain=len(domain_agents),
+            utility=len(utility_agents),
+            meta=1,
+        )
 
         # Build infrastructure container
         infrastructure = AgentInfrastructure(
             event_bus=event_bus,
             tracer=tracer,
-            agents=agents,
+            agents=core_agents,
+            meta_agent=meta_agent,
+            domain_agents=domain_agents,
+            utility_agents=utility_agents,
+            broadcast_protocol=broadcast_protocol,
+            p2p_protocol=p2p_protocol,
+            delegation_protocol=delegation_protocol,
         )
 
-        # 8. Optional: loop-enhanced agents
+        # 13. Optional: loop-enhanced agents
         if enable_loops:
             infrastructure = await self._attach_loop_agents(
                 infrastructure, event_bus, tracer,
             )
 
-        # 9. Optional: long-horizon orchestration
+        # 14. Optional: long-horizon orchestration
         if enable_long_horizon:
             infrastructure = await self._attach_long_horizon(
                 infrastructure, event_bus, tracer,
             )
 
+        # 15. Optional: DeerFlow integration (deerflow-harness)
+        if enable_deerflow:
+            infrastructure = await self._attach_deerflow(
+                infrastructure, event_bus, tracer,
+            )
+
         self._infrastructure = infrastructure
+        total_agents = (
+            len(core_agents) + len(domain_agents) + len(utility_agents) + 1
+        )
         self._logger.info(
-            "agent_infrastructure_ready",
-            core_agents=len(agents),
+            "agent_infrastructure_v2_ready",
+            total_agents=total_agents,
+            core_agents=len(core_agents),
+            domain_agents=len(domain_agents),
+            utility_agents=len(utility_agents),
+            meta_agent=1,
             loop_agents=len(infrastructure.loop_agents),
             flows=list(infrastructure.intelligence_flows.keys()),
+            has_deerflow=infrastructure.deerflow_factory is not None,
         )
 
         return infrastructure
@@ -184,9 +277,16 @@ class AgentFactory:
             return
 
         infra = self._infrastructure
-        self._logger.info("shutting_down_agent_infrastructure")
+        self._logger.info("shutting_down_agent_infrastructure_v2")
 
-        # Stop long-horizon agents first (they depend on core agents)
+        # Stop MetaAgent first (it orchestrates everything)
+        if infra.meta_agent:
+            try:
+                await infra.meta_agent.stop()
+            except Exception as exc:
+                self._logger.warning("meta_agent_stop_error", error=str(exc))
+
+        # Stop long-horizon agents
         if infra.research_orchestrator:
             try:
                 for agent in infra.research_orchestrator.delegator._agents.values():
@@ -208,6 +308,20 @@ class AgentFactory:
             except Exception as exc:
                 self._logger.warning("loop_agent_stop_error", agent=agent.name, error=str(exc))
 
+        # Stop domain agents (Tier 2)
+        for agent in reversed(infra.domain_agents):
+            try:
+                await agent.stop()
+            except Exception as exc:
+                self._logger.warning("domain_agent_stop_error", agent=agent.name, error=str(exc))
+
+        # Stop utility agents (Tier 3)
+        for agent in reversed(infra.utility_agents):
+            try:
+                await agent.stop()
+            except Exception as exc:
+                self._logger.warning("utility_agent_stop_error", agent=agent.name, error=str(exc))
+
         # Stop core agents in reverse order
         for agent in reversed(infra.agents):
             try:
@@ -218,18 +332,68 @@ class AgentFactory:
         # Disconnect event bus
         await infra.event_bus.disconnect()
 
-        self._logger.info("agent_infrastructure_shutdown_complete")
+        self._logger.info("agent_infrastructure_v2_shutdown_complete")
         self._infrastructure = None
+
+    # ── Agent Creation ──────────────────────────────────────────────
+
+    def _create_meta_agent(self):
+        """Create the MetaAgent (Tier 1 system orchestrator)."""
+        from app.agents.meta_agent import MetaAgent
+        return MetaAgent()
+
+    def _create_domain_agents(self) -> List[BiasharaAgent]:
+        """Create Tier 2 domain agents."""
+        from app.agents.domain import (
+            AgricultureDomainAgent,
+            RetailDomainAgent,
+            TransportDomainAgent,
+            DigitalDomainAgent,
+            ManufacturingDomainAgent,
+            ServiceDomainAgent,
+        )
+
+        return [
+            AgricultureDomainAgent(),
+            RetailDomainAgent(),
+            TransportDomainAgent(),
+            DigitalDomainAgent(),
+            ManufacturingDomainAgent(),
+            ServiceDomainAgent(),
+        ]
+
+    def _create_utility_agents(self) -> List[BiasharaAgent]:
+        """Create Tier 3 utility agents."""
+        from app.agents.utility import (
+            DataQualityAgent,
+            AnomalyDetectorAgent,
+            PredictionAgent,
+            CommunicationAgent,
+            LearningAgent,
+            SyncAgent,
+        )
+
+        return [
+            DataQualityAgent(),
+            AnomalyDetectorAgent(),
+            PredictionAgent(),
+            CommunicationAgent(),
+            LearningAgent(),
+            SyncAgent(),
+        ]
 
     # ── Internal wiring ────────────────────────────────────────────
 
     async def _subscribe_agents(
         self,
         event_bus: EventBus,
-        agents: List[BiasharaAgent],
+        core_agents: List[BiasharaAgent],
+        domain_agents: List[BiasharaAgent],
+        meta_agent: BiasharaAgent,
     ) -> None:
         """Subscribe each agent to its relevant event types."""
-        subscription_map = {
+        # Core agent subscriptions
+        core_subscription_map = {
             "TransactionProcessor": [
                 EventType.TRANSACTION_RECEIVED,
                 EventType.BATCH_PROCESSED,
@@ -251,10 +415,31 @@ class AgentFactory:
             ],
         }
 
-        for agent in agents:
-            event_types = subscription_map.get(agent.name, [])
+        for agent in core_agents:
+            event_types = core_subscription_map.get(agent.name, [])
             if event_types:
                 await event_bus.subscribe(agent, event_types)
+
+        # Domain agents subscribe to domain analysis requests
+        domain_event_types = [
+            EventType.DOMAIN_ANALYSIS_REQUESTED,
+            EventType.INTELLIGENCE_REQUESTED,
+            EventType.TRANSACTION_PROCESSED,
+        ]
+        for agent in domain_agents:
+            await event_bus.subscribe(agent, domain_event_types)
+
+        # MetaAgent subscribes to system-wide events
+        meta_event_types = [
+            EventType.TRANSACTION_PROCESSED,
+            EventType.INTELLIGENCE_REQUESTED,
+            EventType.CONFLICT_DETECTED,
+            EventType.AGENT_HEALTH_CHECK,
+            EventType.PIPELINE_ERROR,
+            EventType.DOMAIN_ANALYSIS_COMPLETED,
+            EventType.MARKET_ALERT,
+        ]
+        await event_bus.subscribe(meta_agent, meta_event_types)
 
     def _wire_reflect_loops(self, agents: List[BiasharaAgent]) -> None:
         """
@@ -407,5 +592,54 @@ class AgentFactory:
             )
         except Exception as exc:
             self._logger.warning("long_horizon_setup_failed", error=str(exc))
+
+        return infrastructure
+
+    async def _attach_deerflow(
+        self,
+        infrastructure: AgentInfrastructure,
+        event_bus: EventBus,
+        tracer: AgentTracer,
+    ) -> AgentInfrastructure:
+        """
+        Create and attach DeerFlow-powered agents via deerflow-harness.
+
+        Uses DeerFlow's create_deerflow_agent factory to create LangGraph
+        agents with Biashara tools. Falls back gracefully if deerflow-harness
+        is not installed.
+        """
+        try:
+            from app.deerflow.integration import BiasharaAgentFactory
+
+            df_factory = BiasharaAgentFactory()
+
+            # Create domain agents using DeerFlow's factory
+            domain_agent_names = ["research", "credit", "distribution", "fmcg", "health", "development"]
+            for agent_name in domain_agent_names:
+                try:
+                    df_factory.create_domain_agent(agent_name)
+                except Exception as e:
+                    self._logger.warning("deerflow_domain_agent_failed", agent=agent_name, error=str(e))
+
+            # Create lead agent
+            try:
+                df_factory.create_lead_agent()
+            except Exception as e:
+                self._logger.warning("deerflow_lead_agent_failed", error=str(e))
+
+            infrastructure.deerflow_factory = df_factory
+            infrastructure.deerflow_lead_agent = df_factory.get_lead_agent()
+
+            created = df_factory.list_agents()
+            self._logger.info(
+                "deerflow_agents_attached",
+                domain_agents=created,
+                has_lead=df_factory.get_lead_agent() is not None,
+            )
+
+        except ImportError:
+            self._logger.info("deerflow_harness_not_installed_skipping")
+        except Exception as exc:
+            self._logger.warning("deerflow_setup_failed", error=str(exc))
 
         return infrastructure
