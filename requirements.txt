@@ -56,7 +56,9 @@ python-dateutil==2.9.0
 geopy==2.4.1
 
 # DeerFlow Agent Harness (local install)
-deerflow-harness @ file:///home/work/.openclaw/workspace/biashara-deerflow/backend/packages/harness
+# deerflow-harness — install from local clone or PyPI when published
+# deerflow-harness @ file:///path/to/deerflow/backend/packages/harness
+deerflow-harness>=0.1.0
 langgraph>=1.1.9
 langgraph-sdk>=0.1.51
 langchain>=1.2.15

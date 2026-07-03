@@ -617,6 +617,6 @@ Using Angavu Intelligence's WhatsApp-based platform, Wanjiku:
             target_keyword=best_keyword,
             secondary_keywords=secondary_keywords[:3],
             meta_title=topic[:60],  # Google truncates at ~60 chars
-            meta_description=f"Learn how {best_keyword} is transforming African businesses. Real data, real results.": 155,
+            meta_description=f"Learn how {best_keyword} is transforming African businesses. Real data, real results."[:155],
             readability_score=75.0,  # Target: grade 8 reading level
         )
