@@ -247,7 +247,7 @@ async def record_loan(
             from datetime import datetime
             disbursed_at = datetime.fromisoformat(request.disbursed_at)
 
-        result = await loan_service.record_loan(
+        result = await loan_service.record_loan_legacy(
             db=db,
             user_id=request.user_id,
             principal=request.principal,
@@ -280,7 +280,7 @@ async def loan_status(
     Returns streak info, recent repayments, and voice-friendly summaries.
     """
     try:
-        result = await loan_service.get_loan_status(
+        result = await loan_service.get_loan_status_legacy(
             db=db,
             user_id=user_id,
             loan_id=loan_id,

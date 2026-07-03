@@ -24,6 +24,11 @@ from app.models.worker_features import (
     MindsetLessonProgress,
     RichHabitScore,
 )
+from app.models.loan import (
+    Loan,
+    LoanRepayment as LoanRepaymentV2,
+    PurposeVerification,
+)
 from app.models.goal import (
     Goal,
     GoalMilestone,
@@ -47,6 +52,12 @@ from app.models.stickiness import (
     UserBadge,
     UserLevel,
     Streak,
+)
+from app.models.mindset import (
+    MindsetLesson as MindsetLessonV2,
+    UserLessonProgress,
+    RichHabitsScore,
+    Affirmation,
 )
 
 __all__ = [
@@ -74,6 +85,9 @@ __all__ = [
     "MindsetLesson",
     "MindsetLessonProgress",
     "RichHabitScore",
+    "Loan",
+    "LoanRepaymentV2",
+    "PurposeVerification",
     "Goal",
     "GoalMilestone",
     "GoalProgressEntry",
@@ -90,4 +104,8 @@ __all__ = [
     "UserBadge",
     "UserLevel",
     "Streak",
+    "MindsetLessonV2",
+    "UserLessonProgress",
+    "RichHabitsScore",
+    "Affirmation",
 ]
