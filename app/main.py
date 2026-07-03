@@ -180,6 +180,26 @@ async def lifespan(app: FastAPI):
             research_orchestrator=agent_infra.research_orchestrator,
         )
 
+    # Initialize Autonomous Orchestrator
+    try:
+        from app.autonomous.orchestrator import AutonomousOrchestrator
+        from app.autonomous.escalation import EscalationManager
+        from app.autonomous.monitoring import AgentMonitor
+        from app.autonomous.config import AgentConfigManager
+
+        auto_orchestrator = AutonomousOrchestrator(
+            event_bus=event_bus,
+            tracer=tracer,
+            escalation_manager=EscalationManager(),
+            monitor=AgentMonitor(),
+            config_manager=AgentConfigManager(),
+        )
+        await auto_orchestrator.start()
+        app.state.autonomous_orchestrator = auto_orchestrator
+        logger.info("autonomous_orchestrator_started")
+    except Exception as exc:
+        logger.warning("autonomous_orchestrator_setup_failed", error=str(exc))
+
     # Wire open loop: Drift → EventBus + TaskQueue → Agent retrain
     try:
         from app.services.drift_retrain_trigger import _handle_drift_alert
@@ -525,6 +545,9 @@ from app.api.v1.tithe import router as tithe_router
 # Wealth Mindset (56 lessons, rich habits, affirmations, mastermind)
 from app.api.v1.mindset import router as mindset_router
 
+# Autonomous Revenue Operations (leads, invoicing, content, onboarding)
+from app.autonomous.api.router import router as autonomous_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -554,6 +577,9 @@ app.include_router(loans_router, prefix=settings.API_V1_PREFIX)
 app.include_router(stickiness_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tithe_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mindset_router, prefix=settings.API_V1_PREFIX)
+app.include_router(autonomous_router)
+
+# Mount autonomous router (prefix is built into the router)
 
 
 # =========================================================================

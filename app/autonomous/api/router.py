@@ -35,6 +35,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import get_settings
+from app.db.database import get_db
+from app.autonomous.repository import AutonomousRepository
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -44,6 +46,21 @@ router = APIRouter(prefix="/api/v1/revenue-ops", tags=["revenue-ops"])
 
 # Rate limiter (per-endpoint)
 limiter = Limiter(key_func=get_remote_address)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Orchestrator Access
+# ════════════════════════════════════════════════════════════════════
+
+
+def _get_orchestrator(request: Request):
+    """Get the AutonomousOrchestrator from app state."""
+    return getattr(request.app.state, "autonomous_orchestrator", None)
+
+
+def _get_event_bus(request: Request):
+    """Get the EventBus from app state."""
+    return getattr(request.app.state, "event_bus", None)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -252,34 +269,42 @@ async def create_lead(
     request: Request,
     body: LeadCreateRequest,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """
     Submit a new lead for automatic qualification.
 
-    Requires JWT authentication. Rate limited to 30 requests/minute.
+    Persists to database and publishes event to EventBus
+    for the LeadQualifierAgent to process.
     """
-    from app.autonomous.models.lead import Lead, LeadSource, LeadStatus
+    repo = AutonomousRepository(db)
 
-    try:
-        source = LeadSource(body.source)
-    except ValueError:
-        source = LeadSource.OTHER
+    lead = await repo.create_lead({
+        "company_name": body.company_name,
+        "contact_name": body.contact_name,
+        "contact_email": body.contact_email,
+        "contact_phone": body.contact_phone,
+        "industry": body.industry,
+        "company_size": body.company_size,
+        "estimated_budget": body.estimated_budget,
+        "source": body.source,
+        "status": "new",
+        "metadata": _sanitize_dict(body.metadata),
+    })
 
-    lead = Lead(
-        company_name=body.company_name,
-        contact_name=body.contact_name,
-        contact_email=body.contact_email,
-        contact_phone=body.contact_phone,
-        industry=body.industry,
-        company_size=body.company_size,
-        estimated_budget=body.estimated_budget,
-        source=source,
-        metadata=_sanitize_dict(body.metadata),
-    )
+    # Publish event to EventBus for agent processing
+    event_bus = _get_event_bus(request)
+    if event_bus:
+        from app.agents.base import AgentEvent, EventType
+        await event_bus.publish(AgentEvent(
+            event_type=EventType.LEAD_CREATED,
+            source="api",
+            payload=lead.to_dict(),
+        ))
 
     logger.info(
         "lead_created",
-        lead_id=lead.lead_id,
+        lead_id=lead.id,
         company=body.company_name,
         user_id=user.get("sub"),
     )
@@ -298,12 +323,15 @@ async def list_leads(
     status_filter: Optional[str] = None,
     limit: int = Field(50, ge=1, le=200),
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """List leads with optional status filter."""
-    # In production, query from database (see Fix #3)
+    repo = AutonomousRepository(db)
+    leads = await repo.list_leads(status=status_filter, limit=limit)
+    total = await repo.count_leads(status=status_filter)
     return {
-        "leads": [],
-        "total": 0,
+        "leads": [l.to_dict() for l in leads],
+        "total": total,
         "filter": {"status": status_filter},
     }
 
@@ -314,9 +342,14 @@ async def get_lead(
     request: Request,
     lead_id: str = Field(..., max_length=50),
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Get detailed information about a specific lead."""
-    return {"lead_id": lead_id, "status": "not_found"}
+    repo = AutonomousRepository(db)
+    lead = await repo.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"lead": lead.to_dict()}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -400,23 +433,43 @@ async def create_invoice(
     request: Request,
     body: InvoiceCreateRequest,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """
     Create and send an invoice for a client.
 
-    Requires JWT authentication. Rate limited to 20 requests/minute.
+    Persists to database and publishes event for the InvoicingAgent.
     """
+    repo = AutonomousRepository(db)
+
+    invoice = await repo.create_invoice({
+        "client_id": body.client_id,
+        "client_name": body.client_name,
+        "client_email": body.client_email,
+        "product_tier": body.product_tier,
+        "status": "draft",
+    })
+
+    # Publish event to EventBus
+    event_bus = _get_event_bus(request)
+    if event_bus:
+        from app.agents.base import AgentEvent, EventType
+        await event_bus.publish(AgentEvent(
+            event_type=EventType.INVOICE_DRAFTED,
+            source="api",
+            payload=invoice.to_dict(),
+        ))
+
     logger.info(
         "invoice_created",
+        invoice_id=invoice.id,
         client_id=body.client_id,
-        product_tier=body.product_tier,
         user_id=user.get("sub"),
     )
 
     return {
         "status": "submitted",
-        "client_id": body.client_id,
-        "product_tier": body.product_tier,
+        "invoice": invoice.to_dict(),
         "message": "Invoice creation submitted.",
     }
 
@@ -428,11 +481,14 @@ async def list_invoices(
     status_filter: Optional[str] = None,
     limit: int = Field(50, ge=1, le=200),
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """List invoices with optional status filter."""
+    repo = AutonomousRepository(db)
+    invoices = await repo.list_invoices(status=status_filter, limit=limit)
     return {
-        "invoices": [],
-        "total": 0,
+        "invoices": [i.to_dict() for i in invoices],
+        "total": len(invoices),
         "filter": {"status": status_filter},
     }
 
@@ -445,14 +501,24 @@ async def mark_invoice_paid(
     payment_method: str = Field("mpesa", max_length=50),
     payment_reference: str = Field("", max_length=200),
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Mark an invoice as paid (from payment webhook)."""
-    logger.info(
-        "invoice_marked_paid",
-        invoice_id=invoice_id,
-        payment_method=payment_method,
-        user_id=user.get("sub"),
-    )
+    repo = AutonomousRepository(db)
+    invoice = await repo.mark_invoice_paid(invoice_id, payment_method, payment_reference)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Publish event
+    event_bus = _get_event_bus(request)
+    if event_bus:
+        from app.agents.base import AgentEvent, EventType
+        await event_bus.publish(AgentEvent(
+            event_type=EventType.INVOICE_PAID,
+            source="api",
+            payload=invoice.to_dict(),
+        ))
+
     return {
         "invoice_id": invoice_id,
         "status": "paid",
@@ -487,11 +553,14 @@ async def list_onboarding(
     request: Request,
     status_filter: Optional[str] = None,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """List all onboarding flows."""
+    repo = AutonomousRepository(db)
+    flows = await repo.list_onboarding_flows(status=status_filter)
     return {
-        "flows": [],
-        "total": 0,
+        "flows": [f.to_dict() for f in flows],
+        "total": len(flows),
         "filter": {"status": status_filter},
     }
 
@@ -502,9 +571,14 @@ async def get_onboarding(
     request: Request,
     flow_id: str = Field(..., max_length=50),
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Get detailed onboarding flow progress."""
-    return {"flow_id": flow_id, "status": "not_found"}
+    repo = AutonomousRepository(db)
+    flow = await repo.get_onboarding_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Onboarding flow not found")
+    return {"flow": flow.to_dict()}
 
 
 @router.post("/onboarding/{flow_id}/feedback", summary="Submit onboarding feedback")
@@ -514,8 +588,18 @@ async def submit_onboarding_feedback(
     flow_id: str,
     body: OnboardingFeedbackRequest,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Submit feedback for an onboarding flow."""
+    repo = AutonomousRepository(db)
+    flow = await repo.get_onboarding_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Onboarding flow not found")
+
+    flow.satisfaction_score = body.satisfaction_score
+    flow.feedback = body.feedback
+    await db.flush()
+
     return {
         "flow_id": flow_id,
         "satisfaction_score": body.satisfaction_score,
@@ -530,8 +614,13 @@ async def complete_onboarding_step(
     flow_id: str,
     step_name: str,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Mark a specific onboarding step as completed."""
+    repo = AutonomousRepository(db)
+    step = await repo.complete_onboarding_step(flow_id, step_name)
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
     return {
         "flow_id": flow_id,
         "step": step_name,
@@ -603,12 +692,30 @@ async def record_revenue_metric(
     request: Request,
     body: RevenueMetricRequest,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """Record a revenue metric data point."""
-    return {
-        "status": "recorded",
+    repo = AutonomousRepository(db)
+    metric = await repo.record_metric({
         "metric_name": body.metric_name,
         "value": body.value,
+        "period": body.period,
+        "segment": body.segment,
+    })
+
+    # Publish event
+    event_bus = _get_event_bus(request)
+    if event_bus:
+        from app.agents.base import AgentEvent, EventType
+        await event_bus.publish(AgentEvent(
+            event_type=EventType.REVENUE_METRIC_RECORDED,
+            source="api",
+            payload=metric.to_dict(),
+        ))
+
+    return {
+        "status": "recorded",
+        "metric": metric.to_dict(),
     }
 
 
@@ -622,50 +729,50 @@ async def record_revenue_metric(
 async def get_dashboard(
     request: Request,
     user: dict = Depends(require_auth),
+    db: "AsyncSession" = Depends(get_db),
 ):
     """
     Get the full revenue operations dashboard.
 
-    Includes:
-    - Lead pipeline summary
-    - Content pipeline summary
-    - Invoice status and revenue forecast
-    - Onboarding progress
-    - Feedback loop insights
-    - Strategy adjustment recommendations
+    Pulls real data from the database and orchestrator.
     """
+    repo = AutonomousRepository(db)
+
+    # Get counts from DB
+    total_leads = await repo.count_leads()
+    qualified_leads = await repo.count_leads(status="qualified")
+    invoices = await repo.list_invoices(limit=1000)
+    flows = await repo.list_onboarding_flows()
+
+    paid_invoices = [i for i in invoices if i.status == "paid"]
+    outstanding = [i for i in invoices if i.status in ("sent", "draft")]
+    overdue = [i for i in invoices if i.status == "overdue"]
+
+    # Get orchestrator status if available
+    orchestrator = _get_orchestrator(request)
+    orchestrator_status = orchestrator.get_status() if orchestrator else {}
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "leads": {
-            "total": 0,
-            "by_status": {},
+            "total": total_leads,
+            "qualified": qualified_leads,
             "pipeline_value": 0,
         },
-        "content": {
-            "total_pieces": 0,
-            "by_type": {},
-            "scheduled_this_week": 0,
-        },
         "invoices": {
-            "total": 0,
-            "paid": 0,
-            "outstanding": 0,
-            "overdue": 0,
-            "mrr": 0,
+            "total": len(invoices),
+            "paid": len(paid_invoices),
+            "outstanding": len(outstanding),
+            "overdue": len(overdue),
+            "mrr": sum(i.total for i in paid_invoices),
         },
         "onboarding": {
-            "active_flows": 0,
-            "completed": 0,
-            "avg_satisfaction": 0,
+            "active_flows": sum(1 for f in flows if f.status == "in_progress"),
+            "completed": sum(1 for f in flows if f.status == "completed"),
+            "avg_satisfaction": (
+                sum(f.satisfaction_score for f in flows if f.satisfaction_score > 0)
+                / max(1, sum(1 for f in flows if f.satisfaction_score > 0))
+            ),
         },
-        "feedback": {
-            "total_signals": 0,
-            "top_themes": [],
-            "nps": 0,
-        },
-        "strategy_adjustments": {
-            "lead_scoring": {},
-            "content_strategy": {},
-            "pricing": {},
-        },
+        "orchestrator": orchestrator_status,
     }
