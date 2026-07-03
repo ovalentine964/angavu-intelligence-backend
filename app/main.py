@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
         try:
             await get_clickhouse()
             logger.info("clickhouse_initialized")
-        except Exception as e:
+        except (ConnectionError, OSError, TimeoutError) as e:
             logger.warning("clickhouse_init_failed", error=str(e))
 
     # ── Multi-Agent Wiring (via AgentFactory) ─────────────────────
@@ -197,7 +197,7 @@ async def lifespan(app: FastAPI):
         await auto_orchestrator.start()
         app.state.autonomous_orchestrator = auto_orchestrator
         logger.info("autonomous_orchestrator_started")
-    except Exception as exc:
+    except (ImportError, RuntimeError, AttributeError) as exc:
         logger.warning("autonomous_orchestrator_setup_failed", error=str(exc))
 
     # Wire open loop: Drift → EventBus + TaskQueue → Agent retrain
@@ -225,7 +225,7 @@ async def lifespan(app: FastAPI):
 
         app.state.drift_alert_callback = _on_drift_alert
         logger.info("drift_to_eventbus_bridge_wired")
-    except Exception as exc:
+    except (ImportError, AttributeError) as exc:
         logger.warning("drift_bridge_setup_failed", error=str(exc))
 
     # Wire open loop: FL aggregation → verification
@@ -256,7 +256,7 @@ async def lifespan(app: FastAPI):
 
         FederatedLearningService._aggregate_language = _verified_aggregate
         logger.info("fl_verification_loop_wired")
-    except Exception as exc:
+    except (ImportError, AttributeError) as exc:
         logger.warning("fl_verification_setup_failed", error=str(exc))
 
     # Loop and long-horizon infrastructure is now managed by AgentFactory
@@ -448,8 +448,8 @@ async def health_check():
         try:
             from app.db.clickhouse import ClickHouseClient
             ch_ok = await ClickHouseClient().health_check()
-        except Exception:
-            pass
+        except (ConnectionError, OSError, TimeoutError):
+            ch_ok = False
     components = {
         "database": "ok",
         "cache": "ok" if cache.is_available else "unavailable",

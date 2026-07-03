@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction, Inventory
 from app.models.user import User
+from app.config import get_settings
 from app.schemas.formal_report import (
     BalanceSheetApproximation,
     BankReportData,
@@ -1002,7 +1003,8 @@ class BankReport:
         data_hash = _compute_data_hash({"report_id": report_id, "transactions": txn_data})
 
         # QR code data (verification URL)
-        verification_url = f"https://verify.msaidizi.co.ke/report/{report_id}"
+        _settings = get_settings()
+        verification_url = f"{_settings.VERIFICATION_BASE_URL}/report/{report_id}"
         qr_data = json.dumps({
             "report_id": report_id,
             "hash": data_hash[:16],
@@ -1391,7 +1393,8 @@ class GovernmentReport:
             "txns": total_txns,
             "period": f"{period_start}_{period_end}",
         })
-        verification_url = f"https://verify.msaidizi.co.ke/report/{report_id}"
+        _settings = get_settings()
+        verification_url = f"{_settings.VERIFICATION_BASE_URL}/report/{report_id}"
         qr_data = json.dumps({
             "report_id": report_id,
             "hash": data_hash[:16],
@@ -1716,7 +1719,7 @@ class InsuranceReport:
             report_id=report_id,
             generated_at=datetime.now(timezone.utc),
             valid_until=datetime.now(timezone.utc) + timedelta(days=90),
-            verification_url=f"https://verify.msaidizi.co.ke/report/{report_id}",
+            verification_url=f"{get_settings().VERIFICATION_BASE_URL}/report/{report_id}",
             qr_code_data=json.dumps({"report_id": report_id, "hash": data_hash[:16]}),
             data_hash=data_hash,
             signature="",

@@ -209,18 +209,11 @@ class DataCollectorAgent:
         """
         logger.info("data_collector.collecting", model_type=model_type)
 
-        # TODO: Wire to actual interaction log / feedback database
-        # Query: SELECT * FROM training_signals
-        #        WHERE model_type = ? AND processed = FALSE
-        #        ORDER BY captured_at DESC LIMIT batch_size
-        signals: List[TrainingSignal] = []
-
-        logger.info(
-            "data_collector.collected",
-            model_type=model_type,
-            count=len(signals),
+        raise NotImplementedError(
+            f"DataCollectorAgent.collect() not wired to interaction log / feedback database. "
+            f"Expected: query training_signals WHERE model_type={model_type!r} AND processed=FALSE. "
+            f"Wire to actual data source before running training cycles."
         )
-        return signals
 
 
 class DataCuratorAgent:
@@ -252,34 +245,11 @@ class DataCuratorAgent:
         if not signals:
             return CuratedDataset(is_valid=False, avg_quality_score=0.0)
 
-        # TODO: Implement actual quality scoring pipeline
-        # 1. Deduplicate (similarity > 0.95)
-        # 2. Score each signal (label correctness, completeness)
-        # 3. Remove adversarial samples
-        # 4. Balance classes
-        # 5. Apply temporal weighting
-
-        # For now, assign placeholder quality scores
-        for signal in signals:
-            if signal.quality_score == 0.0:
-                signal.quality_score = 0.8  # Placeholder
-
-        avg_quality = sum(s.quality_score for s in signals) / len(signals)
-        is_valid = avg_quality >= self.MIN_QUALITY_SCORE
-
-        dataset = CuratedDataset(
-            signals=signals,
-            avg_quality_score=round(avg_quality, 4),
-            is_valid=is_valid,
+        raise NotImplementedError(
+            f"DataCuratorAgent.validate() quality scoring pipeline not implemented. "
+            f"Expected: deduplicate (similarity > 0.95), score each signal, remove adversarial samples, "
+            f"balance classes, apply temporal weighting. Received {len(signals)} signals."
         )
-
-        logger.info(
-            "data_curator.validated",
-            signal_count=len(signals),
-            avg_quality=dataset.avg_quality_score,
-            is_valid=dataset.is_valid,
-        )
-        return dataset
 
 
 class ModelTrainerAgent:
@@ -321,25 +291,12 @@ class ModelTrainerAgent:
                 metrics={"error": 1.0},
             )
 
-        # TODO: Wire to actual training infrastructure
-        # 1. Select training recipe from config
-        # 2. Prepare data loaders
-        # 3. Run training (on-device or cloud)
-        # 4. Save checkpoints
-        # 5. Return artifact reference
-
-        result = TrainingResult(
-            model_type=ModelType(model_type),
-            base_model_id=f"baseline_{model_type}",
-            metrics={"loss": 0.0, "accuracy": 0.0},
+        raise NotImplementedError(
+            f"ModelTrainerAgent.train() not wired to training infrastructure. "
+            f"Expected: select training recipe for {model_type!r}, prepare data loaders, "
+            f"run training (on-device or cloud), save checkpoints. "
+            f"Dataset has {len(dataset.signals)} signals."
         )
-
-        logger.info(
-            "model_trainer.trained",
-            model_type=model_type,
-            result_id=result.result_id,
-        )
-        return result
 
 
 class ModelEvaluatorAgent:
@@ -380,30 +337,12 @@ class ModelEvaluatorAgent:
             baseline_id=baseline,
         )
 
-        # TODO: Wire to actual evaluation pipeline
-        # 1. Load candidate and baseline models
-        # 2. Run benchmark suite
-        # 3. McNemar's test for classification
-        # 4. Paired t-test for regression metrics
-        # 5. Measure latency/memory/battery
-        # 6. Generate report with confidence intervals
-
-        result = EvaluationResult(
-            candidate_model_id=candidate.result_id,
-            baseline_model_id=baseline,
-            metrics=candidate.metrics,
-            improvement_metrics={},
-            p_value=1.0,  # Placeholder — no improvement yet
-            is_significant=False,
+        raise NotImplementedError(
+            f"ModelEvaluatorAgent.evaluate() not wired to evaluation pipeline. "
+            f"Expected: load candidate {candidate.result_id!r} and baseline {baseline!r}, "
+            f"run benchmark suite, McNemar's test, paired t-test, measure latency/memory/battery. "
+            f"Gate: p < {self.SIGNIFICANCE_THRESHOLD}."
         )
-
-        logger.info(
-            "model_evaluator.evaluated",
-            candidate_id=candidate.result_id,
-            is_significant=result.is_significant,
-            p_value=result.p_value,
-        )
-        return result
 
 
 class ExperimentRunnerAgent:
@@ -448,25 +387,12 @@ class ExperimentRunnerAgent:
             duration_hours=duration_hours,
         )
 
-        # TODO: Wire to actual A/B testing framework
-        # 1. Configure traffic split (90/10)
-        # 2. Stratified randomization
-        # 3. Collect metrics for duration
-        # 4. Sequential testing with O'Brien-Fleming boundaries
-        # 5. Early stopping check
-
-        result = ExperimentResult(
-            candidate_model_id=candidate.result_id,
-            control_model_id=control,
-            duration_hours=duration_hours,
+        raise NotImplementedError(
+            f"ExperimentRunnerAgent.run_ab_test() not wired to A/B testing framework. "
+            f"Expected: configure 90/10 traffic split for candidate {candidate.result_id!r} "
+            f"vs control {control!r}, stratified randomization, collect metrics for {duration_hours}h, "
+            f"sequential testing with O'Brien-Fleming boundaries."
         )
-
-        logger.info(
-            "experiment_runner.completed",
-            experiment_id=result.experiment_id,
-            is_winner=result.is_winner,
-        )
-        return result
 
 
 class ModelDeployerAgent:
@@ -516,27 +442,12 @@ class ModelDeployerAgent:
                 is_deployed=False,
             )
 
-        # TODO: Wire to actual deployment infrastructure
-        # 1. Register model version
-        # 2. Begin staged rollout at 1%
-        # 3. Monitor for 24h per stage
-        # 4. Advance or rollback based on error rates
-        # 5. Generate delta patches for efficient updates
-
-        result = DeploymentResult(
-            model_id=model.result_id,
-            version=f"v{model.result_id[:8]}",
-            rollout_stage=f"{self.ROLLOUT_STAGES[0]}%",
-            traffic_percentage=self.ROLLOUT_STAGES[0],
+        raise NotImplementedError(
+            f"ModelDeployerAgent.deploy() not wired to deployment infrastructure. "
+            f"Expected: register model version, begin staged rollout at {self.ROLLOUT_STAGES[0]}%, "
+            f"monitor for 24h per stage, advance or rollback based on error rates. "
+            f"Model: {model.result_id!r}, type: {model.model_type.value!r}."
         )
-
-        logger.info(
-            "model_deployer.deployed",
-            deployment_id=result.deployment_id,
-            model_id=model.result_id,
-            stage=result.rollout_stage,
-        )
-        return result
 
 
 class QualityMonitorAgent:
@@ -573,28 +484,11 @@ class QualityMonitorAgent:
         """
         logger.info("quality_monitor.checking", model_type=model_type)
 
-        # TODO: Wire to actual monitoring infrastructure
-        # 1. Query recent prediction metrics
-        # 2. Plot against SPC control limits
-        # 3. Run drift detection (KL divergence, CUSUM)
-        # 4. Apply Western Electric rules
-        # 5. Generate report and recommendations
-
-        report = QualityReport(
-            model_type=ModelType(model_type),
-            kpis={},
-            drift_detected=False,
-            control_chart_status="in_control",
-            retraining_recommended=False,
+        raise NotImplementedError(
+            f"QualityMonitorAgent.check() not wired to monitoring infrastructure. "
+            f"Expected: query recent prediction metrics for {model_type!r}, plot against SPC control limits, "
+            f"run drift detection (KL divergence, CUSUM), apply Western Electric rules."
         )
-
-        logger.info(
-            "quality_monitor.checked",
-            model_type=model_type,
-            drift_detected=report.drift_detected,
-            retraining_recommended=report.retraining_recommended,
-        )
-        return report
 
 
 class FeedbackProcessorAgent:
@@ -632,21 +526,12 @@ class FeedbackProcessorAgent:
             feedback_type=feedback_type,
         )
 
-        # TODO: Wire to actual feedback processing pipeline
-        # 1. Classify feedback type
-        # 2. Convert to training signal format
-        # 3. Weight by worker expertise
-        # 4. Aggregate implicit signals
-        # 5. Generate preference pairs
-
-        signals: List[TrainingSignal] = []
-
-        logger.info(
-            "feedback_processor.processed",
-            worker_id=worker_id,
-            signals_generated=len(signals),
+        raise NotImplementedError(
+            f"FeedbackProcessorAgent.process_feedback() not wired to feedback processing pipeline. "
+            f"Expected: classify feedback type {feedback_type!r} for worker {worker_id!r}, "
+            f"convert to training signal format, weight by worker expertise, "
+            f"aggregate implicit signals, generate preference pairs."
         )
-        return signals
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -829,6 +714,8 @@ class TrainingLoop:
 
     async def get_cycle_status(self, cycle_id: str) -> Optional[TrainingCycleSummary]:
         """Get status of a training cycle by ID."""
-        # TODO: Wire to cycle persistence (database/cache)
-        logger.info("training_loop.status_query", cycle_id=cycle_id)
-        return None
+        raise NotImplementedError(
+            f"TrainingLoop.get_cycle_status() not wired to cycle persistence (database/cache). "
+            f"Expected: query cycle store for cycle_id={cycle_id!r}. "
+            f"Implement database or cache-backed cycle tracking."
+        )

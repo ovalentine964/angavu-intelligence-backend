@@ -31,7 +31,13 @@ logger = structlog.get_logger(__name__)
 # Constants
 # ════════════════════════════════════════════════════════════════════
 
-NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+# Pull base URL from settings so it can be overridden via env var
+try:
+    from app.config import get_settings
+    _settings = get_settings()
+    NIM_BASE_URL = _settings.NVIDIA_NIM_BASE_URL
+except Exception:
+    NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 # Default models — chosen for best free-tier value
 DEFAULT_LLM_MODEL = "deepseek-ai/deepseek-v4-pro"

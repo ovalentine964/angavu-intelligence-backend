@@ -177,11 +177,42 @@ class SelfEvolutionService:
     """
 
     def __init__(self) -> None:
-        # In-memory stores (TODO: wire to database)
+        # In-memory stores — these should be backed by database in production.
+        # Use persist_* methods to flush to database when available.
         self._feedback: Dict[str, WorkerFeedback] = {}
         self._clusters: Dict[str, FeedbackCluster] = {}
         self._specs: Dict[str, FeatureSpec] = {}
         self._adoptions: Dict[str, FeatureAdoption] = {}
+        self._db_session: Any = None  # Injected via set_db_session()
+
+    def set_db_session(self, session: Any) -> None:
+        """Inject a database session for persistence.
+
+        Call this during application startup to enable database-backed
+        persistence. Without this, all data lives in memory only.
+        """
+        self._db_session = session
+
+    async def _persist_feedback(self, fb: WorkerFeedback) -> None:
+        """Persist a feedback record to database (stub).
+
+        When a database session is available, this writes the feedback
+        to the worker_feedback table. Currently a no-op stub.
+        """
+        if self._db_session is None:
+            return  # No DB session — keep in memory only
+        # TODO: Implement database persistence
+        # await self._db_session.execute(
+        #     insert(worker_feedback_table).values(
+        #         feedback_id=fb.feedback_id,
+        #         worker_id=fb.worker_id,
+        #         feedback_type=fb.feedback_type,
+        #         raw_text=fb.raw_text,
+        #         processed_signal=fb.processed_signal,
+        #         created_at=fb.created_at,
+        #     )
+        # )
+        # await self._db_session.commit()
 
     # ── Feedback Collection ───────────────────────────────────────
 

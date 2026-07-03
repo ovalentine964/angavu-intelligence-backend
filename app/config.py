@@ -63,6 +63,23 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     DEEPSEEK_API_KEY: str = ""
 
+    # === NVIDIA NIM API ===
+    NVIDIA_NIM_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+    NVIDIA_NIM_API_KEY: str = ""
+
+    # === LLM Service (local GGUF + API fallback) ===
+    LLM_HOST: str = "localhost"          # llama.cpp server host ("llama-cpp" in Docker)
+    LLM_PORT: int = 8080                  # llama.cpp server port
+    LLM_MODEL_PATH: str = "qwen2.5-7b-q4_k_m"  # Model name/path on the server
+    LLM_TEMPERATURE: float = 0.7          # Default temperature
+    LLM_MAX_TOKENS: int = 512             # Default max tokens per completion
+    LLM_TIMEOUT: float = 60.0             # Request timeout in seconds
+    LLM_FALLBACK_ENABLED: bool = True     # Enable API fallback when local unavailable
+
+    # === Verification / Branding URLs ===
+    VERIFICATION_BASE_URL: str = "https://verify.msaidizi.co.ke"
+    ANGAVU_DASHBOARD_URL: str = "https://angavu.ai"
+
     # === ClickHouse (OLAP analytics) ===
     CLICKHOUSE_URL: str = "http://clickhouse:8123"
     CLICKHOUSE_DATABASE: str = "biashara"

@@ -291,6 +291,55 @@ pytest tests/ -v
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [DEPLOYMENT_ORACLE.md](DEPLOYMENT_ORACLE.md) for details.
 
+## Database Migrations
+
+This project uses [Alembic](https://alembic.sqlalchemy.org/) for database schema migrations.
+
+### Setup
+
+```bash
+# Migrations are in app/db/migrations/
+# Configuration is in alembic.ini (root) and app/db/migrations/env.py
+```
+
+### Generate a New Migration
+
+```bash
+# Auto-generate migration from current ORM models
+alembic -c alembic.ini revision --autogenerate -m "describe_your_change"
+
+# Review the generated file in app/db/migrations/versions/
+# Edit if needed, then apply
+```
+
+### Apply Migrations
+
+```bash
+# Apply all pending migrations
+alembic -c alembic.ini upgrade head
+
+# Apply one migration at a time
+alembic -c alembic.ini upgrade +1
+
+# Rollback one migration
+alembic -c alembic.ini downgrade -1
+
+# View current migration version
+alembic -c alembic.ini current
+
+# View migration history
+alembic -c alembic.ini history
+```
+
+### First-Time Setup
+
+```bash
+# The initial migration (001_initial) is a placeholder.
+# Generate the real initial migration from your models:
+alembic -c alembic.ini revision --autogenerate -m "create_initial_tables"
+alembic -c alembic.ini upgrade head
+```
+
 ## Reports Delivered via WhatsApp
 
 | Report | Frequency | Content |

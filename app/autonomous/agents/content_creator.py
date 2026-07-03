@@ -42,8 +42,12 @@ from app.autonomous.models.content import (
     ContentType,
     SEOMetadata,
 )
+from app.config import get_settings
 
 logger = structlog.get_logger(__name__)
+
+# Pull dashboard URL from settings so it can be overridden via env var
+_DASHBOARD_URL = get_settings().ANGAVU_DASHBOARD_URL
 
 # ── Content templates and configuration ────────────────────────────
 
@@ -397,7 +401,7 @@ The future of African business intelligence is autonomous, AI-powered, and acces
 
 ---
 
-*Ready to transform your business with data? [Get started with Angavu Intelligence](https://angavu.ai).*
+*Ready to transform your business with data? [Get started with Angavu Intelligence]({_DASHBOARD_URL}).*
 """
 
         return ContentPiece(
@@ -503,7 +507,7 @@ The next billion-dollar market isn't in Silicon Valley. It's in Gikomba, Korogoc
 <h2>📈 Your Weekly Numbers</h2>
 <p>Log in to your Angavu dashboard to see your personalized market intelligence report.</p>
 
-<p><a href="https://angavu.ai">View your dashboard →</a></p>"""
+<p><a href="{_DASHBOARD_URL}">View your dashboard →</a></p>"""
 
         return ContentPiece(
             content_type=ContentType.EMAIL_NEWSLETTER,
@@ -551,7 +555,7 @@ Using Angavu Intelligence's WhatsApp-based platform, Wanjiku:
 
 ---
 
-*Want similar results? [Start your free trial](https://angavu.ai).*"""
+*Want similar results? [Start your free trial]({_DASHBOARD_URL}).*"""
 
         return ContentPiece(
             content_type=ContentType.CASE_STUDY,
