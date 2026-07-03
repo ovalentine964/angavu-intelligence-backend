@@ -1,12 +1,16 @@
 """
 Content Agent — Autonomous content creation, distribution, and SEO.
 
-Manages the content pipeline for Msaidizi's market presence:
+Manages the content pipeline for Angavu Intelligence's market presence:
     - Creates blog posts, case studies, social media content
     - Optimizes content for SEO (financial inclusion keywords)
     - Schedules distribution across channels
     - Monitors engagement and adjusts strategy
     - Maintains brand voice consistency
+
+This is the single content agent for the autonomous framework.
+It supersedes ContentCreatorAgent with full template-based generation
+and autonomous lifecycle integration.
 
 Content pillars:
     1. Financial inclusion thought leadership
@@ -28,6 +32,52 @@ from app.autonomous.agents.base import AutonomousAgent
 from app.autonomous.config import AgentConfig
 
 logger = structlog.get_logger(__name__)
+
+
+# ── Content templates and configuration ────────────────────────────
+
+# Industry-relevant topics for Angavu Intelligence
+TOPIC_LIBRARY: Dict[str, List[str]] = {
+    "blog_post": [
+        "How AI-Powered Market Intelligence Transforms African SMEs",
+        "5 Ways Real-Time Price Forecasting Reduces Stock Losses",
+        "The Future of Credit Scoring for Informal Workers",
+        "M-Pesa Data Intelligence: Unlocking Business Growth",
+        "Distribution Gap Analysis: Finding Hidden Market Opportunities",
+    ],
+    "social_twitter": [
+        "\U0001f9f5 Thread: How informal workers are using AI to grow their businesses",
+        "\U0001f4ca Market insight: Real-time price trends in Nairobi's Gikomba market",
+        "\U0001f680 New feature: Automated credit scoring for dukawallahs",
+    ],
+    "social_linkedin": [
+        "The untapped potential of Africa's informal economy",
+        "Why traditional credit scoring fails 1.3B Africans",
+        "Building ethical AI for bottom-of-pyramid markets",
+    ],
+    "email_newsletter": [
+        "Weekly Market Intelligence Digest",
+        "Monthly Platform Update & Insights",
+    ],
+}
+
+# SEO keyword clusters for Angavu's domain
+KEYWORD_CLUSTERS: Dict[str, List[str]] = {
+    "primary": [
+        "African market intelligence",
+        "SME business analytics",
+        "informal economy data",
+        "M-Pesa analytics",
+        "African credit scoring",
+    ],
+    "secondary": [
+        "price forecasting Africa",
+        "business intelligence Kenya",
+        "retail analytics emerging markets",
+        "FMCG distribution intelligence",
+        "financial inclusion data",
+    ],
+}
 
 
 class ContentAgent(AutonomousAgent):
