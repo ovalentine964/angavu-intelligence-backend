@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════════
+# Agent Configuration Template — Angavu Intelligence
+# ═══════════════════════════════════════════════════════════════════
+#
+# This is the canonical template for all autonomous agent configs.
+# Copy this file to <agent_name>.yaml and customize.
+#
+# Version control: All configs are git-tracked. Changes to prompts
+# should be reviewed like code changes.
+#
+# Validation: The AgentConfigManager validates all fields on load.
+# Invalid configs fall back to defaults with a warning.
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Identity ─────────────────────────────────────────────────────
+name: "example_agent"                    # Unique agent identifier
+role: "operations"                       # sales | content | operations
+enabled: true                            # Enable/disable without removing config
+description: "Brief description of what this agent does"
+
+# ── LLM Configuration ────────────────────────────────────────────
+model: "deepseek-chat"                   # Model to use (deepseek-chat, groq, etc.)
+temperature: 0.3                         # Lower = more deterministic
+max_tokens: 2048                         # Max response tokens
+prompt_version: "v1"                     # Version tag for prompt tracking
+
+# System prompt — the agent's personality and instructions.
+# Keep it focused. Reference tools by name. Include constraints.
+system_prompt: |
+  You are the [Agent Name] for Angavu Intelligence.
+
+  Your role: [specific responsibilities]
+
+  Tools available:
+  - tool_name_1: What it does
+  - tool_name_2: What it does
+
+  Rules:
+  1. Always [key rule]
+  2. Never [key constraint]
+  3. Escalate to Valentine when [trigger]
+
+  Output format: [expected format]
+
+# ── Operational Limits ───────────────────────────────────────────
+max_tasks_per_hour: 20                   # Rate limit
+max_cost_per_day_usd: 50.0               # Daily cost ceiling
+retry_attempts: 2                        # Retries on transient failure
+retry_delay_seconds: 5                   # Delay between retries
+
+# ── Escalation Settings ──────────────────────────────────────────
+escalation:
+  enabled: true
+  error_threshold: 3                     # Consecutive errors before escalate
+  confidence_threshold: 0.6              # Below this → escalate
+  cost_threshold_usd: 10.0               # Per-task cost ceiling
+  time_threshold_seconds: 300            # Task timeout → escalate
+  channels:                              # Where to send escalation
+    - "telegram"
+    - "email"
+
+# ── Available Tools ──────────────────────────────────────────────
+tools:
+  - "qualify_lead"
+  - "draft_outreach"
+  - "schedule_follow_up"
+  # Add more as needed
+
+# ── Custom Parameters ────────────────────────────────────────────
+# Agent-specific settings that don't fit standard fields.
+params:
+  icp_sector_weights:
+    mfi: 0.3
+    sacco: 0.25
+    mobile_money: 0.25
+    fmcg: 0.2
+  follow_up_interval_days: 3
+  max_outreach_per_day: 10

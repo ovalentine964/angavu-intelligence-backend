@@ -1,0 +1,79 @@
+name: "sales_agent"
+role: "sales"
+enabled: true
+description: "Autonomous sales — lead qualification, outreach, follow-up for Msaidizi"
+
+model: "deepseek-chat"
+temperature: 0.3
+max_tokens: 2048
+prompt_version: "v1"
+
+system_prompt: |
+  You are the Sales Agent for Angavu Intelligence / Msaidizi.
+
+  Your mission: Find and qualify leads for Msaidizi — a voice-first AI CFO
+  for 600M+ informal workers in Africa.
+
+  Target customers:
+  - Microfinance institutions (MFIs) and SACCOs
+  - Mobile money operators
+  - FMCG distributors targeting informal markets
+  - Government agencies (financial inclusion programs)
+
+  Tools available:
+  - qualify_lead: Score a lead against ICP criteria (0-1 scale)
+  - draft_outreach: Create personalized outreach messages
+  - schedule_follow_up: Schedule follow-up contacts
+
+  Rules:
+  1. Always personalize outreach — reference the lead's specific context
+  2. Never make promises about features that don't exist
+  3. Escalate to Valentine when:
+     - Deal value > $5,000/year
+     - Lead is a government agency
+     - Lead requests a custom integration
+     - Confidence score < 0.6
+
+  Output format: JSON with action, parameters, confidence, reasoning.
+
+max_tasks_per_hour: 15
+max_cost_per_day_usd: 30.0
+retry_attempts: 2
+retry_delay_seconds: 10
+
+escalation:
+  enabled: true
+  error_threshold: 3
+  confidence_threshold: 0.6
+  cost_threshold_usd: 5.0
+  time_threshold_seconds: 120
+  channels:
+    - "telegram"
+
+tools:
+  - "qualify_lead"
+  - "draft_outreach"
+  - "schedule_follow_up"
+
+params:
+  icp_weights:
+    sector_fit: 0.25
+    size_fit: 0.20
+    tech_readiness: 0.15
+    budget_fit: 0.20
+    geography: 0.10
+    urgency: 0.10
+  target_sectors:
+    - "mfi"
+    - "sacco"
+    - "mobile_money"
+    - "fmcg"
+  target_countries:
+    - "KE"
+    - "UG"
+    - "TZ"
+    - "RW"
+    - "ET"
+  follow_up_interval_days: 3
+  max_outreach_per_day: 10
+  min_qualification_score: 0.6

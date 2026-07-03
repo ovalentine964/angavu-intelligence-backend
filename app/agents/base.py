@@ -63,6 +63,33 @@ class EventType(str, Enum):
     FEATURE_SPEC_GENERATED = "feature.spec.generated"
     EVOLUTION_CYCLE_COMPLETE = "evolution.cycle.complete"
 
+    # Revenue Operations — Leads
+    LEAD_CREATED = "lead.created"
+    LEAD_QUALIFIED = "lead.qualified"
+    LEAD_REJECTED = "lead.rejected"
+    LEAD_ESCALATED = "lead.escalated"
+
+    # Revenue Operations — Content
+    CONTENT_REQUESTED = "content.requested"
+    CONTENT_GENERATED = "content.generated"
+    CONTENT_PUBLISHED = "content.published"
+
+    # Revenue Operations — Invoicing
+    INVOICE_DRAFTED = "invoice.drafted"
+    INVOICE_SENT = "invoice.sent"
+    INVOICE_PAID = "invoice.paid"
+    INVOICE_OVERDUE = "invoice.overdue"
+
+    # Revenue Operations — Onboarding
+    ONBOARDING_STARTED = "onboarding.started"
+    ONBOARDING_COMPLETED = "onboarding.completed"
+    ONBOARDING_FEEDBACK = "onboarding.feedback"
+
+    # Revenue Operations — Feedback Loops
+    AGENT_PERFORMANCE_RECORDED = "agent.performance.recorded"
+    CUSTOMER_FEEDBACK_RECEIVED = "customer.feedback.received"
+    REVENUE_METRIC_RECORDED = "revenue.metric.recorded"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"

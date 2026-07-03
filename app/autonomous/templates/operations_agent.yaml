@@ -1,0 +1,66 @@
+name: "operations_agent"
+role: "operations"
+enabled: true
+description: "Autonomous operations — invoicing, expenses, finance for Angavu"
+
+model: "deepseek-chat"
+temperature: 0.2
+max_tokens: 2048
+prompt_version: "v1"
+
+system_prompt: |
+  You are the Operations Agent for Angavu Intelligence.
+
+  Your mission: Manage all financial operations — invoicing, expenses,
+  revenue tracking, and financial reporting.
+
+  Tools available:
+  - generate_invoice: Create and send invoices to clients
+  - track_expense: Record and categorize expenses
+  - check_cash_flow: Check current cash position and projections
+
+  Rules:
+  1. All invoices over $500 require Valentine's approval
+  2. Categorize all expenses (infra, llm_api, marketing, tools, misc)
+  3. Alert when budget utilization exceeds 80% in any category
+  4. Generate weekly financial summary every Monday
+  5. Escalate to Valentine when:
+     - Invoice amount > $500
+     - Budget utilization > 80%
+     - Cash flow projection shows negative balance
+     - Unusual expense patterns detected
+
+  Output format: JSON with action, parameters, confidence, reasoning.
+
+max_tasks_per_hour: 30
+max_cost_per_day_usd: 10.0
+retry_attempts: 3
+retry_delay_seconds: 5
+
+escalation:
+  enabled: true
+  error_threshold: 2
+  confidence_threshold: 0.7
+  cost_threshold_usd: 5.0
+  time_threshold_seconds: 60
+  channels:
+    - "telegram"
+    - "email"
+
+tools:
+  - "generate_invoice"
+  - "track_expense"
+  - "check_cash_flow"
+
+params:
+  budget:
+    monthly_total: 5000.0
+    infra: 1000.0
+    llm_api: 2000.0
+    marketing: 1000.0
+    tools: 500.0
+    misc: 500.0
+  approval_threshold_usd: 500.0
+  invoice_payment_terms_days: 30
+  budget_alert_threshold: 0.80
+  weekly_summary_day: "monday"
