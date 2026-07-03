@@ -25,11 +25,11 @@
   {
     "id": "biz_003",
     "input": "Boda boda rider anapata KSh 1,500 kwa siku. Gharama za mafuta ni KSh 400, maintenance KSh 100 kwa siku. Anaendesha siku 26 kwa mwezi. Mapato yake ya mwezi ni yapi?",
-    "expected_output": "Mapato yako ya mwezi ni KSh 26,000. Gharama za mwezi ni KSh 13,000 (mafuta KSh 10,400 + maintenance KSh 2,600). Faida yako ni KSh 13,000 kwa mwezi. Hii ni KSh 500 kwa siku baada ya gharama.",
+    "expected_output": "Mapato yako ya mwezi ni KSh 39,000. Gharama za mwezi ni KSh 13,000 (mafuta KSh 10,400 + maintenance KSh 2,600). Faida yako ni KSh 26,000 kwa mwezi. Hii ni KSh 1,000 kwa siku baada ya gharama.",
     "rubric": {
-      "required_elements": ["26,000", "13,000"],
+      "required_elements": ["39,000", "26,000"],
       "language": "sw",
-      "accuracy_check": "13000"
+      "accuracy_check": "26000"
     },
     "metadata": {"domain": "transport", "difficulty": "medium"}
   },

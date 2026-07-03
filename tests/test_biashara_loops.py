@@ -31,7 +31,8 @@ if "app.agents" not in sys.modules:
     _agents_pkg.__path__ = []
     sys.modules["app.agents"] = _agents_pkg
 
-# Stub app.agents.loops package to avoid its __init__ importing tree_of_thoughts etc.
+# Stub app.agents.loops package to avoid its __init__ triggering the full
+# app.agents import chain (services, DB, etc.).
 if "app.agents.loops" not in sys.modules:
     _loops_pkg = types.ModuleType("app.agents.loops")
     _loops_pkg.__path__ = []
