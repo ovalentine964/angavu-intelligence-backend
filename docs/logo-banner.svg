@@ -1,129 +1,84 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="Angavu Intelligence — Clarity for Africa's Invisible Economy">
   <defs>
-    <pattern id="bgPattern" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-      <rect width="16" height="16" fill="none"/>
-      <path d="M8 0 L16 8 L8 16 L0 8 Z" fill="none" stroke="#162040" stroke-width="0.4" opacity="0.5"/>
-    </pattern>
-    <pattern id="africaTex" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
-      <rect width="6" height="6" fill="#C6922A"/>
-      <path d="M0 0 L3 3 M3 0 L6 3 M0 3 L3 6 M3 3 L6 6" stroke="#B07A1A" stroke-width="0.5" opacity="0.35"/>
-    </pattern>
-    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#E0591A"/>
-      <stop offset="45%" stop-color="#E0591A"/>
-      <stop offset="55%" stop-color="#F7931A"/>
-      <stop offset="100%" stop-color="#F7931A"/>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B4965"/>
+      <stop offset="100%" stop-color="#0F2D42"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E8A838"/>
+      <stop offset="100%" stop-color="#F0C060"/>
+    </linearGradient>
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#E8A838" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#E8A838" stop-opacity="0.3"/>
     </linearGradient>
     <clipPath id="roundClip">
-      <rect width="1200" height="400" rx="24" ry="24"/>
+      <rect width="1200" height="300" rx="16" ry="16"/>
     </clipPath>
   </defs>
 
   <g clip-path="url(#roundClip)">
     <!-- Background -->
-    <rect width="1200" height="400" fill="#0F1B3A"/>
-    <rect width="1200" height="400" fill="url(#bgPattern)"/>
+    <rect width="1200" height="300" fill="url(#bgGrad)"/>
 
-    <!-- Left section: Icon mark -->
-    <g transform="translate(200, 200)">
-      <!-- Concentric circles -->
-      <circle r="155" fill="none" stroke="#162040" stroke-width="0.8" opacity="0.5"/>
-      <circle r="142" fill="none" stroke="#1a2848" stroke-width="0.6" opacity="0.35"/>
+    <!-- Subtle grid pattern -->
+    <pattern id="grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="none"/>
+      <path d="M40 0 L0 0 0 40" fill="none" stroke="#1E5577" stroke-width="0.3" opacity="0.3"/>
+    </pattern>
+    <rect width="1200" height="300" fill="url(#grid)"/>
 
-      <!-- Africa continent -->
-      <g transform="scale(0.92)" opacity="0.95">
-        <path d="M-8,-90 C2,-95 12,-93 20,-88 C28,-82 32,-72 34,-62
-                 C36,-50 38,-40 42,-30 C46,-18 52,-8 56,2
-                 C59,10 58,18 54,26 C50,34 46,40 44,48
-                 C42,56 38,64 32,72 C26,78 18,82 10,84
-                 C4,85 -2,84 -8,80 C-14,74 -18,66 -22,56
-                 C-26,46 -30,36 -34,24 C-38,14 -42,4 -44,-6
-                 C-46,-16 -46,-26 -42,-36 C-38,-46 -32,-54 -26,-64
-                 C-20,-72 -14,-80 -8,-86 Z"
-             fill="url(#africaTex)" stroke="#B07A1A" stroke-width="0.5"/>
-        <ellipse cx="52" cy="42" rx="4" ry="10" fill="url(#africaTex)" stroke="#B07A1A" stroke-width="0.3" transform="rotate(12,52,42)"/>
-      </g>
+    <!-- Left section: Eye icon -->
+    <g transform="translate(150, 150)">
+      <!-- Outer arc (largest) -->
+      <path d="M-100,0 A100,80 0 0 1 100,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.25"/>
+      <!-- Second arc -->
+      <path d="M-78,0 A78,62 0 0 1 78,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.45"/>
+      <!-- Third arc -->
+      <path d="M-56,0 A56,44 0 0 1 56,0" fill="none" stroke="#E8A838" stroke-width="3" opacity="0.7"/>
+      <!-- Inner arc -->
+      <path d="M-36,0 A36,28 0 0 1 36,0" fill="none" stroke="#E8A838" stroke-width="3.5" opacity="0.9"/>
 
-      <!-- White B -->
-      <g>
-        <path d="M-50,-78 L-50,78 L6,78
-                 C30,78 48,66 48,50 C48,38 42,30 34,27
-                 C43,22 51,13 51,2 C51,-13 40,-24 19,-24
-                 L-50,-24 Z"
-             fill="#FFFFFF"/>
-        <path d="M-34,-62 L-34,-6 L14,-6
-                 C26,-6 32,-2 32,5 C32,11 27,14 14,14
-                 L-34,14 Z"
-             fill="#0F1B3A"/>
-        <path d="M-34,30 L-34,62 L11,62
-                 C22,62 29,56 29,48 C29,40 22,34 11,34
-                 L-34,34 Z"
-             fill="#0F1B3A"/>
-      </g>
+      <!-- Iris -->
+      <circle cx="0" cy="0" r="18" fill="none" stroke="#E8A838" stroke-width="3"/>
 
-      <!-- Pulse line -->
-      <g transform="translate(0, 0)">
-        <path d="M-148,0 L-55,0 L-42,-22 L-29,0 L-18,0 L-13,-38 L-4,13 L5,0 L148,0"
-             fill="none" stroke="url(#pulseGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="-42" cy="-22" r="2.5" fill="#E0591A"/>
-        <circle cx="-13" cy="-38" r="3" fill="#F7931A"/>
-      </g>
+      <!-- Pupil -->
+      <circle cx="0" cy="0" r="8" fill="#E8A838"/>
+
+      <!-- Light reflection -->
+      <circle cx="5" cy="-5" r="3" fill="#FFFFFF" opacity="0.6"/>
+
+      <!-- Lower arcs (mirror, fainter) -->
+      <path d="M-100,0 A100,80 0 0 0 100,0" fill="none" stroke="#E8A838" stroke-width="1.5" opacity="0.12"/>
+      <path d="M-78,0 A78,62 0 0 0 78,0" fill="none" stroke="#E8A838" stroke-width="1.5" opacity="0.18"/>
     </g>
+
+    <!-- Separator line -->
+    <line x1="280" y1="70" x2="280" y2="230" stroke="#E8A838" stroke-width="1" opacity="0.3"/>
 
     <!-- Right section: Text -->
-    <g transform="translate(420, 0)">
-      <!-- BIASHARA -->
-      <text x="0" y="175" font-family="'Arial Black','Arial',Helvetica,sans-serif" font-size="82" font-weight="900" fill="#FFFFFF" letter-spacing="8">BIASHARA</text>
+    <g transform="translate(320, 0)">
+      <!-- ANGAVU -->
+      <text x="0" y="135" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" letter-spacing="6">ANGAVU</text>
 
       <!-- INTELLIGENCE -->
-      <text x="4" y="230" font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="400" fill="#FFFFFF" letter-spacing="12" opacity="0.95">INTELLIGENCE</text>
+      <text x="2" y="180" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="32" font-weight="300" fill="#E8A838" letter-spacing="10" opacity="0.95">INTELLIGENCE</text>
 
-      <!-- Tagline bar -->
-      <line x1="4" y1="252" x2="730" y2="252" stroke="#FFFFFF" stroke-width="1.5" opacity="0.5"/>
+      <!-- Divider -->
+      <line x1="2" y1="200" x2="500" y2="200" stroke="#E8A838" stroke-width="1" opacity="0.4"/>
 
-      <!-- Tagline text -->
-      <text x="4" y="285" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="300" fill="#FFFFFF" letter-spacing="4" opacity="0.7">EMPOWERING AFRICAN BUSINESS WITH AI</text>
+      <!-- Tagline -->
+      <text x="2" y="228" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="17" font-weight="300" fill="#FFFFFF" letter-spacing="3" opacity="0.65">Clarity for Africa's Invisible Economy</text>
     </g>
 
-    <!-- Corner dot clusters -->
-    <!-- Top-left -->
-    <g transform="translate(42,42)">
-      <circle r="2.8" fill="#FFCC02"/>
-      <circle cx="-7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="-9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cx="9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cy="9" r="1.8" fill="#F7931A"/>
-    </g>
-    <!-- Top-right -->
-    <g transform="translate(1158,42)">
-      <circle r="2.8" fill="#FFCC02"/>
-      <circle cx="-7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="-9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cx="9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cy="9" r="1.8" fill="#F7931A"/>
-    </g>
-    <!-- Bottom-left -->
-    <g transform="translate(42,358)">
-      <circle r="2.8" fill="#FFCC02"/>
-      <circle cx="-7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="-9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cx="9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cy="9" r="1.8" fill="#F7931A"/>
-    </g>
-    <!-- Bottom-right -->
-    <g transform="translate(1158,358)">
-      <circle r="2.8" fill="#FFCC02"/>
-      <circle cx="-7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="7" cy="-6" r="1.8" fill="#F7931A"/>
-      <circle cx="-9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cx="9" cy="4" r="1.8" fill="#F7931A"/>
-      <circle cy="9" r="1.8" fill="#F7931A"/>
-    </g>
+    <!-- Corner accent dots -->
+    <circle cx="30" cy="30" r="3" fill="#E8A838" opacity="0.5"/>
+    <circle cx="1170" cy="30" r="3" fill="#E8A838" opacity="0.5"/>
+    <circle cx="30" cy="270" r="3" fill="#E8A838" opacity="0.5"/>
+    <circle cx="1170" cy="270" r="3" fill="#E8A838" opacity="0.5"/>
   </g>
 
-  <!-- Rounded border -->
-  <rect x="1.5" y="1.5" width="1197" height="397" rx="24" ry="24" fill="none" stroke="#1a2a4a" stroke-width="1.5"/>
+  <!-- Border -->
+  <rect x="1" y="1" width="1198" height="298" rx="16" ry="16" fill="none" stroke="#E8A838" stroke-width="1" opacity="0.2"/>
 </svg>

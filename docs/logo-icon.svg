@@ -1,124 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Angavu Intelligence logo — abstracted eye with concentric arcs">
   <defs>
-    <pattern id="bgPattern" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-      <rect width="16" height="16" fill="none"/>
-      <path d="M8 0 L16 8 L8 16 L0 8 Z" fill="none" stroke="#162040" stroke-width="0.4" opacity="0.5"/>
-    </pattern>
-    <pattern id="africaTex" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
-      <rect width="6" height="6" fill="#C6922A"/>
-      <path d="M0 0 L3 3 M3 0 L6 3 M0 3 L3 6 M3 3 L6 6" stroke="#B07A1A" stroke-width="0.5" opacity="0.35"/>
-    </pattern>
-    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#E0591A"/>
-      <stop offset="45%" stop-color="#E0591A"/>
-      <stop offset="55%" stop-color="#F7931A"/>
-      <stop offset="100%" stop-color="#F7931A"/>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B4965"/>
+      <stop offset="100%" stop-color="#0F2D42"/>
+    </linearGradient>
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.2"/>
+      <stop offset="50%" stop-color="#E8A838" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#E8A838" stop-opacity="0.2"/>
     </linearGradient>
     <clipPath id="roundClip">
-      <rect width="512" height="512" rx="36" ry="36"/>
+      <rect width="512" height="512" rx="72" ry="72"/>
     </clipPath>
   </defs>
 
   <g clip-path="url(#roundClip)">
     <!-- Background -->
-    <rect width="512" height="512" fill="#0F1B3A"/>
-    <rect width="512" height="512" fill="url(#bgPattern)"/>
+    <rect width="512" height="512" fill="url(#bgGrad)"/>
 
-    <!-- Concentric guide circles -->
-    <circle cx="256" cy="232" r="192" fill="none" stroke="#162040" stroke-width="0.8" opacity="0.5"/>
-    <circle cx="256" cy="232" r="178" fill="none" stroke="#1a2848" stroke-width="0.6" opacity="0.35"/>
+    <!-- Subtle radial glow behind eye -->
+    <radialGradient id="glow" cx="50%" cy="45%" r="35%">
+      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#E8A838" stop-opacity="0"/>
+    </radialGradient>
+    <rect width="512" height="512" fill="url(#glow)"/>
 
-    <!-- Africa continent (behind B) -->
-    <g transform="translate(256, 225) scale(1.15)" opacity="0.95">
-      <path d="M-8,-90 C2,-95 12,-93 20,-88 C28,-82 32,-72 34,-62
-               C36,-50 38,-40 42,-30 C46,-18 52,-8 56,2
-               C59,10 58,18 54,26 C50,34 46,40 44,48
-               C42,56 38,64 32,72 C26,78 18,82 10,84
-               C4,85 -2,84 -8,80 C-14,74 -18,66 -22,56
-               C-26,46 -30,36 -34,24 C-38,14 -42,4 -44,-6
-               C-46,-16 -46,-26 -42,-36 C-38,-46 -32,-54 -26,-64
-               C-20,-72 -14,-80 -8,-86 Z"
-           fill="url(#africaTex)" stroke="#B07A1A" stroke-width="0.5"/>
-      <!-- Madagascar -->
-      <ellipse cx="52" cy="42" rx="4" ry="10" fill="url(#africaTex)" stroke="#B07A1A" stroke-width="0.3" transform="rotate(12,52,42)"/>
-    </g>
-
-    <!-- White B letterform -->
+    <!-- Eye centered at 256, 228 -->
     <g transform="translate(256, 228)">
-      <!-- Outer B shape with two bowls -->
-      <path d="M-62,-98 L-62,98 L8,98
-               C38,98 60,82 60,62 C60,48 52,38 42,34
-               C54,28 64,16 64,2 C64,-16 50,-30 24,-30
-               L-62,-30 Z"
-           fill="#FFFFFF"/>
-      <!-- Upper counter (hole) -->
-      <path d="M-42,-78 L-42,-8 L18,-8
-               C32,-8 40,-2 40,6 C40,14 34,18 18,18
-               L-42,18 Z"
-           fill="#0F1B3A"/>
-      <!-- Lower counter (hole) -->
-      <path d="M-42,38 L-42,78 L14,78
-               C28,78 36,70 36,60 C36,50 28,42 14,42
-               L-42,42 Z"
-           fill="#0F1B3A"/>
+      <!-- Outer arc (largest) -->
+      <path d="M-180,0 A180,140 0 0 1 180,0" fill="none" stroke="#E8A838" stroke-width="4" opacity="0.2"/>
+      <!-- Second arc -->
+      <path d="M-145,0 A145,112 0 0 1 145,0" fill="none" stroke="#E8A838" stroke-width="4.5" opacity="0.35"/>
+      <!-- Third arc -->
+      <path d="M-110,0 A110,85 0 0 1 110,0" fill="none" stroke="#E8A838" stroke-width="5" opacity="0.55"/>
+      <!-- Fourth arc -->
+      <path d="M-80,0 A80,62 0 0 1 80,0" fill="none" stroke="#E8A838" stroke-width="5.5" opacity="0.75"/>
+      <!-- Inner arc -->
+      <path d="M-55,0 A55,42 0 0 1 55,0" fill="none" stroke="#E8A838" stroke-width="6" opacity="0.9"/>
+
+      <!-- Iris circle -->
+      <circle cx="0" cy="0" r="32" fill="none" stroke="#E8A838" stroke-width="5"/>
+
+      <!-- Pupil -->
+      <circle cx="0" cy="0" r="14" fill="#E8A838"/>
+
+      <!-- Highlight -->
+      <circle cx="8" cy="-8" r="5" fill="#FFFFFF" opacity="0.5"/>
+      <circle cx="-4" cy="4" r="2.5" fill="#FFFFFF" opacity="0.25"/>
+
+      <!-- Lower arcs (mirror, subtle) -->
+      <path d="M-180,0 A180,140 0 0 0 180,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.08"/>
+      <path d="M-145,0 A145,112 0 0 0 145,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.12"/>
+      <path d="M-110,0 A110,85 0 0 0 110,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.15"/>
     </g>
 
-    <!-- Pulse heartbeat line -->
-    <g transform="translate(0, 228)">
-      <path d="M55,0 L168,0 L182,-28 L196,0 L208,0 L214,-48 L224,16 L234,0 L457,0"
-           fill="none" stroke="url(#pulseGrad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="182" cy="-28" r="3" fill="#E0591A"/>
-      <circle cx="214" cy="-48" r="3.5" fill="#F7931A"/>
-    </g>
+    <!-- Text: ANGAVU -->
+    <text x="256" y="370" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="42" font-weight="700" fill="#FFFFFF" letter-spacing="4">ANGAVU</text>
 
-    <!-- BIASHARA text -->
-    <text x="126" y="358" font-family="'Arial Black','Arial',Helvetica,sans-serif" font-size="44" font-weight="900" fill="#FFFFFF" letter-spacing="5">BIASHARA</text>
+    <!-- Text: INTELLIGENCE -->
+    <text x="256" y="405" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="18" font-weight="300" fill="#E8A838" letter-spacing="7" opacity="0.85">INTELLIGENCE</text>
 
-    <!-- INTELLIGENCE text -->
-    <text x="158" y="392" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="400" fill="#FFFFFF" letter-spacing="7" opacity="0.95">INTELLIGENCE</text>
-
-    <!-- Tagline bar -->
-    <line x1="145" y1="406" x2="367" y2="406" stroke="#FFFFFF" stroke-width="1.2" opacity="0.5"/>
-
-    <!-- Corner dot clusters -->
-    <!-- Top-left -->
-    <g transform="translate(52,52)">
-      <circle r="3.2" fill="#FFCC02"/>
-      <circle cx="-8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="-10" cy="5" r="2" fill="#F7931A"/>
-      <circle cx="10" cy="5" r="2" fill="#F7931A"/>
-      <circle cy="11" r="2" fill="#F7931A"/>
-    </g>
-    <!-- Top-right -->
-    <g transform="translate(460,52)">
-      <circle r="3.2" fill="#FFCC02"/>
-      <circle cx="-8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="-10" cy="5" r="2" fill="#F7931A"/>
-      <circle cx="10" cy="5" r="2" fill="#F7931A"/>
-      <circle cy="11" r="2" fill="#F7931A"/>
-    </g>
-    <!-- Bottom-left -->
-    <g transform="translate(52,460)">
-      <circle r="3.2" fill="#FFCC02"/>
-      <circle cx="-8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="-10" cy="5" r="2" fill="#F7931A"/>
-      <circle cx="10" cy="5" r="2" fill="#F7931A"/>
-      <circle cy="11" r="2" fill="#F7931A"/>
-    </g>
-    <!-- Bottom-right -->
-    <g transform="translate(460,460)">
-      <circle r="3.2" fill="#FFCC02"/>
-      <circle cx="-8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="8" cy="-7" r="2" fill="#F7931A"/>
-      <circle cx="-10" cy="5" r="2" fill="#F7931A"/>
-      <circle cx="10" cy="5" r="2" fill="#F7931A"/>
-      <circle cy="11" r="2" fill="#F7931A"/>
-    </g>
+    <!-- Divider line -->
+    <line x1="156" y1="420" x2="356" y2="420" stroke="#E8A838" stroke-width="1" opacity="0.3"/>
   </g>
 
   <!-- Rounded border -->
-  <rect x="1.5" y="1.5" width="509" height="509" rx="36" ry="36" fill="none" stroke="#1a2a4a" stroke-width="1.5"/>
+  <rect x="2" y="2" width="508" height="508" rx="72" ry="72" fill="none" stroke="#E8A838" stroke-width="2" opacity="0.15"/>
 </svg>
