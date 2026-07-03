@@ -13,7 +13,7 @@ This data proves the platform works and justifies
 the data center investment.
 
 Workers must get 5-10x more value from Msaidizi than
-the data they generate is worth to Biashara Intelligence.
+the data they generate is worth to Angavu Intelligence.
 """
 
 from __future__ import annotations

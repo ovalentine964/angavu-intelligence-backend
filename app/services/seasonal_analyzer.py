@@ -1,5 +1,5 @@
 """
-Seasonal Analyzer — Msaidizi / Biashara AI
+Seasonal Analyzer — Msaidizi / Angavu Intelligence
 
 Detects seasonal patterns in informal business data and generates
 actionable insights in Swahili, English, and Sheng.

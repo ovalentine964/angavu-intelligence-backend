@@ -1,7 +1,7 @@
 """
 Critical Mass Dashboard API.
 
-Internal dashboard for tracking Biashara Intelligence's path to
+Internal dashboard for tracking Angavu Intelligence's path to
 revenue activation. Each intelligence product has a minimum worker
 count before it becomes sellable. This dashboard tracks progress
 toward those milestones.
@@ -9,7 +9,7 @@ toward those milestones.
 Critical Mass Milestones (from critical-mass-value.md):
 - Soko Pulse: 1,000 workers → Month 3
 - Alama Score: 5,000 workers → Month 6
-- Biashara Pulse: 10,000 workers → Month 9
+- Angavu Pulse: 10,000 workers → Month 9
 - Jamii Insights: 20,000 workers → Month 12
 - Tax Base: 50,000 workers → Month 18
 
@@ -59,7 +59,7 @@ CRITICAL_MASS_THRESHOLDS = {
         "status": "not_activated",
     },
     "biashara_pulse": {
-        "name": "Biashara Pulse — Government MSME Activity",
+        "name": "Angavu Pulse — Government MSME Activity",
         "min_workers": 10_000,
         "min_transactions_per_day": 100_000,
         "target_month": 9,
@@ -98,7 +98,7 @@ async def critical_mass_dashboard(
     - Activation status and progress percentage
     - Estimated time to activation at current growth rate
 
-    This is the operational heartbeat of Biashara Intelligence's
+    This is the operational heartbeat of Angavu Intelligence's
     go-to-market strategy.
     """
     today = date.today()

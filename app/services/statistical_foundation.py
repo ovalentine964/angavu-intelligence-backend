@@ -10,7 +10,7 @@ Theoretical Foundations:
 
 This module provides the shared statistical infrastructure that all
 intelligence products build upon. Every estimation, prediction, and
-inference in Biashara Intelligence traces back to these foundations.
+inference in Angavu Intelligence traces back to these foundations.
 
 Key Concepts Embedded:
 - Bayesian estimation (STA 341): Prior → Data → Posterior for all services
@@ -1564,7 +1564,7 @@ class PCAAnalyzer:
     - Alama Score: Dimensionality reduction of borrower feature vectors
       (activity, stability, growth, consistency, diversity) into
       uncorrelated principal components for credit scoring
-    - Biashara Pulse: Composite index construction from correlated
+    - Angavu Pulse: Composite index construction from correlated
       economic indicators
     - Jamii Insights: Socioeconomic dimension reduction for community
       profiling
@@ -1776,7 +1776,7 @@ class FactorAnalyzer:
     - Alama Score: Extract latent creditworthiness factors (Transaction
       Intensity, Financial Discipline, Market Position) from correlated
       borrower features
-    - Biashara Pulse: Identify latent economic factors driving
+    - Angavu Pulse: Identify latent economic factors driving
       observed indicators
     - Jamii Insights: Extract latent development factors from
       correlated socioeconomic indicators

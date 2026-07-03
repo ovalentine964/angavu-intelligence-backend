@@ -54,7 +54,7 @@ class CommunicationAgent(BiasharaAgent):
             "profit": "💰 Profit: KSh {amount:,.0f}",
             "loss": "📉 Loss: KSh {amount:,.0f}",
             "recommendation": "💡 {title}: {message}",
-            "footer": "Powered by Biashara Intelligence 🇰🇪",
+            "footer": "Powered by Angavu Intelligence 🇰🇪",
         },
         "sw": {
             "greeting": "Habari {name}! 👋",
@@ -62,7 +62,7 @@ class CommunicationAgent(BiasharaAgent):
             "profit": "💰 Faida: KSh {amount:,.0f}",
             "loss": "📉 Hasara: KSh {amount:,.0f}",
             "recommendation": "💡 {title}: {message}",
-            "footer": "Imeendeshwa na Biashara Intelligence 🇰🇪",
+            "footer": "Imeendeshwa na Angavu Intelligence 🇰🇪",
         },
     }
 

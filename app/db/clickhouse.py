@@ -67,7 +67,7 @@ class ClickHouseClient:
     High-level ClickHouse client for analytical queries.
 
     Wraps the clickhouse-connect async client with convenience methods
-    for the Biashara Intelligence analytics workloads.
+    for the Angavu Intelligence analytics workloads.
 
     Usage:
         ch = ClickHouseClient()

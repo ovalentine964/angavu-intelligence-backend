@@ -1,5 +1,5 @@
 """
-Background task queue for Biashara Intelligence.
+Background task queue for Angavu Intelligence.
 
 Uses Redis as a lightweight task broker to manage async work:
     - Report generation (heavy computation)

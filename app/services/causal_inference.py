@@ -13,7 +13,7 @@ Theoretical Foundations:
   In *Identification and Inference for Econometric Models*. Cambridge.
 
 This module implements three core causal identification strategies used
-throughout Biashara Intelligence to make credible causal claims:
+throughout Angavu Intelligence to make credible causal claims:
 
 1. **Instrumental Variables / 2SLS** — For endogenous regressors
 2. **Difference-in-Differences** — For policy/treatment evaluation
@@ -185,7 +185,7 @@ class InstrumentalVariables2SLS:
       H₁: OLS is inconsistent → use 2SLS.
       Under H₀: H = (β̂_OLS − β̂_2SLS)' [Var(β̂_OLS) − Var(β̂_2SLS)]⁻¹ (β̂_OLS − β̂_2SLS) ~ χ²
 
-    **Biashara Use Case**:
+    **Angavu Use Case**:
       Does credit access CAUSE income growth?
         Y = income_growth
         X = credit_access (endogenous — banks select on income)
@@ -403,7 +403,7 @@ class DifferenceInDifferences:
         Inference is invalid without clustering when treatment varies
         at a group level.
 
-    **Biashara Use Case**:
+    **Angavu Use Case**:
         Did the Msaidizi credit rollout CAUSE business growth?
           Y = business_revenue
           Treat = 1 if market received Msaidizi (treatment group)
@@ -680,7 +680,7 @@ class RegressionDiscontinuity:
         If agents can precisely manipulate X around c, the design is
         invalid. Estimates density on each side and tests for a jump.
 
-    **Biashara Use Case**:
+    **Angavu Use Case**:
         Do businesses just above the Alama Score credit threshold benefit?
           Y = business_revenue_growth
           X = Alama_score (running variable)

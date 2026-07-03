@@ -60,7 +60,7 @@ class ConfidenceInterval:
 
 class ConfidenceIntervalCalculator:
     """
-    Compute confidence intervals for Biashara Intelligence products.
+    Compute confidence intervals for Angavu Intelligence products.
 
     Every intelligence product should include confidence intervals
     to communicate uncertainty to buyers.

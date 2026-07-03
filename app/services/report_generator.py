@@ -1,5 +1,5 @@
 """
-Report Generator — Msaidizi / Biashara AI
+Report Generator — Msaidizi / Angavu Intelligence
 
 The core engine that generates all 5 report types for WhatsApp delivery.
 This is the module that turns raw business data into beautiful, actionable

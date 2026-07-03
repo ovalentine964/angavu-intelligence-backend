@@ -1,5 +1,5 @@
 """
-Msaidizi / Biashara AI — Cloud Backend
+Msaidizi / Angavu Intelligence — Cloud Backend
 =======================================
 
 Intelligence platform for Kenya's informal economy.

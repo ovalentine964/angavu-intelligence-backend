@@ -2,7 +2,7 @@
 Outcome-Based Pricing Engine.
 
 Pricing model where buyers pay based on the VALUE they receive,
-not a flat subscription. This aligns Biashara Intelligence's
+not a flat subscription. This aligns Angavu Intelligence's
 incentives with buyer outcomes.
 
 Products (from product-pricing-strategy.md):
@@ -99,7 +99,7 @@ PRICING_CONFIGS = {
         floor_monthly_usd=1_500.0,
         description=(
             "KRA/county pays 2–5% of incremental tax revenue collected "
-            "from businesses identified by Biashara as previously untaxed."
+            "from businesses identified by Angavu as previously untaxed."
         ),
     ),
     "distribution_gap": OutcomePricingConfig(
@@ -115,7 +115,7 @@ PRICING_CONFIGS = {
         floor_monthly_usd=5_000.0,
         description=(
             "FMCG pays 1–3% of first-year revenue from new markets "
-            "identified by Biashara's distribution gap analysis."
+            "identified by Angavu's distribution gap analysis."
         ),
     ),
     "soko_pulse": OutcomePricingConfig(
@@ -166,7 +166,7 @@ class OutcomePricingEngine:
 
     Calculates fees based on the VALUE delivered to buyers,
     not flat subscriptions. This aligns incentives:
-    - Biashara gets paid more when buyers get more value
+    - Angavu gets paid more when buyers get more value
     - Buyers pay less if the product doesn't deliver
 
     Each product has a unique outcome metric:
@@ -252,7 +252,7 @@ class OutcomePricingEngine:
         Calculate Tax Base outcome-based pricing.
 
         KRA/county pays 2–5% of incremental tax revenue collected
-        from businesses identified by Biashara. Rate depends on:
+        from businesses identified by Angavu. Rate depends on:
         - Collection rate (how much of identified tax was actually collected)
         - Volume (higher volume = lower rate)
 
@@ -318,7 +318,7 @@ class OutcomePricingEngine:
         Calculate Distribution Gap outcome-based pricing.
 
         FMCG pays 1–3% of first-year revenue from markets identified
-        by Biashara's gap analysis. Rate depends on:
+        by Angavu's gap analysis. Rate depends on:
         - Margin (higher margin products = higher rate)
         - Expansion success (did the market entry succeed?)
 

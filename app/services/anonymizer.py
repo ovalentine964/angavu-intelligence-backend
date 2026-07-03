@@ -460,7 +460,7 @@ class Anonymizer:
         """
         Anonymize a transaction before sending to backend.
 
-        Privacy rules for the Msaidizi ↔ Biashara Intelligence sync pipeline:
+        Privacy rules for the Msaidizi ↔ Angavu Intelligence sync pipeline:
 
         KEEP: type, category, amount, timestamp, worker_type, dialect, coarse_location
         REMOVE: customer_name, exact_location, personal_notes

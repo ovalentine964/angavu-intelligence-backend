@@ -1,5 +1,5 @@
 """
-Background task worker for Biashara Intelligence.
+Background task worker for Angavu Intelligence.
 
 Run as: python -m app.worker
 

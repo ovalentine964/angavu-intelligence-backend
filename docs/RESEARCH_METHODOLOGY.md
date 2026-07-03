@@ -1,8 +1,8 @@
-# Biashara Intelligence — Research Methodology Documentation
+# Angavu Intelligence — Research Methodology Documentation
 
 ## Overview
 
-This document describes the statistical and economic methodology underlying Biashara Intelligence's data pipeline, intelligence products, and quality assurance frameworks. All methods are grounded in Valentine's BSc Economics & Statistics degree.
+This document describes the statistical and economic methodology underlying Angavu Intelligence's data pipeline, intelligence products, and quality assurance frameworks. All methods are grounded in Valentine's BSc Economics & Statistics degree.
 
 ---
 
@@ -10,7 +10,7 @@ This document describes the statistical and economic methodology underlying Bias
 
 ### 1.1 Core Units Driving Methodology
 
-| Unit | Title | Application in Biashara Intelligence |
+| Unit | Title | Application in Angavu Intelligence |
 |------|-------|--------------------------------------|
 | **ECO 315** | Research Methods | Research design, sampling methodology, data collection standards |
 | **STA 342** | Test of Hypothesis | Significance testing, Type I/II error control, power analysis |
@@ -22,7 +22,7 @@ This document describes the statistical and economic methodology underlying Bias
 
 ### 1.2 Research Philosophy
 
-Biashara Intelligence adopts a **critical realist** paradigm (ECO 315 §3.1):
+Angavu Intelligence adopts a **critical realist** paradigm (ECO 315 §3.1):
 - The informal economy has **real structures** (markets, institutions)
 - These generate **observable events** (transactions, prices)
 - We interpret these through **data and statistical models**
@@ -164,7 +164,7 @@ Every intelligence product includes confidence intervals:
 ### 5.2 Application in Products
 
 - **Soko Pulse**: Price intelligence includes 95% CI for average prices
-- **Biashara Pulse**: Revenue estimates include CIs
+- **Angavu Pulse**: Revenue estimates include CIs
 - **Alama Score**: Score uncertainty based on data volume
 - **All forecasts**: Include prediction intervals
 
@@ -206,7 +206,7 @@ Where m̄ = average cluster size, ρ = intra-class correlation
 - Forecast includes prediction intervals
 - k-Anonymity enforced on all outputs
 
-### 7.2 Biashara Pulse (Government MSME Index)
+### 7.2 Angavu Pulse (Government MSME Index)
 
 - Activity index includes confidence intervals
 - Bootstrap estimation for key metrics (STA 341)

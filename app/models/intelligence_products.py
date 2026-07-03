@@ -6,7 +6,7 @@ Reports enforce k-anonymity (k≥10) and are generated from anonymized transacti
 
 Products:
 1. Soko Pulse — FMCG demand forecasting
-2. Biashara Pulse — Government MSME Activity Index
+2. Angavu Pulse — Government MSME Activity Index
 3. Alama Score — Bank credit scoring (300-850)
 4. Jamii Insights — NGO financial inclusion
 5. Tax Base Estimation — Government revenue
@@ -136,7 +136,7 @@ class SokoPulseReport(Base):
 
 
 # =========================================================================
-# 2. Biashara Pulse — Government MSME Activity Index
+# 2. Angavu Pulse — Government MSME Activity Index
 # =========================================================================
 
 

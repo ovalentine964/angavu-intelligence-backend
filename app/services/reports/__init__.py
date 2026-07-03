@@ -1,5 +1,5 @@
 """
-Worker Reports Package — Msaidizi / Biashara Intelligence.
+Worker Reports Package — Msaidizi / Angavu Intelligence.
 
 5 report types for WhatsApp delivery to informal workers:
   1. DailyReport    — End-of-day snapshot

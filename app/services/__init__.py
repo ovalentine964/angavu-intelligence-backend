@@ -1,5 +1,5 @@
 """
-Msaidizi / Biashara AI — Report Services
+Msaidizi / Angavu Intelligence — Report Services
 Voice-based AI CFO for Africa's informal economy.
 """
 

@@ -163,7 +163,7 @@ class SyncResponse(BaseModel):
 
 
 # =========================================================================
-# Msaidizi ↔ Biashara Intelligence Sync Pipeline Schemas
+# Msaidizi ↔ Angavu Intelligence Sync Pipeline Schemas
 # =========================================================================
 
 

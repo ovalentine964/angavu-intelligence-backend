@@ -724,7 +724,7 @@ async def get_affirmation(
             "text": "I am building wealth, one day at a time.",
             "text_sw": "Ninajenga utajiri, siku moja kwa wakati.",
             "category": "belief",
-            "source_book": "Biashara Intelligence",
+            "source_book": "Angavu Intelligence",
         }
 
     affirmation = pool[day_index % len(pool)]

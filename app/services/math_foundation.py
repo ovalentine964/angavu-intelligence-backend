@@ -2,7 +2,7 @@
 Mathematical Foundations — MAT 101/121/124: Pure Mathematics.
 
 Explicit implementations of foundational mathematics used throughout
-Biashara Intelligence. These are handled implicitly by NumPy/SciPy
+Angavu Intelligence. These are handled implicitly by NumPy/SciPy
 but this module makes the academic connections explicit.
 
 Academic Foundation:
@@ -45,7 +45,7 @@ class AlgebraFoundations:
         - Partial pivoting: numerical stability
 
         This is the foundation for OLS regression, PCA, and
-        all matrix-based computations in Biashara Intelligence.
+        all matrix-based computations in Angavu Intelligence.
 
         Args:
             A: Coefficient matrix (n × n)
@@ -287,7 +287,7 @@ class IntegralCalculus:
         - simpson: O(h⁴) accuracy (Simpson's 1/3 rule)
         - scipy: adaptive quadrature (quad)
 
-        Applications in Biashara Intelligence:
+        Applications in Angavu Intelligence:
         - Consumer surplus: ∫(P_max - P_actual)dQ
         - Gini coefficient: Area under Lorenz curve
         - Probability: ∫f(x)dx for density functions

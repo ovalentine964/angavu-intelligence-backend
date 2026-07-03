@@ -2,7 +2,7 @@
 Business Cycle Analysis — ECO 322: Advanced Macroeconomics.
 
 Business cycle indicators, leading/lagging indicators, and
-macroeconomic nowcasting for Biashara Intelligence's GDP Estimator.
+macroeconomic nowcasting for Angavu Intelligence's GDP Estimator.
 
 Academic Foundation:
 - ECO 322: Advanced Macroeconomics — Dynamic AD-AS, New Keynesian

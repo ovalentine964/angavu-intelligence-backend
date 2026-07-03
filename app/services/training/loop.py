@@ -656,7 +656,7 @@ class FeedbackProcessorAgent:
 
 class TrainingLoop:
     """
-    Multi-agentic training loop for Biashara Intelligence.
+    Multi-agentic training loop for Angavu Intelligence.
 
     8 agents: Data Collector → Data Curator → Model Trainer →
     Model Evaluator → Experiment Runner → Model Deployer →

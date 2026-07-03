@@ -32,7 +32,7 @@ _task_store: Dict[str, Dict[str, Any]] = {}
 dispatch_task_tool = MCPToolDefinition(
     name="dispatch_task",
     description=(
-        "Dispatch a task to a Biashara Intelligence domain agent. "
+        "Dispatch a task to a Angavu Intelligence domain agent. "
         "Available agents: TransactionProcessor, IntelligenceGenerator, "
         "ReportGenerator, SelfEvolution, and domain agents (Transport, "
         "Retail, Agriculture, Service, Digital, Manufacturing). "
@@ -91,7 +91,7 @@ dispatch_task_tool = MCPToolDefinition(
 get_agent_status_tool = MCPToolDefinition(
     name="get_agent_status",
     description=(
-        "Check the status and health of Biashara Intelligence agents. "
+        "Check the status and health of Angavu Intelligence agents. "
         "Returns agent state (idle/busy/error), uptime, tasks processed, "
         "and current workload."
     ),

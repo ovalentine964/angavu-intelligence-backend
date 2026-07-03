@@ -81,7 +81,7 @@ soko_pulse_tool = MCPToolDefinition(
 biashara_pulse_tool = MCPToolDefinition(
     name="biashara_pulse",
     description=(
-        "Biashara Pulse — Government MSME Activity Index. Provides economic "
+        "Angavu Pulse — Government MSME Activity Index. Provides economic "
         "activity heatmaps: activity indices (0-100) by county/sub-county, "
         "business formation/destruction rates, sector breakdown, employment estimates. "
         "Buyers: KNBS, CBK, county governments."

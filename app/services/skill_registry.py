@@ -1,12 +1,12 @@
 """
-Skill Registry — Central registry for all Biashara Intelligence skills.
+Skill Registry — Central registry for all Angavu Intelligence skills.
 
 Maps degree course units to executable AI skills, tracks usage,
 and manages skill lifecycle (versioning, activation, metrics).
 
 Each skill corresponds to a course unit from Valentine Owuor's
 BSc Economics & Statistics (Masinde Muliro University, 42 units,
-545,000+ words mapped to Biashara Intelligence products).
+545,000+ words mapped to Angavu Intelligence products).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ logger = structlog.get_logger(__name__)
 
 class SkillRegistry:
     """
-    Central registry for all Biashara Intelligence skills.
+    Central registry for all Angavu Intelligence skills.
 
     Responsibilities:
     - Register skills from degree units

@@ -586,7 +586,7 @@ class AudienceReportGenerator:
         total = data.get("total_sales", data.get("total_revenue", 0))
         profit = data.get("gross_profit", data.get("net_profit", 0))
         if lang == "sw":
-            return f"{name}, biashara yako imefanya mauzo ya KSh {total:,.0f na faida ya KSh {profit:,.0f}."
+            return f"{name}, biashara yako imefanya mauzo ya KSh {total:,.0f} na faida ya KSh {profit:,.0f}."
         return f"{name}, your business recorded KSh {total:,.0f} in sales with KSh {profit:,.0f} profit."
 
     def _bank_summary(self, data: Dict[str, Any]) -> str:

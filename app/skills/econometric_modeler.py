@@ -40,7 +40,7 @@ class EconometricModeler(BaseSkill):
     ECO 424 — Advanced Econometrics
 
     Provides causal inference, regression modeling, and econometric
-    analysis for Biashara Intelligence intelligence products.
+    analysis for Angavu Intelligence intelligence products.
     """
 
     def __init__(self):

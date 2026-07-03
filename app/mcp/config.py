@@ -65,7 +65,7 @@ class MCPServerConfig:
     name: str = "biashara-intelligence"
     version: str = "1.0.0"
     description: str = (
-        "Biashara Intelligence MCP Server — exposes Kenya's informal economy "
+        "Angavu Intelligence MCP Server — exposes Kenya's informal economy "
         "intelligence products, worker data, and agent communication as "
         "standard MCP tools."
     )

@@ -2,7 +2,7 @@
 Statistical Quality Control — STA 346: Statistical Quality Control.
 
 SPC charts (X-bar, R, p, np), CUSUM, and process capability analysis
-for Biashara Intelligence's data pipeline monitoring.
+for Angavu Intelligence's data pipeline monitoring.
 
 Academic Foundation:
 - STA 346: Statistical Quality Control & Acceptance Sampling — Control
@@ -50,7 +50,7 @@ class SPCChart:
     - CUSUM: Detect small persistent shifts
     - EWMA: Exponentially weighted moving average
 
-    Applied to Biashara Intelligence:
+    Applied to Angavu Intelligence:
     - X-bar on daily revenue: Detect shifts in business activity
     - p chart on data completeness: Monitor missing data rate
     - CUSUM on transaction volumes: Detect gradual quality degradation

@@ -9,7 +9,7 @@ Flow:
     TriggerResponse → USSDTrigger.send() → USSD Gateway → Feature Phone
 
 USSD Menu Structure:
-    *123# → Biashara Intelligence
+    *123# → Angavu Intelligence
     1. Record Sale
     2. Check Balance
     3. Today's Sales
@@ -38,7 +38,7 @@ logger = structlog.get_logger(__name__)
 # USSD menu tree
 USSD_MENU = {
     "root": {
-        "text": "Welcome to Biashara Intelligence\n"
+        "text": "Welcome to Angavu Intelligence\n"
                 "1. Record Sale\n"
                 "2. Check Balance\n"
                 "3. Today's Sales\n"
@@ -118,7 +118,7 @@ USSD_MENU = {
         "intent": IntentType.CHECK_REPORT,
     },
     "help": {
-        "text": "Biashara Intelligence Help\n"
+        "text": "Angavu Intelligence Help\n"
                 "- Record sales, purchases, expenses\n"
                 "- Check balance, stock, profit\n"
                 "- View daily/weekly reports\n"
@@ -128,7 +128,7 @@ USSD_MENU = {
         "options": {"0": "root"},
     },
     "exit": {
-        "text": "Thank you for using Biashara Intelligence!\n"
+        "text": "Thank you for using Angavu Intelligence!\n"
                 "Have a profitable day! 📈",
         "session_end": True,
     },

@@ -19,6 +19,24 @@ import pytest
 import time
 from unittest.mock import AsyncMock, MagicMock
 
+import sys
+import types
+
+# Avoid triggering full app.agents.__init__ import chain which pulls in
+# services with pre-existing issues. Stub out the package init.
+# We need app.agents.base and app.agents.loops.core to load without
+# going through app.agents.__init__ or app.agents.loops.__init__.
+if "app.agents" not in sys.modules:
+    _agents_pkg = types.ModuleType("app.agents")
+    _agents_pkg.__path__ = []
+    sys.modules["app.agents"] = _agents_pkg
+
+# Stub app.agents.loops package to avoid its __init__ importing tree_of_thoughts etc.
+if "app.agents.loops" not in sys.modules:
+    _loops_pkg = types.ModuleType("app.agents.loops")
+    _loops_pkg.__path__ = []
+    sys.modules["app.agents.loops"] = _loops_pkg
+
 from app.agents.base import AgentEvent, AgentResult, EventType
 from app.agents.loops.core import (
     Critique,
@@ -29,6 +47,16 @@ from app.agents.loops.core import (
     SupervisedExecution,
     SupervisionPolicy,
 )
+
+# Restore the loops package module with core's exports
+import app.agents.loops.core as _core_mod
+sys.modules["app.agents.loops"].core = _core_mod
+for name in ["Critique", "EventStore", "ExecutionPlan", "PlanStep",
+             "ReActTrace", "SupervisedExecution", "SupervisionPolicy",
+             "ReActAgent", "ReflexionAgent", "PlanExecuteAgent",
+             "EventSourcedAgent", "SupervisorAgent", "ReasoningStep"]:
+    if hasattr(_core_mod, name):
+        setattr(sys.modules["app.agents.loops"], name, getattr(_core_mod, name))
 from app.loops.config import (
     BiasharaLoopConfig,
     EvaluationConfig,

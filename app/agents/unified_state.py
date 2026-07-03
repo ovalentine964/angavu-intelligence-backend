@@ -85,7 +85,7 @@ class StateSnapshot:
 
 class UnifiedStateManager:
     """
-    Unified state manager for Biashara agents.
+    Unified state manager for Angavu agents.
 
     Provides a single source of truth that:
     - Stores state in memory (fast access)

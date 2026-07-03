@@ -1,5 +1,5 @@
 """
-Comparison Engine — Msaidizi / Biashara AI
+Comparison Engine — Msaidizi / Angavu Intelligence
 
 Compares a business against anonymized, aggregated data from similar
 businesses in the same market/region. Provides context that helps

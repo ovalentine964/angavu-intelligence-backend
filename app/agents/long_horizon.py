@@ -24,7 +24,7 @@ Key DeerFlow patterns borrowed:
 4. Re-planning on sub-task failure
 5. Timeout / kill switch for runaway tasks
 
-Does NOT fork DeerFlow — builds directly on Biashara's existing
+Does NOT fork DeerFlow — builds directly on Angavu's existing
 EventBus + PlanExecuteAgent + SupervisorAgent infrastructure.
 """
 
@@ -243,7 +243,7 @@ class TaskPlanner:
     Decomposes complex goals into a DAG of sub-tasks with dependencies.
 
     Inspired by DeerFlow's task decomposition, but built on
-    Biashara's existing PlanExecuteAgent patterns.
+    Angavu's existing PlanExecuteAgent patterns.
 
     Subclasses override _decompose() for domain-specific planning.
     """

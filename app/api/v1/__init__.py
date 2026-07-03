@@ -1,1 +1,1 @@
-"""API v1 routers for Biashara Intelligence."""
+"""API v1 routers for Angavu Intelligence."""

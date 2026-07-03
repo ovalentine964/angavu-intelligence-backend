@@ -5,7 +5,7 @@ Before delivering output, the agent critiques itself against
 a set of principles (the constitution). If violations are found,
 the output is revised to comply.
 
-Constitution for Biashara Intelligence:
+Constitution for Angavu Intelligence:
     - Privacy:    Never expose individual transaction details
     - Accuracy:   Never present uncertain data as fact
     - Fairness:   Credit scores must not discriminate
@@ -126,7 +126,7 @@ def _check_actionability(output_str: str) -> Optional[str]:
 
 
 def create_biashara_constitution() -> List[Principle]:
-    """Create the default Biashara Intelligence constitution."""
+    """Create the default Angavu Intelligence constitution."""
     return [
         Principle(
             principle_id="privacy_1",

@@ -500,4 +500,4 @@ All errors follow a consistent format:
 
 ---
 
-*Biashara AI Ltd — Proprietary API*
+*Angavu Intelligence Ltd — Proprietary API*

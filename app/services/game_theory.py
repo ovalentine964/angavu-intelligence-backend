@@ -6,7 +6,7 @@ Theoretical Foundations:
 - ECO 422: Industrial Organization — Cournot/Bertrand competition, market structure
 
 This module provides game-theoretic tools for analyzing strategic interactions
-among market participants in the Biashara Intelligence ecosystem.
+among market participants in the Angavu Intelligence ecosystem.
 
 Key Models:
 - Nash Equilibrium: Mutual best-response in normal-form games

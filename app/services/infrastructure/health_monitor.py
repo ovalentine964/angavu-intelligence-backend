@@ -4,7 +4,7 @@ Data Center Health Monitoring Service.
 Tracks server metrics (CPU, RAM, disk, network), inference latency
 per model, cost per inference, and provides dashboard API data.
 
-Designed for Biashara Intelligence's phased infrastructure:
+Designed for Angavu Intelligence's phased infrastructure:
     Phase 1: Oracle Cloud Free Tier
     Phase 2: Home Server (ARM + Solar)
     Phase 3: Mini DC (3-5 servers)
@@ -87,7 +87,7 @@ class HealthMonitor:
     Data center health monitoring service.
 
     Tracks server health, inference performance, and costs
-    across Biashara Intelligence's infrastructure phases.
+    across Angavu Intelligence's infrastructure phases.
     """
 
     def register_server(

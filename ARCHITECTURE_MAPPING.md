@@ -1,4 +1,4 @@
-# Biashara Intelligence — Architecture Mapping
+# Angavu Intelligence — Architecture Mapping
 ## Valentine's BSc Economics & Statistics → Product Architecture
 
 > Every line of code in this platform traces back to a specific economic or
@@ -19,7 +19,7 @@
 | **ECO 210** | LP, break-even, optimization | Inventory management |
 | **ECO 305** | Gravity model, exchange rate | Cross-border intelligence |
 
-### Biashara Pulse (Government MSME Activity Index)
+### Angavu Pulse (Government MSME Activity Index)
 | Unit | Method | Application |
 |------|--------|-------------|
 | **ECO 203** | Index construction, seasonal adjustment | Activity indices (Laspeyres, Fisher) |
@@ -113,4 +113,4 @@ Transaction → Statistical Foundation (STA 241/443/341)
 
 ---
 
-*Generated: 2026-07-01 | Biashara Intelligence Architecture v2.0*
+*Generated: 2026-07-01 | Angavu Intelligence Architecture v2.0*

@@ -100,4 +100,4 @@ docker run -p 3000:3000 msaidizi-openwa
 
 ## License
 
-Proprietary — Msaidizi / Biashara AI
+Proprietary — Msaidizi / Angavu Intelligence

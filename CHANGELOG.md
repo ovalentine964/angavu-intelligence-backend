@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Biashara Intelligence Backend will be documented in this file.
+All notable changes to Angavu Intelligence Backend will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-07-02
 
 ### Added
-- **15 Intelligence Products** — Soko Pulse, Biashara Pulse, Alama Score, Jamii Insights, Tax Base, Distribution Gap, GDP Estimator, Inflation Tracker, Employment Monitor, Insurance Risk, Market Entry, SDG Tracker, Gender Intelligence, Supply Chain, Research Data
+- **15 Intelligence Products** — Soko Pulse, Angavu Pulse, Alama Score, Jamii Insights, Tax Base, Distribution Gap, GDP Estimator, Inflation Tracker, Employment Monitor, Insurance Risk, Market Entry, SDG Tracker, Gender Intelligence, Supply Chain, Research Data
 - **Multi-Agent Runtime** — Agent lifecycle management, health monitoring, orchestration
 - **Event Bus** — Pub/sub message passing between agents with dead letter queue
 - **Agent Observability** — Metrics, tracing, and health checks for all 33 agents

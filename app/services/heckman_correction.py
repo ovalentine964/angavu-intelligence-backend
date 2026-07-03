@@ -1,5 +1,5 @@
 """
-Heckman Selection Correction for Credit Scoring — Msaidizi / Biashara AI
+Heckman Selection Correction for Credit Scoring — Msaidizi / Angavu Intelligence
 
 Implements the Heckman two-step estimator to correct for selection bias
 in credit scoring models. Credit models trained only on approved borrowers

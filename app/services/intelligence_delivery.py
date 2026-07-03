@@ -1,11 +1,11 @@
 """
-Intelligence Delivery Service — Msaidizi ↔ Biashara Intelligence Pipeline
+Intelligence Delivery Service — Msaidizi ↔ Angavu Intelligence Pipeline
 
 Delivers processed intelligence back to Msaidizi devices. Formats
 intelligence for display in the worker's local language (Swahili, English,
 or Sheng).
 
-Data Flow (Biashara Intelligence → Msaidizi):
+Data Flow (Angavu Intelligence → Msaidizi):
     Backend processes data → generates intelligence
     → Push notification to device
     → Device pulls intelligence (when online)

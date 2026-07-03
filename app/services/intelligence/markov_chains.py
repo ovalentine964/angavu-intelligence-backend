@@ -2,7 +2,7 @@
 Markov Chains & Optimization — ECO 103/104: Mathematics for Economists.
 
 Implements Markov chain credit score transitions and optimization
-theory for Biashara Intelligence.
+theory for Angavu Intelligence.
 
 Academic Foundation:
 - ECO 103: Introduction to Mathematics for Economists — Matrix algebra,

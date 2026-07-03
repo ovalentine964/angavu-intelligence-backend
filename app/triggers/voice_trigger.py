@@ -34,8 +34,8 @@ logger = structlog.get_logger(__name__)
 # IVR menu prompts (bilingual: Swahili primary, English fallback)
 IVR_PROMPTS = {
     "welcome": {
-        "sw": "Karibu Biashara Intelligence. Bonyeza 1 kurekodi mauzo, 2 kuangalia salio, 3 mauzo ya leo, 4 msaada.",
-        "en": "Welcome to Biashara Intelligence. Press 1 to record a sale, 2 to check balance, 3 for today's sales, 4 for help.",
+        "sw": "Karibu Angavu Intelligence. Bonyeza 1 kurekodi mauzo, 2 kuangalia salio, 3 mauzo ya leo, 4 msaada.",
+        "en": "Welcome to Angavu Intelligence. Press 1 to record a sale, 2 to check balance, 3 for today's sales, 4 for help.",
     },
     "record_sale": {
         "sw": "Sema jina la bidhaa na bei. Kwa mfano: nyanya mia tano.",
@@ -54,8 +54,8 @@ IVR_PROMPTS = {
         "en": "Sorry, I didn't understand. Please try again.",
     },
     "goodbye": {
-        "sw": "Asante kwa kutumia Biashara Intelligence. Kwaheri!",
-        "en": "Thank you for using Biashara Intelligence. Goodbye!",
+        "sw": "Asante kwa kutumia Angavu Intelligence. Kwaheri!",
+        "en": "Thank you for using Angavu Intelligence. Goodbye!",
     },
 }
 

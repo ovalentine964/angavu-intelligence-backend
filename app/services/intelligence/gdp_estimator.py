@@ -300,7 +300,7 @@ class GDPEstimatorService:
     7. Bootstrap confidence intervals
 
     This fills the gap: KNBS GDP misses ~34% from informal sector.
-    Biashara data makes the invisible economy visible.
+    Angavu data makes the invisible economy visible.
     """
 
     def __init__(self, db: AsyncSession):

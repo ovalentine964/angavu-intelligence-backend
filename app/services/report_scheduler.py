@@ -1,10 +1,10 @@
 """
-Report Scheduler — Biashara Intelligence
+Report Scheduler — Angavu Intelligence
 
 Schedules and delivers reports via WhatsApp on a recurring basis.
 
 WhatsApp is a PURE REPORT DELIVERY CHANNEL. This scheduler generates
-reports using the Biashara Intelligence cloud model and delivers them
+reports using the Angavu Intelligence cloud model and delivers them
 to workers via WhatsApp when they are online.
 
 Report Delivery Schedule:
@@ -15,7 +15,7 @@ Report Delivery Schedule:
 - Annual (Ripoti ya Mwaka): December 31 — year-end review
 
 Each report type has different content, different charts,
-different level of detail. All driven by Biashara Intelligence
+different level of detail. All driven by Angavu Intelligence
 cloud model analysis.
 
 Integration:
@@ -98,7 +98,7 @@ DELIVERY_WINDOW_MINUTES = 15
 
 class ReportScheduler:
     """
-    Async report scheduler for Biashara Intelligence.
+    Async report scheduler for Angavu Intelligence.
 
     Schedules and delivers reports via WhatsApp. Uses the actual
     database and WhatsAppDelivery service for real delivery.

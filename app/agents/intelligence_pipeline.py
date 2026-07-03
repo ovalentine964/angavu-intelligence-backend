@@ -1,7 +1,7 @@
 """
 Intelligence Pipeline — Domain-Specific Long-Horizon Analysis Flows.
 
-Four specialized pipelines for Biashara Intelligence's core use cases:
+Four specialized pipelines for Angavu Intelligence's core use cases:
 - MarketAnalysisFlow       — long-horizon market analysis
 - CreditScoringFlow        — comprehensive credit assessment
 - DistributionAnalysisFlow — distribution gap analysis

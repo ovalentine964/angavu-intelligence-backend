@@ -40,7 +40,7 @@ class StatisticalEstimator(BaseSkill):
     STA 341 — Theory of Estimation
 
     Provides point estimation, interval estimation, and Bayesian
-    inference for all Biashara Intelligence statistical needs.
+    inference for all Angavu Intelligence statistical needs.
     """
 
     def __init__(self):

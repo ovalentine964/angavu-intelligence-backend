@@ -3,7 +3,7 @@ Intelligence Products API endpoints.
 
 Provides buyer-facing endpoints for the 6 intelligence products:
 1. Soko Pulse — FMCG demand forecasting
-2. Biashara Pulse — Government MSME Activity Index
+2. Angavu Pulse — Government MSME Activity Index
 3. Alama Score — Bank credit scoring (300-850)
 4. Jamii Insights — NGO financial inclusion
 5. Tax Base Estimation — Government revenue
@@ -192,7 +192,7 @@ async def soko_pulse_pricing(
 
 
 # =========================================================================
-# 2. Biashara Pulse — Government MSME Activity Index
+# 2. Angavu Pulse — Government MSME Activity Index
 # =========================================================================
 
 
@@ -206,7 +206,7 @@ async def biashara_pulse_index(
     """
     Generate Government MSME Activity Index.
 
-    **Biashara Pulse** provides economic activity heatmaps:
+    **Angavu Pulse** provides economic activity heatmaps:
     - Activity indices (0-100) by county/sub-county
     - Business formation/destruction rates
     - Sector breakdown and employment estimates
@@ -221,7 +221,7 @@ async def biashara_pulse_index(
     start_time = time.time()
 
     if not _check_product_access(buyer, "biashara_pulse"):
-        raise HTTPException(status_code=403, detail="Not subscribed to Biashara Pulse")
+        raise HTTPException(status_code=403, detail="Not subscribed to Angavu Pulse")
 
     if req.region != "national" and not _is_region_authorized(buyer, req.region):
         raise HTTPException(status_code=403, detail=f"Not authorized for region: {req.region}")
@@ -246,7 +246,7 @@ async def biashara_pulse_index(
 async def biashara_pulse_pricing(
     buyer: Buyer = Depends(get_buyer_from_api_key),
 ):
-    """Get Biashara Pulse pricing tiers."""
+    """Get Angavu Pulse pricing tiers."""
     pricing = get_product_pricing("biashara_pulse")
     if not pricing:
         raise HTTPException(status_code=404, detail="Pricing not found")
@@ -646,7 +646,7 @@ async def intelligence_catalog(
         },
         {
             "code": "biashara_pulse",
-            "name": "Biashara Pulse — Government MSME Activity Index",
+            "name": "Angavu Pulse — Government MSME Activity Index",
             "description": "Economic activity heatmaps by county/sub-county",
             "buyer_segment": "Government",
             "endpoint": "/api/v1/intelligence-products/biashara-pulse/activity-index",

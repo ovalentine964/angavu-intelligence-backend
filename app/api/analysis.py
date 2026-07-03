@@ -1,14 +1,14 @@
 """
-Deep Analysis API — Biashara Intelligence Cloud Model.
+Deep Analysis API — Angavu Intelligence Cloud Model.
 
 This endpoint provides deep business analysis powered by the
-Biashara Intelligence cloud model. It is called by the Msaidizi app
+Angavu Intelligence cloud model. It is called by the Msaidizi app
 when workers request advanced analysis.
 
 Data Flow:
     Worker asks for analysis in Msaidizi app →
     App sends request to this endpoint →
-    Biashara Intelligence cloud model processes →
+    Angavu Intelligence cloud model processes →
     Result returned to app →
     App displays to worker
 
@@ -215,11 +215,11 @@ async def deep_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Deep analysis endpoint — Msaidizi app sends request to Biashara Intelligence.
+    Deep analysis endpoint — Msaidizi app sends request to Angavu Intelligence.
 
     Worker asks for deep analysis in Msaidizi app →
     App sends request to this endpoint →
-    Biashara Intelligence cloud model processes →
+    Angavu Intelligence cloud model processes →
     Result returned to app →
     App displays to worker
 

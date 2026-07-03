@@ -1,7 +1,7 @@
 """
 MCP Client — Connect to external MCP servers.
 
-Allows Biashara Intelligence to call tools exposed by other MCP servers,
+Allows Angavu Intelligence to call tools exposed by other MCP servers,
 enabling agentic workflows where our backend can delegate to external
 intelligence sources or services.
 """

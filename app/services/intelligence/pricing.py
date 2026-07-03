@@ -109,11 +109,11 @@ SOKO_PULSE_PRICING = ProductPricing(
 )
 
 # =========================================================================
-# Biashara Pulse Pricing
+# Angavu Pulse Pricing
 # =========================================================================
 
 BIASHARA_PULSE_PRICING = ProductPricing(
-    product_name="Biashara Pulse — Government MSME Activity Index",
+    product_name="Angavu Pulse — Government MSME Activity Index",
     product_code="biashara_pulse",
     buyer_segment="Government",
     tiers=[

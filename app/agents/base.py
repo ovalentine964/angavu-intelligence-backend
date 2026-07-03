@@ -1,5 +1,5 @@
 """
-BiasharaAgent — Base class for all Biashara Intelligence agents.
+BiasharaAgent — Base class for all Angavu Intelligence agents.
 
 Lifecycle:
     observe  → receive an event from the event bus
@@ -262,7 +262,7 @@ class AgentTools:
 
 class BiasharaAgent:
     """
-    Base class for all Biashara Intelligence agents.
+    Base class for all Angavu Intelligence agents.
 
     Subclasses must implement:
         - think()  — process context and return an AgentDecision

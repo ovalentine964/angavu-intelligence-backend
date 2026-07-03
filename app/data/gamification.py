@@ -195,8 +195,8 @@ BADGES: list[dict[str, Any]] = [
     {
         "name": "mzee_wa_soko",
         "swahili_name": "Mzee wa Soko",
-        "description": "Use Biashara Intelligence for 6 months",
-        "description_sw": "Tumia Biashara Intelligence kwa miezi 6",
+        "description": "Use Angavu Intelligence for 6 months",
+        "description_sw": "Tumia Angavu Intelligence kwa miezi 6",
         "icon": "🏅",
         "category": "loyalty",
         "criteria": {"type": "account_age_days", "days": 180},
@@ -406,8 +406,8 @@ WISDOM_QUOTES: list[dict[str, str]] = [
 SOCIAL_PROOF_TEMPLATES: list[dict[str, Any]] = [
     {
         "type": "peer_activity",
-        "message_sw": "{percent}% ya wauzaji wa {category} eneo lako walitumia Biashara Intelligence wiki hii.",
-        "message_en": "{percent}% of {category} sellers in your area used Biashara Intelligence this week.",
+        "message_sw": "{percent}% ya wauzaji wa {category} eneo lako walitumia Angavu Intelligence wiki hii.",
+        "message_en": "{percent}% of {category} sellers in your area used Angavu Intelligence this week.",
         "icon": "👥",
     },
     {
@@ -430,8 +430,8 @@ SOCIAL_PROOF_TEMPLATES: list[dict[str, Any]] = [
     },
     {
         "type": "community_milestone",
-        "message_sw": "Jamii ya Biashara Intelligence imefikia wauzaji {count}! Wewe ni sehemu ya familia hii.",
-        "message_en": "The Biashara Intelligence community reached {count} sellers! You're part of this family.",
+        "message_sw": "Jamii ya Angavu Intelligence imefikia wauzaji {count}! Wewe ni sehemu ya familia hii.",
+        "message_en": "The Angavu Intelligence community reached {count} sellers! You're part of this family.",
         "icon": "🎉",
     },
 ]

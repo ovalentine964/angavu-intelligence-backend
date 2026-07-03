@@ -1,5 +1,5 @@
 """
-Base Skill — Abstract base class for all Biashara Intelligence skills.
+Base Skill — Abstract base class for all Angavu Intelligence skills.
 
 Each skill corresponds to a course unit from the BSc Economics & Statistics
 degree and provides executable intelligence capabilities.
@@ -103,7 +103,7 @@ class SkillMetrics:
 
 class BaseSkill(ABC):
     """
-    Abstract base class for all Biashara Intelligence skills.
+    Abstract base class for all Angavu Intelligence skills.
 
     Each skill must define:
     - name: Unique identifier

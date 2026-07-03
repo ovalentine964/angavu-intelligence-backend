@@ -1,7 +1,7 @@
 """
-Biashara Loop Configuration — Maps features to DeerFlow loop patterns.
+Angavu Loop Configuration — Maps features to DeerFlow loop patterns.
 
-Each Biashara feature (tithe tracking, goal progress, loan management,
+Each Angavu feature (tithe tracking, goal progress, loan management,
 intelligence generation) is configured as a DeerFlow goal with:
 - Which loop pattern to use (goal-driven, plan-execute, reflexion)
 - Evaluation criteria (when is the goal "satisfied"?)
@@ -59,7 +59,7 @@ class EvaluationConfig:
 @dataclass
 class BiasharaLoopConfig:
     """
-    Configuration for a Biashara-specific loop.
+    Configuration for a Angavu-specific loop.
 
     Maps a feature to DeerFlow's goal system:
     - loop_type: Which DeerFlow pattern to use
@@ -113,7 +113,7 @@ def get_enabled_loop_configs() -> Dict[str, BiasharaLoopConfig]:
 # ════════════════════════════════════════════════════════════════════
 
 def _register_defaults() -> None:
-    """Register default Biashara loop configurations."""
+    """Register default Angavu loop configurations."""
 
     # Tithe Tracking Loop: Record → Analyze → Encourage
     register_loop_config(BiasharaLoopConfig(

@@ -1,5 +1,5 @@
 """
-Mindset models — Wealth Mindset feature for Biashara Intelligence.
+Mindset models — Wealth Mindset feature for Angavu Intelligence.
 
 Dedicated model file for the mindset feature including:
 - MindsetLesson — 56 voice lessons across 6 modules

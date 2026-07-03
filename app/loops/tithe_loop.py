@@ -195,7 +195,7 @@ class TitheLoop(ReActAgent):
     """
     Tithe tracking loop: Record → Analyze → Encourage.
 
-    Implements the Biashara tithe tracking feature as a DeerFlow goal:
+    Implements the Angavu tithe tracking feature as a DeerFlow goal:
     1. Record: Capture tithe payment (or missed payment)
     2. Analyze: Calculate consistency, streaks, trends
     3. Encourage: Generate appropriate message

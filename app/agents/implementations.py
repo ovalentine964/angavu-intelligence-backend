@@ -1,7 +1,7 @@
 """
 Agent Implementations — Wrapping existing services as autonomous agents.
 
-Each agent class wraps one or more existing Biashara Intelligence services
+Each agent class wraps one or more existing Angavu Intelligence services
 and adds the observe → think → act → reflect lifecycle.
 
     TransactionProcessorAgent  → pipeline.py (DataPipeline)

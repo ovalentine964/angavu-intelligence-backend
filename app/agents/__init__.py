@@ -1,5 +1,5 @@
 """
-Biashara Intelligence — Multi-Agent Runtime V2
+Angavu Intelligence — Multi-Agent Runtime V2
 
 3-Tier Agent Architecture:
     Tier 1: Core agents + MetaAgent (system orchestrator)

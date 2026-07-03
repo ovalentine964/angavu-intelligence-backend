@@ -5,7 +5,7 @@ Makes agent lifecycle transitions explicit, auditable, and recoverable.
 Instead of implicit state changes, every transition is a named event
 with guards and actions.
 
-States for Biashara agents:
+States for Angavu agents:
     idle -> observing -> thinking -> acting -> reflecting -> idle
     With error recovery and timeout handling.
 
@@ -330,13 +330,13 @@ class AgentStateMachine:
 
 
 # ════════════════════════════════════════════════════════════════════
-# Biashara Agent State Machine Factory
+# Angavu Agent State Machine Factory
 # ════════════════════════════════════════════════════════════════════
 
 
 def create_agent_state_machine(agent_name: str) -> AgentStateMachine:
     """
-    Create a state machine for a Biashara agent with standard lifecycle.
+    Create a state machine for a Angavu agent with standard lifecycle.
 
     States:
         idle -> observing -> thinking -> acting -> reflecting -> idle

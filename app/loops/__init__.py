@@ -1,7 +1,7 @@
 """
-Biashara Loop Systems — Domain-Specific Goal-Driven Loops.
+Angavu Loop Systems — Domain-Specific Goal-Driven Loops.
 
-Each loop wraps a Biashara feature as a DeerFlow goal:
+Each loop wraps a Angavu feature as a DeerFlow goal:
 - TitheLoop          — Record → Analyze → Encourage
 - GoalProgressLoop   — Track → Predict → Nudge
 - LoanLoop           — Record → Verify → Alert

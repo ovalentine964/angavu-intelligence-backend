@@ -1,7 +1,7 @@
 """
-Biashara Intelligence — DeerFlow Tool Registration.
+Angavu Intelligence — DeerFlow Tool Registration.
 
-Registers all Biashara intelligence services as DeerFlow-compatible
+Registers all Angavu intelligence services as DeerFlow-compatible
 LangChain tools. Each tool wraps an existing Biashara service and
 returns JSON-serialized results.
 
@@ -27,7 +27,7 @@ __all__ = [
 
 
 def get_biashara_tools():
-    """Return all Biashara tools as a list for agent binding."""
+    """Return all Angavu tools as a list for agent binding."""
     return [
         soko_pulse_tool,
         alama_score_tool,

@@ -393,7 +393,7 @@ def get_provider_registry() -> ProviderRegistry:
 
 
 def _register_defaults(registry: ProviderRegistry):
-    """Register default Biashara Intelligence providers."""
+    """Register default Angavu Intelligence providers."""
     # On-device (Android llama.cpp)
     registry.register(
         provider_id="on-device",

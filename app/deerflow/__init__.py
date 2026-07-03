@@ -1,9 +1,9 @@
 """
-Biashara Intelligence — DeerFlow Integration Layer.
+Angavu Intelligence — DeerFlow Integration Layer.
 
-Bridges the DeerFlow agent harness with Biashara's existing services.
+Bridges the DeerFlow agent harness with Angavu's existing services.
 Provides:
-- create_biashara_agent(): Factory for DeerFlow-powered Biashara agents
+- create_biashara_agent(): Factory for DeerFlow-powered Angavu agents
 - BiasharaLeadAgent: Lead agent orchestrating domain sub-agents
 - get_deerflow_tools(): Tool loader for agent construction
 """

@@ -1,6 +1,6 @@
-![Biashara Intelligence](docs/logo-banner.svg)
+![Angavu Intelligence](docs/logo-banner.svg)
 
-# Biashara Intelligence — Cloud Platform
+# Angavu Intelligence — Cloud Platform
 
 **Africa's operating system for the informal economy. Processing data from 600M+ informal workers into economic intelligence.**
 
@@ -12,7 +12,7 @@
 
 ## Vision
 
-Biashara Intelligence is the vertically integrated AI platform for Africa's informal economy. We own the data, the models, and the infrastructure. Every informal worker has an AI CFO. Africa's answer to China's AI factories.
+Angavu Intelligence is the vertically integrated AI platform for Africa's informal economy. We own the data, the models, and the infrastructure. Every informal worker has an AI CFO. Africa's answer to China's AI factories.
 
 > *"What used to take months, we do in days."*
 
@@ -23,7 +23,7 @@ Provide economic intelligence to Africa's 600M+ informal workers. Make invisible
 ## Architecture
 
 ```
-Msaidizi (Android) → Voice/Transaction Data → Biashara Intelligence (Cloud) → Intelligence Products → Buyers
+Msaidizi (Android) → Voice/Transaction Data → Angavu Intelligence (Cloud) → Intelligence Products → Buyers
      ↓                                            ↓                                        ↓
   600M+ workers                            15 intelligence products              12 buyer segments
   14 dialects                              Multi-agent runtime                   $89M-$400M TAM
@@ -76,7 +76,7 @@ The platform uses a **multi-agent runtime** with an **event bus** for loose coup
 | Product | Description | Buyers |
 |---------|-------------|--------|
 | **Soko Pulse** | Market intelligence — prices, demand, forecasting | FMCG, traders |
-| **Biashara Pulse** | Economy monitoring — GDP, inflation, employment | Government, IMF |
+| **Angavu Pulse** | Economy monitoring — GDP, inflation, employment | Government, IMF |
 | **Alama Score** | Credit scoring — transaction-based, 300-850 | Banks, insurance |
 | **Jamii Insights** | Community intelligence — financial inclusion, poverty | NGOs, World Bank |
 | **Tax Base** | Tax compliance estimation | KRA, government |
@@ -303,4 +303,4 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) and [DEPLOYMENT_ORACLE.md](DEPLOYMENT_ORACLE.
 
 ## License
 
-Proprietary — Biashara Intelligence
+Proprietary — Angavu Intelligence

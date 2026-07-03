@@ -1,5 +1,5 @@
 """
-Model Router — OmniRoute-inspired AI gateway for Biashara Intelligence.
+Model Router — OmniRoute-inspired AI gateway for Angavu Intelligence.
 
 Routes inference requests across multiple providers with:
 - Smart provider selection based on task, cost, latency

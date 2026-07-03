@@ -1,5 +1,5 @@
 """
-Business Health Score Calculator — Msaidizi / Biashara AI
+Business Health Score Calculator — Msaidizi / Angavu Intelligence
 
 Calculates three key scores for informal business owners:
 1. Business Health Score (0-100) — overall business wellbeing

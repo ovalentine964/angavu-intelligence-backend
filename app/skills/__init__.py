@@ -1,9 +1,9 @@
 """
-Biashara Intelligence — Skills Module
+Angavu Intelligence — Skills Module
 
 Each skill maps a university course unit (from Valentine Owuor's
 BSc Economics & Statistics, Masinde Muliro University) into an
-executable AI capability for Msaidizi and Biashara Intelligence.
+executable AI capability for Msaidizi and Angavu Intelligence.
 
 The degree IS the product specification — 42 units, 545,000+ words
 mapped to intelligence products.

@@ -2,7 +2,7 @@
 African Development Intelligence — ECO 204: Issues in African Development.
 
 Cross-border trade analysis, EAC integration, and development economics
-for Biashara Intelligence's Soko Pulse product.
+for Angavu Intelligence's Soko Pulse product.
 
 Academic Foundation:
 - ECO 204: Issues in African Development — Structural transformation,

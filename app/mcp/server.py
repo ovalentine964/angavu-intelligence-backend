@@ -29,7 +29,7 @@ logger = structlog.get_logger(__name__)
 
 class MCPServer:
     """
-    MCP (Model Context Protocol) server for Biashara Intelligence.
+    MCP (Model Context Protocol) server for Angavu Intelligence.
 
     Handles JSON-RPC requests per the MCP specification and dispatches
     tool calls to the appropriate service layers.

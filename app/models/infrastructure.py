@@ -2,7 +2,7 @@
 Database Models for Infrastructure Monitoring.
 
 Tracks server health, model versions, federated learning updates,
-and cost data across Biashara Intelligence's infrastructure.
+and cost data across Angavu Intelligence's infrastructure.
 
 Tables:
     - ServerMetric: CPU, RAM, disk, network metrics per server

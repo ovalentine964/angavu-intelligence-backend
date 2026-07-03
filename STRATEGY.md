@@ -1,4 +1,4 @@
-# Biashara Intelligence Backend — Strategic Framework
+# Angavu Intelligence Backend — Strategic Framework
 
 **Classification:** Internal — Founder Level
 **Date:** July 2, 2026
@@ -8,7 +8,7 @@
 
 ## The One-Line Strategy
 
-> **"Biashara Intelligence: The operating system for Africa's informal economy. Not competing. Just operating."**
+> **"Angavu Intelligence: The operating system for Africa's informal economy. Not competing. Just operating."**
 
 ---
 
@@ -40,12 +40,12 @@ No competitor can replicate this without first reaching 600M+ informal workers. 
 
 ### Why 15 Products = Monopoly Defense
 
-Each product creates a separate revenue stream and a separate switching cost for enterprise clients. A bank using Alama Score AND a government using Biashara Pulse AND an NGO using Jamii Insights = three independent reasons the platform cannot be replaced.
+Each product creates a separate revenue stream and a separate switching cost for enterprise clients. A bank using Alama Score AND a government using Angavu Pulse AND an NGO using Jamii Insights = three independent reasons the platform cannot be replaced.
 
 | Product | Buyer Segment | Revenue Model |
 |---|---|---|
 | Soko Pulse | FMCG companies | $5K-$25K/month subscription |
-| Biashara Pulse | Government, IMF | $10K-$50K/month subscription |
+| Angavu Pulse | Government, IMF | $10K-$50K/month subscription |
 | Alama Score | Banks, insurance | Per-score pricing |
 | Jamii Insights | NGOs, World Bank | $5K-$15K/month subscription |
 | Tax Base | KRA, government | $10K-$25K/month subscription |
@@ -81,7 +81,7 @@ The backend operates as an **agent economy** — not a traditional server applic
 
 ### Why Agents > Traditional Architecture
 
-| Traditional Backend | Biashara Agent Architecture |
+| Traditional Backend | Angavu Agent Architecture |
 |---|---|
 | Scale by adding servers | Scale by adding agents |
 | Manual feature development | Self-evolving agents design features |
@@ -184,4 +184,4 @@ The backend is the engine of this flywheel. Every agent, every pipeline, every i
 
 *This document is a living strategic asset. Review quarterly.*
 
-**Biashara Intelligence © 2026**
+**Angavu Intelligence © 2026**

@@ -11,7 +11,7 @@
 ### ✅ STA 442 — Applied Multivariate Analysis
 - **What was done:** Promoted PCA, Factor Analysis, LDA, and MANOVA from local helpers in `alama_score.py` to shared classes in `statistical_foundation.py`
 - **Classes added:** `PCAAnalyzer`, `FactorAnalyzer`, `DiscriminantAnalyzer`, `MANOVA`
-- **Products improved:** Alama Score (feature engineering), Biashara Pulse (composite indices), Jamii Insights (community profiling)
+- **Products improved:** Alama Score (feature engineering), Angavu Pulse (composite indices), Jamii Insights (community profiling)
 - **Commit:** `feat(degree): STA 442 — promote multivariate analysis to shared module`
 
 ### ✅ ECO 305/313 — International Trade

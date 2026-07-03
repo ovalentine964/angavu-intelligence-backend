@@ -1,5 +1,5 @@
 # =============================================================
-# Biashara Intelligence — Oracle Cloud Docker Compose
+# Angavu Intelligence — Oracle Cloud Docker Compose
 # Two profiles:
 #   - MICRO  (E2.Micro 1GB RAM): SQLite, 1 worker, no Redis
 #   - ARM    (A1.Flex 24GB RAM): PostgreSQL, 4 workers, Redis

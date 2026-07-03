@@ -12,7 +12,7 @@ Logs every agent lifecycle event so you can answer:
 Output: structured logs (via structlog) + optional in-memory trace store
 for API introspection (/api/v1/agents/traces).
 
-This is the Biashara Intelligence equivalent of LangSmith / Phoenix.
+This is the Angavu Intelligence equivalent of LangSmith / Phoenix.
 """
 
 from __future__ import annotations

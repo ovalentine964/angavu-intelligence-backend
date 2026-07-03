@@ -113,7 +113,7 @@ async def get_gdp_estimate(
     Real-Time Informal GDP Estimation.
 
     **GDP Estimator** nowcasts the contribution of Kenya's informal
-    sector (~34% of GDP) using transaction data from Biashara workers.
+    sector (~34% of GDP) using transaction data from Angavu workers.
 
     **Methodology:**
     - Transaction volumes × average margins × sector multipliers
@@ -360,7 +360,7 @@ async def calculate_outcome_pricing(
 
     **Outcome-Based Model:** Buyers pay based on the VALUE they
     receive, not flat subscriptions. This aligns incentives —
-    Biashara gets paid more when buyers get more value.
+    Angavu gets paid more when buyers get more value.
 
     **Product-Specific Parameters:**
 

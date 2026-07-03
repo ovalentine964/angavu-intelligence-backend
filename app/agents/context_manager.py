@@ -87,7 +87,7 @@ class ContextSummary:
 
 class ContextManager:
     """
-    Proactive context window manager for Biashara agents.
+    Proactive context window manager for Angavu agents.
 
     Manages a token-budgeted context window with:
     - Priority-based retention (errors > recent > old)
@@ -429,7 +429,7 @@ class ContextManager:
 
 class AgentContextManager:
     """
-    Per-agent context manager that integrates with BiasharaAgent.
+    Per-agent context manager that integrates with AngavuAgent.
 
     Wraps ContextManager with agent-specific hooks for automatic
     context management during observe/think/act/reflect cycles.

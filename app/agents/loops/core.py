@@ -1,5 +1,5 @@
 """
-Agentic Loop Patterns for Biashara Intelligence.
+Agentic Loop Patterns for Angavu Intelligence.
 
 Implements 5 foundational loop patterns from agentic AI research:
 

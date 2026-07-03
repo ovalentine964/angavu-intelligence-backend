@@ -1,13 +1,13 @@
 """
-Biashara Intelligence — DeerFlow Integration Layer.
+Angavu Intelligence — DeerFlow Integration Layer.
 
 This module bridges DeerFlow's agent harness (deerflow-harness) with
-Biashara's existing intelligence services. It provides:
+Angavu's existing intelligence services. It provides:
 
-1. Tool loading: Wraps Biashara services as LangChain tools
+1. Tool loading: Wraps Angavu services as LangChain tools
 2. Agent creation: Uses DeerFlow's create_deerflow_agent factory
 3. Lead agent: Orchestrates domain-specific sub-agents
-4. Middleware chain: Configures DeerFlow's 21+ middlewares for Biashara
+4. Middleware chain: Configures DeerFlow's 21+ middlewares for Angavu
 
 Architecture:
     User Request
@@ -16,16 +16,16 @@ Architecture:
         ↓
     Domain Agent Router (research | credit | distribution | fmcg | health | dev)
         ↓
-    Biashara Tools (soko_pulse | alama_score | distribution_gap | fmcg_intelligence | worker_intelligence)
+    Angavu Tools (soko_pulse | alama_score | distribution_gap | fmcg_intelligence | worker_intelligence)
         ↓
-    Biashara Services (existing SQLAlchemy-backed services)
+    Angavu Services (existing SQLAlchemy-backed services)
 
 Key Design Decisions:
 - USE DeerFlow's create_deerflow_agent, NOT custom agent code
 - USE DeerFlow's middleware chain (summarization, memory, loop detection, etc.)
 - USE DeerFlow's ThreadState for LangGraph state management
 - USE DeerFlow's skill system for SKILL.md loading
-- Bridge async Biashara services with DeerFlow's sync tool interface
+- Bridge async Angavu services with DeerFlow's sync tool interface
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ BIASHARA_CONFIG_PATH = "config/biashara_agents.yaml"
 
 
 def _load_biashara_config() -> dict:
-    """Load Biashara agent configuration from YAML."""
+    """Load Angavu agent configuration from YAML."""
     try:
         with open(BIASHARA_CONFIG_PATH, "r") as f:
             return yaml.safe_load(f) or {}
@@ -83,10 +83,10 @@ def _load_biashara_config() -> dict:
 # ── Tool Loading ────────────────────────────────────────────────────────────
 
 def get_deerflow_tools(groups: list[str] | None = None) -> list:
-    """Load Biashara tools for DeerFlow agent binding.
+    """Load Angavu tools for DeerFlow agent binding.
 
     Args:
-        groups: Optional tool group filter. If None, returns all Biashara tools.
+        groups: Optional tool group filter. If None, returns all Angavu tools.
 
     Returns:
         List of LangChain BaseTool instances.
@@ -94,7 +94,7 @@ def get_deerflow_tools(groups: list[str] | None = None) -> list:
     tools = get_biashara_tools()
 
     if groups and "biashara" not in groups:
-        logger.warning(f"Requested tool groups {groups} not available; Biashara tools require group 'biashara'")
+        logger.warning(f"Requested tool groups {groups} not available; Angavu tools require group 'biashara'")
         return []
 
     return tools
@@ -109,9 +109,9 @@ def create_biashara_agent(
     plan_mode: bool = False,
     extra_middleware: list[AgentMiddleware] | None = None,
 ) -> Any:
-    """Create a DeerFlow agent with Biashara tools.
+    """Create a DeerFlow agent with Angavu tools.
 
-    This is the PRIMARY entry point for creating Biashara agents.
+    This is the PRIMARY entry point for creating Angavu agents.
     It uses DeerFlow's create_deerflow_agent factory — NOT custom code.
 
     Args:
@@ -143,7 +143,7 @@ def create_biashara_agent(
         agent_config = config.get("agents", {}).get(agent_name, {})
         system_prompt = agent_config.get("description", _default_system_prompt(agent_name))
 
-    # Configure features for Biashara use case
+    # Configure features for Angavu use case
     features = RuntimeFeatures(
         sandbox=False,           # No code sandbox needed
         summarization=False,     # Disable for now (needs model arg)
@@ -167,7 +167,7 @@ def create_biashara_agent(
         name=agent_name,
     )
 
-    logger.info(f"Created Biashara DeerFlow agent: {agent_name} (model={model_name}, tools={len(tools)})")
+    logger.info(f"Created Angavu DeerFlow agent: {agent_name} (model={model_name}, tools={len(tools)})")
     return agent
 
 
@@ -175,13 +175,13 @@ def create_biashara_lead_agent(
     model_name: str = "deepseek-reasoner",
     plan_mode: bool = True,
 ) -> Any:
-    """Create the Biashara lead agent — the top-level orchestrator.
+    """Create the Angavu lead agent — the top-level orchestrator.
 
     The lead agent:
     - Routes queries to appropriate domain agents
     - Manages conversation context and memory
     - Handles multi-step research tasks with plan mode
-    - Provides a unified interface for all Biashara intelligence
+    - Provides a unified interface for all Angavu intelligence
 
     Uses DeerFlow's create_deerflow_agent with full feature set.
 
@@ -221,14 +221,14 @@ def create_biashara_lead_agent(
         name="biashara-lead",
     )
 
-    logger.info(f"Created Biashara Lead Agent (model={model_name}, tools={len(tools)}, plan_mode={plan_mode})")
+    logger.info(f"Created Angavu Lead Agent (model={model_name}, tools={len(tools)}, plan_mode={plan_mode})")
     return agent
 
 
 # ── BiasharaAgentFactory ────────────────────────────────────────────────────
 
 class BiasharaAgentFactory:
-    """Factory for creating and managing Biashara DeerFlow agents.
+    """Factory for creating and managing Angavu DeerFlow agents.
 
     Replaces the custom AgentFactory for DeerFlow-powered deployments.
     Maintains a registry of created agents for the FastAPI app lifecycle.
@@ -287,7 +287,7 @@ class BiasharaAgentFactory:
 # ── System Prompts ──────────────────────────────────────────────────────────
 
 def _default_system_prompt(agent_name: str) -> str:
-    """Generate a default system prompt for a Biashara domain agent."""
+    """Generate a default system prompt for a Angavu domain agent."""
     prompts = {
         "research": (
             "You are a market research specialist for Kenya's informal economy. "
@@ -320,18 +320,18 @@ def _default_system_prompt(agent_name: str) -> str:
         "development": (
             "You are an African development intelligence analyst. Analyze GDP "
             "estimation, inflation tracking, tax base expansion, and business "
-            "cycles for East African economies using Biashara intelligence tools."
+            "cycles for East African economies using Angavu intelligence tools."
         ),
     }
     return prompts.get(agent_name, (
-        "You are a Biashara Intelligence agent. Use the available tools to "
+        "You are a Angavu Intelligence agent. Use the available tools to "
         "analyze Kenya's informal economy and provide actionable insights."
     ))
 
 
 def _build_lead_system_prompt() -> str:
     """Build the system prompt for the lead orchestrator agent."""
-    return """You are the Biashara Intelligence Lead Agent — the primary orchestrator for Kenya's informal economy intelligence platform.
+    return """You are the Angavu Intelligence Lead Agent — the primary orchestrator for Kenya's informal economy intelligence platform.
 
 ## Your Role
 You coordinate specialized intelligence tools to answer complex questions about Kenya's informal economy (dukas, kiosks, mama mbogas, informal traders).

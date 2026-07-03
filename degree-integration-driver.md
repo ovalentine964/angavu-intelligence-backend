@@ -52,7 +52,7 @@ Each product lists the **degree units that drive it**, what **concept** from tha
 
 ---
 
-## 2. Biashara Pulse — Business Intelligence Engine
+## 2. Angavu Pulse — Business Intelligence Engine
 
 ### Degree Units Driving This Product
 
@@ -534,7 +534,7 @@ These degree units provide the **statistical backbone** used by every product:
 
 | Unit | Concept | Products Using It | Code Location |
 |------|---------|-------------------|---------------|
-| STA 142 | Bayes' theorem | Alama Score, Biashara Pulse, Jamii Insights, all new products | statistical_foundation.py:L30 |
+| STA 142 | Bayes' theorem | Alama Score, Angavu Pulse, Jamii Insights, all new products | statistical_foundation.py:L30 |
 | STA 241 | Distribution fitting | All products with distributional assumptions | statistical_foundation.py:L316 |
 | STA 341 | Bootstrap CI | All products reporting uncertainty | statistical_foundation.py:L225 |
 | STA 342 | Hypothesis testing | All products with A/B tests, comparisons | hypothesis_testing.py |
@@ -559,7 +559,7 @@ These degree units provide the **statistical backbone** used by every product:
 | ECO 101 | Soko Pulse, Pricing, Market Entry, Supply Chain | ⚠️ Partial → ✅ Full with pricing |
 | ECO 102 | GDP Estimator, Inflation Tracker | ⚠️ Partial → ✅ Full with GDP/Inflation |
 | ECO 103 | All products (mathematical foundations) | ✅ Full |
-| ECO 104 | Biashara Pulse, Supply Chain (I-O), Alama Score | ⚠️ Partial → ✅ Full with I-O |
+| ECO 104 | Angavu Pulse, Supply Chain (I-O), Alama Score | ⚠️ Partial → ✅ Full with I-O |
 | ECO 106 | — | ❌ Not integrated (health economics) |
 | BIT 113 | All products (infrastructure) | ✅ Full |
 | MAT 101 | All products (foundations) | ✅ Full |
@@ -570,19 +570,19 @@ These degree units provide the **statistical backbone** used by every product:
 | ECO 202 | All products (sampling, CIs) | ✅ Full |
 | ECO 203 | Soko Pulse, Inflation Tracker, GDP Estimator | ✅ Full |
 | ECO 204 | Jamii Insights, Gender Intel, SDG Tracker | ⚠️ Partial → ✅ Full with Gender Intel |
-| ECO 205 | Biashara Pulse, GDP Estimator, Employment Monitor | ⚠️ Partial → ✅ Full with GDP |
+| ECO 205 | Angavu Pulse, GDP Estimator, Employment Monitor | ⚠️ Partial → ✅ Full with GDP |
 | ECO 206 | Alama Score, Jamii Insights, Insurance Risk | ⚠️ Partial → ✅ Full with Insurance |
 | ECO 209 | — | ❌ Not integrated (money & banking) |
 | ECO 210 | All products (optimization, MLE) | ✅ Full |
 | STA 241 | All products (distribution fitting) | ✅ Full |
 | STA 244 | Soko Pulse, Inflation, GDP, Employment, Supply Chain | ⚠️ Partial → ✅ Full (still need full ARIMA) |
-| STA 245 | Biashara Pulse, Jamii Insights, SDG, Employment | ⚠️ Partial → ✅ Full with SDG |
+| STA 245 | Angavu Pulse, Jamii Insights, SDG, Employment | ⚠️ Partial → ✅ Full with SDG |
 | STA 246 | Jamii Insights, Employment, Gender Intel | ⚠️ Partial → ✅ Full with Employment |
 | ECO 305 | Soko Pulse, Market Entry, Supply Chain | ❌ Not integrated → ✅ Full with gravity model |
 | ECO 313 | — | ❌ Not integrated (advanced trade theory) |
 | ECO 315 | Research Data Platform | ⚠️ Partial → ✅ Full with Research Platform |
 | ECO 321 | Alama Score (screening), Pricing (mechanism design) | ❌ Not integrated → ⚠️ Partial with pricing |
-| ECO 322 | GDP Estimator (nowcasting), Biashara Pulse | ❌ Not integrated → ✅ Full with GDP |
+| ECO 322 | GDP Estimator (nowcasting), Angavu Pulse | ❌ Not integrated → ✅ Full with GDP |
 | STA 341 | All products (estimation backbone) | ✅ Full |
 | STA 342 | All products (testing backbone) | ✅ Full |
 | STA 343 | All products with experiments (onboarding, pricing) | ✅ Full |
@@ -612,7 +612,7 @@ These degree units provide the **statistical backbone** used by every product:
 | Unit | Why Not Integrated | Potential Product |
 |------|-------------------|-------------------|
 | ECO 106 | Emerging Public Health Issues | Health economics overlay on Jamii Insights |
-| ECO 209 | Money and Banking | Monetary policy indicator for Biashara Pulse |
+| ECO 209 | Money and Banking | Monetary policy indicator for Angavu Pulse |
 | ECO 313 | International Economics (advanced) | Advanced trade theory for Market Entry |
 | STA 443 | Measure and Probability Theory | Abstract mathematical foundation — scipy handles implementation |
 

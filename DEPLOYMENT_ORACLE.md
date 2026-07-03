@@ -1,4 +1,4 @@
-# Biashara Intelligence — Oracle Cloud Deployment Guide
+# Angavu Intelligence — Oracle Cloud Deployment Guide
 
 Deploy to Oracle Cloud Free Tier with one command.
 
@@ -246,4 +246,4 @@ docker compose -f docker-compose.oracle.yml restart api
 
 ---
 
-*Biashara Intelligence — Deployed on Oracle Cloud Free Tier 🇰🇪*
+*Angavu Intelligence — Deployed on Oracle Cloud Free Tier 🇰🇪*

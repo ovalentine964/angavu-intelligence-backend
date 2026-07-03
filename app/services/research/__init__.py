@@ -1,5 +1,5 @@
 """
-Research Methodology & Statistical Quality Framework for Biashara Intelligence.
+Research Methodology & Statistical Quality Framework for Angavu Intelligence.
 
 Grounded in Valentine's Economics & Statistics degree:
 - ECO 315: Research Methods → Research design, sampling, data collection

@@ -559,8 +559,8 @@ async def get_variable_reward(
     if not user_level:
         return {
             "has_reward": False,
-            "message_sw": "Anza kutumia Biashara Intelligence kupata zawadi!",
-            "message_en": "Start using Biashara Intelligence to earn rewards!",
+            "message_sw": "Anza kutumia Angavu Intelligence kupata zawadi!",
+            "message_en": "Start using Angavu Intelligence to earn rewards!",
         }
 
     # Check cooldown (don't give rewards too frequently)

@@ -216,7 +216,7 @@ def _calculate_flywheel_stats() -> dict:
         "flywheel": {
             "description": (
                 "Worker uses Msaidizi → Generates transaction data → "
-                "Biashara Intelligence aggregates & sells → Revenue funds "
+                "Angavu Intelligence aggregates & sells → Revenue funds "
                 "better infrastructure → Better performance attracts more workers"
             ),
             "stages": [
@@ -232,7 +232,7 @@ def _calculate_flywheel_stats() -> dict:
                 },
                 {
                     "stage": "Intelligence Products",
-                    "description": "Soko Pulse, Alama Score, Biashara Pulse, Jamii Insights",
+                    "description": "Soko Pulse, Alama Score, Angavu Pulse, Jamii Insights",
                     "products_activated_at_workers": {
                         "soko_pulse": 1_000,
                         "alama_score": 5_000,

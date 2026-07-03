@@ -1,1 +1,1 @@
-"""Static data for Biashara Intelligence features."""
+"""Static data for Angavu Intelligence features."""

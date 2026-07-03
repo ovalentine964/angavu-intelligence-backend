@@ -86,7 +86,7 @@ class AgentInfrastructure:
 
 class AgentFactory:
     """
-    Creates and wires all Biashara Intelligence agents.
+    Creates and wires all Angavu Intelligence agents.
 
     V2 Architecture — 3 Tiers:
         Tier 1: Core agents (TransactionProcessor, IntelligenceGenerator,
@@ -605,7 +605,7 @@ class AgentFactory:
         Create and attach DeerFlow-powered agents via deerflow-harness.
 
         Uses DeerFlow's create_deerflow_agent factory to create LangGraph
-        agents with Biashara tools. Falls back gracefully if deerflow-harness
+        agents with Angavu tools. Falls back gracefully if deerflow-harness
         is not installed.
         """
         try:

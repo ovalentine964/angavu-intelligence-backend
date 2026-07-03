@@ -245,7 +245,7 @@ class MultipleTestingCorrection:
 
 class HypothesisTester:
     """
-    Comprehensive hypothesis testing for Biashara Intelligence.
+    Comprehensive hypothesis testing for Angavu Intelligence.
 
     From STA 342 (Test of Hypothesis):
     - One-sample, two-sample, paired t-tests

@@ -1,5 +1,5 @@
 """
-Biashara Intelligence — FastAPI Application
+Angavu Intelligence — FastAPI Application
 
 Main entry point for the cloud backend. Sets up:
 - CORS middleware
@@ -274,7 +274,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Biashara Intelligence",
+    title="Angavu Intelligence",
     description=(
         "Intelligence platform for Kenya's informal economy. "
         "Transforms raw transaction data from dukawallahs and mama mbogas "
@@ -447,7 +447,7 @@ async def health_check():
 async def root():
     """Root endpoint — redirects to docs in development."""
     return {
-        "service": "Biashara Intelligence Backend",
+        "service": "Angavu Intelligence Backend",
         "version": "0.1.0",
         "docs": "/docs" if settings.ENABLE_DOCS else None,
         "health": "/health",
@@ -565,7 +565,7 @@ app.include_router(mindset_router, prefix=settings.API_V1_PREFIX)
 async def startup_banner():
     """Print startup banner for visibility."""
     logger.info("=" * 60)
-    logger.info("🇰🇪 Biashara Intelligence — Backend Starting")
+    logger.info("🇰🇪 Angavu Intelligence — Backend Starting")
     logger.info(f"   Environment: {settings.APP_ENV}")
     logger.info(f"   API Prefix:  {settings.API_V1_PREFIX}")
     logger.info(f"   Debug:       {settings.DEBUG}")

@@ -11,7 +11,7 @@ WhatsApp is ONLY for:
 
 WhatsApp is NOT for:
 - Transaction recording (Msaidizi app, offline)
-- Interactive business advice (Msaidizi app → Biashara Intelligence cloud)
+- Interactive business advice (Msaidizi app → Angavu Intelligence cloud)
 """
 
 import hashlib

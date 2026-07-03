@@ -325,7 +325,7 @@ class IndexNumberBuilder:
 
     Used by:
     - Soko Pulse: Market price indices
-    - Biashara Pulse: Activity indices
+    - Angavu Pulse: Activity indices
     - Tax Base: Revenue indices
     """
 
@@ -565,7 +565,7 @@ class HeckmanCorrection:
     Heckman selection correction (ECO 424 — Econometrics).
 
     Addresses selection bias when the sample is not random.
-    In Biashara Intelligence: only active businesses have
+    In Angavu Intelligence: only active businesses have
     transaction data → selection on activity.
 
     Two-step estimation (Heckman, 1979):
@@ -1147,7 +1147,7 @@ class VARModel:
     Estimation: Equation-by-equation OLS (equivalent to SUR when
     regressors are identical across equations).
 
-    Applications in Biashara Intelligence:
+    Applications in Angavu Intelligence:
     - Lead-lag analysis: Does M-Pesa volume Granger-cause prices?
     - Spillover effects: Cross-market price transmission
     - Policy simulation: Impulse response to external shocks
@@ -1469,7 +1469,7 @@ class CointegrationTester:
     ΔY_t = γ(ε̂_{t-1}) + Σ a_i ΔY_{t-i} + Σ b_i ΔX_{t-i} + u_t
     where γ < 0 measures speed of adjustment to equilibrium.
 
-    Applications in Biashara Intelligence:
+    Applications in Angavu Intelligence:
     - Cross-border price linkages (Kenya-Uganda, Kenya-Tanzania)
     - Commodity price parity (Nairobi vs Mombasa wholesale)
     - Exchange rate pass-through to domestic prices

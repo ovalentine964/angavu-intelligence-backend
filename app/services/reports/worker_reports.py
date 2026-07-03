@@ -1,5 +1,5 @@
 """
-Worker Reports — Msaidizi / Biashara Intelligence
+Worker Reports — Msaidizi / Angavu Intelligence
 
 Five report types delivered to informal workers via WhatsApp, each applying
 Valentine's BSc Economics & Statistics degree concepts to transform raw

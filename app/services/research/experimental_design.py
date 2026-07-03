@@ -366,7 +366,7 @@ class ExperimentDesigner:
 
 class ABTestFramework:
     """
-    A/B testing framework for Biashara Intelligence products.
+    A/B testing framework for Angavu Intelligence products.
 
     Implements proper experimental design (STA 343):
     - Random assignment using cryptographic randomness

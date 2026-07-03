@@ -1376,7 +1376,7 @@ class HealthEconomicIntelligence:
         3. Reduced market attendance (fewer active traders)
 
         This is syndromic surveillance through economic data — a novel
-        approach enabled by Biashara Intelligence's transaction coverage.
+        approach enabled by Angavu Intelligence's transaction coverage.
 
         Early warning signals:
         - Z-score > 2 on 7-day rolling revenue (unusual decline)

@@ -1,5 +1,5 @@
 """
-Loop Systems — Biashara Intelligence.
+Loop Systems — Angavu Intelligence.
 
 Agentic loop patterns for structured reasoning, self-correction,
 human feedback, and explicit state management.

@@ -1,5 +1,5 @@
 """
-CUSUM Drift Detection for Model Monitoring — Msaidizi / Biashara AI
+CUSUM Drift Detection for Model Monitoring — Msaidizi / Angavu Intelligence
 
 Implements Cumulative Sum (CUSUM) control charts for detecting concept drift
 in credit scoring and other ML models. When model predictions degrade over

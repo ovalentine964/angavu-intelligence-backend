@@ -2,7 +2,7 @@
 Measure and Probability Theory — STA 443: Measure and Probability Theory.
 
 Probability spaces, conditional expectation, convergence theorems,
-and foundational probability theory for Biashara Intelligence.
+and foundational probability theory for Angavu Intelligence.
 
 Academic Foundation:
 - STA 443: Measure and Probability Theory — Sigma-algebras, measure

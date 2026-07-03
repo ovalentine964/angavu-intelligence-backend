@@ -133,12 +133,12 @@ class SokoPulseResponse(IntelligenceResponse):
 
 
 # =========================================================================
-# 2. Biashara Pulse — Government MSME Activity Index
+# 2. Angavu Pulse — Government MSME Activity Index
 # =========================================================================
 
 
 class BiasharaPulseRequest(BaseModel):
-    """Request for Biashara Pulse MSME Activity Index."""
+    """Request for Angavu Pulse MSME Activity Index."""
 
     region: str = Field(..., description="County code, sub-county, or 'national'")
     period_start: Optional[date] = None
@@ -170,7 +170,7 @@ class BusinessFormation(BaseModel):
 
 
 class BiasharaPulseResponse(IntelligenceResponse):
-    """Response for Biashara Pulse MSME Activity Index."""
+    """Response for Angavu Pulse MSME Activity Index."""
 
     product = "biashara_pulse"
     region: str

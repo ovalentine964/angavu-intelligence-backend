@@ -44,7 +44,7 @@ class FMCGIntelligenceService:
     East African commerce that happens through informal channels
     (dukas, kiosks, mama mbogas, open-air markets).
 
-    Powered by Biashara Intelligence's network of 600M+ informal
+    Powered by Angavu Intelligence's network of 600M+ informal
     economy participants providing ground-truth data from actual
     points of sale.
     """

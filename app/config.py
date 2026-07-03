@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     """Main application settings loaded from environment variables."""
 
     # === Application ===
-    APP_NAME: str = "Biashara Intelligence"
+    APP_NAME: str = "Angavu Intelligence"
     APP_ENV: str = "development"
     DEBUG: bool = True
     ENABLE_DOCS: bool = False  # Explicit toggle; defaults off even in development

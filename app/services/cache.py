@@ -1,5 +1,5 @@
 """
-Redis caching layer for Biashara Intelligence.
+Redis caching layer for Angavu Intelligence.
 
 Provides a unified CacheService that wraps Redis with JSON serialization,
 key prefixing, TTL management, and pattern-based invalidation.
@@ -76,7 +76,7 @@ class InMemoryFallback:
 
 class CacheService:
     """
-    Redis-backed caching service for Biashara Intelligence.
+    Redis-backed caching service for Angavu Intelligence.
 
     Usage:
         cache = CacheService()

@@ -1,7 +1,7 @@
 """
 Sync API endpoints.
 
-Handles device-to-cloud data synchronization for the Msaidizi ↔ Biashara
+Handles device-to-cloud data synchronization for the Msaidizi ↔ Angavu
 Intelligence sync pipeline.
 
 Sync Protocol:
@@ -11,12 +11,12 @@ Sync Protocol:
     4. Cloud decrypts, decompresses, validates, stores
     5. Cloud returns sync status and intelligence updates
 
-Data Flow — Msaidizi → Biashara Intelligence:
+Data Flow — Msaidizi → Angavu Intelligence:
     Worker speaks → Whisper STT → Intent classification → Transaction (Room DB)
     → When online: batch upload (gzip, encrypted)
     → Backend: validate → store → trigger intelligence recalculation
 
-Data Flow — Biashara Intelligence → Msaidizi:
+Data Flow — Angavu Intelligence → Msaidizi:
     Backend processes → generates intelligence
     → Push notification to device
     → Device pulls intelligence (when online)
@@ -182,7 +182,7 @@ async def sync_batch(
 
 
 # =========================================================================
-# Msaidizi ↔ Biashara Intelligence Sync Pipeline Endpoints
+# Msaidizi ↔ Angavu Intelligence Sync Pipeline Endpoints
 # =========================================================================
 
 

@@ -24,7 +24,7 @@ SUPPORTING UNITS:
   inflation expectations, Taylor rule implications
 
 METHODOLOGY:
-KNBS updates CPI monthly using a 200-item basket. Biashara
+KNBS updates CPI monthly using a 200-item basket. Angavu
 Inflation Tracker computes price indices DAILY from actual
 transactions across all 47 counties. This is not a survey —
 it's real prices paid by real consumers in real markets.
@@ -216,7 +216,7 @@ class InflationTrackerService:
 
     Computes daily price indices from actual transaction data
     across all 47 Kenyan counties. Unlike KNBS's monthly 200-basket
-    CPI, Biashara Inflation Tracker captures real prices paid by
+    CPI, Angavu Inflation Tracker captures real prices paid by
     real consumers in real markets — updated daily.
 
     Four index methods computed in parallel:

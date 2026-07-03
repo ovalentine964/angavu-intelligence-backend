@@ -1349,7 +1349,7 @@ class EWMAChart:
 
 class DataQualityFramework:
     """
-    Comprehensive data quality framework for Biashara Intelligence.
+    Comprehensive data quality framework for Angavu Intelligence.
 
     Integrates:
     - SPC control charts (STA 346) for monitoring data streams

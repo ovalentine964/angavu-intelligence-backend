@@ -1,5 +1,5 @@
 """
-Pricing services for Biashara Intelligence products.
+Pricing services for Angavu Intelligence products.
 
 Includes both tier-based and outcome-based pricing models.
 """

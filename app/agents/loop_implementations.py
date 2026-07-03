@@ -647,7 +647,7 @@ class SelfEvolutionEventSourced(EventSourcedAgent):
 
 class PipelineSupervisor(SupervisorAgent):
     """
-    Supervisor that coordinates the full Biashara Intelligence pipeline.
+    Supervisor that coordinates the full Angavu Intelligence pipeline.
 
     Registers all four agents and manages the flow:
     TransactionProcessor → IntelligenceGenerator → ReportGenerator → SelfEvolution
@@ -692,7 +692,7 @@ def create_loop_enhanced_agents(
     event_store: Optional[EventStore] = None,
 ) -> Dict[str, Any]:
     """
-    Create all loop-enhanced agents for the Biashara Intelligence pipeline.
+    Create all loop-enhanced agents for the Angavu Intelligence pipeline.
 
     Returns a dictionary with:
     - agents: List of all agents

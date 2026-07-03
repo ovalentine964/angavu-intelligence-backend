@@ -1,5 +1,5 @@
 """
-Biashara Pulse — Government MSME Activity Index Service.
+Angavu Pulse — Government MSME Activity Index Service.
 
 Theoretical Foundations (Valentine's BSc Economics & Statistics):
 
@@ -41,15 +41,15 @@ Key Economic Concepts:
   Pulse estimates informal GDP using transaction data — providing what
   official statistics cannot measure.
 - Business Cycles: Kenya's cycles are agriculture-driven (rain-dependent).
-  Biashara Pulse detects cycles in real-time using transaction volume
+  Angavu Pulse detects cycles in real-time using transaction volume
   trends, enabling early warning of economic stress.
 - Devolution Economics: Kenya's 47 counties receive ~15% of national
-  revenue. Biashara Pulse provides county-level economic data for
+  revenue. Angavu Pulse provides county-level economic data for
   evidence-based fiscal transfers.
 - Employment Multiplier: Each informal business supports ~3 jobs
-  (owner + 2 dependents). Biashara Pulse estimates employment from
+  (owner + 2 dependents). Angavu Pulse estimates employment from
   business counts, providing real-time labor market data.
-- Nowcasting: Instead of waiting for quarterly GDP, Biashara Pulse
+- Nowcasting: Instead of waiting for quarterly GDP, Angavu Pulse
   estimates economic activity in real-time from transaction data —
   a leading indicator of official statistics.
 

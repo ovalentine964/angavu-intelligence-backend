@@ -387,4 +387,4 @@ curl -f http://localhost:8000/api/v1/health
 
 ---
 
-*Biashara AI Ltd — Proprietary*
+*Angavu Intelligence Ltd — Proprietary*

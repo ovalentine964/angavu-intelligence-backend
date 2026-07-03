@@ -1,7 +1,7 @@
 """
 Health Economics Intelligence — ECO 106: Emerging Public Health Issues.
 
-Standalone health-economic intelligence module for Biashara Intelligence.
+Standalone health-economic intelligence module for Angavu Intelligence.
 Tracks health shocks, models health investment decisions, and quantifies
 the poverty-health nexus for informal workers.
 
