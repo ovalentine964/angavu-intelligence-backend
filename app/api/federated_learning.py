@@ -16,9 +16,10 @@ import json
 from typing import Optional
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from app.api.auth import get_current_user
 from app.schemas.federated_learning import (
     FLStatusResponse,
     FLUpdate,
@@ -49,7 +50,10 @@ _fl_service = FederatedLearningService()
         "LoRA adapter deltas. Raw speech/text data is never transmitted."
     ),
 )
-async def upload_model_update(update: FLUpdate) -> UploadResponse:
+async def upload_model_update(
+    update: FLUpdate,
+    current_user=Depends(get_current_user),
+) -> UploadResponse:
     """
     Receive encrypted model update from device.
 
@@ -90,7 +94,10 @@ async def upload_model_update(update: FLUpdate) -> UploadResponse:
     include_in_schema=False,
     summary="[Compat] Upload federated learning update",
 )
-async def upload_model_update_compat(request: Request) -> UploadResponse:
+async def upload_model_update_compat(
+    request: Request,
+    current_user=Depends(get_current_user),
+) -> UploadResponse:
     """
     Compatibility endpoint for FederatedLearningClient.kt.
 
@@ -150,7 +157,10 @@ async def upload_model_update_compat(request: Request) -> UploadResponse:
         "vocabulary updates from all contributing devices."
     ),
 )
-async def get_global_model(dialect: str) -> GlobalModelResponse:
+async def get_global_model(
+    dialect: str,
+    current_user=Depends(get_current_user),
+) -> GlobalModelResponse:
     """
     Get latest aggregated model for a dialect.
 
@@ -187,7 +197,10 @@ async def get_global_model(dialect: str) -> GlobalModelResponse:
     include_in_schema=False,
     summary="[Compat] Get global model",
 )
-async def get_global_model_compat(language: str) -> GlobalModelResponse:
+async def get_global_model_compat(
+    language: str,
+    current_user=Depends(get_current_user),
+) -> GlobalModelResponse:
     """Compatibility endpoint for FederatedLearningClient.kt."""
     return await get_global_model(language)
 
@@ -206,7 +219,9 @@ async def get_global_model_compat(language: str) -> GlobalModelResponse:
         "update counts, active devices, model versions, and DP parameters."
     ),
 )
-async def fl_status() -> FLStatusResponse:
+async def fl_status(
+    current_user=Depends(get_current_user),
+) -> FLStatusResponse:
     """
     Federated learning system status.
 

@@ -283,7 +283,7 @@ class AgentFactory:
         if infra.meta_agent:
             try:
                 await infra.meta_agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 self._logger.warning("meta_agent_stop_error", error=str(exc))
 
         # Stop long-horizon agents
@@ -291,42 +291,42 @@ class AgentFactory:
             try:
                 for agent in infra.research_orchestrator.delegator._agents.values():
                     await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError, AttributeError) as exc:
                 self._logger.warning("research_orchestrator_stop_error", error=str(exc))
 
         for flow_name, orch in infra.intelligence_flows.items():
             try:
                 for agent in orch.delegator._agents.values():
                     await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError, AttributeError) as exc:
                 self._logger.warning("intelligence_flow_stop_error", flow=flow_name, error=str(exc))
 
         # Stop loop-enhanced agents
         for agent in reversed(infra.loop_agents):
             try:
                 await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 self._logger.warning("loop_agent_stop_error", agent=agent.name, error=str(exc))
 
         # Stop domain agents (Tier 2)
         for agent in reversed(infra.domain_agents):
             try:
                 await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 self._logger.warning("domain_agent_stop_error", agent=agent.name, error=str(exc))
 
         # Stop utility agents (Tier 3)
         for agent in reversed(infra.utility_agents):
             try:
                 await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 self._logger.warning("utility_agent_stop_error", agent=agent.name, error=str(exc))
 
         # Stop core agents in reverse order
         for agent in reversed(infra.agents):
             try:
                 await agent.stop()
-            except Exception as exc:
+            except (RuntimeError, OSError) as exc:
                 self._logger.warning("core_agent_stop_error", agent=agent.name, error=str(exc))
 
         # Disconnect event bus
@@ -544,7 +544,7 @@ class AgentFactory:
             infrastructure.loop_agents = loop_infra["agents"]
 
             self._logger.info("loop_agents_attached", count=len(loop_infra["agents"]))
-        except Exception as exc:
+        except (ImportError, AttributeError, RuntimeError) as exc:
             self._logger.warning("loop_agents_setup_failed", error=str(exc))
 
         return infrastructure
@@ -590,7 +590,7 @@ class AgentFactory:
                 "long_horizon_attached",
                 flows=list(intelligence_flows.keys()),
             )
-        except Exception as exc:
+        except (ImportError, AttributeError, RuntimeError) as exc:
             self._logger.warning("long_horizon_setup_failed", error=str(exc))
 
         return infrastructure
@@ -618,13 +618,13 @@ class AgentFactory:
             for agent_name in domain_agent_names:
                 try:
                     df_factory.create_domain_agent(agent_name)
-                except Exception as e:
+                except (ImportError, RuntimeError, ValueError) as e:
                     self._logger.warning("deerflow_domain_agent_failed", agent=agent_name, error=str(e))
 
             # Create lead agent
             try:
                 df_factory.create_lead_agent()
-            except Exception as e:
+            except (ImportError, RuntimeError, ValueError) as e:
                 self._logger.warning("deerflow_lead_agent_failed", error=str(e))
 
             infrastructure.deerflow_factory = df_factory
@@ -639,7 +639,7 @@ class AgentFactory:
 
         except ImportError:
             self._logger.info("deerflow_harness_not_installed_skipping")
-        except Exception as exc:
+        except (RuntimeError, AttributeError) as exc:
             self._logger.warning("deerflow_setup_failed", error=str(exc))
 
         return infrastructure

@@ -29,7 +29,8 @@ from typing import Any, Dict, List, Optional
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt.exceptions import PyJWTError as JWTError
 from pydantic import BaseModel, Field, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -71,7 +72,7 @@ def _get_event_bus(request: Request):
 def _decode_jwt(token: str) -> dict:
     """Decode and validate a JWT token."""
     try:
-        return jwt.decode(
+        return pyjwt.decode(
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],

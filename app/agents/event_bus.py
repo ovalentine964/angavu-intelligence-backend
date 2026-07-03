@@ -42,6 +42,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TYPE_CHE
 import structlog
 
 from app.config import get_settings
+from app.exceptions import AgentError, EventBusError
 
 if TYPE_CHECKING:
     from app.agents.base import AgentEvent, BiasharaAgent
@@ -111,7 +112,7 @@ class EventBus:
                 self._persist_dir = _PERSIST_DIR
                 self._persist_dir.mkdir(parents=True, exist_ok=True)
                 self._logger.info("event_persistence_enabled", path=str(self._persist_dir))
-            except Exception as exc:
+            except (OSError, PermissionError) as exc:
                 self._logger.warning("event_persistence_setup_failed", error=str(exc))
                 self._persist_dir = None
 
@@ -135,7 +136,7 @@ class EventBus:
             await self._ensure_consumer_groups()
 
             self._logger.info("event_bus_connected", redis_url=redis_url.split("@")[-1])
-        except Exception as exc:
+        except (ImportError, ConnectionError, OSError, TimeoutError) as exc:
             self._logger.warning(
                 "redis_unavailable_fallback",
                 error=str(exc),
@@ -162,8 +163,9 @@ class EventBus:
                     stream_key, CONSUMER_GROUP, id="0", mkstream=True,
                 )
                 self._logger.debug("consumer_group_created", stream=stream_key)
-            except Exception:
-                pass  # Group already exists — idempotent
+            except (ConnectionError, OSError, TimeoutError) as exc:
+                # Group already exists or Redis temporarily unavailable — idempotent
+                self._logger.debug("consumer_group_skip", stream=stream_key, reason=str(exc))
 
     async def disconnect(self) -> None:
         """Clean up Redis connection and close persistence handles."""
@@ -171,8 +173,8 @@ class EventBus:
         for handle in self._persist_handles.values():
             try:
                 handle.close()
-            except Exception:
-                pass
+            except (OSError, ValueError) as exc:
+                self._logger.debug("persist_handle_close_failed", error=str(exc))
         self._persist_handles.clear()
 
         if self._redis:
@@ -213,7 +215,7 @@ class EventBus:
                     stream_id=entry_id,
                 )
                 return entry_id
-            except Exception as exc:
+            except (ConnectionError, OSError, TimeoutError) as exc:
                 self._logger.warning(
                     "publish_redis_failed",
                     error=str(exc),
@@ -260,8 +262,8 @@ class EventBus:
                     await self._redis.xgroup_create(
                         stream_key, CONSUMER_GROUP, id="0", mkstream=True,
                     )
-                except Exception:
-                    pass  # Group already exists — that's fine
+                except (ConnectionError, OSError, TimeoutError) as exc:
+                    self._logger.debug("subscribe_group_skip", stream=stream_key, reason=str(exc))
 
             # Register in-memory handler
             self._handlers[etype].append(agent.handle_event)
@@ -337,7 +339,7 @@ class EventBus:
                         await self._redis.xack(
                             stream_key, CONSUMER_GROUP, msg_id,
                         )
-                    except Exception as exc:
+                    except (json.JSONDecodeError, KeyError, ValueError, ConnectionError, OSError) as exc:
                         self._logger.warning(
                             "event_parse_error",
                             msg_id=msg_id,
@@ -351,7 +353,7 @@ class EventBus:
                             "timestamp": time.time(),
                         })
 
-        except Exception as exc:
+        except (ConnectionError, OSError, TimeoutError) as exc:
             self._logger.warning("xreadgroup_failed", error=str(exc))
 
         return results
@@ -377,7 +379,7 @@ class EventBus:
             for data in taken:
                 try:
                     results.append(AgentEvent.from_dict(data))
-                except Exception as exc:
+                except (json.JSONDecodeError, KeyError, ValueError) as exc:
                     self._logger.warning("in_memory_parse_error", error=str(exc))
 
             if len(results) >= limit:
@@ -393,7 +395,7 @@ class EventBus:
         for handler in handlers:
             try:
                 await handler(event)
-            except Exception as exc:
+            except (AgentError, EventBusError, RuntimeError, OSError) as exc:
                 self._logger.warning(
                     "handler_error",
                     event_type=etype,
@@ -426,7 +428,7 @@ class EventBus:
                 f.write(json.dumps(event_data, default=str) + "\n")
 
             self._persisted_count += 1
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             self._logger.debug("persist_event_failed", error=str(exc))
 
     def get_persisted_events(
@@ -459,7 +461,7 @@ class EventBus:
                     line = line.strip()
                     if line:
                         events.append(json.loads(line))
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError) as exc:
             self._logger.warning("read_persisted_events_failed", error=str(exc))
 
         return events[-limit:]

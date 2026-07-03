@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
+from app.utils.crypto import encrypt_value
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/onboarding", tags=["Worker Onboarding"])
@@ -366,10 +367,10 @@ async def register_worker(
         location_geohash=req.location_geohash,
     )
 
-    # Encrypt phone (simplified — in production, use proper AES-256)
+    # Encrypt phone and name using AES-256-GCM
     anonymizer = Anonymizer(db)
-    phone_encrypted = req.phone  # Would be AES-256 encrypted in production
-    name_encrypted = req.name if req.name else None
+    phone_encrypted = encrypt_value(req.phone)
+    name_encrypted = encrypt_value(req.name) if req.name else None
 
     # Create user
     new_user = User(

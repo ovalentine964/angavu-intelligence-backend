@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "biashara-intelligence-backend"
+version = "0.1.0"
+description = "Intelligence platform for Kenya's informal economy"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+# ── pytest ────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--cov=app",
+    "--cov-fail-under=60",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring external services",
+    "unit: marks unit tests (no external dependencies)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# ── coverage ──────────────────────────────────────────────────────
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/mcp/*",
+]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "if __name__ == .__main__.",
+]
+
+# ── ruff ──────────────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "RUF",    # ruff-specific rules
+    "S",      # flake8-bandit (security)
+    "BLE",    # flake8-blind-except
+    "T20",    # flake8-print
+]
+ignore = [
+    "S101",   # assert used (fine in tests)
+    "S104",   # binding to all interfaces (needed for Docker)
+    "S105",   # hardcoded password detection (false positives on config defaults)
+    "S603",   # subprocess call (too noisy for scripts)
+    "S607",   # partial executable path
+    "T201",   # print found (we use structlog, but some places use print)
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (FastAPI Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S106", "T201", "B"]
+"app/db/migrations/**/*.py" = ["E501", "B"]
+"scripts/**/*.py" = ["T201", "S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

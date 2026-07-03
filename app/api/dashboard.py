@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.api.auth import get_current_user
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -88,6 +89,7 @@ CRITICAL_MASS_THRESHOLDS = {
 @router.get("/critical-mass")
 async def critical_mass_dashboard(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Critical Mass Dashboard — Track progress toward revenue activation.
@@ -362,6 +364,7 @@ async def critical_mass_dashboard(
 async def worker_growth_trend(
     days: int = Query(30, ge=7, le=365),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Worker growth trend over time.

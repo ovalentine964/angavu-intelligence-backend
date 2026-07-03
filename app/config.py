@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # === Application ===
     APP_NAME: str = "Angavu Intelligence"
     APP_ENV: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     ENABLE_DOCS: bool = False  # Explicit toggle; defaults off even in development
     SECRET_KEY: str = ""
     API_V1_PREFIX: str = "/api/v1"
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # === CORS ===
-    CORS_ORIGINS: List[str] = []
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

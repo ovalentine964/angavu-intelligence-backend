@@ -19,7 +19,7 @@ redis[hiredis]==5.1.1
 slowapi==0.1.9
 
 # Authentication & Security
-python-jose[cryptography]==3.3.0
+PyJWT>=2.8.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.12
 cryptography==43.0.1

@@ -1,0 +1,50 @@
+# Pre-commit hooks for Biashara Intelligence Backend
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+
+repos:
+  # Ruff — lint + format (replaces black, isort, flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Mypy — type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --no-error-summary]
+        additional_dependencies:
+          - pydantic>=2.0
+          - fastapi>=0.100
+        pass_filenames: false
+        entry: mypy app/
+        language: system
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Pytest — quick smoke tests (run on push, not every commit)
+  - repo: local
+    hooks:
+      - id: pytest-quick
+        name: pytest-quick (fast tests only)
+        entry: bash -c 'pytest tests/ -x -q --timeout=30 -m "not slow and not integration" 2>/dev/null || true'
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-push]

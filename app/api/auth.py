@@ -14,7 +14,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt.exceptions import PyJWTError as JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.database import get_db
 from app.models.buyer import Buyer, BuyerAPIKey
+from app.models.refresh_token import RefreshToken as RefreshTokenModel
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -93,21 +95,26 @@ def create_access_token(
         or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(
+    return pyjwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
     )
 
 
-def create_refresh_token(data: dict) -> str:
-    """Create a JWT refresh token with longer expiry."""
+def create_refresh_token(data: dict, family: Optional[str] = None) -> str:
+    """Create a JWT refresh token with longer expiry and token family tracking."""
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
     )
-    to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(
+    to_encode.update({
+        "exp": expire,
+        "type": "refresh",
+        "family": family or secrets.token_hex(16),
+        "jti": secrets.token_hex(16),
+    })
+    return pyjwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
@@ -122,7 +129,7 @@ def decode_token(token: str) -> dict:
         HTTPException if token is invalid or expired
     """
     try:
-        payload = jwt.decode(
+        payload = pyjwt.decode(
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
@@ -292,10 +299,21 @@ async def register_device(
 
     await db.flush()
 
-    # Generate tokens
+    # Generate tokens with family tracking
     token_data = {"sub": str(user.id), "phone_hash": phone_hash}
     access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
+    family = secrets.token_hex(16)
+    refresh_token = create_refresh_token(token_data, family=family)
+
+    # Store refresh token for rotation tracking
+    rt_payload = decode_token(refresh_token)
+    rt_record = RefreshTokenModel(
+        user_id=user.id,
+        family_id=rt_payload["family"],
+        jti=rt_payload["jti"],
+    )
+    db.add(rt_record)
+    await db.commit()
 
     return TokenResponse(
         access_token=access_token,
@@ -310,7 +328,13 @@ async def refresh_token(
     request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Refresh an expired access token using a valid refresh token."""
+    """Refresh an expired access token using a valid refresh token.
+
+    Implements refresh token rotation with family-based theft detection:
+    - Each refresh token is single-use
+    - New tokens belong to the same family
+    - If a used token is replayed, ALL tokens in the family are revoked
+    """
     payload = decode_token(request.refresh_token)
 
     if payload.get("type") != "refresh":
@@ -320,11 +344,64 @@ async def refresh_token(
         )
 
     user_id = payload.get("sub")
-    if not user_id:
+    family_id = payload.get("family")
+    jti = payload.get("jti")
+
+    if not user_id or not family_id or not jti:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail="Invalid token: missing claims",
         )
+
+    # Check if the entire family has been revoked (theft detection)
+    family_revoked = await db.execute(
+        select(RefreshTokenModel).where(
+            and_(
+                RefreshTokenModel.family_id == family_id,
+                RefreshTokenModel.revoked == True,
+            )
+        ).limit(1)
+    )
+    if family_revoked.scalar_one_or_none():
+        # Family was revoked — possible token theft. Revoke ALL tokens for this user's family.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token family revoked (possible theft detected). Please re-authenticate.",
+        )
+
+    # Find the specific refresh token record
+    rt_result = await db.execute(
+        select(RefreshTokenModel).where(
+            and_(
+                RefreshTokenModel.jti == jti,
+                RefreshTokenModel.family_id == family_id,
+            )
+        )
+    )
+    rt_record = rt_result.scalar_one_or_none()
+
+    if not rt_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not found",
+        )
+
+    if rt_record.used:
+        # REPLAY DETECTED: This token was already used. Revoke the entire family.
+        await db.execute(
+            RefreshTokenModel.__table__.update()
+            .where(RefreshTokenModel.family_id == family_id)
+            .values(revoked=True)
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token replay detected. All sessions revoked. Please re-authenticate.",
+        )
+
+    # Mark current token as used
+    rt_record.used = True
+    rt_record.used_at = datetime.now(timezone.utc)
 
     # Verify user still exists and is active
     result = await db.execute(
@@ -339,10 +416,20 @@ async def refresh_token(
             detail="User not found",
         )
 
-    # Issue new tokens
+    # Issue new tokens (same family, new jti)
     token_data = {"sub": str(user.id), "phone_hash": user.phone_hash}
     new_access = create_access_token(token_data)
-    new_refresh = create_refresh_token(token_data)
+    new_refresh = create_refresh_token(token_data, family=family_id)
+
+    # Store new refresh token
+    new_rt_payload = decode_token(new_refresh)
+    new_rt_record = RefreshTokenModel(
+        user_id=user.id,
+        family_id=family_id,
+        jti=new_rt_payload["jti"],
+    )
+    db.add(new_rt_record)
+    await db.commit()
 
     return TokenResponse(
         access_token=new_access,
