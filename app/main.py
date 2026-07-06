@@ -566,6 +566,18 @@ from app.api.v1.mindset import router as mindset_router
 # Autonomous Revenue Operations (leads, invoicing, content, onboarding)
 from app.autonomous.api.router import router as autonomous_router
 
+# WhatsApp Connection Management (connect, verify, disconnect, send-report)
+from app.api.v1.whatsapp_connection import router as whatsapp_connection_router
+
+# Biashara Sync Protocol (anonymized transaction upload + intelligence pull)
+from app.api.biashara_sync import router as biashara_sync_router
+
+# OTP-Based Phone Authentication
+from app.api.otp_auth import router as otp_auth_router
+
+# Evolution / Feedback Sync
+from app.api.evolution import router as evolution_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -595,6 +607,10 @@ app.include_router(loans_router, prefix=settings.API_V1_PREFIX)
 app.include_router(stickiness_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tithe_router, prefix=settings.API_V1_PREFIX)
 app.include_router(mindset_router, prefix=settings.API_V1_PREFIX)
+app.include_router(whatsapp_connection_router, prefix=settings.API_V1_PREFIX)
+app.include_router(biashara_sync_router, prefix=settings.API_V1_PREFIX)
+app.include_router(otp_auth_router, prefix=settings.API_V1_PREFIX)
+app.include_router(evolution_router, prefix=settings.API_V1_PREFIX)
 app.include_router(autonomous_router)
 
 # Mount autonomous router (prefix is built into the router)

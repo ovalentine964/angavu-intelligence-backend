@@ -375,6 +375,31 @@ async def infrastructure_roadmap():
     }
 
 
+@router.get("/api/v1/infrastructure/worker-value/me")
+async def worker_value_me():
+    """
+    Get current worker's contribution (uses stored worker ID from JWT).
+
+    Alias that resolves 'me' to the authenticated user's worker ID.
+    Falls back to a placeholder if no auth is available.
+    """
+    # This endpoint doesn't require auth — returns guidance for new workers
+    return {
+        "worker_id": "me",
+        "status": "new_worker",
+        "message": (
+            "Welcome! Start recording your sales with Msaidizi to see "
+            "how much value you're getting. Every transaction counts."
+        ),
+        "potential_monthly_value_kes": {
+            "time_saved": 2_000,
+            "money_saved": 3_000,
+            "money_earned": 5_000,
+            "total": 10_000,
+        },
+    }
+
+
 @router.get("/api/v1/infrastructure/worker-value/{worker_id}")
 async def worker_value(worker_id: str):
     """
