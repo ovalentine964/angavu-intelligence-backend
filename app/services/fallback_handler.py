@@ -7,11 +7,14 @@ When a provider fails, the fallback handler:
 3. Degrades to simpler/cheaper models
 4. Logs all failures for analysis
 
+ZERO-COST STRATEGY: Only on-device and Angavu Cloud providers.
+No paid APIs (Groq, DeepSeek, NVIDIA NIM) are used.
+
 Inspired by OmniRoute's smart fallback pattern.
 
 Usage:
     handler = FallbackHandler(provider_registry)
-    result = await handler.execute_with_fallback(request, providers=["groq", "deepseek"])
+    result = await handler.execute_with_fallback(request, providers=["on-device", "angavu-cloud"])
 """
 
 from __future__ import annotations

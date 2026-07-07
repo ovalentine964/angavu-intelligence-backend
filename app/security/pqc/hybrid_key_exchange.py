@@ -6,6 +6,17 @@ Follows the approach used by Cloudflare, Google Chrome, and Meta:
 
 If ML-KEM is broken, classical ECDHE still protects the connection.
 If classical ECDHE is broken by quantum computers, ML-KEM still protects it.
+
+╔══════════════════════════════════════════════════════════════╗
+║  ⚠️  STUB IMPLEMENTATION — NOT REAL CRYPTOGRAPHY  ⚠️        ║
+╠══════════════════════════════════════════════════════════════╣
+║  Both X25519 and ML-KEM components are stubs. The HKDF      ║
+║  combination logic is correct but inputs are random bytes.   ║
+║  This provides ZERO cryptographic security.                   ║
+║                                                              ║
+║  For production: use AES-256-GCM with proper key derivation. ║
+║  PQC hybrid exchange will be enabled when liboqs is ready.   ║
+╚══════════════════════════════════════════════════════════════╝
 """
 
 import hashlib
@@ -41,41 +52,51 @@ class HybridKeyExchange:
     """
     Hybrid key exchange combining classical ECDHE with ML-KEM.
 
+    ⚠️  STUB IMPLEMENTATION — NOT REAL CRYPTOGRAPHY.
+
+    Both X25519 and ML-KEM components are stubs.
+    For production, use AES-256-GCM with proper key derivation.
+    PQC hybrid exchange will be enabled when liboqs is available.
+
     Usage (client side):
         kex = HybridKeyExchange()
-        result = kex.initiate(peer_ml_kem_public_key)
-        # Send result.ecdh_public_key and result.ml_kem_ciphertext to server
-        # Use result.shared_secret for AES-256-GCM encryption
+        if kex.is_stub:
+            # Fall back to TLS 1.3 with AES-256-GCM
+            use_tls_instead()
+        else:
+            result = kex.initiate(peer_ml_kem_public_key)
+            # Use result.shared_secret for AES-256-GCM encryption
 
     Usage (server side):
         kex = HybridKeyExchange()
         shared_secret = kex.complete(peer_ecdh_pub, ml_kem_ct, ml_kem_priv)
-        # Use shared_secret for AES-256-GCM encryption
     """
+
+    is_stub: bool = True  # Callers MUST check this before use
 
     def __init__(self, ml_kem_provider: MlKemProvider | None = None):
         self._ml_kem = ml_kem_provider or MlKemProvider(MlKemParameterSet.ML_KEM_768)
+
+    def get_real_provider(self):
+        """STUB: No real provider available. Fall back to TLS 1.3 + AES-256-GCM."""
+        return None
 
     def initiate(self, peer_ml_kem_public_key: bytes) -> HybridKeyExchangeResult:
         """
         Initiate a hybrid key exchange (client side).
 
-        Args:
-            peer_ml_kem_public_key: The server's ML-KEM public key.
-
-        Returns:
-            HybridKeyExchangeResult with public material and combined shared secret.
+        ⚠️  STUB — both ECDHE and ML-KEM components are simulated.
         """
         # Step 1: Generate ECDHE ephemeral key pair (X25519 stub)
         ecdh_key_pair = self._generate_x25519_key_pair()
 
-        # Step 2: ML-KEM encapsulation
+        # Step 2: ML-KEM encapsulation (STUB)
         ml_kem_result = self._ml_kem.encapsulate(peer_ml_kem_public_key)
 
-        # Step 3: Derive ECDH shared secret (stub)
+        # Step 3: Derive ECDH shared secret (STUB)
         ecdh_secret = self._derive_ecdh_secret(ecdh_key_pair.private_key, peer_ml_kem_public_key)
 
-        # Step 4: Combine using HKDF
+        # Step 4: Combine using HKDF (correct algorithm, stub inputs)
         combined_secret = self._combine_secrets(ecdh_secret, ml_kem_result.shared_secret)
 
         return HybridKeyExchangeResult(
@@ -93,18 +114,12 @@ class HybridKeyExchange:
         """
         Complete a hybrid key exchange (server side).
 
-        Args:
-            peer_ecdh_public_key: Client's ECDHE public key.
-            ml_kem_ciphertext: Client's ML-KEM ciphertext.
-            ml_kem_private_key: Server's ML-KEM private key.
-
-        Returns:
-            Combined shared secret.
+        ⚠️  STUB — both ECDHE and ML-KEM components are simulated.
         """
-        # Step 1: ECDH shared secret
+        # Step 1: ECDH shared secret (STUB)
         ecdh_secret = self._derive_ecdh_secret(ml_kem_private_key, peer_ecdh_public_key)
 
-        # Step 2: ML-KEM decapsulation
+        # Step 2: ML-KEM decapsulation (STUB)
         ml_kem_secret = self._ml_kem.decapsulate(ml_kem_ciphertext, ml_kem_private_key)
 
         # Step 3: Combine using HKDF

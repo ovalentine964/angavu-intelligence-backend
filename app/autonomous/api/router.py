@@ -72,9 +72,15 @@ def _get_event_bus(request: Request):
 def _decode_jwt(token: str) -> dict:
     """Decode and validate a JWT token."""
     try:
+        # Use RSA public key for RS256 verification, shared secret for HS256
+        verify_key = (
+            settings.JWT_PUBLIC_KEY
+            if settings.JWT_ALGORITHM == "RS256" and settings.JWT_PUBLIC_KEY
+            else settings.JWT_SECRET_KEY
+        )
         return pyjwt.decode(
             token,
-            settings.JWT_SECRET_KEY,
+            verify_key,
             algorithms=[settings.JWT_ALGORITHM],
         )
     except JWTError as exc:

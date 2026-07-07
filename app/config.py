@@ -38,7 +38,9 @@ class Settings(BaseSettings):
 
     # === Authentication ===
     JWT_SECRET_KEY: str = ""
-    JWT_ALGORITHM: str = "HS256"
+    JWT_ALGORITHM: str = "RS256"
+    JWT_PRIVATE_KEY: str = ""  # PEM-encoded RSA private key for RS256 signing
+    JWT_PUBLIC_KEY: str = ""   # PEM-encoded RSA public key for RS256 verification
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
@@ -60,12 +62,9 @@ class Settings(BaseSettings):
     # === External Services ===
     OPENWA_URL: str = "http://localhost:3000"
     OPENWA_WEBHOOK_SECRET: str = ""
-    GROQ_API_KEY: str = ""
-    DEEPSEEK_API_KEY: str = ""
-
-    # === NVIDIA NIM API ===
-    NVIDIA_NIM_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    NVIDIA_NIM_API_KEY: str = ""
+    # NOTE: GROQ_API_KEY, DEEPSEEK_API_KEY, NVIDIA_NIM_API_KEY removed.
+    # Angavu uses zero-cost on-device inference only.
+    # No paid API keys are needed or accepted.
 
     # === LLM Service (local GGUF + API fallback) ===
     LLM_HOST: str = "localhost"          # llama.cpp server host ("llama-cpp" in Docker)
@@ -115,6 +114,10 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def validate_jwt_secret(cls, v, info):
+        # RS256 uses key pairs instead of shared secret
+        algorithm = os.getenv("JWT_ALGORITHM", info.data.get("JWT_ALGORITHM", "RS256"))
+        if algorithm == "RS256":
+            return v  # RS256 doesn't need JWT_SECRET_KEY
         if not v or v.startswith("change-me"):
             raise ValueError("JWT_SECRET_KEY must be set to a unique secret (got default)")
         env = os.getenv("APP_ENV", info.data.get("APP_ENV", "development"))

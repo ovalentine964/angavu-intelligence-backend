@@ -104,7 +104,7 @@ def get_deerflow_tools(groups: list[str] | None = None) -> list:
 
 def create_biashara_agent(
     agent_name: str = "default",
-    model_name: str = "deepseek-chat",
+    model_name: str = "qwen-0.5b-fl-sw",  # On-device model (zero-cost strategy)
     system_prompt: str | None = None,
     plan_mode: bool = False,
     extra_middleware: list[AgentMiddleware] | None = None,
@@ -116,7 +116,7 @@ def create_biashara_agent(
 
     Args:
         agent_name: Agent role name (research, credit, distribution, fmcg, health, development)
-        model_name: DeepSeek model to use (deepseek-chat, deepseek-reasoner)
+        model_name: Model to use (default: qwen-0.5b-fl-sw on-device)
         system_prompt: Custom system prompt. If None, uses the agent's configured prompt.
         plan_mode: Enable TodoMiddleware for complex multi-step tasks.
         extra_middleware: Additional DeerFlow middlewares to inject.
@@ -172,7 +172,7 @@ def create_biashara_agent(
 
 
 def create_biashara_lead_agent(
-    model_name: str = "deepseek-reasoner",
+    model_name: str = "qwen-0.5b-fl-sw",  # On-device model (zero-cost strategy)
     plan_mode: bool = True,
 ) -> Any:
     """Create the Angavu lead agent — the top-level orchestrator.
@@ -186,7 +186,7 @@ def create_biashara_lead_agent(
     Uses DeerFlow's create_deerflow_agent with full feature set.
 
     Args:
-        model_name: Model for the lead agent (default: deepseek-reasoner for planning)
+        model_name: Model for the lead agent (default: qwen-0.5b-fl-sw on-device)
         plan_mode: Enable plan mode (recommended for complex queries)
 
     Returns:
@@ -241,7 +241,7 @@ class BiasharaAgentFactory:
     def create_domain_agent(
         self,
         agent_name: str,
-        model_name: str = "deepseek-chat",
+        model_name: str = "qwen-0.5b-fl-sw",  # On-device (zero-cost)
         plan_mode: bool = False,
     ) -> Any:
         """Create a domain-specific agent and register it."""
@@ -255,7 +255,7 @@ class BiasharaAgentFactory:
 
     def create_lead_agent(
         self,
-        model_name: str = "deepseek-reasoner",
+        model_name: str = "qwen-0.5b-fl-sw",  # On-device (zero-cost)
         plan_mode: bool = True,
     ) -> Any:
         """Create the lead orchestrator agent."""

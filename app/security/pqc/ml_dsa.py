@@ -4,14 +4,26 @@ ML-DSA (Module-Lattice-Based Digital Signature Algorithm) provider.
 Implements NIST FIPS 204 (formerly CRYSTALS-Dilithium).
 ML-DSA provides EUF-CMA secure digital signatures resistant to quantum attacks.
 
-This is a STUB implementation. Replace with native ML-DSA when
-liboqs-python or pqcrypto packages are available.
+╔══════════════════════════════════════════════════════════════╗
+║  ⚠️  STUB IMPLEMENTATION — NOT REAL CRYPTOGRAPHY  ⚠️        ║
+╠══════════════════════════════════════════════════════════════╣
+║  This implementation uses hashlib.sha512 for signatures.     ║
+║  It provides ZERO digital signature security. Forgery is     ║
+║  trivial. DO NOT use for production signing.                  ║
+║                                                              ║
+║  Production: install liboqs-python                           ║
+║  Fallback: use RSA-2048 or ECDSA-P256 (real signatures)     ║
+╚══════════════════════════════════════════════════════════════╝
 
 Usage:
     provider = MlDsaProvider(MlDsaParameterSet.ML_DSA_65)
-    key_pair = provider.generate_key_pair()
-    signature = provider.sign(document, key_pair.private_key)
-    valid = provider.verify(document, signature, key_pair.public_key)
+    if provider.is_stub:
+        # Fall back to RSA/ECDSA — real signatures
+        use_rsa_or_ecdsa_instead()
+    else:
+        key_pair = provider.generate_key_pair()
+        signature = provider.sign(document, key_pair.private_key)
+        valid = provider.verify(document, signature, key_pair.public_key)
 
 See: https://csrc.nist.gov/pubs/fips/204/final
 """
@@ -40,9 +52,22 @@ class MlDsaProvider(CryptoProvider):
     """
     ML-DSA digital signature provider (STUB).
 
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  ⚠️  STUB IMPLEMENTATION — NOT REAL CRYPTOGRAPHY  ⚠️        ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  This implementation uses hashlib.sha512 for signatures.     ║
+    ║  It provides ZERO digital signature security. Forgery is     ║
+    ║  trivial. DO NOT use for production signing.                  ║
+    ║                                                              ║
+    ║  Production: install liboqs-python                           ║
+    ║  Fallback: use RSA-2048 or ECDSA-P256 (real signatures)     ║
+    ╚══════════════════════════════════════════════════════════════╝
+
     Replace with native ML-DSA when liboqs-python is available:
         pip install liboqs-python
     """
+
+    is_stub: bool = True  # Callers MUST check this before use
 
     def __init__(self, parameter_set: MlDsaParameterSet = MlDsaParameterSet.ML_DSA_65):
         self._param_set = parameter_set
@@ -59,8 +84,12 @@ class MlDsaProvider(CryptoProvider):
     def security_level(self) -> int:
         return self._param_set.security_level
 
+    def get_real_provider(self):
+        """STUB: No real provider available. Callers must fall back to RSA-2048/ECDSA-P256."""
+        return None
+
     def generate_key_pair(self) -> CryptoKeyPair:
-        """Generate an ML-DSA key pair (STUB)."""
+        """Generate an ML-DSA key pair (STUB — NOT REAL CRYPTOGRAPHY)."""
         public_key = os.urandom(self._param_set.pub_key_size)
         private_key = os.urandom(self._param_set.priv_key_size)
         return CryptoKeyPair(
@@ -70,19 +99,26 @@ class MlDsaProvider(CryptoProvider):
         )
 
     def sign(self, data: bytes, private_key: bytes) -> bytes:
-        """Sign data using ML-DSA (STUB)."""
+        """Sign data using ML-DSA (STUB — NOT REAL CRYPTOGRAPHY)."""
         if len(private_key) != self._param_set.priv_key_size:
             raise ValueError(f"Invalid private key size for {self._param_set.name}")
-        h = hashlib.sha512(private_key + data).digest()
+        # STUB: deterministic signature from data only, so verify() can re-derive
+        # In production, replace with native ML-DSA signing.
+        h = hashlib.sha512(data).digest()
         signature = bytearray(self._param_set.max_sig_size)
         signature[: len(h)] = h
         return bytes(signature)
 
     def verify(self, data: bytes, signature: bytes, public_key: bytes) -> bool:
-        """Verify an ML-DSA signature (STUB — always returns True)."""
+        """Verify an ML-DSA signature (STUB — NOT REAL CRYPTOGRAPHY)."""
         if len(public_key) != self._param_set.pub_key_size:
             raise ValueError(f"Invalid public key size for {self._param_set.name}")
-        return True  # STUB: replace with native verification
+        if len(signature) < 32:
+            return False
+        # STUB: re-derive expected signature and compare first 32 bytes
+        # In production, replace with native ML-DSA verification.
+        expected = hashlib.sha512(data).digest()[:32]
+        return signature[:32] == expected
 
     def encrypt(self, plaintext: bytes, key: bytes) -> bytes:
         raise NotImplementedError("ML-DSA is a signature algorithm, not encryption")

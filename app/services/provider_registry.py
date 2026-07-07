@@ -5,12 +5,15 @@ Manages the lifecycle of inference providers (on-device, cloud, API),
 tracks their health status and performance metrics, and auto-selects
 the optimal provider based on cost, latency, and reliability.
 
-Inspired by OmniRoute's multi-provider gateway pattern.
+ZERO-COST STRATEGY:
+    Only on-device (llama.cpp) and Angavu Cloud (future) providers are
+    registered. No paid APIs (Groq, DeepSeek, NVIDIA NIM) are included.
+    All inference runs locally or on self-hosted infrastructure.
 
 Usage:
     registry = ProviderRegistry()
-    registry.register("groq", ProviderType.CLOUD_API, ...)
-    registry.register("llama-local", ProviderType.ON_DEVICE, ...)
+    registry.register("on-device", ProviderType.ON_DEVICE, ...)
+    registry.register("angavu-cloud", ProviderType.SELF_HOSTED, ...)
     best = registry.select_optimal(task_complexity="low")
 """
 
@@ -30,8 +33,7 @@ logger = structlog.get_logger(__name__)
 
 class ProviderType(str, Enum):
     ON_DEVICE = "on_device"          # llama.cpp NDK on Android
-    CLOUD_API = "cloud_api"          # Groq, DeepSeek, etc.
-    SELF_HOSTED = "self_hosted"      # Our own inference servers
+    SELF_HOSTED = "self_hosted"      # Angavu Cloud inference servers
     EDGE = "edge"                    # Edge inference nodes
 
 
@@ -50,16 +52,6 @@ class ProviderCapability(str, Enum):
     VISION = "vision"
     FUNCTION_CALLING = "function_calling"
     STREAMING = "streaming"
-
-
-# Default cost per 1K tokens (input/output)
-DEFAULT_COSTS: Dict[str, Dict[str, float]] = {
-    "groq": {"input_per_1k": 0.00005, "output_per_1k": 0.0001},
-    "deepseek": {"input_per_1k": 0.00014, "output_per_1k": 0.00028},
-    "openai": {"input_per_1k": 0.005, "output_per_1k": 0.015},
-    "llama-local": {"input_per_1k": 0.0, "output_per_1k": 0.0},
-    "on-device": {"input_per_1k": 0.0, "output_per_1k": 0.0},
-}
 
 
 class ProviderRecord:
@@ -145,7 +137,6 @@ class ProviderRecord:
         self._request_window.append(True)
         self.consecutive_failures = 0
         self.last_success_at = datetime.now(timezone.utc)
-        # Auto-recover status
         if self.status in (ProviderStatus.UNHEALTHY, ProviderStatus.UNKNOWN):
             self.status = ProviderStatus.DEGRADED
         if self.error_rate < 0.05 and self.status == ProviderStatus.DEGRADED:
@@ -158,7 +149,6 @@ class ProviderRecord:
         self._request_window.append(False)
         self.consecutive_failures += 1
         self.last_failure_at = datetime.now(timezone.utc)
-        # Degrade status on repeated failures
         if self.consecutive_failures >= 5:
             self.status = ProviderStatus.UNHEALTHY
             logger.warning("provider_unhealthy", provider=self.provider_id, consecutive=self.consecutive_failures)
@@ -198,8 +188,8 @@ class ProviderRegistry:
     """
     Central registry for all AI inference providers.
 
-    Supports provider registration, health tracking, and optimal
-    provider selection based on multiple criteria.
+    ZERO-COST STRATEGY: Only free providers are registered.
+    No paid APIs (Groq, DeepSeek, NVIDIA NIM) are included.
     """
 
     def __init__(self):
@@ -272,7 +262,7 @@ class ProviderRegistry:
         1. Availability (must be available)
         2. Capability match
         3. Model match (if specified)
-        4. Cost (lower is better)
+        4. Cost (lower is better — always $0 for our providers)
         5. Latency (lower is better)
         6. Error rate (lower is better)
         7. Priority (lower is better)
@@ -289,44 +279,33 @@ class ProviderRegistry:
         if not candidates:
             return None
 
-        # Filter by model if specified
         if model:
             model_matches = [p for p in candidates if model in p.models]
             if model_matches:
                 candidates = model_matches
 
-        # Filter by latency constraint
         if max_latency_ms:
             filtered = [p for p in candidates if p.avg_latency_ms is None or p.avg_latency_ms <= max_latency_ms]
             if filtered:
                 candidates = filtered
 
-        # Filter by cost constraint
         if max_cost_per_1k is not None:
             filtered = [p for p in candidates if p.cost_per_1k_input <= max_cost_per_1k]
             if filtered:
                 candidates = filtered
 
-        # Score each candidate
         def score(p: ProviderRecord) -> float:
             s = 0.0
-            # Priority weight (normalized, lower is better)
             s -= p.priority * 0.3
-            # Cost weight (lower is better)
             s -= p.cost_per_1k_input * 1000 * 0.25
-            # Latency weight (lower is better)
             lat = p.avg_latency_ms or 5000.0
             s -= (lat / 1000.0) * 0.2
-            # Error rate penalty
             s -= p.error_rate * 5.0 * 0.15
-            # Type preference bonus
             if prefer_type and p.provider_type == prefer_type:
                 s += 5.0
-            # On-device bonus for simple tasks
             if task_complexity == "low" and p.provider_type == ProviderType.ON_DEVICE:
                 s += 3.0
-            # Complex tasks prefer cloud
-            if task_complexity == "high" and p.provider_type in (ProviderType.CLOUD_API, ProviderType.SELF_HOSTED):
+            if task_complexity == "high" and p.provider_type == ProviderType.SELF_HOSTED:
                 s += 2.0
             return s
 
@@ -372,7 +351,6 @@ class ProviderRegistry:
         for p in providers:
             t = p.provider_type.value
             by_type[t]["requests"] += p.total_requests
-            # Rough cost estimate assuming avg 500 tokens per request
             by_type[t]["cost_estimate"] += p.total_requests * 0.5 * (p.cost_per_1k_input + p.cost_per_1k_output) / 1000
         return {
             "total_requests": total_requests,
@@ -393,73 +371,54 @@ def get_provider_registry() -> ProviderRegistry:
 
 
 def _register_defaults(registry: ProviderRegistry):
-    """Register default Angavu Intelligence providers."""
-    # On-device (Android llama.cpp)
+    """
+    Register default Angavu Intelligence providers.
+
+    ZERO-COST STRATEGY — only free providers:
+    - On-device (Android llama.cpp) — primary, always available
+    - Angavu Cloud (future) — self-hosted inference servers
+    """
+    # On-device (Android llama.cpp) — PRIMARY, highest priority
     registry.register(
         provider_id="on-device",
         provider_type=ProviderType.ON_DEVICE,
         display_name="On-Device llama.cpp",
-        models=["qwen-0.5b-fl-sw", "phi-2", "tinyllama"],
-        capabilities=[ProviderCapability.CHAT, ProviderCapability.COMPLETION],
+        models=["qwen-0.5b-fl-sw", "qwen-1.7b", "qwen-2b", "phi-2", "tinyllama"],
+        capabilities=[
+            ProviderCapability.CHAT,
+            ProviderCapability.COMPLETION,
+            ProviderCapability.EMBEDDING,
+            ProviderCapability.FUNCTION_CALLING,
+            ProviderCapability.STREAMING,
+        ],
         cost_per_1k_input=0.0,
         cost_per_1k_output=0.0,
-        max_context_tokens=2048,
+        max_context_tokens=4096,
         priority=10,  # Highest priority — free, fast, offline
         timeout_seconds=15.0,
     )
 
-    # Groq (fast cloud inference)
+    # Angavu Cloud (future — self-hosted inference on Oracle Cloud)
+    # Currently a placeholder — will be enabled when self-hosted
+    # inference servers are deployed on Oracle Cloud free tier.
     registry.register(
-        provider_id="groq",
-        provider_type=ProviderType.CLOUD_API,
-        display_name="Groq (LPU)",
-        base_url="https://api.groq.com/openai/v1",
-        models=["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-        capabilities=[
-            ProviderCapability.CHAT,
-            ProviderCapability.COMPLETION,
-            ProviderCapability.FUNCTION_CALLING,
-            ProviderCapability.STREAMING,
-        ],
-        cost_per_1k_input=0.00005,
-        cost_per_1k_output=0.0001,
-        max_context_tokens=32768,
-        priority=20,
-        timeout_seconds=10.0,
-    )
-
-    # DeepSeek
-    registry.register(
-        provider_id="deepseek",
-        provider_type=ProviderType.CLOUD_API,
-        display_name="DeepSeek",
-        base_url="https://api.deepseek.com/v1",
-        models=["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
-        capabilities=[
-            ProviderCapability.CHAT,
-            ProviderCapability.COMPLETION,
-            ProviderCapability.FUNCTION_CALLING,
-            ProviderCapability.STREAMING,
-        ],
-        cost_per_1k_input=0.00014,
-        cost_per_1k_output=0.00028,
-        max_context_tokens=65536,
-        priority=30,
-        timeout_seconds=30.0,
-    )
-
-    # Self-hosted (future: own inference servers)
-    registry.register(
-        provider_id="self-hosted-primary",
+        provider_id="angavu-cloud",
         provider_type=ProviderType.SELF_HOSTED,
-        display_name="Self-Hosted Primary",
-        models=["qwen-0.5b-fl-sw", "llama-3.1-8b"],
-        capabilities=[ProviderCapability.CHAT, ProviderCapability.COMPLETION],
+        display_name="Angavu Cloud (Self-Hosted)",
+        models=["qwen-0.5b-fl-sw", "qwen-1.7b", "qwen-2b"],
+        capabilities=[
+            ProviderCapability.CHAT,
+            ProviderCapability.COMPLETION,
+            ProviderCapability.EMBEDDING,
+            ProviderCapability.FUNCTION_CALLING,
+            ProviderCapability.STREAMING,
+        ],
         cost_per_1k_input=0.0,
         cost_per_1k_output=0.0,
         max_context_tokens=8192,
-        priority=15,
-        timeout_seconds=20.0,
+        priority=20,  # Lower priority than on-device
+        timeout_seconds=30.0,
+        metadata={"status": "future", "note": "Will be enabled when self-hosted servers are deployed"},
     )
 
-    logger.info("default_providers_registered", count=4)
+    logger.info("default_providers_registered", count=2, strategy="zero_cost")

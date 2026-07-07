@@ -89,6 +89,10 @@ class AgentInfrastructure:
     # V3: Financial agent templates
     financial_agents: List[BiasharaAgent] = field(default_factory=list)
 
+    # V3: Sub-agent orchestration
+    subagent_decomposer: Any = None  # TaskDecomposer
+    skill_generator: Any = None      # SkillGenerator
+
     def __post_init__(self):
         if not self.agent_map:
             self.agent_map = {a.name: a for a in self.agents}
@@ -264,6 +268,9 @@ class AgentFactory:
         # 17. Create financial agent templates
         infrastructure = await self._attach_financial_agents(infrastructure, event_bus, tracer)
 
+        # 18. Attach sub-agent orchestration and skill generation
+        infrastructure = await self._attach_subagent_infrastructure(infrastructure, event_bus, tracer)
+
         self._infrastructure = infrastructure
         total_agents = (
             len(core_agents) + len(domain_agents) + len(utility_agents) + 1
@@ -282,6 +289,8 @@ class AgentFactory:
             has_deerflow=infrastructure.deerflow_factory is not None,
             has_mcp=infrastructure.mcp_server is not None,
             has_a2a=infrastructure.a2a_server is not None,
+            has_subagent_decomposer=infrastructure.subagent_decomposer is not None,
+            has_skill_generator=infrastructure.skill_generator is not None,
         )
 
         return infrastructure
@@ -619,6 +628,130 @@ class AgentFactory:
             )
         except (ImportError, AttributeError, RuntimeError) as exc:
             self._logger.warning("long_horizon_setup_failed", error=str(exc))
+
+        return infrastructure
+
+    async def _attach_protocols(
+        self,
+        infrastructure: AgentInfrastructure,
+        event_bus: EventBus,
+        tracer: AgentTracer,
+    ) -> AgentInfrastructure:
+        """Create and attach MCP and A2A protocol servers/clients."""
+        try:
+            from app.agents.protocols.mcp import (
+                MCPServer,
+                MCPClient,
+                create_angavu_mcp_tools,
+            )
+            from app.agents.protocols.a2a import (
+                A2AServer,
+                A2AClient,
+                create_angavu_agent_card,
+            )
+
+            # MCP Server — expose Angavu tools
+            mcp_server = MCPServer()
+            mcp_tools = create_angavu_mcp_tools()
+            mcp_server.register_tools(mcp_tools)
+
+            # MCP Client — consume external servers
+            mcp_client = MCPClient()
+            MCPClient.register_local_server(mcp_server)
+
+            # A2A Server — accept tasks from external agents
+            agent_card = create_angavu_agent_card()
+            a2a_server = A2AServer(agent_card=agent_card)
+
+            # A2A Client — delegate to external agents
+            a2a_client = A2AClient()
+
+            infrastructure.mcp_server = mcp_server
+            infrastructure.mcp_client = mcp_client
+            infrastructure.a2a_server = a2a_server
+            infrastructure.a2a_client = a2a_client
+
+            self._logger.info(
+                "protocols_attached",
+                mcp_tools=len(mcp_tools),
+                a2a_capabilities=len(agent_card.capabilities),
+            )
+        except (ImportError, AttributeError, RuntimeError) as exc:
+            self._logger.warning("protocols_setup_failed", error=str(exc))
+
+        return infrastructure
+
+    async def _attach_financial_agents(
+        self,
+        infrastructure: AgentInfrastructure,
+        event_bus: EventBus,
+        tracer: AgentTracer,
+    ) -> AgentInfrastructure:
+        """Create and attach financial agent templates."""
+        try:
+            from app.agents.templates.financial import (
+                create_all_financial_agents,
+                get_financial_agent_mcp_tools,
+            )
+
+            financial_agents = create_all_financial_agents()
+
+            # Wire into infrastructure
+            for agent in financial_agents:
+                agent.set_event_bus(event_bus)
+                agent.set_tracer(tracer)
+                await event_bus.subscribe(agent, [
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.INTELLIGENCE_REQUESTED,
+                    EventType.DOMAIN_ANALYSIS_REQUESTED,
+                ])
+                await agent.start()
+
+            # Register financial MCP tools
+            if infrastructure.mcp_server:
+                fin_tools = get_financial_agent_mcp_tools()
+                infrastructure.mcp_server.register_tools(fin_tools)
+
+            infrastructure.financial_agents = financial_agents
+
+            self._logger.info(
+                "financial_agents_attached",
+                count=len(financial_agents),
+                names=[a.name for a in financial_agents],
+            )
+        except (ImportError, AttributeError, RuntimeError) as exc:
+            self._logger.warning("financial_agents_setup_failed", error=str(exc))
+
+        return infrastructure
+
+    async def _attach_subagent_infrastructure(
+        self,
+        infrastructure: AgentInfrastructure,
+        event_bus: EventBus,
+        tracer: AgentTracer,
+    ) -> AgentInfrastructure:
+        """Create and attach sub-agent orchestration and skill generation."""
+        try:
+            from app.agents.subagent import SubAgentOrchestrator
+            from app.agents.task_decomposition import create_financial_task_decomposer
+            from app.agents.skill_generator import SkillGenerator
+
+            # Create task decomposer with financial handlers
+            task_decomposer = create_financial_task_decomposer()
+
+            # Create skill generator
+            skill_generator = SkillGenerator()
+
+            # Store on infrastructure for API access
+            infrastructure.subagent_decomposer = task_decomposer  # type: ignore
+            infrastructure.skill_generator = skill_generator  # type: ignore
+
+            self._logger.info(
+                "subagent_infrastructure_attached",
+                decomposer_handlers=len(task_decomposer.get_registered_handlers()),
+            )
+        except (ImportError, AttributeError, RuntimeError) as exc:
+            self._logger.warning("subagent_infrastructure_setup_failed", error=str(exc))
 
         return infrastructure
 

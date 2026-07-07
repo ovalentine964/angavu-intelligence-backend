@@ -3,7 +3,7 @@ role: "operations"
 enabled: true
 description: "Autonomous operations — invoicing, expenses, finance for Angavu"
 
-model: "deepseek-chat"
+model: "on-device"
 temperature: 0.2
 max_tokens: 2048
 prompt_version: "v1"

@@ -137,6 +137,29 @@ from app.agents.communication import (
     DelegationProtocol,
 )
 
+# V3: Sub-Agent Orchestration
+from app.agents.subagent import (
+    SubAgentOrchestrator,
+    SubAgentTask,
+    SubAgentResult,
+    SubAgentCapableMixin,
+)
+
+# V3: Task Decomposition
+from app.agents.task_decomposition import (
+    TaskDecomposer,
+    DecompositionPlan,
+    DecompositionResult,
+    SubTaskDefinition,
+)
+
+# V3: Skill Generator
+from app.agents.skill_generator import (
+    SkillGenerator,
+    SkillDocument,
+    SkillAwareMixin,
+)
+
 __all__ = [
     # Base
     "BiasharaAgent",
@@ -226,4 +249,18 @@ __all__ = [
     "BroadcastProtocol",
     "PointToPointProtocol",
     "DelegationProtocol",
+    # V3: Sub-Agent Orchestration
+    "SubAgentOrchestrator",
+    "SubAgentTask",
+    "SubAgentResult",
+    "SubAgentCapableMixin",
+    # V3: Task Decomposition
+    "TaskDecomposer",
+    "DecompositionPlan",
+    "DecompositionResult",
+    "SubTaskDefinition",
+    # V3: Skill Generator
+    "SkillGenerator",
+    "SkillDocument",
+    "SkillAwareMixin",
 ]

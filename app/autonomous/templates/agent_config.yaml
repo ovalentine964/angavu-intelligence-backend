@@ -19,7 +19,7 @@ enabled: true                            # Enable/disable without removing confi
 description: "Brief description of what this agent does"
 
 # ── LLM Configuration ────────────────────────────────────────────
-model: "deepseek-chat"                   # Model to use (deepseek-chat, groq, etc.)
+model: "on-device"                   # Model to use (deepseek-chat, groq, etc.)
 temperature: 0.3                         # Lower = more deterministic
 max_tokens: 2048                         # Max response tokens
 prompt_version: "v1"                     # Version tag for prompt tracking

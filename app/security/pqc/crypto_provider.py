@@ -47,8 +47,24 @@ class CryptoProvider(ABC):
 
     @property
     @abstractmethod
+    def is_stub(self) -> bool:
+        """Whether this is a STUB implementation (not real cryptography)."""
+        ...
+
+    @property
+    @abstractmethod
     def security_level(self) -> int:
         """Security level (1-5, matching NIST levels)."""
+        ...
+
+    @abstractmethod
+    def get_real_provider(self) -> "CryptoProvider | None":
+        """Return a real (non-stub) provider if available, else None.
+        
+        Callers MUST check is_stub before using this provider for
+        actual security. If is_stub is True and get_real_provider()
+        returns None, the system MUST fall back to AES-256-GCM.
+        """
         ...
 
     @abstractmethod
@@ -88,6 +104,12 @@ class KeyEncapsulationProvider(ABC):
     @property
     @abstractmethod
     def is_post_quantum(self) -> bool:
+        ...
+
+    @property
+    @abstractmethod
+    def is_stub(self) -> bool:
+        """Whether this is a STUB implementation (not real cryptography)."""
         ...
 
     @property

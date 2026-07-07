@@ -496,16 +496,17 @@ class LLMService:
         """
         Create LLMService from application settings.
 
+        ZERO-COST STRATEGY: Only on-device llama.cpp is used.
+        No paid APIs (Groq, DeepSeek, NVIDIA NIM) are registered.
+
         Reads config from app.config.Settings:
         - LLM_HOST, LLM_PORT, LLM_MODEL_PATH → LocalGGUFProvider
-        - GROQ_API_KEY → Groq provider
-        - DEEPSEEK_API_KEY → DeepSeek provider
-        - NVIDIA_NIM_BASE_URL, NVIDIA_NIM_API_KEY → NVIDIA NIM provider
         """
         settings = get_settings()
         providers: List[LLMProvider] = []
 
-        # 1. Local GGUF (primary — Qwen 2.5 7B on Oracle Cloud)
+        # On-device llama.cpp (PRIMARY — Qwen on Oracle Cloud / Android)
+        # This is the ONLY provider. Zero cost, zero external dependencies.
         local_provider = LocalGGUFProvider(
             host=settings.LLM_HOST,
             port=settings.LLM_PORT,
@@ -513,36 +514,6 @@ class LLMService:
             timeout=settings.LLM_TIMEOUT,
         )
         providers.append(local_provider)
-
-        # 2. Groq (fast inference, free tier)
-        if settings.GROQ_API_KEY:
-            providers.append(OpenAICompatibleProvider(
-                name="groq",
-                base_url="https://api.groq.com/openai/v1",
-                api_key=settings.GROQ_API_KEY,
-                model="llama-3.1-70b-versatile",
-                timeout=30.0,
-            ))
-
-        # 3. DeepSeek (affordable, good quality)
-        if settings.DEEPSEEK_API_KEY:
-            providers.append(OpenAICompatibleProvider(
-                name="deepseek",
-                base_url="https://api.deepseek.com/v1",
-                api_key=settings.DEEPSEEK_API_KEY,
-                model="deepseek-chat",
-                timeout=60.0,
-            ))
-
-        # 4. NVIDIA NIM (enterprise, if configured)
-        if settings.NVIDIA_NIM_API_KEY and settings.NVIDIA_NIM_BASE_URL:
-            providers.append(OpenAICompatibleProvider(
-                name="nvidia_nim",
-                base_url=settings.NVIDIA_NIM_BASE_URL,
-                api_key=settings.NVIDIA_NIM_API_KEY,
-                model="meta/llama-3.1-70b-instruct",
-                timeout=60.0,
-            ))
 
         default_config = LLMConfig(
             temperature=settings.LLM_TEMPERATURE,
@@ -555,6 +526,7 @@ class LLMService:
             "llm_service_initialized",
             providers=[p.name for p in providers],
             primary=providers[0].name if providers else "none",
+            strategy="zero_cost",
         )
 
         return cls(providers=providers, default_config=default_config)

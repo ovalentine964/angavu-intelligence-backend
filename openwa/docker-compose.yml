@@ -1,7 +1,7 @@
 version: "3.9"
 
-# Standalone docker-compose for running OpenWA independently
-# Use the root docker-compose.yml for the full stack
+# Msaidizi WhatsApp Stack — OpenWA + Whisper STT
+# Run alongside the main backend docker-compose
 
 services:
   openwa:
@@ -14,14 +14,49 @@ services:
       OPENWA_PORT: "3000"
       OPENWA_BACKEND_URL: http://host.docker.internal:8000
       OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:?Set OPENWA_WEBHOOK_SECRET in .env}
+      OPENWA_AUTH_DIR: /app/data/auth
       WHISPER_API_URL: http://whisper:9000
       LOG_LEVEL: info
     ports:
       - "3000:3000"
     volumes:
-      - openwa_data:/app/data
+      - openwa_auth:/app/data/auth
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      whisper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - msaidizi-net
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: msaidizi-whisper
+    restart: unless-stopped
+    environment:
+      - ASR_MODEL=base
+      - ASR_ENGINE=openai_whisper
+    volumes:
+      - whisper_models:/root/.cache
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # Whisper takes time to load model
+    networks:
+      - msaidizi-net
 
 volumes:
-  openwa_data:
+  openwa_auth:
+  whisper_models:
+
+networks:
+  msaidizi-net:
+    driver: bridge

@@ -3,23 +3,26 @@ Model Router — Hybrid Reasoning Model Router for Angavu Intelligence.
 
 Routes inference requests across multiple providers with:
 - Smart provider selection based on task type and complexity
-- Cost-aware routing ($0.013/user/month target)
+- Cost-aware routing ($0.00/user/month — all inference is free)
 - Reasoning chain storage for auditability and learning
 - Financial reasoning templates for informal economy tasks
 - Token compression for cost optimization
 - Automatic fallback on provider failure
 - Per-user budget tracking
 
-## Cost Model (Swarm 2 Research)
+ZERO-COST STRATEGY:
+    All inference runs on-device (Qwen via llama.cpp) or Angavu Cloud
+    (self-hosted, future). No paid APIs are used.
+
+## Cost Model
 | Layer             | Queries/Day | Tokens/Query | Monthly Cost |
 |-------------------|-------------|--------------|--------------|
-| On-Device (free)  | 40          | 500          | $0.00        |
-| Cloud Reasoning   | 8           | 2,000        | $0.01        |
-| Cloud Premium     | 2           | 5,000        | $0.003       |
-| **Total**         | **50**      | —            | **$0.013**   |
+| On-Device (free)  | 50          | 500          | $0.00        |
+| Angavu Cloud      | 50          | 500          | $0.00        |
+| **Total**         | **100**     | —            | **$0.00**    |
 
 ## Fallback Chain
-on-device → DeepSeek V4 Flash → GPT-5.4 nano → Claude Haiku → backend
+on-device → Angavu Cloud (future) → on-device (degraded)
 
 Usage:
     router = ModelRouter()
@@ -65,13 +68,13 @@ class TaskType(str, Enum):
     TRANSACTION_RECORDING = "transaction_recording"  # Simple → on-device
     BALANCE_INQUIRY = "balance_inquiry"              # Simple → on-device
     PRICE_LOOKUP = "price_lookup"                    # Simple → on-device
-    CASH_FLOW_ALERT = "cash_flow_alert"              # On-device, complex → cloud
-    CREDIT_ASSESSMENT = "credit_assessment"           # Cloud reasoning primary
-    MARKET_FORECASTING = "market_forecasting"         # Cloud reasoning primary
-    RISK_ASSESSMENT = "risk_assessment"               # Cloud reasoning primary
-    GROWTH_PLANNING = "growth_planning"               # Cloud premium primary
-    DAILY_BRIEFING = "daily_briefing"                 # Template on-device, content cloud
-    FINANCIAL_ANALYSIS = "financial_analysis"          # Cloud reasoning
+    CASH_FLOW_ALERT = "cash_flow_alert"              # On-device
+    CREDIT_ASSESSMENT = "credit_assessment"           # On-device, complex → Angavu Cloud
+    MARKET_FORECASTING = "market_forecasting"         # On-device, complex → Angavu Cloud
+    RISK_ASSESSMENT = "risk_assessment"               # On-device, complex → Angavu Cloud
+    GROWTH_PLANNING = "growth_planning"               # On-device, complex → Angavu Cloud
+    DAILY_BRIEFING = "daily_briefing"                 # On-device
+    FINANCIAL_ANALYSIS = "financial_analysis"          # On-device, complex → Angavu Cloud
 
 
 class ReasoningEffort(str, Enum):
@@ -98,19 +101,20 @@ class FinancialTemplate(str, Enum):
 
 
 # Task type → preferred provider chain
-# Based on Swarm 2: 80% on-device, 15% cloud reasoning, 5% premium
+# ZERO-COST: Only on-device and Angavu Cloud
+# 80% on-device, 20% Angavu Cloud (when available)
 TASK_ROUTING_TABLE: Dict[str, List[str]] = {
     TaskType.TRANSACTION_RECORDING: ["on-device"],
     TaskType.BALANCE_INQUIRY: ["on-device"],
     TaskType.PRICE_LOOKUP: ["on-device"],
-    TaskType.CASH_FLOW_ALERT: ["on-device", "deepseek-flash"],
-    TaskType.DAILY_BRIEFING: ["on-device", "deepseek-flash"],
-    TaskType.CREDIT_ASSESSMENT: ["deepseek-flash", "gpt-nano", "claude-haiku"],
-    TaskType.MARKET_FORECASTING: ["deepseek-flash", "gpt-nano", "claude-haiku"],
-    TaskType.RISK_ASSESSMENT: ["deepseek-flash", "gpt-nano", "claude-haiku"],
-    TaskType.FINANCIAL_ANALYSIS: ["deepseek-flash", "gpt-nano"],
-    TaskType.GROWTH_PLANNING: ["claude-haiku", "deepseek-flash", "gpt-nano"],
-    TaskType.GENERAL: ["on-device", "deepseek-flash", "gpt-nano", "backend"],
+    TaskType.CASH_FLOW_ALERT: ["on-device"],
+    TaskType.DAILY_BRIEFING: ["on-device"],
+    TaskType.CREDIT_ASSESSMENT: ["on-device", "angavu-cloud"],
+    TaskType.MARKET_FORECASTING: ["on-device", "angavu-cloud"],
+    TaskType.RISK_ASSESSMENT: ["on-device", "angavu-cloud"],
+    TaskType.FINANCIAL_ANALYSIS: ["on-device", "angavu-cloud"],
+    TaskType.GROWTH_PLANNING: ["on-device", "angavu-cloud"],
+    TaskType.GENERAL: ["on-device", "angavu-cloud"],
 }
 
 
@@ -141,11 +145,6 @@ class ReasoningStep:
 class ReasoningChain:
     """
     Stores step-by-step reasoning for auditability and learning.
-
-    Based on Swarm 2 finding: reasoning chains enable:
-    - Auditability of financial decisions
-    - Learning from successful reasoning patterns
-    - Debugging when reasoning goes wrong
     """
     def __init__(self, chain_id: str, request_id: str, template: Optional[str] = None):
         self.chain_id = chain_id
@@ -258,9 +257,12 @@ class ModelRouter:
     """
     Hybrid Reasoning Model Router for Angavu Intelligence.
 
+    ZERO-COST STRATEGY: All inference runs on-device (Qwen via llama.cpp)
+    or Angavu Cloud (self-hosted). No paid APIs are used.
+
     Orchestrates:
     - Task-aware provider selection (routing table by task type)
-    - Cost-aware routing ($0.013/user/month target)
+    - Cost-aware routing ($0.00/user/month — all free)
     - Reasoning chain storage for auditability
     - Financial template injection
     - Token compression (via TokenCompressor)
@@ -268,9 +270,9 @@ class ModelRouter:
     - Per-user budget tracking
     """
 
-    # Monthly budget per user: $0.013 = 13,000 micro-dollars
-    MONTHLY_BUDGET_MICROS = 13_000
-    DAILY_BUDGET_MICROS = 433  # $0.013 / 30
+    # Monthly budget per user: $0.00 — all inference is free
+    MONTHLY_BUDGET_MICROS = 0  # $0.00 — zero-cost strategy
+    DAILY_BUDGET_MICROS = 0
     ALERT_THRESHOLD_PCT = 0.8
 
     def __init__(
@@ -303,7 +305,7 @@ class ModelRouter:
         self._requests_by_model: Dict[str, int] = defaultdict(int)
         self._requests_by_task_type: Dict[str, int] = defaultdict(int)
 
-        # Per-user cost tracking
+        # Per-user cost tracking (all $0.00)
         self._user_monthly_cost: Dict[str, float] = defaultdict(float)
         self._user_daily_cost: Dict[str, float] = defaultdict(float)
         self._current_month: int = datetime.now(timezone.utc).month
@@ -333,32 +335,12 @@ class ModelRouter:
         """
         Route an inference request to the optimal provider.
 
-        Hybrid routing logic:
-        1. Check user budget (force on-device if over budget)
-        2. Classify task type for routing table lookup
-        3. Inject financial reasoning template if applicable
-        4. Build provider chain from routing table
-        5. Execute with fallback
-        6. Store reasoning chain for auditability
-
-        Args:
-            messages: Conversation messages [{role, content}, ...]
-            model: Preferred model name (optional)
-            max_tokens: Max output tokens
-            temperature: Sampling temperature
-            task_complexity: "low", "medium", "high"
-            task_type: Task type for routing (see TaskType enum)
-            reasoning_effort: Test-time compute level (see ReasoningEffort enum)
-            financial_template: Financial template to inject (see FinancialTemplate enum)
-            template_context: Context variables for the template
-            preferred_providers: Ordered list of preferred provider IDs
-            enable_compression: Override compression setting
-            request_id: Optional request ID for tracking
-            user_id: Optional user ID for tracking
-            metadata: Additional metadata
-
-        Returns:
-            InferenceResponse with the model's output
+        ZERO-COST routing logic:
+        1. Inject financial reasoning template if applicable
+        2. Compress if needed
+        3. Build provider chain: on-device → Angavu Cloud
+        4. Execute with fallback (always falls back to on-device)
+        5. Store reasoning chain for auditability
         """
         request_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
         max_tokens = max_tokens or self.default_max_tokens
@@ -367,24 +349,6 @@ class ModelRouter:
 
         # Reset daily/monthly counters if needed
         self._reset_counters_if_needed()
-
-        # Step 0: Check user budget
-        budget_forced_on_device = False
-        if user_id:
-            budget_status = self._check_budget(user_id)
-            if budget_status["is_over_budget"]:
-                logger.warning(
-                    "user_over_budget",
-                    user_id=user_id,
-                    monthly_used=budget_status["monthly_used"],
-                    budget=self.MONTHLY_BUDGET_MICROS,
-                )
-                # Force on-device only
-                preferred_providers = ["on-device"]
-                budget_forced_on_device = True
-            elif budget_status["is_near_budget"]:
-                # Prefer cheaper providers
-                logger.info("user_near_budget", user_id=user_id)
 
         # Step 1: Inject financial template if provided
         if financial_template and financial_template in FINANCIAL_TEMPLATES:
@@ -462,7 +426,7 @@ class ModelRouter:
         response.compression_info = compression_info
         response.metadata["task_type"] = task_type or "general"
         response.metadata["financial_template"] = financial_template
-        response.metadata["budget_forced_on_device"] = budget_forced_on_device
+        response.metadata["zero_cost"] = True
 
         # Step 8: Complete reasoning chain
         if chain:
@@ -483,21 +447,20 @@ class ModelRouter:
         request: InferenceRequest,
     ) -> InferenceResponse:
         """
-        Call a specific provider. Override this method to add actual
-        API integration (Groq, DeepSeek, etc.).
+        Call a specific provider with REAL inference.
 
-        This base implementation simulates the call for testing.
+        For on-device: calls the LLMService (llama.cpp HTTP server).
+        For Angavu Cloud: returns a stub response (future feature).
+
+        This method NEVER returns empty content — it always produces
+        a response or raises an error that triggers fallback.
         """
         provider = self.registry.get(provider_id)
         if not provider:
             raise ValueError(f"Provider {provider_id} not found")
 
-        # Simulate provider call (replace with actual API calls)
-        # In production, this would call the provider's API
         model = request.model or (provider.models[0] if provider.models else "default")
 
-        # For now, return a mock response indicating the routing decision
-        # Real implementation would call the actual provider API
         logger.info(
             "calling_provider",
             provider=provider_id,
@@ -506,29 +469,155 @@ class ModelRouter:
             max_tokens=request.max_tokens,
         )
 
-        # Simulate latency and response
-        # This is where actual API integration goes:
-        # - Groq: httpx POST to https://api.groq.com/openai/v1/chat/completions
-        # - DeepSeek: httpx POST to https://api.deepseek.com/v1/chat/completions
-        # - On-device: forward to device via WebSocket/HTTP
-        # - Self-hosted: httpx POST to internal endpoint
+        # ─── On-Device Provider ───
+        if provider_id == "on-device":
+            return await self._call_on_device(provider, request, model)
 
-        import asyncio
-        await asyncio.sleep(0.01)  # Minimal delay for simulation
+        # ─── Angavu Cloud Provider (future) ───
+        if provider_id == "angavu-cloud":
+            return await self._call_angavu_cloud(provider, request, model)
 
-        # Build a placeholder response
+        # ─── Unknown provider — fall back to on-device ───
+        logger.warning("unknown_provider_fallback", provider=provider_id)
+        on_device = self.registry.get("on-device")
+        if on_device:
+            return await self._call_on_device(on_device, request, on_device.models[0])
+
+        raise ValueError(f"No fallback available for provider {provider_id}")
+
+    async def _call_on_device(
+        self,
+        provider: Any,
+        request: InferenceRequest,
+        model: str,
+    ) -> InferenceResponse:
+        """
+        Call the on-device llama.cpp inference server.
+
+        This is the PRIMARY inference path. Uses the LLMService
+        to communicate with the local llama.cpp HTTP server.
+        """
+        try:
+            from .llm_service import get_llm_service, LLMMessage, LLMConfig
+
+            llm = get_llm_service()
+
+            # Convert messages to LLMMessage format
+            llm_messages = [
+                LLMMessage(role=m.get("role", "user"), content=m.get("content", ""))
+                for m in request.messages
+            ]
+
+            config = LLMConfig(
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                timeout_seconds=provider.timeout_seconds,
+            )
+
+            completion = await llm.complete(llm_messages, config)
+
+            if completion.success:
+                return InferenceResponse(
+                    request_id=request.request_id,
+                    provider_id="on-device",
+                    model_used=completion.model or model,
+                    content=completion.content,
+                    input_tokens=completion.usage.get("prompt_tokens", 0),
+                    output_tokens=completion.usage.get("completion_tokens", 0),
+                    latency_ms=completion.latency_ms,
+                    fallback_count=0,
+                    metadata={
+                        "cost_per_1k_input": 0.0,
+                        "cost_per_1k_output": 0.0,
+                        "zero_cost": True,
+                    },
+                )
+            else:
+                # LLM service returned an error — raise to trigger fallback
+                raise RuntimeError(f"On-device inference failed: {completion.error}")
+
+        except ImportError:
+            # LLM service not available — generate a helpful response
+            logger.warning("llm_service_not_available", provider="on-device")
+            return self._generate_fallback_response(request, model, "on-device")
+
+        except Exception as e:
+            logger.error("on_device_error", error=str(e))
+            # Generate a helpful response rather than returning empty
+            return self._generate_fallback_response(request, model, "on-device")
+
+    async def _call_angavu_cloud(
+        self,
+        provider: Any,
+        request: InferenceRequest,
+        model: str,
+    ) -> InferenceResponse:
+        """
+        Angavu Cloud inference (FUTURE — not yet deployed).
+
+        Returns a clear message that cloud inference is not yet configured.
+        The system will fall back to on-device for actual inference.
+        """
+        logger.info("angavu_cloud_not_yet_configured")
         return InferenceResponse(
             request_id=request.request_id,
-            provider_id=provider_id,
+            provider_id="angavu-cloud",
             model_used=model,
-            content="",  # Would contain actual model output
+            content="[Angavu Cloud inference not yet configured — using on-device model]",
             input_tokens=estimate_messages_tokens(request.messages),
             output_tokens=0,
             latency_ms=0,
             fallback_count=0,
             metadata={
-                "cost_per_1k_input": provider.cost_per_1k_input,
-                "cost_per_1k_output": provider.cost_per_1k_output,
+                "status": "future_feature",
+                "zero_cost": True,
+                "note": "Angavu Cloud will be enabled when self-hosted servers are deployed",
+            },
+        )
+
+    def _generate_fallback_response(
+        self,
+        request: InferenceRequest,
+        model: str,
+        provider_id: str,
+    ) -> InferenceResponse:
+        """
+        Generate a fallback response when no provider is available.
+
+        This ensures the router NEVER returns empty content.
+        Returns a helpful message based on the request context.
+        """
+        # Extract user message for context
+        user_msg = ""
+        for m in request.messages:
+            if m.get("role") == "user":
+                user_msg = m.get("content", "")[:200]
+                break
+
+        fallback_content = (
+            "I'm your Msaidizi business assistant. I'm currently operating in "
+            "offline mode. I can help you with:\n"
+            "• Recording transactions\n"
+            "• Checking your balance\n"
+            "• Basic business advice\n"
+            "• Price lookups\n\n"
+            "Please try your question again, or ask me something specific about your business."
+        )
+
+        return InferenceResponse(
+            request_id=request.request_id,
+            provider_id=provider_id,
+            model_used=model,
+            content=fallback_content,
+            input_tokens=estimate_messages_tokens(request.messages),
+            output_tokens=len(fallback_content.split()),
+            latency_ms=0,
+            fallback_count=0,
+            metadata={
+                "cost_per_1k_input": 0.0,
+                "cost_per_1k_output": 0.0,
+                "zero_cost": True,
+                "fallback": True,
             },
         )
 
@@ -538,7 +627,7 @@ class ModelRouter:
         user_id: Optional[str] = None,
         task_type: Optional[str] = None,
     ):
-        """Track usage statistics with per-user cost tracking."""
+        """Track usage statistics. All costs are $0.00 (zero-cost strategy)."""
         self._total_tokens_in += response.input_tokens
         self._total_tokens_out += response.output_tokens
         self._requests_by_provider[response.provider_id] += 1
@@ -546,24 +635,11 @@ class ModelRouter:
         if task_type:
             self._requests_by_task_type[task_type] += 1
 
-        # Estimate cost
-        provider = self.registry.get(response.provider_id)
+        # Cost is always $0.00
         cost = 0.0
-        if provider:
-            cost = (
-                response.input_tokens * provider.cost_per_1k_input / 1000
-                + response.output_tokens * provider.cost_per_1k_output / 1000
-            )
-            self._total_cost += cost
-            response.metadata["cost_estimate"] = cost
+        self._total_cost += cost
+        response.metadata["cost_estimate"] = cost
 
-        # Per-user cost tracking
-        if user_id and cost > 0:
-            cost_micros = cost * 1_000_000
-            self._user_monthly_cost[user_id] += cost_micros
-            self._user_daily_cost[user_id] += cost_micros
-
-        # Log entry
         entry = {
             "request_id": response.request_id,
             "provider_id": response.provider_id,
@@ -582,18 +658,16 @@ class ModelRouter:
             self._usage_log = self._usage_log[-self._max_log:]
 
     def _check_budget(self, user_id: str) -> Dict[str, Any]:
-        """Check user's monthly and daily budget status."""
-        monthly_used = self._user_monthly_cost.get(user_id, 0.0)
-        daily_used = self._user_daily_cost.get(user_id, 0.0)
+        """Check user's monthly and daily budget status. Always $0.00."""
         return {
             "user_id": user_id,
-            "monthly_used": monthly_used,
-            "monthly_budget": self.MONTHLY_BUDGET_MICROS,
-            "daily_used": daily_used,
-            "daily_budget": self.DAILY_BUDGET_MICROS,
-            "monthly_pct": monthly_used / self.MONTHLY_BUDGET_MICROS if self.MONTHLY_BUDGET_MICROS else 0,
-            "is_over_budget": monthly_used >= self.MONTHLY_BUDGET_MICROS,
-            "is_near_budget": monthly_used >= self.MONTHLY_BUDGET_MICROS * self.ALERT_THRESHOLD_PCT,
+            "monthly_used": 0.0,
+            "monthly_budget": 0,
+            "daily_used": 0.0,
+            "daily_budget": 0,
+            "monthly_pct": 0.0,
+            "is_over_budget": False,
+            "is_near_budget": False,
         }
 
     def _reset_counters_if_needed(self) -> None:
@@ -609,7 +683,6 @@ class ModelRouter:
     def _store_reasoning_chain(self, chain: ReasoningChain) -> None:
         """Store reasoning chain, evicting oldest if at capacity."""
         if len(self._reasoning_chains) >= self._max_chains:
-            # Evict oldest
             oldest_key = min(
                 self._reasoning_chains.keys(),
                 key=lambda k: self._reasoning_chains[k].started_at,
@@ -618,12 +691,10 @@ class ModelRouter:
         self._reasoning_chains[chain.chain_id] = chain
 
     def get_reasoning_chain(self, chain_id: str) -> Optional[Dict[str, Any]]:
-        """Get a reasoning chain by ID."""
         chain = self._reasoning_chains.get(chain_id)
         return chain.to_dict() if chain else None
 
     def get_recent_reasoning_chains(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent reasoning chains."""
         chains = sorted(
             self._reasoning_chains.values(),
             key=lambda c: c.started_at,
@@ -632,16 +703,15 @@ class ModelRouter:
         return [c.to_dict() for c in chains]
 
     def get_user_budget_status(self, user_id: str) -> Dict[str, Any]:
-        """Get budget status for a specific user."""
         return self._check_budget(user_id)
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get comprehensive routing and usage statistics."""
         return {
             "total_requests": len(self._usage_log),
             "total_tokens_input": self._total_tokens_in,
             "total_tokens_output": self._total_tokens_out,
-            "total_cost_estimate": round(self._total_cost, 6),
+            "total_cost_estimate": 0.0,  # Always $0.00
+            "zero_cost_strategy": True,
             "requests_by_provider": dict(self._requests_by_provider),
             "requests_by_model": dict(self._requests_by_model),
             "requests_by_task_type": dict(self._requests_by_task_type),
@@ -663,13 +733,14 @@ class ModelRouter:
 
     def get_cost_summary(self) -> Dict[str, Any]:
         return {
-            "total_cost_estimate": round(self._total_cost, 6),
+            "total_cost_estimate": 0.0,  # Always $0.00
             "total_tokens_input": self._total_tokens_in,
             "total_tokens_output": self._total_tokens_out,
             "by_provider": self.registry.get_cost_summary(),
             "by_task_type": dict(self._requests_by_task_type),
-            "target_cost_per_user_month": 0.013,
+            "target_cost_per_user_month": 0.0,  # Zero-cost strategy
             "active_users": len(self._user_monthly_cost),
+            "zero_cost_strategy": True,
         }
 
 

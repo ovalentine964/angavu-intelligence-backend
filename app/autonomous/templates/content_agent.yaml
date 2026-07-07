@@ -3,7 +3,7 @@ role: "content"
 enabled: true
 description: "Autonomous content — creation, SEO, distribution for Msaidizi"
 
-model: "deepseek-chat"
+model: "on-device"
 temperature: 0.5
 max_tokens: 3000
 prompt_version: "v1"

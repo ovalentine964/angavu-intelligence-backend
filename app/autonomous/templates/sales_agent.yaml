@@ -3,7 +3,7 @@ role: "sales"
 enabled: true
 description: "Autonomous sales — lead qualification, outreach, follow-up for Msaidizi"
 
-model: "deepseek-chat"
+model: "on-device"
 temperature: 0.3
 max_tokens: 2048
 prompt_version: "v1"

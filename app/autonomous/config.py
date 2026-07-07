@@ -56,7 +56,7 @@ class AgentConfig:
     description: str = ""
 
     # LLM settings
-    model: str = "deepseek-chat"
+    model: str = "qwen-0.5b-fl-sw"  # On-device model (zero-cost strategy)
     temperature: float = 0.3
     max_tokens: int = 2048
     system_prompt: str = ""
@@ -186,7 +186,7 @@ class AgentConfigManager:
             role=AgentRole(raw.get("role", agent_name.split("_")[0])),
             enabled=raw.get("enabled", True),
             description=raw.get("description", ""),
-            model=raw.get("model", "deepseek-chat"),
+            model=raw.get("model", "qwen-0.5b-fl-sw"),  # On-device model (zero-cost)
             temperature=raw.get("temperature", 0.3),
             max_tokens=raw.get("max_tokens", 2048),
             system_prompt=raw.get("system_prompt", ""),

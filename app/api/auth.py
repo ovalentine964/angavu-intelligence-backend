@@ -75,6 +75,24 @@ class RefreshRequest(BaseModel):
 # =========================================================================
 
 
+def _get_signing_key() -> str:
+    """Get the signing key — RSA private key for RS256, shared secret for HS256."""
+    if settings.JWT_ALGORITHM == "RS256":
+        if not settings.JWT_PRIVATE_KEY:
+            raise ValueError("JWT_PRIVATE_KEY must be set when using RS256")
+        return settings.JWT_PRIVATE_KEY
+    return settings.JWT_SECRET_KEY
+
+
+def _get_verification_key() -> str:
+    """Get the verification key — RSA public key for RS256, shared secret for HS256."""
+    if settings.JWT_ALGORITHM == "RS256":
+        if not settings.JWT_PUBLIC_KEY:
+            raise ValueError("JWT_PUBLIC_KEY must be set when using RS256")
+        return settings.JWT_PUBLIC_KEY
+    return settings.JWT_SECRET_KEY
+
+
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
@@ -97,7 +115,7 @@ def create_access_token(
     to_encode.update({"exp": expire, "type": "access"})
     return pyjwt.encode(
         to_encode,
-        settings.JWT_SECRET_KEY,
+        _get_signing_key(),
         algorithm=settings.JWT_ALGORITHM,
     )
 
@@ -116,7 +134,7 @@ def create_refresh_token(data: dict, family: Optional[str] = None) -> str:
     })
     return pyjwt.encode(
         to_encode,
-        settings.JWT_SECRET_KEY,
+        _get_signing_key(),
         algorithm=settings.JWT_ALGORITHM,
     )
 
@@ -131,7 +149,7 @@ def decode_token(token: str) -> dict:
     try:
         payload = pyjwt.decode(
             token,
-            settings.JWT_SECRET_KEY,
+            _get_verification_key(),
             algorithms=[settings.JWT_ALGORITHM],
         )
         return payload
