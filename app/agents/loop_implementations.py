@@ -7,6 +7,9 @@ Upgrades the core agents with agentic loop patterns:
 - ReportGenerator       → Reflexion (self-critique for report quality)
 - SelfEvolution         → EventSourced (full audit trail of learning)
 - PipelineSupervisor    → Supervisor (coordinates all agents)
+- PriceAlertAgent       → OODA (fast time-critical decisions)
+- MarketFeedbackAgent   → Feedback (self-improving from outcomes)
+- CreditDecisionAgent   → HITL (progressive autonomy for credit)
 
 These implementations extend the existing agents with loop capabilities
 while preserving their original service-wrapping behavior.
@@ -22,15 +25,23 @@ import structlog
 
 from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
 from app.agents.loops import (
+    AutonomyLevel,
     Critique,
     EventSourcedAgent,
     EventStore,
     ExecutionPlan,
+    FeedbackAgent,
+    HITLConfig,
+    HumanInTheLoopAgent,
+    OODAAgent,
+    Observation,
+    OrientationState,
     PlanExecuteAgent,
     PlanStep,
     ReActAgent,
     ReflexionAgent,
     SupervisorAgent,
+    UrgencyLevel,
 )
 
 logger = structlog.get_logger(__name__)
@@ -688,6 +699,279 @@ class PipelineSupervisor(SupervisorAgent):
         )
 
 
+# ════════════════════════════════════════════════════════════════════
+# PriceAlertAgent — with OODA Loop
+# ════════════════════════════════════════════════════════════════════
+
+
+class PriceAlertOODA(OODAAgent):
+    """
+    Price alert agent with OODA loop for fast, time-critical decisions.
+
+    Monitors market prices and generates alerts when significant
+    changes are detected. Uses the OODA loop for speed:
+    - Observe: Receive price signals from market data
+    - Orient: Compare against historical patterns and current context
+    - Decide: Determine if an alert is warranted
+    - Act: Emit alert event with recommendation
+
+    Designed for sub-second decision velocity.
+    """
+
+    def __init__(self):
+        super().__init__(
+            name="PriceAlert",
+            role="Real-time price monitoring and alerting (OODA-enabled)",
+            capabilities=[
+                "price_monitoring",
+                "market_disruption_detection",
+                "supply_demand_analysis",
+                "fast_alert_generation",
+                "orientation_tracking",
+            ],
+            urgency_threshold=UrgencyLevel.HIGH,
+        )
+
+    async def _extract_observation(self, event: AgentEvent) -> Observation:
+        """Extract price-related signals from the event."""
+        payload = event.payload
+
+        # Determine urgency based on event type and payload
+        urgency = UrgencyLevel.MEDIUM
+        if event.event_type == EventType.MARKET_ALERT:
+            urgency = UrgencyLevel.CRITICAL
+        elif event.event_type == EventType.PRICE_FORECAST_READY:
+            urgency = UrgencyLevel.HIGH
+        elif "price_change_pct" in payload:
+            change = abs(payload.get("price_change_pct", 0))
+            if change > 30:
+                urgency = UrgencyLevel.CRITICAL
+            elif change > 15:
+                urgency = UrgencyLevel.HIGH
+
+        return Observation(
+            source=event.source,
+            signal_type=event.event_type.value,
+            data=payload,
+            urgency=urgency,
+            confidence=payload.get("confidence", 0.9),
+        )
+
+    async def _make_decision(
+        self,
+        observation: Observation,
+        orientation: OrientationState,
+    ) -> AgentDecision:
+        """Decide whether to alert based on observation and orientation."""
+        # Check if this is a significant price change
+        price_data = observation.data
+        price_change = price_data.get("price_change_pct", 0)
+        product = price_data.get("product", "unknown")
+        market = price_data.get("market", "unknown")
+
+        # Factor in orientation (accumulated context)
+        risk = orientation.risk_level
+        confidence = orientation.orientation_confidence
+
+        if observation.urgency == UrgencyLevel.CRITICAL:
+            action = "alert_immediate"
+            reasoning = (
+                f"CRITICAL: {product} price changed {price_change}% in {market}. "
+                f"Risk level: {risk:.2f}. Immediate alert required."
+            )
+            conf = 0.95
+        elif observation.urgency == UrgencyLevel.HIGH:
+            action = "alert_and_recommend"
+            reasoning = (
+                f"Significant price movement: {product} {price_change}% in {market}. "
+                f"Orientation confidence: {confidence:.2f}. Recommending action."
+            )
+            conf = 0.85
+        else:
+            action = "log_and_monitor"
+            reasoning = (
+                f"Normal price update: {product} in {market}. "
+                f"Continuing to monitor. Cycles since shift: {orientation.cycles_since_shift}."
+            )
+            conf = 0.7
+
+        return AgentDecision(
+            action=action,
+            parameters={
+                "product": product,
+                "market": market,
+                "price_change_pct": price_change,
+                "urgency": observation.urgency.value,
+                "risk_level": risk,
+            },
+            confidence=conf,
+            reasoning=reasoning,
+        )
+
+    async def _execute_action(self, decision: AgentDecision) -> AgentResult:
+        """Execute the price alert action."""
+        start = time.time()
+
+        action = decision.action
+        params = decision.parameters
+
+        if action == "alert_immediate":
+            event_type = EventType.MARKET_ALERT
+        elif action == "alert_and_recommend":
+            event_type = EventType.PRICE_FORECAST_READY
+        else:
+            event_type = EventType.AGENT_HEALTH_CHECK
+
+        downstream = AgentEvent(
+            event_type=event_type,
+            source=self.name,
+            payload={
+                **params,
+                "ooda_action": action,
+                "confidence": decision.confidence,
+                "reasoning": decision.reasoning[:300],
+            },
+        )
+
+        return AgentResult(
+            success=True,
+            data={
+                "action": action,
+                "product": params.get("product"),
+                "market": params.get("market"),
+                "alert_level": action,
+            },
+            duration_ms=(time.time() - start) * 1000,
+            events_to_publish=[downstream],
+        )
+
+
+# ════════════════════════════════════════════════════════════════════
+# MarketFeedbackAgent — with Self-Improving Feedback Loop
+# ════════════════════════════════════════════════════════════════════
+
+
+class MarketFeedbackAgent(FeedbackAgent):
+    """
+    Market feedback agent that learns from every transaction outcome.
+
+    Extracts implicit learning signals from transaction results,
+    detects patterns across outcomes, and continuously improves
+    market intelligence strategies.
+
+    Key capabilities:
+    - Learns from price prediction accuracy
+    - Detects recurring market patterns
+    - Adjusts confidence thresholds based on outcomes
+    - Shares anonymized patterns across the network
+    """
+
+    def __init__(self):
+        super().__init__(
+            name="MarketFeedback",
+            role="Self-improving market intelligence (Feedback-enabled)",
+            capabilities=[
+                "signal_extraction",
+                "pattern_detection",
+                "strategy_optimization",
+                "implicit_learning",
+                "cross_worker_patterns",
+            ],
+            decay_half_life_hours=24.0,
+            min_signals_for_pattern=5,
+            auto_deploy_threshold=0.75,
+        )
+
+    async def _extract_domain_signals(self, event: AgentEvent) -> List["LearningSignal"]:
+        """Extract market-specific learning signals."""
+        from app.agents.loops.feedback_loop import LearningSignal, SignalType
+
+        signals = []
+        payload = event.payload
+
+        # Price prediction accuracy signal
+        if "predicted_price" in payload and "actual_price" in payload:
+            predicted = payload["predicted_price"]
+            actual = payload["actual_price"]
+            error_pct = abs(predicted - actual) / max(actual, 1) * 100
+
+            if error_pct < 5:
+                signals.append(LearningSignal(
+                    signal_type=SignalType.SUCCESS,
+                    source_action="price_prediction",
+                    outcome={"error_pct": error_pct, "product": payload.get("product")},
+                    strength=1.0 - (error_pct / 100),
+                    context={"product": payload.get("product"), "market": payload.get("market")},
+                ))
+            elif error_pct > 20:
+                signals.append(LearningSignal(
+                    signal_type=SignalType.FAILURE,
+                    source_action="price_prediction",
+                    outcome={"error_pct": error_pct, "product": payload.get("product")},
+                    strength=error_pct / 100,
+                    context={"product": payload.get("product"), "market": payload.get("market")},
+                ))
+
+        # Market disruption signal
+        if event.event_type == EventType.MARKET_ALERT:
+            signals.append(LearningSignal(
+                signal_type=SignalType.MARKET_RESPONSE,
+                source_action="market_monitoring",
+                outcome={"alert_type": payload.get("alert_type")},
+                strength=0.8,
+                context={"market": payload.get("market")},
+            ))
+
+        return signals
+
+
+# ════════════════════════════════════════════════════════════════════
+# CreditDecisionAgent — with Human-in-the-Loop
+# ════════════════════════════════════════════════════════════════════
+
+
+class CreditDecisionHITL(HumanInTheLoopAgent):
+    """
+    Credit decision agent with Human-in-the-Loop oversight.
+
+    Wraps the credit scoring logic with progressive autonomy:
+    - New workers: Full human control (system only suggests)
+    - Trusted workers: Human confirms (system proposes)
+    - Established workers: Human informed (system acts)
+    - Long-term workers: Human override (system acts autonomously)
+    - Highly trusted: Full autonomy (periodic summaries)
+
+    Escalation triggers:
+    - Loan amount > KSh 5,000: Always escalate
+    - Loan amount > KSh 50,000: Always require human approval
+    - Low confidence (<0.7): Escalate
+    - 3+ consecutive failures: Pause and escalate
+    """
+
+    def __init__(self, wrapped_agent: Optional[BiasharaAgent] = None):
+        config = HITLConfig(
+            financial_threshold_low=5000.0,
+            financial_threshold_high=50000.0,
+            confidence_threshold=0.7,
+            consecutive_failure_threshold=3,
+            default_autonomy=AutonomyLevel.FULL_HUMAN,
+        )
+
+        super().__init__(
+            name="CreditDecision",
+            role="Credit decision oversight (HITL-enabled)",
+            capabilities=[
+                "credit_scoring",
+                "loan_assessment",
+                "escalation_management",
+                "trust_tracking",
+                "progressive_autonomy",
+            ],
+            wrapped_agent=wrapped_agent,
+            config=config,
+        )
+
+
 def create_loop_enhanced_agents(
     event_store: Optional[EventStore] = None,
 ) -> Dict[str, Any]:
@@ -704,8 +988,20 @@ def create_loop_enhanced_agents(
     supervisor = PipelineSupervisor(event_store=store)
     supervisor.setup_agents(event_store=store)
 
+    # Create new loop agents
+    price_alert = PriceAlertOODA()
+    market_feedback = MarketFeedbackAgent()
+    credit_hitl = CreditDecisionHITL()
+
+    # Register new agents with supervisor
+    supervisor.register_agent(price_alert)
+    supervisor.register_agent(market_feedback)
+    supervisor.register_agent(credit_hitl)
+
+    all_agents = list(supervisor._managed_agents.values())
+
     return {
-        "agents": list(supervisor._managed_agents.values()),
+        "agents": all_agents,
         "supervisor": supervisor,
         "event_store": store,
     }

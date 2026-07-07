@@ -7,6 +7,7 @@ agent creation that was previously scattered across main.py lifespan.
 
 V2: Now includes MetaAgent (Tier 1), Domain Agents (Tier 2),
 and Utility Agents (Tier 3) in a 3-tier architecture.
+V3: Adds MCP/A2A protocol integration and financial agent templates.
 
 Usage:
     factory = AgentFactory()
@@ -78,6 +79,15 @@ class AgentInfrastructure:
     # DeerFlow integration (deerflow-harness)
     deerflow_factory: Any = None
     deerflow_lead_agent: Any = None
+
+    # V3: Protocol integration
+    mcp_server: Any = None          # MCPServer
+    mcp_client: Any = None          # MCPClient
+    a2a_server: Any = None          # A2AServer
+    a2a_client: Any = None          # A2AClient
+
+    # V3: Financial agent templates
+    financial_agents: List[BiasharaAgent] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.agent_map:
@@ -248,20 +258,30 @@ class AgentFactory:
                 infrastructure, event_bus, tracer,
             )
 
+        # 16. Attach MCP/A2A protocols
+        infrastructure = await self._attach_protocols(infrastructure, event_bus, tracer)
+
+        # 17. Create financial agent templates
+        infrastructure = await self._attach_financial_agents(infrastructure, event_bus, tracer)
+
         self._infrastructure = infrastructure
         total_agents = (
             len(core_agents) + len(domain_agents) + len(utility_agents) + 1
+            + len(infrastructure.financial_agents)
         )
         self._logger.info(
-            "agent_infrastructure_v2_ready",
+            "agent_infrastructure_v3_ready",
             total_agents=total_agents,
             core_agents=len(core_agents),
             domain_agents=len(domain_agents),
             utility_agents=len(utility_agents),
             meta_agent=1,
+            financial_agents=len(infrastructure.financial_agents),
             loop_agents=len(infrastructure.loop_agents),
             flows=list(infrastructure.intelligence_flows.keys()),
             has_deerflow=infrastructure.deerflow_factory is not None,
+            has_mcp=infrastructure.mcp_server is not None,
+            has_a2a=infrastructure.a2a_server is not None,
         )
 
         return infrastructure
@@ -277,7 +297,7 @@ class AgentFactory:
             return
 
         infra = self._infrastructure
-        self._logger.info("shutting_down_agent_infrastructure_v2")
+        self._logger.info("shutting_down_agent_infrastructure_v3")
 
         # Stop MetaAgent first (it orchestrates everything)
         if infra.meta_agent:
@@ -329,10 +349,17 @@ class AgentFactory:
             except (RuntimeError, OSError) as exc:
                 self._logger.warning("core_agent_stop_error", agent=agent.name, error=str(exc))
 
+        # Stop financial agents
+        for agent in reversed(infra.financial_agents):
+            try:
+                await agent.stop()
+            except (RuntimeError, OSError) as exc:
+                self._logger.warning("financial_agent_stop_error", agent=agent.name, error=str(exc))
+
         # Disconnect event bus
         await infra.event_bus.disconnect()
 
-        self._logger.info("agent_infrastructure_v2_shutdown_complete")
+        self._logger.info("agent_infrastructure_v3_shutdown_complete")
         self._infrastructure = None
 
     # ── Agent Creation ──────────────────────────────────────────────

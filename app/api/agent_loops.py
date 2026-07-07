@@ -12,6 +12,24 @@ monitoring, and observability:
     GET  /api/v1/loops/supervision     — Supervisor stats and execution history
     GET  /api/v1/loops/agents          — All agent metrics
     POST /api/v1/loops/supervise       — Manually trigger supervised execution
+
+    OODA Loop:
+    GET  /api/v1/loops/ooda/cycles     — OODA cycle history
+    GET  /api/v1/loops/ooda/velocity   — Decision velocity metrics
+    GET  /api/v1/loops/ooda/orientation — Current orientation state
+
+    Feedback Loop:
+    GET  /api/v1/loops/feedback/signals    — Learning signals summary
+    GET  /api/v1/loops/feedback/patterns   — Detected patterns
+    GET  /api/v1/loops/feedback/strategy   — Current strategy
+    GET  /api/v1/loops/feedback/history    — Strategy version history
+
+    Human-in-the-Loop:
+    GET  /api/v1/loops/hitl/escalations    — Escalation history
+    GET  /api/v1/loops/hitl/trust-scores   — Per-worker trust scores
+    GET  /api/v1/loops/hitl/autonomy       — Autonomy level distribution
+    GET  /api/v1/loops/hitl/pending        — Pending escalation requests
+    POST /api/v1/loops/hitl/resolve        — Resolve an escalation
 """
 
 from __future__ import annotations
@@ -32,6 +50,9 @@ router = APIRouter(prefix="/loops", tags=["Agent Loops"])
 _supervisor = None
 _event_store: Optional[EventStore] = None
 _agents = {}
+_ooda_agents = {}  # name -> OODAAgent
+_feedback_agents = {}  # name -> FeedbackAgent
+_hitl_agents = {}  # name -> HumanInTheLoopAgent
 
 
 def set_loop_infrastructure(supervisor, event_store, agents):
@@ -40,6 +61,19 @@ def set_loop_infrastructure(supervisor, event_store, agents):
     _supervisor = supervisor
     _event_store = event_store
     _agents = {a.name: a for a in agents}
+
+    # Index new loop agents by type
+    from app.agents.loops.ooda_loop import OODAAgent
+    from app.agents.loops.feedback_loop import FeedbackAgent
+    from app.agents.loops.human_in_the_loop import HumanInTheLoopAgent
+
+    for a in agents:
+        if isinstance(a, OODAAgent):
+            _ooda_agents[a.name] = a
+        if isinstance(a, FeedbackAgent):
+            _feedback_agents[a.name] = a
+        if isinstance(a, HumanInTheLoopAgent):
+            _hitl_agents[a.name] = a
 
 
 # ── ReAct Traces ────────────────────────────────────────────────────
@@ -286,6 +320,347 @@ async def get_agent_metrics():
     return _supervisor.get_agent_metrics()
 
 
+# ── OODA Loop ──────────────────────────────────────────────────────
+
+
+@router.get("/ooda/cycles")
+async def get_ooda_cycles(
+    agent_name: Optional[str] = Query(None, description="Filter by agent name"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Get OODA loop cycle history.
+
+    Shows the observe-orient-decide-act cycles with timing
+    data for each phase.
+    """
+    cycles = []
+    targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_recent_cycles"):
+            agent_cycles = agent.get_recent_cycles(limit)
+            cycles.extend(agent_cycles)
+
+    return {
+        "cycles": cycles[-limit:],
+        "total": len(cycles),
+    }
+
+
+@router.get("/ooda/velocity")
+async def get_decision_velocity(
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Get decision velocity metrics.
+
+    Decision velocity = how quickly the system converts
+    observations to actions (in milliseconds).
+    """
+    velocities = {}
+    targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_decision_velocity"):
+            velocities[name] = agent.get_decision_velocity()
+
+    return {"velocities": velocities}
+
+
+@router.get("/ooda/orientation")
+async def get_orientation_state(
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Get current OODA orientation state.
+
+    The orientation state is the system's accumulated understanding
+    of the current situation, built up over many observe-orient cycles.
+    """
+    orientations = {}
+    targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_orientation_state"):
+            orientations[name] = agent.get_orientation_state()
+
+    return {"orientations": orientations}
+
+
+@router.get("/ooda/stats")
+async def get_ooda_stats(
+    agent_name: Optional[str] = Query(None),
+):
+    """Get overall OODA loop statistics."""
+    stats = {}
+    targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_ooda_stats"):
+            stats[name] = agent.get_ooda_stats()
+
+    return {"ooda_stats": stats}
+
+
+# ── Self-Improving Feedback Loop ────────────────────────────────────
+
+
+@router.get("/feedback/signals")
+async def get_feedback_signals(
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Get learning signals summary.
+
+    Shows the signals extracted from transaction outcomes,
+    including type distribution and effective strength.
+    """
+    signals = {}
+    targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_signals_summary"):
+            signals[name] = agent.get_signals_summary()
+
+    return {"signals": signals}
+
+
+@router.get("/feedback/patterns")
+async def get_feedback_patterns(
+    agent_name: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Get detected patterns from the feedback loop.
+
+    Shows patterns detected across accumulated signals,
+    including recurring failures and success factors.
+    """
+    patterns = []
+    targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_patterns"):
+            agent_patterns = agent.get_patterns(limit)
+            patterns.extend(agent_patterns)
+
+    return {
+        "patterns": patterns[-limit:],
+        "total": len(patterns),
+    }
+
+
+@router.get("/feedback/strategy")
+async def get_current_strategy(
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Get current active strategy from the feedback loop.
+
+    Shows the strategy parameters that are currently in effect,
+    including which pattern triggered them.
+    """
+    strategies = {}
+    targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_current_strategy"):
+            strategies[name] = agent.get_current_strategy()
+
+    return {"strategies": strategies}
+
+
+@router.get("/feedback/history")
+async def get_strategy_history(
+    agent_name: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get strategy version history."""
+    history = []
+    targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_strategy_history"):
+            agent_history = agent.get_strategy_history(limit)
+            history.extend(agent_history)
+
+    return {"history": history[-limit:]}
+
+
+@router.get("/feedback/stats")
+async def get_feedback_stats(
+    agent_name: Optional[str] = Query(None),
+):
+    """Get overall feedback loop statistics."""
+    stats = {}
+    targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_feedback_stats"):
+            stats[name] = agent.get_feedback_stats()
+
+    return {"feedback_stats": stats}
+
+
+# ── Human-in-the-Loop ──────────────────────────────────────────────
+
+
+class ResolveEscalationRequest(BaseModel):
+    """Request to resolve a pending escalation."""
+    request_id: str
+    decision: str  # approved | rejected | modified | deferred
+    human_response: Optional[Dict[str, Any]] = None
+
+
+@router.get("/hitl/escalations")
+async def get_escalation_history(
+    agent_name: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get escalation history."""
+    escalations = []
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_escalation_history"):
+            agent_escalations = agent.get_escalation_history(limit)
+            escalations.extend(agent_escalations)
+
+    return {
+        "escalations": escalations[-limit:],
+        "total": len(escalations),
+    }
+
+
+@router.get("/hitl/trust-scores")
+async def get_trust_scores(
+    agent_name: Optional[str] = Query(None),
+    worker_id: Optional[str] = Query(None),
+):
+    """
+    Get trust scores for workers.
+
+    Trust scores determine the autonomy level:
+    - 0.0–0.2: Full Human (system only suggests)
+    - 0.2–0.4: Human Confirms (system proposes, human approves)
+    - 0.4–0.6: Human Informed (system acts, human notified)
+    - 0.6–0.8: Human Override (system acts, human can override)
+    - 0.8–1.0: Full Autonomy (system acts, periodic summary)
+    """
+    scores = []
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if worker_id:
+            score = agent.get_trust_score(worker_id)
+            scores.append(score)
+        else:
+            all_scores = agent.get_all_trust_scores()
+            scores.extend(all_scores)
+
+    return {"trust_scores": scores}
+
+
+@router.get("/hitl/autonomy")
+async def get_autonomy_levels(
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Get autonomy level distribution across workers.
+
+    Shows how many workers are at each autonomy level.
+    """
+    distribution = {}
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_hitl_stats"):
+            stats = agent.get_hitl_stats()
+            distribution[name] = stats.get("autonomy_distribution", {})
+
+    return {"autonomy_distribution": distribution}
+
+
+@router.get("/hitl/pending")
+async def get_pending_escalations(
+    agent_name: Optional[str] = Query(None),
+):
+    """Get pending escalation requests awaiting human response."""
+    pending = []
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_pending_escalations"):
+            agent_pending = agent.get_pending_escalations()
+            pending.extend(agent_pending)
+
+    return {
+        "pending": pending,
+        "count": len(pending),
+    }
+
+
+@router.post("/hitl/resolve")
+async def resolve_escalation(
+    request: ResolveEscalationRequest,
+    agent_name: Optional[str] = Query(None),
+):
+    """
+    Resolve a pending escalation with a human decision.
+
+    Decision values: approved, rejected, modified, deferred
+    """
+    from app.agents.loops.human_in_the_loop import HumanDecision
+
+    decision_map = {
+        "approved": HumanDecision.APPROVED,
+        "rejected": HumanDecision.REJECTED,
+        "modified": HumanDecision.MODIFIED,
+        "deferred": HumanDecision.DEFERRED,
+    }
+
+    human_decision = decision_map.get(request.decision)
+    if not human_decision:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid decision: {request.decision}. Must be one of: {list(decision_map.keys())}",
+        )
+
+    # Find the agent with this pending escalation
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "resolve_escalation"):
+            result = await agent.resolve_escalation(
+                request_id=request.request_id,
+                decision=human_decision,
+                human_response=request.human_response,
+            )
+            if result.success:
+                return result.data
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Escalation {request.request_id} not found",
+    )
+
+
+@router.get("/hitl/stats")
+async def get_hitl_stats(
+    agent_name: Optional[str] = Query(None),
+):
+    """Get overall Human-in-the-Loop statistics."""
+    stats = {}
+    targets = {agent_name: _hitl_agents[agent_name]} if agent_name and agent_name in _hitl_agents else _hitl_agents
+
+    for name, agent in targets.items():
+        if hasattr(agent, "get_hitl_stats"):
+            stats[name] = agent.get_hitl_stats()
+
+    return {"hitl_stats": stats}
+
+
 # ── Combined View ───────────────────────────────────────────────────
 
 
@@ -302,6 +677,9 @@ async def loop_health():
         "plan_executions": 0,
         "event_store_events": 0,
         "supervision_executions": 0,
+        "ooda_cycles": 0,
+        "feedback_signals": 0,
+        "hitl_escalations": 0,
         "agents": {},
     }
 
@@ -325,6 +703,21 @@ async def loop_health():
 
         if hasattr(agent, "get_audit_trail"):
             agent_health["patterns"].append("event_sourced")
+
+        if hasattr(agent, "get_ooda_stats"):
+            stats = agent.get_ooda_stats()
+            health["ooda_cycles"] += stats.get("total_cycles", 0)
+            agent_health["patterns"].append("ooda")
+
+        if hasattr(agent, "get_feedback_stats"):
+            stats = agent.get_feedback_stats()
+            health["feedback_signals"] += stats.get("signals", {}).get("total_signals", 0)
+            agent_health["patterns"].append("feedback")
+
+        if hasattr(agent, "get_hitl_stats"):
+            stats = agent.get_hitl_stats()
+            health["hitl_escalations"] += stats.get("total_escalations", 0)
+            agent_health["patterns"].append("hitl")
 
         health["agents"][name] = agent_health
 
