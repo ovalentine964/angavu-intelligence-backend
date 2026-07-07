@@ -174,7 +174,7 @@ class WhatsAppDelivery:
         Send monthly report via WhatsApp.
 
         Called 1st of month 9 AM EAT by the report scheduler.
-        Includes: monthly summary, trends, expense breakdown, peer comparison.
+        Includes: monthly summary, trends, expense breakdown, chart image.
 
         Args:
             worker_id: Worker UUID
@@ -191,10 +191,20 @@ class WhatsAppDelivery:
 
         try:
             message = await self.bot._generate_monthly_report(user, lang)
-            success = await self.bot.send_message(phone, message)
+
+            # Try to generate and send chart image
+            chart_data = await self._generate_monthly_chart(user, lang)
+            if chart_data:
+                success = await self.bot.send_image(phone, chart_data, message)
+            else:
+                success = await self.bot.send_message(phone, message)
 
             if success:
-                logger.info("monthly_report_delivered", worker_id=worker_id)
+                logger.info(
+                    "monthly_report_delivered",
+                    worker_id=worker_id,
+                    with_chart=chart_data is not None,
+                )
             return success
 
         except Exception as e:
@@ -616,6 +626,135 @@ class WhatsAppDelivery:
         except Exception as e:
             logger.warning("chart_generation_failed", error=str(e))
             return None
+
+    async def _generate_monthly_chart(
+        self, user, language: str
+    ) -> Optional[bytes]:
+        """
+        Generate a chart image for the monthly report.
+
+        Returns PNG image bytes, or None if chart generation fails.
+        """
+        try:
+            from app.services.whatsapp_charts import WhatsAppCharts
+            from app.services.pipeline import DataPipeline
+            from datetime import date
+
+            pipeline = DataPipeline(self.db)
+            today = date.today()
+            month_start = today.replace(day=1)
+            metrics = await pipeline.aggregate_user_metrics(
+                user.id, month_start, today
+            )
+
+            charts = WhatsAppCharts()
+            return charts.generate_monthly_chart(metrics, language)
+        except Exception as e:
+            logger.warning("monthly_chart_generation_failed", error=str(e))
+            return None
+
+    async def send_voice_report(
+        self,
+        worker_id: str,
+        report_type: str = "daily",
+    ) -> bool:
+        """
+        Send a voice note version of the report.
+
+        For low-literacy workers who prefer audio reports.
+        Generates TTS audio and sends as WhatsApp voice note.
+
+        Args:
+            worker_id: Worker UUID
+n            report_type: Type of report (daily, weekly, monthly)
+
+        Returns:
+            True if sent successfully
+        """
+        user = await self._get_user(worker_id)
+        if not user:
+            return False
+
+        phone = decrypt_value(user.phone_encrypted)
+        lang = user.language or "sw"
+
+        try:
+            # Generate report text first
+            if report_type == "daily":
+                report = await self.report_gen.generate_daily_report(user)
+                message = self.bot._format_daily_report(report, lang)
+            elif report_type == "weekly":
+                report = await self.report_gen.generate_weekly_report(user)
+                message = self.bot._format_weekly_report(report, lang)
+            else:
+                message = await self.bot._generate_monthly_report(user, lang)
+
+            # Generate TTS audio
+            audio_data = await self._generate_tts(message, lang)
+            if audio_data:
+                # Send as voice note via OpenWA
+                import base64
+                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.bot.openwa_url}/send-voice",
+                        json={
+                            "to": phone,
+                            "audio": audio_b64,
+                        },
+                        headers={
+                            "Authorization": f"Bearer {settings.OPENWA_WEBHOOK_SECRET}",
+                        },
+                        timeout=30.0,
+                    )
+                    if response.status_code == 200:
+                        logger.info(
+                            "voice_report_delivered",
+                            worker_id=worker_id,
+                            report_type=report_type,
+                        )
+                        return True
+
+            # Fallback to text if TTS fails
+            return await self.bot.send_message(phone, message)
+
+        except Exception as e:
+            logger.error(
+                "voice_report_delivery_failed",
+                worker_id=worker_id,
+                error=str(e),
+            )
+            return False
+
+    async def _generate_tts(
+        self, text: str, language: str
+    ) -> Optional[bytes]:
+        """
+        Generate TTS audio from text.
+
+        Uses the TTS service to convert report text to audio.
+        Returns audio bytes (MP4/AAC) or None if generation fails.
+        """
+        try:
+            import httpx
+            tts_url = getattr(settings, 'TTS_SERVICE_URL', 'http://tts:5002')
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{tts_url}/synthesize",
+                    json={
+                        "text": text[:1000],  # Limit text length for TTS
+                        "language": language,
+                        "voice": "swahili-female" if language == "sw" else "english-female",
+                    },
+                    timeout=30.0,
+                )
+                if response.status_code == 200:
+                    return response.content
+        except Exception as e:
+            logger.warning("tts_generation_failed", error=str(e))
+        return None
 
     # =========================================================================
     # Helpers

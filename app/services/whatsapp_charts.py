@@ -1128,3 +1128,146 @@ def quick_trend(values: Sequence[float], labels: Optional[Sequence[str]] = None)
     """Quick trend line. Returns formatted string."""
     tl = TrendLine()
     return tl.render(values, labels=labels)
+
+
+# ---------------------------------------------------------------------------
+# WhatsAppCharts — Chart image generation for WhatsApp reports
+# ---------------------------------------------------------------------------
+
+class WhatsAppCharts:
+    """
+    Generate chart images (PNG bytes) for WhatsApp report delivery.
+
+    Uses matplotlib to create visual charts that are sent as images
+    alongside text reports via WhatsApp.
+    """
+
+    def generate_weekly_sales_chart(self, report, language: str = "sw") -> Optional[bytes]:
+        """
+        Generate a weekly sales bar chart as PNG bytes.
+
+        Args:
+            report: Weekly report data object
+            language: Language for labels
+
+        Returns:
+            PNG image bytes, or None if generation fails
+        """
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            from io import BytesIO
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+
+            # Extract daily data if available
+            if hasattr(report, 'daily_sales') and report.daily_sales:
+                days = list(report.daily_sales.keys())
+                values = list(report.daily_sales.values())
+            else:
+                days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                values = [0] * 7
+
+            colors = ['#2E86AB' if v > 0 else '#E8E8E8' for v in values]
+            bars = ax.bar(days, values, color=colors, edgecolor='white', linewidth=0.5)
+
+            for bar, val in zip(bars, values):
+                if val > 0:
+                    ax.text(bar.get_x() + bar.get_width() / 2., bar.get_height(),
+                            f'KSh {val:,.0f}', ha='center', va='bottom', fontsize=8)
+
+            title = 'Mauzo ya Wiki' if language == 'sw' else 'Weekly Sales'
+            ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
+            ax.set_ylabel('KES', fontsize=10)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.set_ylim(0, max(values) * 1.2 if max(values) > 0 else 100)
+
+            plt.tight_layout()
+
+            buf = BytesIO()
+            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            buf.seek(0)
+            return buf.getvalue()
+
+        except Exception as e:
+            import structlog
+            logger = structlog.get_logger(__name__)
+            logger.warning("weekly_chart_generation_error", error=str(e))
+            return None
+
+    def generate_monthly_chart(self, metrics: Dict, language: str = "sw") -> Optional[bytes]:
+        """
+        Generate a monthly summary chart as PNG bytes.
+
+        Shows: Sales, Costs, Profit as a grouped bar chart.
+
+        Args:
+            metrics: Monthly metrics dict
+            language: Language for labels
+
+        Returns:
+            PNG image bytes, or None if generation fails
+        """
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            from io import BytesIO
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+
+            categories = []
+            values = []
+            colors = []
+
+            labels_map = {
+                'sw': {'sales': 'Mauzo', 'costs': 'Gharama', 'profit': 'Faida'},
+                'en': {'sales': 'Sales', 'costs': 'Costs', 'profit': 'Profit'},
+            }
+            labels = labels_map.get(language, labels_map['sw'])
+
+            if metrics.get('total_sales', 0) > 0:
+                categories.append(labels['sales'])
+                values.append(metrics['total_sales'])
+                colors.append('#2E86AB')
+            costs = metrics.get('total_purchases', 0) + metrics.get('total_expenses', 0)
+            if costs > 0:
+                categories.append(labels['costs'])
+                values.append(costs)
+                colors.append('#E85D75')
+            if metrics.get('net_profit', 0) != 0:
+                categories.append(labels['profit'])
+                values.append(metrics['net_profit'])
+                colors.append('#4CAF50' if metrics['net_profit'] > 0 else '#E85D75')
+
+            if not categories:
+                return None
+
+            bars = ax.bar(categories, values, color=colors, edgecolor='white', linewidth=0.5, width=0.6)
+
+            for bar, val in zip(bars, values):
+                ax.text(bar.get_x() + bar.get_width() / 2., bar.get_height(),
+                        f'KSh {val:,.0f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+            title = 'Ripoti ya Mwezi' if language == 'sw' else 'Monthly Report'
+            ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
+            ax.set_ylabel('KES', fontsize=10)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            plt.tight_layout()
+
+            buf = BytesIO()
+            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            buf.seek(0)
+            return buf.getvalue()
+
+        except Exception as e:
+            import structlog
+            logger = structlog.get_logger(__name__)
+            logger.warning("monthly_chart_generation_error", error=str(e))
+            return None

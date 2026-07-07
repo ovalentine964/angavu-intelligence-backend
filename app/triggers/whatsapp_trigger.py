@@ -134,7 +134,7 @@ class WhatsAppTrigger(BaseTrigger):
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"{self.openwa_url}/api/send-message",
+                    f"{self.openwa_url}/send-message",
                     json={
                         "to": user_id,
                         "message": response.text,

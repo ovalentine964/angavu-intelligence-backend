@@ -18,6 +18,7 @@ import hashlib
 import hmac
 from typing import Optional
 
+import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -187,5 +188,111 @@ async def whatsapp_health():
     return {
         "status": "ok",
         "service": "msaidizi-whatsapp-webhook",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
+
+
+@router.post("/whatsapp/daily-reports")
+async def trigger_daily_reports(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Trigger daily reports to all WhatsApp-connected users.
+
+    Called by the backend scheduler (NOT OpenWA) at 7 PM EAT.
+    Also callable manually for testing.
+
+    Returns:
+        Dict with total, sent, failed counts
+    """
+    # Validate signature
+    body = await request.body()
+    signature = request.headers.get("X-OpenWA-Signature")
+    if signature:
+        expected = hmac.new(
+            settings.OPENWA_WEBHOOK_SECRET.encode(),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid webhook signature",
+            )
+
+    from app.services.whatsapp_delivery import WhatsAppDelivery
+
+    delivery = WhatsAppDelivery(db)
+    result = await delivery.send_daily_reports_to_all()
+
+    logger.info(
+        "daily_reports_triggered",
+        total=result["total"],
+        sent=result["sent"],
+        failed=result["failed"],
+    )
+
+    return result
+
+
+@router.post("/whatsapp/weekly-reports")
+async def trigger_weekly_reports(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Trigger weekly reports to all WhatsApp-connected users.
+
+    Called by the backend scheduler on Monday 8 AM EAT.
+    """
+    from app.services.whatsapp_delivery import WhatsAppDelivery
+
+    delivery = WhatsAppDelivery(db)
+    result = await delivery.send_weekly_reports_to_all()
+
+    logger.info("weekly_reports_triggered", **result)
+    return result
+
+
+@router.post("/whatsapp/monthly-reports")
+async def trigger_monthly_reports(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Trigger monthly reports to all WhatsApp-connected users.
+
+    Called by the backend scheduler on 1st of month 9 AM EAT.
+    """
+    from app.services.whatsapp_delivery import WhatsAppDelivery
+
+    delivery = WhatsAppDelivery(db)
+    result = await delivery.send_monthly_reports_to_all()
+
+    logger.info("monthly_reports_triggered", **result)
+    return result
+
+
+@router.get("/whatsapp/openwa-health")
+async def openwa_health_check():
+    """
+    Check OpenWA service health.
+
+    Proxies to OpenWA's /health endpoint for monitoring.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.OPENWA_URL}/health",
+                timeout=5.0,
+            )
+            return response.json()
+    except Exception as e:
+        logger.error("openwa_health_check_failed", error=str(e))
+        return {
+            "status": "error",
+            "service": "msaidizi-openwa",
+            "error": str(e),
+            "connected": False,
+        }

@@ -420,11 +420,13 @@ async def send_report(
 
     # Generate report using WhatsAppBot
     try:
+        from app.utils.crypto import decrypt_value
         bot = WhatsAppBot(db)
+        phone = decrypt_value(user.phone_encrypted)
         # Use the existing report handling method
         report_text = await bot._handle_report_request(user, request.report_type)
         # Send via WhatsApp
-        await bot.send_message(user.phone_encrypted, report_text)
+        success = await bot.send_message(phone, report_text)
         message_id = f"msg_{secrets.token_hex(8)}"
 
         logger.info(

@@ -96,6 +96,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("database_initialized")
 
+    # Initialize connection pool manager (health checks, retry, metrics)
+    from app.infrastructure.connection_pool import get_pool_manager
+    pool_mgr = get_pool_manager()
+    await pool_mgr.initialize()
+    logger.info("connection_pool_manager_initialized")
+
     # Initialize Redis cache (Tier 2)
     cache = get_cache()
     await cache.connect()
@@ -284,6 +290,11 @@ async def lifespan(app: FastAPI):
     logger.info("task_queue_closed")
     await cache.close()
     logger.info("cache_closed")
+    # Shutdown connection pool manager
+    from app.infrastructure.connection_pool import get_pool_manager
+    await get_pool_manager().shutdown()
+    logger.info("connection_pool_manager_shutdown")
+
     await close_db()
     logger.info("database_connections_closed")
 
@@ -331,6 +342,10 @@ app.add_middleware(
 
 # Rate limiting
 app.state.limiter = limiter
+
+# Prometheus metrics middleware
+from app.infrastructure.metrics import create_metrics_middleware
+app.middleware("http")(create_metrics_middleware())
 
 
 # Security headers middleware
@@ -437,12 +452,41 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/health", tags=["Health"])
 async def health_check():
     """
-    Health check endpoint.
+    Comprehensive health check endpoint.
 
-    Returns application status including cache and task queue health.
-    Used by Docker health checks, load balancers, and monitoring.
+    Returns application status including all component health,
+    system resources, and queue depth. Used by Docker health checks,
+    load balancers, Kubernetes probes, and monitoring.
+
+    Components checked:
+    - Database (PostgreSQL) connection
+    - Redis cache connection
+    - ClickHouse (OLAP) connection
+    - OpenWA connection
+    - Agent runtime status
+    - Memory usage
+    - CPU usage
+    - Queue depth
     """
+    import psutil
+
     cache = get_cache()
+    components = {}
+
+    # 1. Database health
+    try:
+        from app.infrastructure.connection_pool import get_pool_manager
+        pool_mgr = get_pool_manager()
+        db_healthy = await pool_mgr.health_check() if pool_mgr._initialized else True
+        components["database"] = "ok" if db_healthy else "degraded"
+        components["database_pool"] = pool_mgr.get_metrics().to_dict()
+    except Exception:
+        components["database"] = "ok"  # Assume ok if pool manager not initialized
+
+    # 2. Redis health
+    components["cache"] = "ok" if cache.is_available else "unavailable"
+
+    # 3. ClickHouse health
     ch_ok = False
     if settings.has_clickhouse:
         try:
@@ -450,14 +494,21 @@ async def health_check():
             ch_ok = await ClickHouseClient().health_check()
         except (ConnectionError, OSError, TimeoutError):
             ch_ok = False
-    components = {
-        "database": "ok",
-        "cache": "ok" if cache.is_available else "unavailable",
-        "clickhouse": "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured"),
-        "task_queue": "ok" if get_task_queue()._connected else "unavailable",
-    }
+    components["clickhouse"] = "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured")
 
-    # Agent status
+    # 4. OpenWA health
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(f"{settings.OPENWA_URL}/health")
+            components["openwa"] = "ok" if resp.status_code == 200 else "degraded"
+    except Exception:
+        components["openwa"] = "unreachable"
+
+    # 5. Task queue health
+    components["task_queue"] = "ok" if get_task_queue()._connected else "unavailable"
+
+    # 6. Agent status
     agents_info = {}
     if hasattr(app.state, "agents"):
         for name, agent in app.state.agents.items():
@@ -466,19 +517,90 @@ async def health_check():
     if hasattr(app.state, "event_bus"):
         components["event_bus"] = app.state.event_bus.get_stats()["mode"]
 
+    # 7. System resources
+    try:
+        mem = psutil.virtual_memory()
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        components["system"] = {
+            "memory_total_mb": round(mem.total / (1024 * 1024)),
+            "memory_used_mb": round(mem.used / (1024 * 1024)),
+            "memory_percent": mem.percent,
+            "cpu_percent": cpu_percent,
+        }
+    except ImportError:
+        components["system"] = "psutil_not_installed"
+
+    # 8. Queue depth
+    try:
+        from app.infrastructure.task_queue import get_async_task_queue
+        aq = get_async_task_queue()
+        if aq._connected:
+            depths = await aq.get_queue_depths()
+            components["queue_depths"] = depths
+    except Exception:
+        pass
+
+    # Overall status
+    critical_components = ["database", "cache", "task_queue"]
     overall = "ok" if all(
-        v == "ok" for k, v in components.items()
-        if k not in ("agents", "event_bus")
+        components.get(k) == "ok" for k in critical_components
     ) else "degraded"
 
     return {
         "status": overall,
-        "service": "biashara-intelligence-backend",
+        "service": "angavu-intelligence-backend",
         "version": "0.1.0",
         "environment": settings.APP_ENV,
         "components": components,
-        "tier": "2-growth",
+        "tier": "3-scale",
     }
+
+
+@app.get("/health/ready", tags=["Health"])
+async def readiness_probe():
+    """
+    Kubernetes readiness probe.
+
+    Returns 200 only when the service is ready to accept traffic.
+    Checks minimum required components.
+    """
+    cache = get_cache()
+    if not cache.is_available:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "cache_unavailable"},
+        )
+    return {"status": "ready"}
+
+
+@app.get("/health/live", tags=["Health"])
+async def liveness_probe():
+    """
+    Kubernetes liveness probe.
+
+    Returns 200 if the process is alive and responsive.
+    Does NOT check dependencies (to avoid restart loops).
+    """
+    return {"status": "alive", "uptime": time.time()}
+
+
+@app.get("/metrics", tags=["Monitoring"])
+async def prometheus_metrics():
+    """
+    Prometheus-compatible metrics endpoint.
+
+    Returns all application metrics in OpenMetrics text format.
+    Scrape this endpoint with Prometheus for dashboards and alerting.
+    """
+    from app.infrastructure.metrics import get_registry, collect_system_metrics
+    from fastapi.responses import PlainTextResponse
+
+    await collect_system_metrics()
+    registry = get_registry()
+    return PlainTextResponse(
+        content=registry.render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get("/", tags=["Root"])
