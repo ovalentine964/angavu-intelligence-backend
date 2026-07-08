@@ -146,6 +146,7 @@ class IntelligenceUpdateResponse(BaseModel):
 async def biashara_sync(
     payload: BiasharaSyncPayload,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """
     Upload anonymized transactions from Msaidizi device.

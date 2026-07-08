@@ -220,7 +220,7 @@ class Anonymizer:
         if epsilon is None:
             epsilon = settings.DIFFERENTIAL_PRIVACY_EPSILON
         scale = sensitivity / epsilon
-        noise = np.random.laplace(0, scale)
+        noise = np.random.Generator(np.random.PCG64()).laplace(0, scale)
         return value + noise
 
     @staticmethod
@@ -252,7 +252,7 @@ class Anonymizer:
         sigma = (
             sensitivity * math.sqrt(2 * math.log(1.25 / delta)) / epsilon
         )
-        noise = np.random.normal(0, sigma)
+        noise = np.random.Generator(np.random.PCG64()).normal(0, sigma)
         return value + noise
 
     def anonymize_aggregate(

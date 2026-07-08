@@ -81,6 +81,14 @@ async def upload_model_update(
         UploadResponse with status, update ID, and new model version
         if aggregation was triggered
     """
+    # Consent check — verify user has consented to data sharing
+    if hasattr(current_user, 'consent_data_sharing') and not current_user.consent_data_sharing:
+        logger.warning("fl_upload_no_consent", user_id=current_user.id)
+        raise HTTPException(
+            status_code=403,
+            detail="User has not consented to data sharing. Enable in Settings > Privacy."
+        )
+
     try:
         result = await _fl_service.upload_update(update)
         return result

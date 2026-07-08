@@ -488,7 +488,7 @@ class DataPipeline:
         """
         epsilon = settings.DIFFERENTIAL_PRIVACY_EPSILON
         scale = sensitivity / epsilon
-        noise = np.random.laplace(0, scale)
+        noise = np.random.Generator(np.random.PCG64()).laplace(0, scale)
         return value + noise
 
     def compute_k_anonymity_value(self, group_size: int) -> int:
