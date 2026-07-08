@@ -35,7 +35,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import structlog
 
@@ -101,6 +101,7 @@ class SubTask:
     checkpoint_data: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize sub-task to dictionary."""
         return {
             "subtask_id": self.subtask_id,
             "name": self.name,
@@ -136,6 +137,7 @@ class TaskCheckpoint:
     step_index: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize checkpoint to dictionary."""
         return {
             "checkpoint_id": self.checkpoint_id,
             "task_id": self.task_id,
@@ -166,6 +168,7 @@ class LongHorizonTask:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def get_subtask(self, subtask_id: str) -> Optional[SubTask]:
+        """Find a sub-task by its ID."""
         for st in self.subtasks:
             if st.subtask_id == subtask_id:
                 return st

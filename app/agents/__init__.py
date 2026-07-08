@@ -130,6 +130,14 @@ from app.agents.utility import (
     SyncAgent,
 )
 
+# V4: Newly Added Agents (Voice, Compliance, Security, Onboarding)
+from app.agents.implementations_extra import (
+    VoicePipelineAgent,
+    ComplianceAgent,
+    SecurityAgent,
+    OnboardingAgent,
+)
+
 # V2: Communication Protocols
 from app.agents.communication import (
     BroadcastProtocol,
@@ -156,8 +164,7 @@ from app.agents.task_decomposition import (
 # V3: Skill Generator
 from app.agents.skill_generator import (
     SkillGenerator,
-    SkillDocument,
-    SkillAwareMixin,
+    GeneratedSkill,
 )
 
 __all__ = [
@@ -261,6 +268,10 @@ __all__ = [
     "SubTaskDefinition",
     # V3: Skill Generator
     "SkillGenerator",
-    "SkillDocument",
-    "SkillAwareMixin",
+    "GeneratedSkill",
+    # V4: Newly Added Agents
+    "VoicePipelineAgent",
+    "ComplianceAgent",
+    "SecurityAgent",
+    "OnboardingAgent",
 ]

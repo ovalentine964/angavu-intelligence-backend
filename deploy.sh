@@ -49,7 +49,8 @@ DOMAIN="${ANGAVU_DOMAIN:-}"
 EMAIL="${ANGAVU_EMAIL:-}"
 DB_PASSWORD="${ANGAVU_DB_PASSWORD:-$(openssl rand -hex 16)}"
 REDIS_PASSWORD="${ANGAVU_REDIS_PASSWORD:-$(openssl rand -hex 16)}"
-JWT_SECRET="${ANGAVU_JWT_SECRET:-$(openssl rand -hex 32)}"
+JWT_SECRET_KEY="${ANGAVU_JWT_SECRET_KEY:-$(openssl rand -hex 32)}"
+SECRET_KEY="${ANGAVU_SECRET_KEY:-$(openssl rand -hex 32)}"
 ENCRYPTION_KEY="${ANGAVU_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
 OPENWA_WEBHOOK_SECRET="${ANGAVU_OPENWA_SECRET:-$(openssl rand -hex 16)}"
 CLICKHOUSE_PASSWORD="${ANGAVU_CLICKHOUSE_PASSWORD:-$(openssl rand -hex 16)}"
@@ -126,6 +127,18 @@ fi
 log "Setting up installation directory..."
 
 mkdir -p "$INSTALL_DIR"
+
+# Clone repo if not already present (needed for Dockerfile + openwa context)
+if [ ! -f "$INSTALL_DIR/Dockerfile" ]; then
+    REPO_URL="${ANGAVU_REPO_URL:-https://github.com/ovalentine964/angavu-intelligence-backend.git}"
+    log "Cloning repository..."
+    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR/repo"
+    # Copy build context files to install dir
+    cp -r "$INSTALL_DIR/repo/"* "$INSTALL_DIR/"
+    cp -r "$INSTALL_DIR/repo/".* "$INSTALL_DIR/" 2>/dev/null || true
+    rm -rf "$INSTALL_DIR/repo"
+fi
+
 cd "$INSTALL_DIR"
 
 # ================================================================
@@ -163,7 +176,8 @@ CLICKHOUSE_USER=admin
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
 
 # === Security ===
-JWT_SECRET=${JWT_SECRET}
+JWT_SECRET_KEY=${JWT_SECRET_KEY}
+SECRET_KEY=${SECRET_KEY}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
 
 # === OpenWA (WhatsApp) ===
@@ -318,6 +332,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/certbot:/var/www/certbot:ro
     depends_on:
       - backend
     restart: unless-stopped
@@ -341,11 +356,29 @@ COMPOSE
 mkdir -p nginx/ssl
 
 cat > nginx/nginx.conf << 'NGINX'
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
 events {
     worker_connections 1024;
 }
 
 http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log /var/log/nginx/access.log main;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    client_max_body_size 10m;
+
     # Rate limiting
     limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
     limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/m;
@@ -353,26 +386,65 @@ http {
     # Upstream
     upstream backend {
         server backend:8000;
+        keepalive 32;
     }
 
-    # HTTP → HTTPS redirect (if SSL configured)
+    # ── HTTP → HTTPS redirect ──────────────────────────────
     server {
         listen 80;
         server_name _;
 
-        # Health check endpoint (no redirect)
+        # Health check (no redirect)
         location /health {
             proxy_pass http://backend;
+            proxy_set_header Host $host;
         }
 
-        # API
+        # ACME challenge for Let's Encrypt
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        # Redirect everything else to HTTPS
         location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # ── HTTPS server ───────────────────────────────────────
+    server {
+        listen 443 ssl http2;
+        server_name _;
+
+        # SSL certificates (Let's Encrypt via certbot)
+        ssl_certificate /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+        # SSL hardening
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+        ssl_prefer_server_ciphers off;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        # API
+        location /api/ {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://backend;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Connection "";
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
         }
@@ -383,6 +455,14 @@ http {
             proxy_pass http://backend;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Health check
+        location /health {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
         }
 
         # WhatsApp webhook
@@ -390,6 +470,8 @@ http {
             proxy_pass http://backend;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         # Federated learning
@@ -398,9 +480,54 @@ http {
             proxy_set_header Host $host;
             proxy_read_timeout 600s;
         }
+
+        # Default
+        location / {
+            return 404;
+        }
     }
 }
 NGINX
+
+# ================================================================
+# SSL CERTIFICATES
+# ================================================================
+log "Setting up SSL certificates..."
+mkdir -p nginx/ssl nginx/certbot
+
+if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
+    # Use Let's Encrypt with certbot
+    log "Requesting Let's Encrypt certificate for $DOMAIN..."
+    apt-get install -y -qq certbot 2>/dev/null || dnf install -y certbot 2>/dev/null || true
+
+    # Generate self-signed cert first (nginx needs something to start)
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout nginx/ssl/privkey.pem \
+        -out nginx/ssl/fullchain.pem \
+        -subj "/CN=$DOMAIN" 2>/dev/null
+
+    # Start nginx temporarily for ACME challenge
+    docker-compose up -d nginx
+    sleep 5
+
+    # Get real certificate
+    certbot certonly --webroot -w /var/www/certbot \
+        -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive \
+        --deploy-hook "cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem $INSTALL_DIR/nginx/ssl/fullchain.pem && cp /etc/letsencrypt/live/$DOMAIN/privkey.pem $INSTALL_DIR/nginx/ssl/privkey.pem && docker-compose restart nginx" \
+        2>/dev/null || warn "Certbot failed — using self-signed certificate"
+
+    # Auto-renew cron
+    (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet") | crontab -
+else
+    # Self-signed certificate for development/testing
+    log "No domain configured — generating self-signed certificate..."
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout nginx/ssl/privkey.pem \
+        -out nginx/ssl/fullchain.pem \
+        -subj "/CN=localhost" 2>/dev/null
+fi
+
+chmod 600 nginx/ssl/*.pem
 
 # ================================================================
 # GENERATE BACKUP SCRIPT
@@ -463,7 +590,8 @@ cat > /root/.angavu-credentials << EOF
 
 Database Password: ${DB_PASSWORD}
 Redis Password: ${REDIS_PASSWORD}
-JWT Secret: ${JWT_SECRET}
+JWT Secret Key: ${JWT_SECRET_KEY}
+Secret Key: ${SECRET_KEY}
 Encryption Key: ${ENCRYPTION_KEY}
 OpenWA Webhook Secret: ${OPENWA_WEBHOOK_SECRET}
 ClickHouse Password: ${CLICKHOUSE_PASSWORD}
@@ -480,12 +608,26 @@ docker-compose pull
 log "Building backend image..."
 docker-compose build --no-cache backend
 
+log "Building OpenWA image..."
+docker-compose build --no-cache openwa
+
 log "Starting all services..."
 docker-compose up -d
 
 # Wait for services to be healthy
 log "Waiting for services to start..."
 sleep 30
+
+# ================================================================
+# RUN DATABASE MIGRATIONS
+# ================================================================
+log "Running database migrations..."
+for i in 1 2 3 4 5; do
+    docker-compose exec -T backend alembic upgrade head 2>/dev/null && break
+    log "  Waiting for database to be ready (attempt $i/5)..."
+    sleep 10
+done
+log "Migrations complete."
 
 # ================================================================
 # VERIFY DEPLOYMENT

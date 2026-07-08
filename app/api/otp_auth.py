@@ -37,6 +37,7 @@ settings = get_settings()
 router = APIRouter(prefix="/auth/otp", tags=["OTP Authentication"])
 
 # In-memory OTP store (production: Redis with TTL)
+# Structure: _otps[phone] = [{code_hash, created_at, expires_at, verified, attempts}]
 _otps: dict = {}
 
 
@@ -95,8 +96,13 @@ class TokenResponse(BaseModel):
 
 
 def _generate_otp() -> str:
-    """Generate a 6-digit OTP code."""
+    """Generate a 6-digit OTP code using cryptographically secure RNG."""
     return f"{secrets.randbelow(900000) + 100000}"
+
+
+def _hash_otp(code: str) -> str:
+    """Hash OTP code with SHA-256 before storage. Never store plaintext OTPs."""
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
 def _hash_phone(phone: str) -> str:
@@ -155,14 +161,15 @@ async def request_otp(request: OTPRequest):
     code = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-    # Store OTP
+    # Store hashed OTP (never store plaintext)
     if phone not in _otps:
         _otps[phone] = []
     _otps[phone].append({
-        "code": code,
+        "code_hash": _hash_otp(code),
         "created_at": datetime.now(timezone.utc),
         "expires_at": expires_at,
         "verified": False,
+        "attempts": 0,
     })
 
     # Clean old OTPs
@@ -202,12 +209,21 @@ async def verify_otp(
     phone = request.phone.strip()
     phone_hash = _hash_phone(phone)
 
-    # Verify OTP
+    # Verify OTP using constant-time comparison on hashed codes
     otps = _otps.get(phone, [])
     valid_otp = None
+    input_hash = _hash_otp(request.code)
     for otp in reversed(otps):
         if otp["expires_at"] > datetime.now(timezone.utc) and not otp["verified"]:
-            if otp["code"] == request.code:
+            # Rate limit: max 5 verification attempts per OTP
+            otp["attempts"] = otp.get("attempts", 0) + 1
+            if otp["attempts"] > 5:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many verification attempts. Request a new OTP.",
+                )
+            # Constant-time comparison to prevent timing attacks
+            if secrets.compare_digest(otp["code_hash"], input_hash):
                 valid_otp = otp
                 break
 
@@ -276,12 +292,19 @@ async def register_with_otp(
     phone = request.phone.strip()
     phone_hash = _hash_phone(phone)
 
-    # Verify OTP
+    # Verify OTP using constant-time comparison on hashed codes
     otps = _otps.get(phone, [])
     valid_otp = None
+    input_hash = _hash_otp(request.code)
     for otp in reversed(otps):
         if otp["expires_at"] > datetime.now(timezone.utc) and not otp["verified"]:
-            if otp["code"] == request.code:
+            otp["attempts"] = otp.get("attempts", 0) + 1
+            if otp["attempts"] > 5:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many verification attempts. Request a new OTP.",
+                )
+            if secrets.compare_digest(otp["code_hash"], input_hash):
                 valid_otp = otp
                 break
 

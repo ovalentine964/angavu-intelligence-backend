@@ -60,8 +60,15 @@ async def upload_model_update(
     Privacy guarantees:
     - Device sends only anonymized correction patterns (no raw text)
     - LoRA weight deltas are encrypted client-side (Android Keystore)
-    - Differential privacy (ε=1.0) is applied server-side before aggregation
+    - Differential privacy (ε=0.1) is applied server-side before aggregation
     - Device ID is a one-way hash — server cannot identify the user
+
+    PRIVACY AUDIT NOTES:
+    - The FLUpdate schema contains NO audio fields (no ShortArray, ByteArray of audio)
+    - The only binary field is adapter_deltas (LoRA weights, not audio)
+    - correction_patterns contains only hashes and statistics, not raw text
+    - The server never receives, stores, or processes raw voice data
+    - All PII is stripped before the update reaches this endpoint
 
     The update is queued for aggregation. Once enough updates are
     collected (≥5 from the same dialect), FedAvg aggregation runs
@@ -234,6 +241,42 @@ async def fl_status(
     - Differential privacy parameters
     """
     return await _fl_service.get_status()
+
+
+# ════════════════════════════════════════════════════════════════════
+# Version Check — Lightweight polling for model updates
+# ════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/fl/check-version/{dialect}",
+    summary="Check for model updates",
+    description=(
+        "Lightweight version check for devices. "
+        "Returns whether a newer model is available without downloading it. "
+        "Devices poll this endpoint to decide when to pull the full model."
+    ),
+)
+async def check_model_version(
+    dialect: str,
+    client_version: str = "v0.0.0",
+    current_user=Depends(get_current_user),
+) -> dict:
+    """
+    Check if a newer global model is available for a dialect.
+
+    This is the push-notification mechanism: devices poll this
+    lightweight endpoint. When update_available=true, the device
+    triggers a full model download.
+
+    Args:
+        dialect: Language/dialect code
+        client_version: Device's current model version (query param)
+
+    Returns:
+        Dict with update_available, latest_version, download_url
+    """
+    return await _fl_service.check_version(dialect, client_version)
 
 
 # ════════════════════════════════════════════════════════════════════

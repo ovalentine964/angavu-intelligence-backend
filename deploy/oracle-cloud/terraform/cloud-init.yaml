@@ -1,0 +1,76 @@
+#cloud-config
+# Oracle Cloud Infrastructure — Training Loop Orchestrator
+# Angavu Intelligence Platform
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose
+  - python3-pip
+  - python3-venv
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+
+write_files:
+  - path: /opt/angavu/docker-compose.training.yml
+    content: |
+      version: "3.8"
+      services:
+        training-orchestrator:
+          image: angavu/training-loop:latest
+          container_name: angavu-training-loop
+          restart: unless-stopped
+          ports:
+            - "8001:8001"
+          environment:
+            - ANGAVU_ENV=${environment}
+            - DATABASE_URL=postgresql://angavu:${DB_PASSWORD}@training-db:5432/angavu_training
+            - REDIS_URL=redis://redis:6379/0
+            - OBJECT_STORAGE_BUCKET=angavu-model-checkpoints
+            - FL_AGGREGATION_ENDPOINT=http://fl-server:8000
+            - TRAINING_LOOP_INTERVAL_SECONDS=3600
+            - MIN_SIGNALS_FOR_TRAINING=100
+            - DP_EPSILON=1.0
+            - DP_DELTA=1e-5
+          volumes:
+            - training-data:/data
+            - model-checkpoints:/checkpoints
+          depends_on:
+            - redis
+
+        redis:
+          image: redis:7-alpine
+          container_name: angavu-training-redis
+          restart: unless-stopped
+          ports:
+            - "6379:6379"
+          volumes:
+            - redis-data:/data
+
+      volumes:
+        training-data:
+        model-checkpoints:
+        redis-data:
+
+  - path: /opt/angavu/training-loop.env
+    content: |
+      # Training Loop Environment Configuration
+      ANGAVU_ENV=${environment}
+      LOG_LEVEL=INFO
+      TRAINING_LOOP_INTERVAL_SECONDS=3600
+      MIN_SIGNALS_FOR_TRAINING=100
+      MAX_TRAINING_DURATION_SECONDS=7200
+      DP_EPSILON=1.0
+      DP_DELTA=1e-5
+      MODEL_REGISTRY_PATH=/checkpoints
+      ENABLE_WANDB=false
+
+runcmd:
+  - systemctl enable docker
+  - systemctl start docker
+  - docker pull angavu/training-loop:latest
+  - cd /opt/angavu && docker-compose -f docker-compose.training.yml up -d
+  - echo "Training loop orchestrator deployed successfully" > /opt/angavu/deploy-status.txt

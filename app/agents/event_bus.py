@@ -37,7 +37,7 @@ import os
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Any, Callable, Coroutine, Dict, List, Optional, TYPE_CHECKING
 
 import structlog
 
@@ -71,9 +71,24 @@ class EventBus:
     - Dead letter tracking for failed events
     - Stream trimming to prevent memory exhaustion
     - Event correlation for request/response patterns
+    - Horizontal scaling configuration for multi-instance deployment
+
+    Scaling:
+    - Supports multiple consumer instances via Redis consumer groups
+    - Each instance gets a unique consumer name (agent_name + instance_id)
+    - Stream sharding by event type for parallel processing
+    - Configurable max stream length and consumer group size
     """
 
-    def __init__(self, persist_events: bool = True):
+    def __init__(
+        self,
+        persist_events: bool = True,
+        instance_id: Optional[str] = None,
+        max_consumers_per_group: int = 10,
+        enable_stream_sharding: bool = False,
+        shard_count: int = 4,
+        max_stream_length: int = MAX_STREAM_LENGTH,
+    ):
         self._redis: Any = None  # aioredis.Redis | None
         self._subscriptions: Dict[str, List[str]] = defaultdict(list)
         # event_type → [agent_name, ...]
@@ -95,7 +110,19 @@ class EventBus:
         self._persist_handles: Dict[str, Any] = {}  # stream_key → file handle
         self._persisted_count: int = 0
 
-        self._logger = logger.bind(component="event_bus")
+        # Horizontal scaling configuration
+        self._instance_id = instance_id or f"instance_{id(self) % 10000:04d}"
+        self._max_consumers_per_group = max_consumers_per_group
+        self._enable_stream_sharding = enable_stream_sharding
+        self._shard_count = shard_count
+        self._consumer_name = f"{CONSUMER_GROUP}:{self._instance_id}"
+        # Configurable max stream length (from settings or caller)
+        self._max_stream_length = max_stream_length
+
+        self._logger = logger.bind(
+            component="event_bus",
+            instance_id=self._instance_id,
+        )
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -202,7 +229,7 @@ class EventBus:
                     stream_key,
                     {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
                      for k, v in event_data.items()},
-                    maxlen=MAX_STREAM_LENGTH,
+                    maxlen=self._max_stream_length,
                     approximate=True,
                 )
                 # Persist event to disk for audit/replay
@@ -226,8 +253,8 @@ class EventBus:
         # In-memory fallback — buffer for polling, no immediate dispatch
         self._pending_buffer[stream_key].append(event_data)
         # Trim to max length
-        if len(self._pending_buffer[stream_key]) > MAX_STREAM_LENGTH:
-            self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-MAX_STREAM_LENGTH:]
+        if len(self._pending_buffer[stream_key]) > self._max_stream_length:
+            self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-self._max_stream_length:]
 
         # Persist event to disk for audit/replay
         self._persist_event(stream_key, event_data)
@@ -312,13 +339,16 @@ class EventBus:
         """Pull events from Redis Streams using consumer groups."""
         from app.agents.base import AgentEvent
 
+        # For horizontal scaling, use instance-specific consumer name
+        consumer_name = f"{agent.name}:{self._instance_id}" if self._instance_id else agent.name
+
         streams = {f"{STREAM_PREFIX}{et}": ">" for et in event_types}
         results = []
 
         try:
             entries = await self._redis.xreadgroup(
                 CONSUMER_GROUP,
-                agent.name,
+                consumer_name,
                 streams,
                 count=limit,
                 block=100,  # ms — don't block forever
@@ -482,6 +512,33 @@ class EventBus:
             "dead_letters_recent": self._dead_letters[-5:],
             "persisted_count": self._persisted_count,
             "persistence_enabled": self._persist_dir is not None,
+            # Horizontal scaling info
+            "scaling": {
+                "instance_id": self._instance_id,
+                "consumer_name": self._consumer_name,
+                "max_consumers_per_group": self._max_consumers_per_group,
+                "stream_sharding_enabled": self._enable_stream_sharding,
+                "shard_count": self._shard_count,
+                "max_stream_length": self._max_stream_length,
+            },
+        }
+
+    def get_scaling_config(self) -> Dict[str, Any]:
+        """Return horizontal scaling configuration."""
+        return {
+            "instance_id": self._instance_id,
+            "consumer_group": CONSUMER_GROUP,
+            "consumer_name": self._consumer_name,
+            "max_consumers_per_group": self._max_consumers_per_group,
+            "stream_sharding": {
+                "enabled": self._enable_stream_sharding,
+                "shard_count": self._shard_count,
+            },
+            "deployment_notes": (
+                "For horizontal scaling: deploy multiple instances with unique "
+                "instance_id values. Each instance gets its own consumer in the "
+                "shared consumer group. Redis handles load distribution automatically."
+            ),
         }
 
     def get_dead_letters(self) -> List[Dict[str, Any]]:

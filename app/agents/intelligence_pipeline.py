@@ -19,7 +19,6 @@ structured intelligence products for delivery via WhatsApp.
 from __future__ import annotations
 
 import time
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -44,6 +43,137 @@ from app.agents.long_horizon import (
 from app.agents.loops import EventStore, ReActAgent
 
 logger = structlog.get_logger(__name__)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Database query helpers — replace hardcoded stub data
+# ════════════════════════════════════════════════════════════════════
+
+
+def _get_db_session():
+    """Get a database session for querying real data.
+
+    Returns a SQLAlchemy async session or None if DB is unavailable.
+    Falls back gracefully — agents return empty results rather than crashing.
+    """
+    try:
+        from app.database import async_session
+        return async_session
+    except (ImportError, Exception) as exc:
+        logger.debug("db_session_unavailable", error=str(exc))
+        return None
+
+
+async def _query_market_prices(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+    """Query real market price data from the database.
+
+    Falls back to empty structure if DB is unavailable.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"prices": {}, "data_points": 0, "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            query = select(
+                func.avg(Transaction.amount).label("avg"),
+                func.min(Transaction.amount).label("min"),
+                func.max(Transaction.amount).label("max"),
+                func.count(Transaction.id).label("count"),
+            ).where(Transaction.region == region)
+            if product:
+                query = query.where(Transaction.product_name.ilike(f"%{product}%"))
+
+            result = await session.execute(query)
+            row = result.one_or_none()
+            if row and row.count > 0:
+                return {
+                    "prices": {"avg": float(row.avg), "min": float(row.min), "max": float(row.max)},
+                    "data_points": row.count,
+                    "source": "database",
+                }
+    except Exception as exc:
+        logger.warning("market_price_query_failed", error=str(exc), region=region)
+
+    return {"prices": {}, "data_points": 0, "source": "query_failed"}
+
+
+async def _query_transaction_history(worker_id: str) -> Dict[str, Any]:
+    """Query real transaction history for credit scoring.
+
+    Falls back to empty structure if DB is unavailable.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"months_available": 0, "transactions": [], "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            query = select(
+                func.count(Transaction.id).label("total"),
+                func.avg(Transaction.amount).label("avg_amount"),
+                func.min(Transaction.created_at).label("first_txn"),
+                func.max(Transaction.created_at).label("last_txn"),
+            ).where(Transaction.user_id == worker_id)
+
+            result = await session.execute(query)
+            row = result.one_or_none()
+            if row and row.total > 0:
+                return {
+                    "total_transactions": row.total,
+                    "avg_amount": float(row.avg_amount) if row.avg_amount else 0,
+                    "first_transaction": str(row.first_txn),
+                    "last_transaction": str(row.last_txn),
+                    "source": "database",
+                }
+    except Exception as exc:
+        logger.warning("transaction_history_query_failed", error=str(exc), worker_id=worker_id)
+
+    return {"total_transactions": 0, "source": "query_failed"}
+
+
+async def _query_distribution_data(product: str) -> Dict[str, Any]:
+    """Query real distribution/coverage data from the database.
+
+    Falls back to empty structure if DB is unavailable.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"regions": [], "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            query = select(
+                Transaction.region,
+                func.count(Transaction.id).label("txn_count"),
+                func.sum(Transaction.amount).label("total_volume"),
+            ).group_by(Transaction.region)
+            if product:
+                query = query.where(Transaction.product_name.ilike(f"%{product}%"))
+
+            result = await session.execute(query)
+            rows = result.all()
+            if rows:
+                return {
+                    "regions": [
+                        {"region": r.region, "txn_count": r.txn_count, "volume": float(r.total_volume or 0)}
+                        for r in rows
+                    ],
+                    "source": "database",
+                }
+    except Exception as exc:
+        logger.warning("distribution_query_failed", error=str(exc), product=product)
+
+    return {"regions": [], "source": "query_failed"}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -86,23 +216,52 @@ class MarketDataAgent(ReActAgent):
         start = time.time()
         try:
             action = decision.action
-            data = {
+            params = decision.parameters
+            region = params.get("region", "Nairobi")
+            data: Dict[str, Any] = {
                 "action": action,
                 "status": "completed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             if "price" in action:
-                data["prices"] = {"avg": 850.0, "min": 600.0, "max": 1200.0, "trend": "increasing"}
-                data["data_points"] = 30
+                # Query real market prices from DB
+                db_prices = await _query_market_prices(region)
+                if db_prices["data_points"] > 0:
+                    data["prices"] = db_prices["prices"]
+                    data["data_points"] = db_prices["data_points"]
+                else:
+                    # DB unavailable — report empty rather than fake data
+                    data["prices"] = {"avg": None, "min": None, "max": None}
+                    data["data_points"] = 0
+                    data["source"] = "no_data_available"
+                    logger.info("market_price_no_data", region=region, action=action)
             elif "supply" in action or "demand" in action:
-                data["supply_demand"] = {"supply_index": 0.72, "demand_index": 0.85, "gap": 0.13}
+                # TODO: Wire to real supply/demand data source
+                # Currently no dedicated supply/demand table exists.
+                # When available, query: SELECT * FROM supply_demand_index WHERE region = ?
+                data["supply_demand"] = {"supply_index": None, "demand_index": None, "gap": None}
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to supply/demand data source when available"
             elif "trade" in action or "volume" in action:
-                data["trade_volume"] = {"daily_avg": 45000, "weekly_total": 315000, "trend": "stable"}
+                # Query real trade volume from DB
+                db_dist = await _query_distribution_data(params.get("product", ""))
+                if db_dist["regions"]:
+                    total_volume = sum(r["volume"] for r in db_dist["regions"])
+                    total_txns = sum(r["txn_count"] for r in db_dist["regions"])
+                    data["trade_volume"] = {"total_volume": total_volume, "total_transactions": total_txns}
+                else:
+                    data["trade_volume"] = {"total_volume": 0, "total_transactions": 0}
+                    data["source"] = "no_data_available"
             elif "competitor" in action:
-                data["competitors"] = {"count": 5, "market_share": {"leader": 0.35, "others": 0.65}}
+                # TODO: Wire to real competitor data source
+                # Currently no competitor table exists.
+                # When available, query: SELECT * FROM competitor_profiles WHERE market = ?
+                data["competitors"] = {"count": None, "market_share": {}}
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to competitor data source when available"
             else:
-                data["market_overview"] = {"status": "active", "volatility": "moderate"}
+                data["market_overview"] = {"status": "data_driven", "volatility": "unknown"}
 
             return AgentResult(
                 success=True,
@@ -148,26 +307,43 @@ class CreditAnalysisAgent(ReActAgent):
         start = time.time()
         try:
             action = decision.action
-            data = {
+            params = decision.parameters
+            worker_id = params.get("worker_id", "unknown")
+            data: Dict[str, Any] = {
                 "action": action,
                 "status": "completed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             if "history" in action or "transaction" in action:
+                # Query real transaction history from DB
+                history = await _query_transaction_history(worker_id)
                 data["transaction_history"] = {
-                    "months_available": 8,
-                    "avg_monthly_volume": 125000,
-                    "consistency_score": 0.78,
+                    "total_transactions": history["total_transactions"],
+                    "avg_amount": history.get("avg_amount", 0),
+                    "first_transaction": history.get("first_transaction"),
+                    "last_transaction": history.get("last_transaction"),
+                    "source": history["source"],
                 }
             elif "repay" in action:
-                data["repayment"] = {"on_time_rate": 0.92, "late_payments": 2, "defaults": 0}
+                # TODO: Wire to repayment data when loan tracking table exists
+                # Currently no dedicated repayment/loan table.
+                # When available: SELECT * FROM loan_repayments WHERE worker_id = ?
+                data["repayment"] = {"on_time_rate": None, "late_payments": None, "defaults": None}
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to loan repayment tracking when available"
             elif "behavior" in action:
-                data["behavioral_score"] = {"regularity": 0.85, "growth_trend": 0.12, "risk_flags": []}
+                # TODO: Wire to behavioral analytics when available
+                data["behavioral_score"] = {"regularity": None, "growth_trend": None, "risk_flags": []}
+                data["source"] = "not_implemented"
             elif "creditworthiness" in action or "credit_score" in action:
-                data["credit_score"] = {"score": 720, "rating": "good", "confidence": 0.82}
+                # TODO: Wire to Alama Score service for real credit scoring
+                # Currently AlamaScoreService exists but needs integration here
+                data["credit_score"] = {"score": None, "rating": "pending", "confidence": 0.0}
+                data["source"] = "not_wired_to_alama_score"
+                data["todo"] = "Wire to AlamaScoreService.compute_score()"
             else:
-                data["credit_overview"] = {"risk_level": "moderate", "creditworthy": True}
+                data["credit_overview"] = {"risk_level": "unknown", "creditworthy": None}
 
             return AgentResult(
                 success=True,
@@ -213,39 +389,54 @@ class DistributionAgent(ReActAgent):
         start = time.time()
         try:
             action = decision.action
-            data = {
+            params = decision.parameters
+            product = params.get("product", "")
+            data: Dict[str, Any] = {
                 "action": action,
                 "status": "completed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             if "mapping" in action or "coverage" in action:
-                data["coverage"] = {
-                    "regions_covered": 12,
-                    "regions_total": 47,
-                    "coverage_pct": 25.5,
-                    "underserved_regions": ["Turkana", "Marsabit", "Wajir"],
-                }
+                # Query real distribution coverage from DB
+                dist_data = await _query_distribution_data(product)
+                if dist_data["regions"]:
+                    regions_covered = len(dist_data["regions"])
+                    data["coverage"] = {
+                        "regions_covered": regions_covered,
+                        "regions_total": 47,  # Kenya has 47 counties
+                        "coverage_pct": round(regions_covered / 47 * 100, 1),
+                        "regions": dist_data["regions"],
+                    }
+                else:
+                    data["coverage"] = {"regions_covered": 0, "regions_total": 47, "coverage_pct": 0.0}
+                    data["source"] = "no_data_available"
             elif "logistics" in action:
-                data["logistics"] = {
-                    "avg_delivery_time_days": 3.2,
-                    "cost_per_unit": 45.0,
-                    "bottlenecks": ["cold_chain", "last_mile"],
-                }
+                # TODO: Wire to logistics data source when available
+                # Currently no dedicated logistics/warehouse table.
+                data["logistics"] = {"avg_delivery_time_days": None, "cost_per_unit": None, "bottlenecks": []}
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to logistics tracking system when available"
             elif "demand" in action:
-                data["demand_map"] = {
-                    "high_demand": ["Nairobi", "Mombasa", "Kisumu"],
-                    "emerging": ["Nakuru", "Eldoret"],
-                    "untapped": ["Garissa", "Lamu"],
-                }
+                # Query demand signals from transaction data
+                dist_data = await _query_distribution_data(product)
+                if dist_data["regions"]:
+                    # Sort regions by volume to identify high-demand areas
+                    sorted_regions = sorted(dist_data["regions"], key=lambda r: r["volume"], reverse=True)
+                    data["demand_map"] = {
+                        "high_demand": [r["region"] for r in sorted_regions[:5]],
+                        "total_regions_with_data": len(sorted_regions),
+                    }
+                else:
+                    data["demand_map"] = {"high_demand": [], "total_regions_with_data": 0}
+                    data["source"] = "no_data_available"
             elif "expansion" in action:
-                data["expansion"] = {
-                    "priority_regions": ["Nakuru", "Eldoret", "Machakos"],
-                    "estimated_investment": 2500000,
-                    "roi_timeline_months": 18,
-                }
+                # TODO: Wire to expansion planning service when available
+                data["expansion"] = {"priority_regions": [], "estimated_investment": None, "roi_timeline_months": None}
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to expansion planning service when available"
             else:
-                data["distribution_overview"] = {"gaps_identified": 5, "opportunities": 3}
+                data["distribution_overview"] = {"gaps_identified": None, "opportunities": None}
 
             return AgentResult(
                 success=True,
@@ -291,44 +482,54 @@ class CompetitorAgent(ReActAgent):
         start = time.time()
         try:
             action = decision.action
-            data = {
+            params = decision.parameters
+            market = params.get("market", "Kenya")
+            data: Dict[str, Any] = {
                 "action": action,
                 "status": "completed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
+            # All competitor intelligence requires external data sources
+            # that don't exist yet. Return clear TODOs rather than fake data.
             if "mapping" in action:
                 data["competitor_map"] = {
-                    "direct_competitors": 3,
-                    "indirect_competitors": 5,
-                    "new_entrants": 1,
+                    "direct_competitors": None,
+                    "indirect_competitors": None,
+                    "new_entrants": None,
                 }
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to competitor profiling service or web scraping pipeline"
             elif "pricing" in action:
                 data["pricing_analysis"] = {
-                    "our_avg_price": 850,
-                    "market_avg": 920,
-                    "price_position": "below_average",
-                    "recommendation": "increase_pricing_5pct",
+                    "our_avg_price": None,
+                    "market_avg": None,
+                    "price_position": "unknown",
                 }
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to market pricing data source"
             elif "feature" in action:
                 data["feature_comparison"] = {
-                    "our_features": 15,
-                    "leader_features": 22,
-                    "gap_features": ["multi_language", "offline_mode", "voice_input"],
+                    "our_features": None,
+                    "leader_features": None,
+                    "gap_features": [],
                 }
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to competitor feature database"
             elif "positioning" in action:
                 data["positioning"] = {
-                    "our_position": "challenger",
-                    "market_leader": "CompetitorA",
+                    "our_position": None,
+                    "market_leader": None,
                     "differentiator": "informal_economy_focus",
                 }
+                data["source"] = "not_implemented"
             elif "threat" in action:
-                data["threats"] = [
-                    {"source": "CompetitorA", "level": "high", "type": "market_share"},
-                    {"source": "NewEntrant", "level": "medium", "type": "innovation"},
-                ]
+                data["threats"] = []
+                data["source"] = "not_implemented"
+                data["todo"] = "Wire to threat intelligence feed"
             else:
-                data["competitor_overview"] = {"total_competitors": 8, "threat_level": "moderate"}
+                data["competitor_overview"] = {"total_competitors": None, "threat_level": "unknown"}
+                data["source"] = "not_implemented"
 
             return AgentResult(
                 success=True,
@@ -527,6 +728,7 @@ class CompetitorPlanner(TaskPlanner):
 
 
 class MarketResultAggregator(ResultAggregator):
+    """Aggregates market analysis results from multiple sub-tasks."""
     def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         market_data = {}
         for tid, td in results.items():
@@ -544,6 +746,7 @@ class MarketResultAggregator(ResultAggregator):
 
 
 class CreditResultAggregator(ResultAggregator):
+    """Aggregates credit scoring results from multiple sub-tasks."""
     def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         credit_data = {}
         for tid, td in results.items():
@@ -561,6 +764,7 @@ class CreditResultAggregator(ResultAggregator):
 
 
 class DistributionResultAggregator(ResultAggregator):
+    """Aggregates distribution gap analysis results from multiple sub-tasks."""
     def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         dist_data = {}
         for tid, td in results.items():

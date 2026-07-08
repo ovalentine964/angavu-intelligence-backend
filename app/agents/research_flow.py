@@ -83,6 +83,7 @@ class ResearchScope:
         self.sources = sources or []
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize research scope to dictionary."""
         return {
             "topic": self.topic,
             "region": self.region,
@@ -115,6 +116,7 @@ class ResearchResult:
         self.created_at = time.time()
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize research result to dictionary."""
         return {
             "result_id": self.result_id,
             "scope": self.scope.to_dict(),

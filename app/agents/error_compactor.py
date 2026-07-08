@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import structlog
 
@@ -53,6 +53,7 @@ class CompactedError:
 
     @property
     def age_seconds(self) -> float:
+        """Seconds since this error was first seen."""
         return time.time() - self.first_seen
 
     @property

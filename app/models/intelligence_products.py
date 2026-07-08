@@ -626,3 +626,46 @@ class DistributionGapReport(Base):
         Index("idx_distgap_product_region", "product_category", "region"),
         Index("idx_distgap_created", "created_at"),
     )
+
+
+# =========================================================================
+# 7. Alama Score — Outcome Tracking for Calibration
+# =========================================================================
+
+
+class AlamaScoreOutcome(Base):
+    """
+    Tracks actual credit outcomes (repayment/default) for Alama Score calibration.
+
+    This implements the feedback loop:
+    1. Score predicts default probability
+    2. Loan is issued
+    3. Outcome is observed
+    4. Outcome updates Bayesian priors
+    5. Updated priors improve future scoring
+
+    Academic Foundation:
+    - STA 341 (Theory of Estimation): Bayesian updating
+    - STA 346 (Quality Control): Calibration monitoring
+    - ECO 209 (Money and Banking): Credit risk validation
+    """
+
+    __tablename__ = "alama_score_outcomes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_hash = Column(String(128), nullable=False, index=True)
+    outcome_type = Column(
+        Enum("repayment", "default", name="alama_outcome_enum"),
+        nullable=False,
+    )
+    amount = Column(Float, nullable=True)
+    predicted_default_prob = Column(Float, nullable=True)
+    alama_score_at_issue = Column(Integer, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_alama_outcome_business", "business_hash"),
+        Index("idx_alama_outcome_type", "outcome_type"),
+        Index("idx_alama_outcome_recorded", "recorded_at"),
+    )

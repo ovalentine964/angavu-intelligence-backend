@@ -17,9 +17,8 @@ Tier: 1 (Core) — started last, monitors everything.
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import structlog
 
@@ -52,11 +51,13 @@ class AgentMetrics:
 
     @property
     def success_rate(self) -> float:
+        """Calculate agent success rate as a fraction."""
         if self.total_requests == 0:
             return 0.0
         return self.successful_requests / self.total_requests
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize metrics to dictionary for API response."""
         return {
             "agent_name": self.agent_name,
             "total_requests": self.total_requests,
@@ -79,6 +80,7 @@ class ConflictRecord:
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize conflict record to dictionary."""
         return {
             "conflict_id": self.conflict_id,
             "agents_involved": self.agents_involved,

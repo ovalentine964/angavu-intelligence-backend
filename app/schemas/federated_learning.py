@@ -8,7 +8,8 @@ data classes on the device side.
 Privacy model:
 - Devices send anonymized correction patterns (no raw text/audio)
 - LoRA adapter deltas are encrypted client-side
-- Differential privacy is applied before upload (ε=1.0, δ=1e-5)
+- Differential privacy is applied with consistent ε=0.1 (client + server)
+  to ensure the composed privacy budget is ε_total ≤ 0.2
 """
 
 from datetime import datetime, timezone
@@ -135,9 +136,12 @@ class FLStatusResponse(BaseModel):
     aggregation_round: int = Field(0)
     differential_privacy: Dict[str, Any] = Field(
         default_factory=lambda: {
-            "epsilon": 1.0,
+            "epsilon": 0.1,
             "delta": 1e-5,
             "mechanism": "gaussian",
+            "client_epsilon": 0.1,
+            "server_epsilon": 0.1,
+            "composed_budget": 0.2,
         },
     )
 

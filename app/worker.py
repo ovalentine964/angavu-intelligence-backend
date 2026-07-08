@@ -9,9 +9,7 @@ training, data aggregation, etc.).
 """
 
 import asyncio
-import logging
 import signal
-import sys
 
 import structlog
 

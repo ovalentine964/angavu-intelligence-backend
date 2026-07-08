@@ -1,0 +1,79 @@
+#cloud-config
+# Oracle Cloud Infrastructure — FL Aggregation Server
+# Angavu Intelligence Platform
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose
+  - python3-pip
+  - python3-venv
+  - nginx
+
+write_files:
+  - path: /opt/angavu/docker-compose.fl.yml
+    content: |
+      version: "3.8"
+      services:
+        fl-aggregation:
+          image: angavu/fl-server:latest
+          container_name: angavu-fl-server
+          restart: unless-stopped
+          ports:
+            - "8000:8000"
+          environment:
+            - ANGAVU_ENV=${environment}
+            - FL_PORT=8000
+            - DP_EPSILON=1.0
+            - DP_DELTA=1e-5
+            - MIN_UPDATES_FOR_AGGREGATION=5
+            - MAX_UPDATES_IN_ROUND=1000
+            - L2_CLIP_NORM=5.0
+            - SECURE_AGGREGATION_ENABLED=true
+            - OBJECT_STORAGE_BUCKET=angavu-model-checkpoints
+          volumes:
+            - fl-state:/state
+            - model-store:/models
+          deploy:
+            resources:
+              limits:
+                memory: 8G
+
+      volumes:
+        fl-state:
+        model-store:
+
+  - path: /etc/nginx/sites-available/fl-aggregation
+    content: |
+      server {
+          listen 443 ssl http2;
+          server_name fl.angavu.com;
+
+          ssl_certificate /etc/letsencrypt/live/fl.angavu.com/fullchain.pem;
+          ssl_certificate_key /etc/letsencrypt/live/fl.angavu.com/privkey.pem;
+
+          location / {
+              proxy_pass http://localhost:8000;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_read_timeout 300s;
+              client_max_body_size 50M;
+          }
+
+          location /health {
+              proxy_pass http://localhost:8000/health;
+              access_log off;
+          }
+      }
+
+runcmd:
+  - systemctl enable docker
+  - systemctl start docker
+  - docker pull angavu/fl-server:latest
+  - cd /opt/angavu && docker-compose -f docker-compose.fl.yml up -d
+  - ln -sf /etc/nginx/sites-available/fl-aggregation /etc/nginx/sites-enabled/
+  - systemctl restart nginx

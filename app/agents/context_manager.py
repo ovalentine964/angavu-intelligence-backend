@@ -56,6 +56,7 @@ class ContextItem:
 
     @property
     def age_seconds(self) -> float:
+        """Seconds since this context item was created."""
         return time.time() - self.created_at
 
     @property

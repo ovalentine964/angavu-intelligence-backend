@@ -31,10 +31,8 @@ Architecture:
 
 from __future__ import annotations
 
-import asyncio
 import time
 import uuid
-from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
@@ -97,6 +95,7 @@ class SubTaskDefinition:
     tags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize sub-task definition to dictionary."""
         return {
             "subtask_id": self.subtask_id,
             "name": self.name,
@@ -127,6 +126,7 @@ class DecompositionPlan:
 
     @property
     def total_subtasks(self) -> int:
+        """Total number of sub-tasks in this plan."""
         return len(self.subtasks)
 
     @property
@@ -137,6 +137,7 @@ class DecompositionPlan:
         return len(self.subtasks) / len(self.execution_batches)
 
     def get_subtask(self, subtask_id: str) -> Optional[SubTaskDefinition]:
+        """Find a sub-task definition by its ID."""
         for st in self.subtasks:
             if st.subtask_id == subtask_id:
                 return st

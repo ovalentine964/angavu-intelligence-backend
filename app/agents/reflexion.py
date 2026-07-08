@@ -58,6 +58,7 @@ class Critique:
     revision_plan: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize critique to dictionary."""
         return {
             "critique_id": self.critique_id,
             "score": self.score,

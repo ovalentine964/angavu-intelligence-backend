@@ -1,38 +1,83 @@
-node_modules/
-npm-debug.log*
-.env
-.env.local
-logs/
-*.log
+# ═══════════════════════════════════════════════════════════════
+# Angavu Intelligence Backend — .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
 dist/
 build/
-coverage/
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-openwa-data/
-session-data/
-*.session.json
+eggs/
+parts/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# === Virtual Environments ===
+.venv/
+venv/
+ENV/
+env/
+
+# === Environment & Secrets ===
+.env
+.env.local
+.env.production
+.env.staging
+
+# === Database ===
+*.sqlite
+*.db
+*.sqlite3
+
+# === Logs ===
+logs/
+*.log
+npm-debug.log*
+
+# === Docker ===
 docker-compose.override.yml
 tmp/
 temp/
-*.sqlite
-*.db
+openwa-data/
+session-data/
+*.session.json
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-*.egg-info/
+# === IDE / Editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
 
-# Build
-dist/
-build/
+# === OS ===
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Env
-.env
+# === Node.js (OpenWA) ===
+node_modules/
+npm-debug.log*
 
-# Logs
-*.log
+# === SSL / Certificates ===
+*.pem
+*.key
+*.crt
+nginx/ssl/
+
+# === Deployment ===
+/opt/angavu/

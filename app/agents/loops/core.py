@@ -16,14 +16,12 @@ event persistence, and supervision capabilities.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import time
 import uuid
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Type
+from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
 import structlog
 

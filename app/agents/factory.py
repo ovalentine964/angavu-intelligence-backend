@@ -18,13 +18,12 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import structlog
 
-from app.agents.base import AgentEvent, BiasharaAgent, EventType
+from app.agents.base import BiasharaAgent, EventType
 from app.agents.event_bus import EventBus
 from app.agents.observability import AgentTracer
 from app.agents.implementations import (
@@ -145,8 +144,14 @@ class AgentFactory:
         """
         self._logger.info("creating_agent_infrastructure_v2")
 
-        # 1. EventBus
-        event_bus = EventBus()
+        # Load scaling config from settings
+        from app.config import get_settings
+        settings = get_settings()
+
+        # 1. EventBus with scaling config
+        event_bus = EventBus(
+            max_consumers_per_group=settings.AGENT_MAX_CONCURRENT // 5,
+        )
         await event_bus.connect()
         self._logger.info("event_bus_ready", mode=event_bus.get_stats()["mode"])
 
@@ -174,6 +179,23 @@ class AgentFactory:
         report_generator = ReportGeneratorAgent()
         self_evolution = SelfEvolutionAgent()
 
+        # Wire real services into agents (when available)
+        try:
+            from app.services.intelligence.soko_pulse import SokoPulseService
+            soko_pulse = SokoPulseService()
+            intelligence_generator.set_soko_pulse(soko_pulse)
+            self._logger.info("soko_pulse_wired_to_agent")
+        except (ImportError, Exception) as exc:
+            self._logger.info("soko_pulse_not_available", error=str(exc))
+
+        try:
+            from app.services.intelligence.alama_score import AlamaScoreService
+            alama_score = AlamaScoreService()
+            intelligence_generator.set_alama_score(alama_score)
+            self._logger.info("alama_score_wired_to_agent")
+        except (ImportError, Exception) as exc:
+            self._logger.info("alama_score_not_available", error=str(exc))
+
         core_agents = [
             transaction_processor,
             intelligence_generator,
@@ -185,11 +207,13 @@ class AgentFactory:
         domain_agents = self._create_domain_agents()
         self._logger.info("domain_agents_created", count=len(domain_agents))
 
-        # 7. Create Tier 1: MetaAgent
+        # 7. Create Tier 1: MetaAgent + New Agents
         meta_agent = self._create_meta_agent()
+        new_agents = self._create_new_agents()
+        self._logger.info("new_agents_created", count=len(new_agents))
 
         # 8. Wire all agents together
-        all_agents = core_agents + domain_agents + utility_agents + [meta_agent]
+        all_agents = core_agents + domain_agents + utility_agents + new_agents + [meta_agent]
 
         # Inject infrastructure into all agents
         for agent in all_agents:
@@ -201,8 +225,13 @@ class AgentFactory:
             if agent.name != "MetaAgent":
                 meta_agent.register_agent(agent)
 
+        # 9b. Wire SubAgentCapableMixin agents to SubAgentOrchestrator
+        for agent in all_agents:
+            if hasattr(agent, 'get_or_create_orchestrator'):
+                agent.get_or_create_orchestrator()
+
         # 10. Subscribe agents to event types
-        await self._subscribe_agents(event_bus, core_agents, domain_agents, meta_agent)
+        await self._subscribe_agents(event_bus, core_agents, domain_agents + new_agents, meta_agent)
 
         # 11. Wire reflect→behavior feedback loops
         self._wire_reflect_loops(core_agents)
@@ -237,7 +266,7 @@ class AgentFactory:
             tracer=tracer,
             agents=core_agents,
             meta_agent=meta_agent,
-            domain_agents=domain_agents,
+            domain_agents=domain_agents + new_agents,
             utility_agents=utility_agents,
             broadcast_protocol=broadcast_protocol,
             p2p_protocol=p2p_protocol,
@@ -273,7 +302,7 @@ class AgentFactory:
 
         self._infrastructure = infrastructure
         total_agents = (
-            len(core_agents) + len(domain_agents) + len(utility_agents) + 1
+            len(core_agents) + len(domain_agents) + len(new_agents) + len(utility_agents) + 1
             + len(infrastructure.financial_agents)
         )
         self._logger.info(
@@ -418,6 +447,22 @@ class AgentFactory:
             SyncAgent(),
         ]
 
+    def _create_new_agents(self) -> List[BiasharaAgent]:
+        """Create newly identified agents: Voice, Compliance, Security, Onboarding."""
+        from app.agents.implementations_extra import (
+            VoicePipelineAgent,
+            ComplianceAgent,
+            SecurityAgent,
+            OnboardingAgent,
+        )
+
+        return [
+            VoicePipelineAgent(),
+            ComplianceAgent(),
+            SecurityAgent(),
+            OnboardingAgent(),
+        ]
+
     # ── Internal wiring ────────────────────────────────────────────
 
     async def _subscribe_agents(
@@ -456,14 +501,46 @@ class AgentFactory:
             if event_types:
                 await event_bus.subscribe(agent, event_types)
 
-        # Domain agents subscribe to domain analysis requests
-        domain_event_types = [
-            EventType.DOMAIN_ANALYSIS_REQUESTED,
-            EventType.INTELLIGENCE_REQUESTED,
-            EventType.TRANSACTION_PROCESSED,
-        ]
+        # New agent subscriptions (Voice, Compliance, Security, Onboarding)
+        new_subscription_map = {
+            "VoicePipeline": [
+                EventType.VOICE_INPUT_RECEIVED,
+                EventType.REPORT_GENERATED,
+            ],
+            "ComplianceAgent": [
+                EventType.COMPLIANCE_CHECK,
+                EventType.TRANSACTION_PROCESSED,
+                EventType.INTELLIGENCE_GENERATED,
+                EventType.REPORT_GENERATED,
+                EventType.DOMAIN_ANALYSIS_COMPLETED,
+            ],
+            "SecurityAgent": [
+                EventType.SECURITY_SCAN,
+                EventType.TRANSACTION_PROCESSED,
+                EventType.PIPELINE_ERROR,
+                EventType.VOICE_INPUT_RECEIVED,
+            ],
+            "OnboardingAgent": [
+                EventType.ONBOARDING_STARTED,
+                EventType.ONBOARDING_STEP_COMPLETED,
+                EventType.ONBOARDING_VERIFICATION,
+                EventType.ONBOARDING_FEEDBACK,
+            ],
+        }
+
         for agent in domain_agents:
-            await event_bus.subscribe(agent, domain_event_types)
+            if agent.name in new_subscription_map:
+                await event_bus.subscribe(agent, new_subscription_map[agent.name])
+            else:
+                # Standard domain agent subscriptions
+                domain_event_types = [
+                    EventType.DOMAIN_ANALYSIS_REQUESTED,
+                    EventType.INTELLIGENCE_REQUESTED,
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.COMPLIANCE_CHECK,
+                    EventType.SECURITY_SCAN,
+                ]
+                await event_bus.subscribe(agent, domain_event_types)
 
         # MetaAgent subscribes to system-wide events
         meta_event_types = [
@@ -474,6 +551,12 @@ class AgentFactory:
             EventType.PIPELINE_ERROR,
             EventType.DOMAIN_ANALYSIS_COMPLETED,
             EventType.MARKET_ALERT,
+            # New event types for MetaAgent oversight
+            EventType.COMPLIANCE_VIOLATION,
+            EventType.SECURITY_ALERT,
+            EventType.SECURITY_INCIDENT,
+            EventType.ONBOARDING_COMPLETED,
+            EventType.VOICE_TRANSCRIBED,
         ]
         await event_bus.subscribe(meta_agent, meta_event_types)
 

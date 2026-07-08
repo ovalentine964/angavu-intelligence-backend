@@ -127,6 +127,26 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── OpenWA — WhatsApp Automation ──────────────────────────────
+  openwa:
+    build:
+      context: ../..
+      dockerfile: openwa/Dockerfile
+    container_name: angavu-openwa
+    environment:
+      - WEBHOOK_URL=http://app:8000/webhooks/whatsapp
+      - WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET:-changeme}
+    volumes:
+      - openwa-data:/app/data
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   # ── llama.cpp Server (Qwen 2.5 7B Q4_K_M) ─────────────────────
   llama-cpp:
     image: ghcr.io/ggerganov/llama.cpp:server
@@ -169,4 +189,5 @@ volumes:
   postgres-data:
   redis-data:
   app-data:
+  openwa-data:
   llama-models:

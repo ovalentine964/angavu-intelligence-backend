@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import structlog
 
@@ -280,12 +280,14 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         self._alama_score = service
 
     async def observe(self, event: AgentEvent) -> None:
-        """Process transaction-processed events and market alerts."""
+        """Process transaction-processed events, market alerts, and outcome feedback."""
         await super().observe(event)
         if event.event_type not in (
             EventType.TRANSACTION_PROCESSED,
             EventType.INTELLIGENCE_REQUESTED,
             EventType.MARKET_ALERT,
+            EventType.FEEDBACK_RECEIVED,
+            EventType.CUSTOMER_FEEDBACK_RECEIVED,
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
@@ -297,16 +299,35 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         - Which intelligence products are relevant (Soko Pulse, Alama Score)
         - Whether to generate alerts (anomalies detected)
         - Priority ordering of intelligence generation
+        - Process credit outcome feedback for Alama Score calibration
         """
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         user_id = payload.get("user_id", "unknown")
+        event_type = event_data.get("event_type", "")
+
+        # Handle credit outcome feedback for Alama Score calibration
+        if event_type in (
+            EventType.FEEDBACK_RECEIVED.value,
+            EventType.CUSTOMER_FEEDBACK_RECEIVED.value,
+        ):
+            outcome = payload.get("outcome", payload.get("feedback_type", ""))
+            if outcome in ("repayment", "default"):
+                return AgentDecision(
+                    action="record_credit_outcome",
+                    parameters={
+                        "user_id": user_id,
+                        "outcome": outcome,
+                        "amount": payload.get("amount"),
+                    },
+                    confidence=0.95,
+                    reasoning=f"Recording credit outcome '{outcome}' for user {user_id} to calibrate Alama Score",
+                )
 
         # Determine which intelligence products to generate
         products = ["market_intelligence"]  # always generate
 
         # Check if credit scoring is needed
-        # (in production, check if worker has enough transaction history)
         recent = self.memory.recall_recent(10)
         has_credit_history = any(
             r.get("event_type") == "transaction.processed"
@@ -350,7 +371,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
 
     async def act(self, decision: AgentDecision) -> AgentResult:
         """
-        Generate intelligence products.
+        Generate intelligence products or record credit outcomes.
 
         Calls real SokoPulseService and AlamaScoreService when available.
         Always emits downstream events for ReportGenerator.
@@ -358,7 +379,46 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         start = time.time()
 
         try:
+            action = decision.action
             user_id = decision.parameters.get("user_id", "unknown")
+
+            # Handle credit outcome recording (Alama Score feedback loop)
+            if action == "record_credit_outcome":
+                outcome = decision.parameters.get("outcome", "")
+                amount = decision.parameters.get("amount")
+
+                if self._alama_score:
+                    try:
+                        result = await self._alama_score.record_outcome(
+                            business_id=user_id,
+                            outcome=outcome,
+                            amount=amount,
+                        )
+                        self._logger.info(
+                            "alama_outcome_recorded",
+                            user_id=user_id,
+                            outcome=outcome,
+                        )
+                    except Exception as svc_exc:
+                        self._logger.warning(
+                            "alama_outcome_failed",
+                            error=str(svc_exc),
+                        )
+                        result = {"error": str(svc_exc)}
+                else:
+                    result = {"status": "alama_score_not_available"}
+
+                return AgentResult(
+                    success=True,
+                    data={
+                        "action": "record_credit_outcome",
+                        "user_id": user_id,
+                        "outcome": outcome,
+                        "result": result,
+                    },
+                    duration_ms=(time.time() - start) * 1000,
+                )
+
             products = decision.parameters.get("products", [])
 
             # Call real services when available

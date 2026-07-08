@@ -64,6 +64,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that provides a database session.
 
+    Only commits when there are pending write operations (dirty/new/deleted objects).
+    Read-only endpoints will not trigger an unnecessary commit.
+
     Usage in endpoints:
         @router.get("/example")
         async def example(db: AsyncSession = Depends(get_db)):
@@ -75,7 +78,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
         try:
             yield session
-            await session.commit()
+            # Only commit if there are pending changes (write operations).
+            # This avoids unnecessary commits on read-only endpoints.
+            if session.dirty or session.new or session.deleted:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

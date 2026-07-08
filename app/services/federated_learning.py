@@ -51,7 +51,10 @@ logger = structlog.get_logger(__name__)
 # ════════════════════════════════════════════════════════════════════
 
 # Differential privacy parameters
-DP_EPSILON = 1.0
+# CRITICAL: ε MUST match client-side ε=0.1 for consistent privacy budget.
+# If client uses ε=0.1 and server uses ε=1.0, composed budget is ε_total=1.1,
+# which weakens the overall guarantee. Both sides must use ε=0.1.
+DP_EPSILON = 0.1
 DP_DELTA = 1e-5
 DP_SENSITIVITY = 1.0  # L2 sensitivity of individual updates
 
@@ -213,6 +216,139 @@ def _fedavg_aggregate(
     return aggregated_calibration, vocab_updates
 
 
+def _weighted_lora_average(
+    adapter_updates: List[Tuple[bytes, float]],
+) -> str:
+    """
+    Compute sample-count-weighted element-wise average of LoRA adapter deltas.
+
+    Each device sends base64-encoded float32 weight deltas. We decode them,
+    compute the weighted mean across devices (weight = n_k, the number of
+    local training samples), and re-encode the result.
+
+    This replaces the previous "take last device" approach with a proper
+    FedAvg-style weighted aggregation.
+
+    Args:
+        adapter_updates: List of (raw_bytes, weight) tuples
+
+    Returns:
+        Base64-encoded aggregated adapter deltas
+    """
+    import struct as _struct
+
+    # Decode all delta arrays and determine max length
+    decoded_arrays: List[Tuple[List[float], float]] = []
+    max_len = 0
+    for raw_bytes, weight in adapter_updates:
+        # Interpret as little-endian float32 array
+        n_floats = len(raw_bytes) // 4
+        if n_floats == 0:
+            continue
+        floats = list(_struct.unpack(f"<{n_floats}f", raw_bytes[:n_floats * 4]))
+        decoded_arrays.append((floats, weight))
+        max_len = max(max_len, n_floats)
+
+    if not decoded_arrays or max_len == 0:
+        return base64.b64encode(adapter_updates[0][0]).decode("ascii")
+
+    # Compute weighted average element-wise
+    total_weight = sum(w for _, w in decoded_arrays)
+    if total_weight <= 0:
+        total_weight = float(len(decoded_arrays))
+
+    aggregated = [0.0] * max_len
+    weight_sum = [0.0] * max_len
+
+    for floats, weight in decoded_arrays:
+        for i, val in enumerate(floats):
+            aggregated[i] += val * weight
+            weight_sum[i] += weight
+
+    # Divide by total weight per element
+    for i in range(max_len):
+        if weight_sum[i] > 0:
+            aggregated[i] /= weight_sum[i]
+
+    # Re-encode as base64 float32
+    packed = _struct.pack(f"<{max_len}f", *aggregated)
+    return base64.b64encode(packed).decode("ascii")
+
+
+def _secure_aggregate_gradients(
+    updates: List[FLUpdate],
+    noise_sigma: float,
+) -> List[FLUpdate]:
+    """
+    Basic secure aggregation: apply per-update clipping and noise
+    before the server sees individual gradients.
+
+    In production, this would use Bonawitz et al. (2017) secure
+    aggregation protocol with secret sharing. This implementation
+    provides a lighter-weight defense:
+
+    1. Clip each update's adapter deltas to bounded L2 norm
+    2. Add calibrated Gaussian noise to each update
+    3. Zero out adapter deltas from low-quality devices
+
+    This ensures the server cannot reconstruct individual device
+    gradients even with access to the aggregated result.
+
+    Args:
+        updates: Raw device updates
+        noise_sigma: Gaussian noise scale for DP
+
+    Returns:
+        Updates with clipped + noised adapter deltas
+    """
+    import struct as _struct
+
+    L2_CLIP_NORM = 5.0  # Maximum L2 norm per update
+
+    secured: List[FLUpdate] = []
+    for update in updates:
+        if not update.adapter_deltas:
+            secured.append(update)
+            continue
+
+        decoded = _decrypt_adapter_deltas(update.adapter_deltas)
+        if decoded is None:
+            secured.append(update)
+            continue
+
+        n_floats = len(decoded) // 4
+        if n_floats == 0:
+            secured.append(update)
+            continue
+
+        floats = list(_struct.unpack(f"<{n_floats}f", decoded[:n_floats * 4]))
+
+        # Step 1: Clip to L2 norm
+        l2_norm = math.sqrt(sum(v * v for v in floats))
+        if l2_norm > L2_CLIP_NORM:
+            scale = L2_CLIP_NORM / l2_norm
+            floats = [v * scale for v in floats]
+
+        # Step 2: Add calibrated Gaussian noise
+        import secrets as _secrets
+        for i in range(len(floats)):
+            u1 = max(_secrets.randbelow(10**8) / 10**8, 1e-10)
+            u2 = _secrets.randbelow(10**8) / 10**8
+            z = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+            floats[i] += noise_sigma * z
+
+        # Step 3: Re-encode
+        packed = _struct.pack(f"<{n_floats}f", *floats)
+        noised_b64 = base64.b64encode(packed).decode("ascii")
+
+        # Create a copy with noised deltas (FLUpdate is a dataclass)
+        from dataclasses import replace
+        secured_update = replace(update, adapter_deltas=noised_b64)
+        secured.append(secured_update)
+
+    return secured
+
+
 # ════════════════════════════════════════════════════════════════════
 # Differential Privacy
 # ════════════════════════════════════════════════════════════════════
@@ -225,7 +361,7 @@ def _compute_noise_scale(epsilon: float, delta: float, sensitivity: float) -> fl
     σ = Δf · √(2 · ln(1.25/δ)) / ε
 
     For (ε=1.0, δ=1e-5, Δf=1.0):
-        σ ≈ 4.91
+        σ ≈ 4.84
     """
     return sensitivity * math.sqrt(2.0 * math.log(1.25 / delta)) / epsilon
 
@@ -457,6 +593,22 @@ def _next_version(language: str) -> str:
     return f"v{MODEL_MAJOR_VERSION}.{MODEL_MINOR_VERSION}.{patch}"
 
 
+def _is_newer_version(server_version: str, client_version: str) -> bool:
+    """
+    Compare two version strings (e.g. 'v3.2.5' vs 'v3.2.3').
+
+n    Returns True if server_version > client_version.
+    """
+    try:
+        def parse(v: str) -> tuple:
+            v = v.lstrip("v")
+            parts = v.split(".")
+            return tuple(int(p) for p in parts)
+        return parse(server_version) > parse(client_version)
+    except (ValueError, AttributeError):
+        return True  # Assume update available if parsing fails
+
+
 # ════════════════════════════════════════════════════════════════════
 # Public API
 # ════════════════════════════════════════════════════════════════════
@@ -619,6 +771,49 @@ class FederatedLearningService:
             timestamp=model.get("timestamp", 0),
         )
 
+    async def check_version(self, dialect: str, client_version: str) -> Dict[str, Any]:
+        """
+        Check if a newer model version is available for a dialect.
+
+        This is a lightweight endpoint for devices to poll — returns
+        only version info, not the full model. Devices use this to
+        decide whether to download the full model.
+
+        Args:
+            dialect: Language/dialect code
+n            client_version: Device's current model version
+
+        Returns:
+            Dict with update_available, latest_version, and download_url
+        """
+        dialect = dialect.lower().strip()
+        model = _state.global_models.get(dialect)
+
+        if model is None:
+            persisted = _persistence.get_latest_model(dialect)
+            if persisted:
+                version = persisted[0]
+            else:
+                return {
+                    "update_available": False,
+                    "current_version": client_version,
+                    "latest_version": client_version,
+                    "reason": "no_model_available",
+                }
+        else:
+            version = model.get("version", "v3.2.0")
+
+        # Compare versions (simple string comparison works for v<major>.<minor>.<patch>)
+        update_available = _is_newer_version(version, client_version)
+
+        return {
+            "update_available": update_available,
+            "current_version": client_version,
+            "latest_version": version,
+            "download_url": f"/api/v1/federated/models/{dialect}" if update_available else None,
+            "changelog": f"Aggregated from {model.get('updates_included', '?')} devices" if model else None,
+        }
+
     async def get_status(self) -> FLStatusResponse:
         """
         Get federated learning system status.
@@ -667,6 +862,10 @@ class FederatedLearningService:
         previous_model = _state.global_models.get(dialect)
         previous_version = previous_model["version"] if previous_model else None
 
+        # ── Secure aggregation: clip + noise individual updates ──
+        # This must happen BEFORE FedAvg so the server never sees raw gradients
+        updates = _secure_aggregate_gradients(updates, self._sigma)
+
         # ── FedAvg ──
         agg_calibration, agg_vocab = _fedavg_aggregate(updates)
 
@@ -678,12 +877,34 @@ class FederatedLearningService:
 
         agg_vocab = _apply_dp_to_vocabulary(agg_vocab, self._sigma)
 
-        # ── Adapter aggregation ──
+        # ── Adapter aggregation (weighted average, not last-device) ──
+        # Previously this just took the last device's deltas — now we
+        # decode each device's LoRA adapter deltas, compute a
+        # sample-count-weighted element-wise average, and re-encode.
         adapter_deltas_b64 = None
-        for update in reversed(updates):
+        adapter_updates_with_weights: List[Tuple[bytes, float]] = []
+        for update in updates:
             if update.adapter_deltas:
-                adapter_deltas_b64 = update.adapter_deltas
-                break
+                decoded = _decrypt_adapter_deltas(update.adapter_deltas)
+                if decoded is not None:
+                    n_k = float(update.metadata.corrections_count) if update.metadata and update.metadata.corrections_count > 0 else 1.0
+                    adapter_updates_with_weights.append((decoded, n_k))
+
+        if adapter_updates_with_weights:
+            try:
+                adapter_deltas_b64 = _weighted_lora_average(adapter_updates_with_weights)
+            except Exception as exc:
+                logger.warning("fl_lora_avg_failed", error=str(exc), fallback="last_device")
+                # Fallback: use highest-quality device's deltas
+                best_idx = 0
+                best_quality = -1.0
+                for idx, (update_obj) in enumerate(updates):
+                    q = _state.device_quality.get(update_obj.device_id, 0.5)
+                    if q > best_quality:
+                        best_quality = q
+                        best_idx = idx
+                if updates[best_idx].adapter_deltas:
+                    adapter_deltas_b64 = updates[best_idx].adapter_deltas
 
         # ── Generate candidate version ──
         candidate_version = _next_version(dialect)

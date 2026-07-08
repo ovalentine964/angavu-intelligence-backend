@@ -30,6 +30,7 @@ logger = structlog.get_logger(__name__)
 
 
 class TraceStatus(str, Enum):
+    """Status of an agent trace lifecycle."""
     STARTED = "started"
     DECIDED = "decided"
     COMPLETED = "completed"
@@ -56,6 +57,7 @@ class AgentTrace:
     duration_ms: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize trace to dictionary for API introspection."""
         return {
             "trace_id": self.trace_id,
             "agent_name": self.agent_name,

@@ -87,6 +87,7 @@ class SubAgentTask:
     tags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize sub-agent task to dictionary."""
         return {
             "task_id": self.task_id,
             "name": self.name,
@@ -120,9 +121,11 @@ class SubAgentResult:
 
     @property
     def success(self) -> bool:
+        """Check if the sub-agent completed successfully."""
         return self.status == SubAgentStatus.COMPLETED
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize sub-agent result to dictionary."""
         return {
             "task_id": self.task_id,
             "status": self.status.value,

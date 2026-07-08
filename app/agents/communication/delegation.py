@@ -20,6 +20,11 @@ import structlog
 
 from app.agents.base import AgentEvent, AgentResult, BiasharaAgent, EventType
 
+
+class DelegationError(Exception):
+    """Raised when task delegation fails."""
+    pass
+
 logger = structlog.get_logger(__name__)
 
 

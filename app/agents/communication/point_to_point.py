@@ -22,6 +22,11 @@ import structlog
 
 from app.agents.base import AgentEvent, AgentMessage, BiasharaAgent, EventType
 
+
+class AgentCommunicationError(Exception):
+    """Raised when agent-to-agent communication fails."""
+    pass
+
 logger = structlog.get_logger(__name__)
 
 
@@ -61,23 +66,56 @@ class PointToPointProtocol:
 
         Returns:
             The message ID
+
+        Raises:
+            AgentCommunicationError: If event bus delivery fails
+            ValueError: If sender/recipient is empty
         """
-        message = AgentMessage(
-            sender=sender,
-            recipient=recipient,
-            content=content,
-            message_type=message_type,
-            correlation_id=correlation_id,
-        )
+        """
+        Send a point-to-point message to a specific agent.
+
+        Args:
+            sender: Sending agent name
+            recipient: Receiving agent name
+            content: Message payload
+            message_type: "request" | "response" | "notification" | "negotiation"
+            correlation_id: Links request to response
+            priority: 1 (highest) to 10 (lowest)
+
+        Returns:
+            The message ID
+        """
+        if not sender or not recipient:
+            raise ValueError("Sender and recipient must be non-empty strings")
+
+        try:
+            message = AgentMessage(
+                sender=sender,
+                recipient=recipient,
+                content=content,
+                message_type=message_type,
+                correlation_id=correlation_id,
+            )
+        except Exception as e:
+            self._logger.error(
+                "p2p_message_creation_failed",
+                sender=sender,
+                recipient=recipient,
+                error=str(e),
+            )
+            raise AgentCommunicationError(
+                f"Failed to create message from {sender} to {recipient}: {e}"
+            ) from e
 
         # Publish as a targeted event
-        event = AgentEvent(
-            event_type=EventType.AGENT_HEALTH_CHECK,  # generic envelope
-            source=sender,
-            payload={
-                "message_type": "point_to_point",
-                "recipient": recipient,
-                "content": content,
+        try:
+            event = AgentEvent(
+                event_type=EventType.AGENT_HEALTH_CHECK,  # generic envelope
+                source=sender,
+                payload={
+                    "message_type": "point_to_point",
+                    "recipient": recipient,
+                    "content": content,
                 "msg_type": message_type,
                 "priority": priority,
                 "message_id": message.message_id,
@@ -87,7 +125,18 @@ class PointToPointProtocol:
             metadata={"p2p": True, "recipient": recipient},
         )
 
-        await self._event_bus.publish(event)
+            await self._event_bus.publish(event)
+        except Exception as e:
+            self._logger.error(
+                "p2p_event_bus_publish_failed",
+                sender=sender,
+                recipient=recipient,
+                message_id=message.message_id,
+                error=str(e),
+            )
+            raise AgentCommunicationError(
+                f"Event bus delivery failed for message {message.message_id}: {e}"
+            ) from e
 
         self._message_log.append({
             "message_id": message.message_id,
@@ -133,7 +182,13 @@ class PointToPointProtocol:
 
         Raises:
             asyncio.TimeoutError: If no response within timeout
+            ConnectionError: If event bus is unavailable
         """
+        if self._event_bus is None:
+            raise ConnectionError(
+                f"Cannot send P2P message from '{sender}' to '{recipient}': event bus not connected"
+            )
+
         correlation_id = uuid.uuid4().hex[:12]
         future = asyncio.get_event_loop().create_future()
         self._pending_responses[correlation_id] = future
@@ -150,6 +205,22 @@ class PointToPointProtocol:
             response = await asyncio.wait_for(future, timeout=timeout_seconds)
             return response
 
+        except asyncio.TimeoutError:
+            self._logger.warning(
+                "p2p_request_timeout",
+                sender=sender,
+                recipient=recipient,
+                timeout=timeout_seconds,
+            )
+            raise
+        except Exception as exc:
+            self._logger.error(
+                "p2p_request_error",
+                sender=sender,
+                recipient=recipient,
+                error=str(exc),
+            )
+            raise
         finally:
             self._pending_responses.pop(correlation_id, None)
 
@@ -164,7 +235,13 @@ class PointToPointProtocol:
         # Resolve pending future if exists
         future = self._pending_responses.get(correlation_id)
         if future and not future.done():
-            future.set_result(content)
+            try:
+                future.set_result(content)
+            except asyncio.InvalidStateError:
+                self._logger.warning(
+                    "p2p_respond_future_already_done",
+                    correlation_id=correlation_id,
+                )
 
         return await self.send(
             sender=sender,

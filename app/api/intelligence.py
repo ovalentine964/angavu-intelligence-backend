@@ -681,18 +681,20 @@ async def get_corrected_credit_signal(
     if not corrector.is_fitted:
         # Generate synthetic training data for demonstration
         # In production: load from model registry
-        np.random.seed(42)
+        # SECURITY: Use PCG64 (not Mersenne Twister) for differential privacy RNG.
+        # np.random default (MT19937) is predictable — unsuitable for privacy-sensitive noise.
+        rng = np.random.Generator(np.random.PCG64())
         n_total = 500
         n_selected = 350
 
-        X_sel_train = np.random.randn(n_total, 5)
+        X_sel_train = rng.standard_normal((n_total, 5))
         X_sel_train[:, 0] = 1.0  # intercept
         sel_prob = 1 / (1 + np.exp(-(X_sel_train @ np.array([0.5, 1.2, 0.8, 0.3, 0.6]))))
-        sel_ind = (np.random.rand(n_total) < sel_prob).astype(int)
+        sel_ind = (rng.random(n_total) < sel_prob).astype(int)
 
         X_out_train = X_sel_train[sel_ind == 1, :4]
         X_out_train[:, 0] = 1.0
-        y_out_train = X_out_train @ np.array([50, 15, 10, 8]) + np.random.randn(n_selected) * 5
+        y_out_train = X_out_train @ np.array([50, 15, 10, 8]) + rng.standard_normal(n_selected) * 5
 
         try:
             corrector.fit(

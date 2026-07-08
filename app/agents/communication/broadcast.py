@@ -55,7 +55,16 @@ class BroadcastProtocol:
 
         Returns:
             The event ID
+
+        Raises:
+            ConnectionError: If event bus is unavailable
+            RuntimeError: If event bus publish fails
         """
+        if self._event_bus is None:
+            raise ConnectionError(
+                f"Cannot publish event '{event_type.value}' from '{source}': event bus not connected"
+            )
+
         event = AgentEvent(
             event_type=event_type,
             source=source,
@@ -64,7 +73,19 @@ class BroadcastProtocol:
             metadata=metadata or {},
         )
 
-        event_id = await self._event_bus.publish(event)
+        try:
+            event_id = await self._event_bus.publish(event)
+        except Exception as exc:
+            self._logger.error(
+                "broadcast_publish_failed",
+                event_type=event_type.value,
+                source=source,
+                error=str(exc),
+            )
+            raise RuntimeError(
+                f"Failed to publish event '{event_type.value}' from '{source}': {exc}"
+            ) from exc
+
         self._publish_count += 1
 
         self._delivery_log.append({

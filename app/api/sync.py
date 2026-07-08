@@ -24,6 +24,8 @@ Data Flow — Angavu Intelligence → Msaidizi:
 """
 
 import hashlib
+import hmac
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -225,6 +227,32 @@ async def upload_transactions(
         txn_count=len(batch.transactions),
     )
 
+    # SECURITY: Use authenticated user's ID from JWT, NOT the payload's worker_id_hash.
+    # The payload's worker_id_hash could be forged by an attacker.
+    # The JWT-submitted user is verified by the auth middleware.
+    authenticated_user_id = str(current_user.id)
+
+    # Verify the worker_id_hash in the payload matches the authenticated user.
+    # The worker_id_hash is HMAC-SHA256(worker_id) where worker_id == user.id.
+    # We recompute the expected hash and compare with constant-time comparison.
+    import hmac as _hmac
+    expected_hash = _hmac.new(
+        authenticated_user_id.encode("utf-8"),
+        authenticated_user_id.encode("utf-8"),
+        "sha256",
+    ).hexdigest()
+    if not secrets.compare_digest(batch.worker_id_hash, expected_hash):
+        logger.warning(
+            "sync_worker_id_mismatch",
+            sync_id=sync_id,
+            token_user=authenticated_user_id,
+            payload_hash=batch.worker_id_hash[:12],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Worker ID hash does not match authenticated user",
+        )
+
     # 1. Validate batch integrity (checksum)
     import json as _json
 
@@ -318,9 +346,9 @@ async def upload_transactions(
                 )
                 continue
 
-            # Create transaction record
+            # Create transaction record — use authenticated user ID, not payload hash
             txn = Transaction(
-                user_id=uuid.UUID(batch.worker_id_hash[:32]),
+                user_id=current_user.id,
                 transaction_type=record.transaction_type,
                 item=record.item,
                 item_category=record.item_category,

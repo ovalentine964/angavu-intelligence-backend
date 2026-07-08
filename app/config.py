@@ -9,7 +9,7 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # === Data Pipeline ===
     K_ANONYMITY_THRESHOLD: int = 10
-    DIFFERENTIAL_PRIVACY_EPSILON: float = 1.0
+    DIFFERENTIAL_PRIVACY_EPSILON: float = 0.1
     DIFFERENTIAL_PRIVACY_DELTA: float = 1e-5
     MAX_BATCH_SIZE: int = 200
     MAX_PAYLOAD_SIZE_KB: int = 200
@@ -96,6 +96,15 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"
 
+    # === Agent Scaling ===
+    # Controls max concurrent agents and event bus queue depth
+    AGENT_MAX_CONCURRENT: int = 50         # Max agents running simultaneously
+    AGENT_EVENT_QUEUE_DEPTH: int = 10_000  # Max events buffered per stream
+    AGENT_POLL_INTERVAL: float = 1.0       # Seconds between agent event polls
+    AGENT_SUBAGENT_MAX_CONCURRENCY: int = 10  # Max sub-agents per parent
+    AGENT_SUBAGENT_MAX_DEPTH: int = 3      # Max nesting depth for sub-agents
+    AGENT_TASK_TIMEOUT: float = 300.0      # Default task timeout in seconds
+
     # === CORS ===
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
 
@@ -134,6 +143,21 @@ class Settings(BaseSettings):
         if env == "production" and len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters in production")
         return v
+
+    @model_validator(mode="after")
+    def validate_secrets_not_empty(self):
+        """Cross-validate that secret keys are consistent with the chosen algorithm."""
+        # If using HS256 (or any HMAC algorithm), JWT_SECRET_KEY MUST be set
+        if self.JWT_ALGORITHM.startswith("HS") and not self.JWT_PRIVATE_KEY:
+            if not self.JWT_SECRET_KEY:
+                raise ValueError(
+                    "JWT_SECRET_KEY must be set when JWT_ALGORITHM is "
+                    f"{self.JWT_ALGORITHM} and JWT_PRIVATE_KEY is not provided"
+                )
+        # SECRET_KEY must never be empty in any environment
+        if not self.SECRET_KEY:
+            raise ValueError("SECRET_KEY must not be empty")
+        return self
 
     @field_validator("ENCRYPTION_KEY")
     @classmethod

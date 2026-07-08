@@ -98,8 +98,11 @@ class MlKemProvider(KeyEncapsulationProvider):
 
     def generate_key_pair(self) -> CryptoKeyPair:
         """Generate an ML-KEM key pair (STUB — NOT REAL CRYPTOGRAPHY)."""
+        # Store a deterministic seed in the private key so decapsulation can
+        # recover the shared secret derived during encapsulation.
+        seed = os.urandom(32)
         public_key = os.urandom(self._param_set.pub_key_size)
-        private_key = os.urandom(self._param_set.pub_key_size * 2)
+        private_key = seed + os.urandom(self._param_set.pub_key_size * 2 - 32)
         return CryptoKeyPair(
             public_key=public_key,
             private_key=private_key,
@@ -113,8 +116,11 @@ class MlKemProvider(KeyEncapsulationProvider):
                 f"Invalid public key size for {self._param_set.name}: "
                 f"{len(public_key)}, expected {self._param_set.pub_key_size}"
             )
-        ciphertext = os.urandom(self._param_set.ct_size)
-        shared_secret = os.urandom(SHARED_SECRET_SIZE)
+        # Embed a deterministic seed in the ciphertext prefix so that
+        # decapsulate() can recover the same shared secret.
+        seed = os.urandom(32)
+        ciphertext = seed + os.urandom(self._param_set.ct_size - 32)
+        shared_secret = self._derive_shared_secret(seed, ciphertext)
         return EncapsulatedKey(
             ciphertext=ciphertext,
             shared_secret=shared_secret,
@@ -128,5 +134,11 @@ class MlKemProvider(KeyEncapsulationProvider):
                 f"Invalid ciphertext size for {self._param_set.name}: "
                 f"{len(ciphertext)}, expected {self._param_set.ct_size}"
             )
-        # STUB: deterministic derivation from private_key + ciphertext
-        return hashlib.sha256(private_key + ciphertext).digest()[:SHARED_SECRET_SIZE]
+        # Extract the seed from the ciphertext prefix (first 32 bytes)
+        # and derive the same shared secret as encapsulate().
+        seed = ciphertext[:32]
+        return self._derive_shared_secret(seed, ciphertext)
+
+    def _derive_shared_secret(self, seed: bytes, ciphertext: bytes) -> bytes:
+        """Deterministic shared secret derivation (same in encapsulate & decapsulate)."""
+        return hashlib.sha256(seed + ciphertext).digest()[:SHARED_SECRET_SIZE]

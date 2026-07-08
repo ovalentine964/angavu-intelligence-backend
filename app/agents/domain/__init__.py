@@ -16,6 +16,7 @@ from app.agents.domain.transport import TransportDomainAgent
 from app.agents.domain.digital import DigitalDomainAgent
 from app.agents.domain.manufacturing import ManufacturingDomainAgent
 from app.agents.domain.service import ServiceDomainAgent
+from app.agents.domain.base import DomainAgent, ECO_FRAMEWORK, STA_FRAMEWORK
 
 __all__ = [
     "AgricultureDomainAgent",
@@ -24,4 +25,7 @@ __all__ = [
     "DigitalDomainAgent",
     "ManufacturingDomainAgent",
     "ServiceDomainAgent",
+    "DomainAgent",
+    "ECO_FRAMEWORK",
+    "STA_FRAMEWORK",
 ]

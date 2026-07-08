@@ -95,6 +95,23 @@ class EventType(str, Enum):
     DOMAIN_ANALYSIS_COMPLETED = "domain.analysis.completed"
     CONFLICT_DETECTED = "conflict.detected"
 
+    # Voice Pipeline
+    VOICE_INPUT_RECEIVED = "voice.input.received"
+    VOICE_TRANSCRIBED = "voice.transcribed"
+    VOICE_RESPONSE_GENERATED = "voice.response.generated"
+
+    # Compliance & Security
+    COMPLIANCE_CHECK = "compliance.check"
+    COMPLIANCE_VIOLATION = "compliance.violation"
+    COMPLIANCE_REPORT = "compliance.report"
+    SECURITY_SCAN = "security.scan"
+    SECURITY_ALERT = "security.alert"
+    SECURITY_INCIDENT = "security.incident"
+
+    # Onboarding
+    ONBOARDING_STEP_COMPLETED = "onboarding.step.completed"
+    ONBOARDING_VERIFICATION = "onboarding.verification"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"
@@ -127,6 +144,7 @@ class AgentEvent:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize event to dictionary for storage/transmission."""
         return {
             "event_id": self.event_id,
             "event_type": self.event_type.value,
@@ -139,6 +157,7 @@ class AgentEvent:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> AgentEvent:
+        """Deserialize event from dictionary."""
         return cls(
             event_type=EventType(data["event_type"]),
             source=data["source"],
@@ -284,6 +303,7 @@ class AgentTools:
         ]
 
     def has(self, name: str) -> bool:
+        """Check if a tool is registered."""
         return name in self._tools
 
 
@@ -413,6 +433,94 @@ class BiasharaAgent:
             source=event.source,
         )
 
+    async def handle_event(self, event: AgentEvent) -> AgentResult:
+        """
+        Full lifecycle: observe → think → act → reflect.
+
+        Orchestrators and the event bus use this to trigger an agent.
+        """
+        cycle_start = time.time()
+        trace_id = None
+
+        try:
+            # 1. Observe
+            await self.observe(event)
+
+            # 2. Think
+            self.status = AgentStatus.THINKING
+
+            # Gather past reflections from long-term memory
+            reflections = [
+                v for k, v in self.memory._long_term.items()
+                if k.startswith("reflection:")
+            ]
+
+            # Check for strategy adjustments from consecutive failures
+            strategy_adjustment = self.memory.retrieve("strategy_adjustment")
+
+            context: Dict[str, Any] = {
+                "event": event.to_dict(),
+                "memory": self.memory.snapshot(),
+                "tools": self.tools.list_tools(),
+                "past_reflections": reflections[-5:],
+                "strategy_adjustment": strategy_adjustment,
+            }
+
+            if self._tracer:
+                trace_id = self._tracer.start_trace(self.name, context)
+
+            decision = await self.think(context)
+
+            if self._tracer and trace_id:
+                self._tracer.record_decision(trace_id, decision)
+
+            # 3. Act
+            self.status = AgentStatus.ACTING
+            result = await self.act(decision)
+
+            if self._tracer and trace_id:
+                self._tracer.record_result(trace_id, result)
+
+            # 4. Reflect
+            await self.reflect(result)
+
+            # 5. Publish downstream events
+            if self._event_bus and result.events_to_publish:
+                for downstream_event in result.events_to_publish:
+                    try:
+                        await self._event_bus.publish(downstream_event)
+                    except Exception as pub_err:
+                        self._logger.warning(
+                            "event_publish_failed",
+                            event_type=downstream_event.event_type.value,
+                            error=str(pub_err),
+                        )
+
+            # 6. Finalize trace
+            if self._tracer and trace_id:
+                self._tracer.end_trace(trace_id, success=result.success)
+
+            self.status = AgentStatus.IDLE
+            return result
+
+        except asyncio.CancelledError:
+            self.status = AgentStatus.IDLE
+            raise
+        except Exception as exc:
+            self.status = AgentStatus.ERROR
+            self._logger.exception(
+                "agent_cycle_error",
+                event_type=event.event_type.value,
+                error=str(exc),
+            )
+            if self._tracer and trace_id:
+                self._tracer.end_trace(trace_id, success=False, error=str(exc))
+            return AgentResult(
+                success=False,
+                error=str(exc),
+                duration_ms=(time.time() - cycle_start) * 1000,
+            )
+
     async def think(self, context: Dict[str, Any]) -> AgentDecision:
         """
         Process context and make a decision.
@@ -524,84 +632,69 @@ class BiasharaAgent:
             message_type=message.message_type,
         )
 
-    # ── Full cycle (orchestrators call this) ────────────────────────
-
-    async def handle_event(self, event: AgentEvent) -> AgentResult:
+    async def delegate_to(
+        self,
+        target_agent: "BiasharaAgent",
+        action: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout_seconds: float = 60.0,
+    ) -> AgentResult:
         """
-        Full lifecycle: observe → think → act → reflect.
+        Delegate a task to another agent and wait for the result.
 
-        Orchestrators and the event bus use this to trigger an agent.
+        Creates an event, sends it to the target agent via handle_event(),
+        and returns the result. Used by DelegationProtocol and MetaAgent.
+
+        Args:
+            target_agent: The agent to execute the task
+            action: The action name
+            parameters: Task parameters
+            timeout_seconds: Max wait time
+
+        Returns:
+            AgentResult from the target agent
+
+        Raises:
+            asyncio.TimeoutError: If target doesn't respond in time
+            ValueError: If target_agent is None
         """
-        cycle_start = time.time()
-        trace_id = None
+        if target_agent is None:
+            raise ValueError("target_agent must not be None")
+
+        event = AgentEvent(
+            event_type=EventType.INTELLIGENCE_REQUESTED,
+            source=self.name,
+            payload={
+                "action": action,
+                "parameters": parameters or {},
+                "delegated_by": self.name,
+            },
+        )
 
         try:
-            # 1. Observe
-            await self.observe(event)
-
-            # 2. Think
-            self.status = AgentStatus.THINKING
-
-            # Gather past reflections from long-term memory
-            reflections = [
-                v for k, v in self.memory._long_term.items()
-                if k.startswith("reflection:")
-            ]
-
-            # Check for strategy adjustments from consecutive failures
-            strategy_adjustment = self.memory.retrieve("strategy_adjustment")
-
-            context = {
-                "event": event.to_dict(),
-                "memory": self.memory.snapshot(),
-                "tools": self.tools.list_tools(),
-                "past_reflections": reflections[-5:],  # Last 5 reflections
-                "strategy_adjustment": strategy_adjustment,
-            }
-
-            if self._tracer:
-                trace_id = self._tracer.start_trace(self.name, context)
-
-            decision = await self.think(context)
-
-            if self._tracer and trace_id:
-                self._tracer.record_decision(trace_id, decision)
-
-            # 3. Act
-            self.status = AgentStatus.ACTING
-            result = await self.act(decision)
-
-            if self._tracer and trace_id:
-                self._tracer.record_result(trace_id, result)
-
-            # 4. Reflect
-            await self.reflect(result)
-
-            # 5. Publish downstream events
-            if self._event_bus and result.events_to_publish:
-                for downstream_event in result.events_to_publish:
-                    await self._event_bus.publish(downstream_event)
-
-            # 6. Finalize trace
-            if self._tracer and trace_id:
-                self._tracer.end_trace(trace_id, success=result.success)
-
-            self.status = AgentStatus.IDLE
+            result = await asyncio.wait_for(
+                target_agent.handle_event(event),
+                timeout=timeout_seconds,
+            )
             return result
-
+        except asyncio.TimeoutError:
+            self._logger.warning(
+                "delegate_to_timeout",
+                target=target_agent.name,
+                action=action,
+                timeout=timeout_seconds,
+            )
+            raise
         except Exception as exc:
-            self.status = AgentStatus.ERROR
-            self._logger.exception(
-                "agent_cycle_error",
-                event_type=event.event_type.value,
+            self._logger.error(
+                "delegate_to_error",
+                target=target_agent.name,
+                action=action,
                 error=str(exc),
             )
-            if self._tracer and trace_id:
-                self._tracer.end_trace(trace_id, success=False, error=str(exc))
             return AgentResult(
                 success=False,
-                error=str(exc),
-                duration_ms=(time.time() - cycle_start) * 1000,
+                error=f"Delegation to {target_agent.name} failed: {exc}",
             )
 
     # ── Health ──────────────────────────────────────────────────────

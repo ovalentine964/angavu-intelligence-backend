@@ -5,12 +5,103 @@ Allows runtime selection and swapping of cryptographic algorithms without
 changing application code. Critical for PQC migration.
 """
 
+import hashlib
 import logging
+import os
 from typing import Dict, Optional
 
-from .crypto_provider import CryptoProvider, KeyEncapsulationProvider
+from .crypto_provider import CryptoProvider, CryptoKeyPair, KeyEncapsulationProvider
 
 logger = logging.getLogger(__name__)
+
+
+class _Aes256GcmProvider(CryptoProvider):
+    """AES-256-GCM symmetric encryption provider (quantum-safe)."""
+
+    is_stub: bool = True  # Placeholder — real AES-GCM requires cryptography lib
+
+    @property
+    def algorithm_id(self) -> str:
+        return "AES-256-GCM"
+
+    @property
+    def is_post_quantum(self) -> bool:
+        return True  # 256-bit symmetric → 128-bit post-quantum security
+
+    @property
+    def security_level(self) -> int:
+        return 5
+
+    def get_real_provider(self):
+        return None
+
+    def generate_key_pair(self) -> CryptoKeyPair:
+        return CryptoKeyPair(
+            public_key=os.urandom(32),
+            private_key=os.urandom(32),
+            algorithm_id=self.algorithm_id,
+        )
+
+    def encrypt(self, plaintext: bytes, key: bytes) -> bytes:
+        # STUB: XOR with key-derived stream. Real impl uses AES-256-GCM.
+        stream = hashlib.sha256(key).digest() * (len(plaintext) // 32 + 1)
+        return bytes(a ^ b for a, b in zip(plaintext, stream[:len(plaintext)]))
+
+    def decrypt(self, ciphertext: bytes, key: bytes) -> bytes:
+        # STUB: XOR is its own inverse.
+        stream = hashlib.sha256(key).digest() * (len(ciphertext) // 32 + 1)
+        return bytes(a ^ b for a, b in zip(ciphertext, stream[:len(ciphertext)]))
+
+    def sign(self, data: bytes, private_key: bytes) -> bytes:
+        raise NotImplementedError("AES-256-GCM is an encryption algorithm, not a signature algorithm")
+
+    def verify(self, data: bytes, signature: bytes, public_key: bytes) -> bool:
+        raise NotImplementedError("AES-256-GCM is an encryption algorithm, not a signature algorithm")
+
+
+class _EcdsaP256Provider(CryptoProvider):
+    """ECDSA-P256 signature provider (NOT quantum-safe, backward compat)."""
+
+    is_stub: bool = True
+
+    @property
+    def algorithm_id(self) -> str:
+        return "ECDSA-P256"
+
+    @property
+    def is_post_quantum(self) -> bool:
+        return False  # Broken by Shor's algorithm
+
+    @property
+    def security_level(self) -> int:
+        return 1
+
+    def get_real_provider(self):
+        return None
+
+    def generate_key_pair(self) -> CryptoKeyPair:
+        return CryptoKeyPair(
+            public_key=os.urandom(64),
+            private_key=os.urandom(32),
+            algorithm_id=self.algorithm_id,
+        )
+
+    def sign(self, data: bytes, private_key: bytes) -> bytes:
+        h = hashlib.sha256(private_key + data).digest()
+        return h + os.urandom(32)
+
+    def verify(self, data: bytes, signature: bytes, public_key: bytes) -> bool:
+        if len(signature) < 32:
+            return False
+        # STUB: re-derive from public_key + data (not real ECDSA)
+        expected = hashlib.sha256(public_key[:32] + data).digest()[:16]
+        return signature[:16] == expected
+
+    def encrypt(self, plaintext: bytes, key: bytes) -> bytes:
+        raise NotImplementedError("ECDSA is a signature algorithm, not encryption")
+
+    def decrypt(self, ciphertext: bytes, key: bytes) -> bytes:
+        raise NotImplementedError("ECDSA is a signature algorithm, not encryption")
 
 
 class AlgorithmRegistry:
@@ -106,9 +197,13 @@ class AlgorithmRegistry:
         }
 
     def _register_classical(self):
-        from .ml_dsa import MlDsaProvider, MlDsaParameterSet
-        # AES-256-GCM is quantum-safe (symmetric), register as placeholder
-        # ECDSA is NOT quantum-safe but retained for backward compatibility
+        # AES-256-GCM: quantum-safe symmetric encryption (256-bit key → 128-bit PQ security)
+        aes_provider = _Aes256GcmProvider()
+        self.register_encrypt_provider(aes_provider)
+
+        # ECDSA-P256: NOT quantum-safe but retained for backward compatibility
+        ecdsa_provider = _EcdsaP256Provider()
+        self.register_signature_provider(ecdsa_provider)
 
     def _register_pqc(self):
         from .ml_kem import MlKemProvider, MlKemParameterSet

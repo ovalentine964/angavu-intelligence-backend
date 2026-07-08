@@ -36,14 +36,13 @@ improves the decision-making strategy itself.
 
 from __future__ import annotations
 
-import asyncio
 import math
 import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import structlog
 

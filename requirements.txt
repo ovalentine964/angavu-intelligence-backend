@@ -64,5 +64,3 @@ deerflow-harness>=0.1.0
 langgraph>=1.1.9
 langgraph-sdk>=0.1.51
 langchain>=1.2.15
-langchain-openai>=1.2.1
-langchain-deepseek>=1.0.1

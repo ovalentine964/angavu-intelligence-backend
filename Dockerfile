@@ -14,8 +14,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create logs directory
-RUN mkdir -p logs
+# Create logs directory and non-root user
+RUN mkdir -p logs && \
+    useradd -m -u 1000 angavu && \
+    chown -R angavu:angavu /app
+
+USER angavu
 
 EXPOSE 8000
 

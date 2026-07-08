@@ -1764,6 +1764,394 @@ class CointegrationTester:
         }
 
 
+class DifferenceInDifferences:
+    """
+    Difference-in-Differences (DiD) estimator.
+
+    Estimates causal treatment effects using panel data with
+    a treatment and control group observed before and after
+    an intervention.
+
+    Model: Y_it = α + β₁·Treat_i + β₂·Post_t + β₃·(Treat_i × Post_t) + ε_it
+    The DiD estimate is β₃ — the interaction coefficient.
+
+    Key assumption: Parallel trends — absent treatment, the treatment
+    and control groups would have followed the same trend.
+
+    Applications in Angavu Intelligence:
+    - Did Msaidizi improve revenue for treated businesses vs control?
+    - Did a market intervention change price dynamics?
+    - Did a policy change affect loan repayment rates?
+
+    References:
+    - Angrist & Pischke (2009). Mostly Harmless Econometrics. Ch. 5.
+    - Card, D. & Krueger, A. (1994). Minimum wages and employment.
+      AER, 84(4), 772-793.
+    - Bertrand, M., Duflo, E. & Mullainathan, S. (2004). How much
+      should we trust DiD estimates? QJE, 119(1), 249-275.
+    """
+
+    @staticmethod
+    def fit(
+        y: np.ndarray,
+        treat: np.ndarray,
+        post: np.ndarray,
+        covariates: Optional[np.ndarray] = None,
+        cluster: Optional[np.ndarray] = None,
+    ) -> Dict[str, Any]:
+        """
+        Estimate DiD model.
+
+        Args:
+            y: Outcome variable (n × 1)
+            treat: Treatment indicator (1 = treated group)
+            post: Post-treatment indicator (1 = after intervention)
+            covariates: Optional additional controls (n × k)
+            cluster: Optional cluster variable for clustered SEs
+
+        Returns:
+            Dict with DiD estimate, SEs, parallel trends test
+        """
+        y = np.asarray(y, dtype=float)
+        treat = np.asarray(treat, dtype=float)
+        post = np.asarray(post, dtype=float)
+        n = len(y)
+
+        # Build design matrix: [1, treat, post, treat×post, covariates]
+        did_interaction = treat * post
+        cols = [np.ones(n), treat, post, did_interaction]
+        k = 4
+
+        if covariates is not None:
+            covariates = np.asarray(covariates, dtype=float)
+            if covariates.ndim == 1:
+                covariates = covariates.reshape(-1, 1)
+            cols.append(covariates)
+            k += covariates.shape[1]
+
+        X = np.column_stack(cols)
+
+        # OLS: β̂ = (X'X)⁻¹X'Y
+        try:
+            XtX_inv = np.linalg.inv(X.T @ X)
+        except np.linalg.LinAlgError:
+            return {"error": "Singular matrix in DiD regression"}
+
+        beta = XtX_inv @ (X.T @ y)
+        residuals = y - X @ beta
+        df = n - k
+        mse = np.sum(residuals ** 2) / max(df, 1)
+
+        # Standard errors (clustered or robust)
+        if cluster is not None:
+            # Cluster-robust (Arellano, 1987; Cameron & Miller, 2015)
+            cluster = np.asarray(cluster)
+            unique_clusters = np.unique(cluster)
+            G = len(unique_clusters)
+            meat = np.zeros((k, k))
+            for g in unique_clusters:
+                mask = cluster == g
+                Xg = X[mask]
+                eg = residuals[mask]
+                score = Xg.T @ eg
+                meat += np.outer(score, score)
+            # Cluster adjustment: (G/(G-1)) × ((n-1)/(n-k))
+            adj = (G / max(G - 1, 1)) * (n - 1) / max(df, 1)
+            sandwich = adj * XtX_inv @ meat @ XtX_inv
+            se = np.sqrt(np.diag(sandwich))
+        else:
+            # White robust SEs
+            Omega = np.diag(residuals ** 2)
+            sandwich = XtX_inv @ (X.T @ Omega @ X) @ XtX_inv
+            se = np.sqrt(np.diag(sandwich))
+
+        t_stats = beta / np.maximum(se, 1e-10)
+        p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=max(df, 1)))
+
+        # R²
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        ss_res = np.sum(residuals ** 2)
+        r2 = 1 - ss_res / max(ss_tot, 1e-10)
+
+        # Pre-treatment parallel trends test
+        parallel_trends = None
+        pre_mask = post == 0
+        if np.sum(pre_mask) > 10:
+            pre_treat = treat[pre_mask]
+            pre_y = y[pre_mask]
+            pre_X = np.column_stack([np.ones(np.sum(pre_mask)), pre_treat])
+            try:
+                pre_beta = np.linalg.inv(pre_X.T @ pre_X) @ (pre_X.T @ pre_y)
+                pre_resid = pre_y - pre_X @ pre_beta
+                pre_mse = np.sum(pre_resid ** 2) / max(np.sum(pre_mask) - 2, 1)
+                pre_se = np.sqrt(pre_mse * np.diag(np.linalg.inv(pre_X.T @ pre_X)))
+                pre_t = pre_beta[1] / max(pre_se[1], 1e-10)
+                pre_p = 2 * (1 - stats.t.cdf(abs(pre_t), df=max(int(np.sum(pre_mask)) - 2, 1)))
+                parallel_trends = {
+                    "pre_treatment_diff": round(float(pre_beta[1]), 4),
+                    "pre_treatment_t": round(float(pre_t), 4),
+                    "pre_treatment_p": round(float(pre_p), 4),
+                    "parallel_trends_holds": pre_p > 0.05,
+                }
+            except np.linalg.LinAlgError:
+                pass
+
+        # Group means for interpretation
+        groups = {
+            "control_pre": round(float(np.mean(y[(treat == 0) & (post == 0)])), 4),
+            "control_post": round(float(np.mean(y[(treat == 0) & (post == 1)])), 4),
+            "treated_pre": round(float(np.mean(y[(treat == 1) & (post == 0)])), 4),
+            "treated_post": round(float(np.mean(y[(treat == 1) & (post == 1)])), 4),
+        }
+        groups["naive_did"] = round(
+            (groups["treated_post"] - groups["treated_pre"]) -
+            (groups["control_post"] - groups["control_pre"]), 4
+        )
+
+        variable_names = ["const", "treat", "post", "did_estimate"]
+        if covariates is not None:
+            variable_names += [f"covariate_{i+1}" for i in range(covariates.shape[1])]
+
+        return {
+            "method": "Difference-in-Differences",
+            "did_estimate": round(float(beta[3]), 6),
+            "did_se": round(float(se[3]), 6),
+            "did_t_statistic": round(float(t_stats[3]), 4),
+            "did_p_value": round(float(p_values[3]), 6),
+            "did_ci_95": (
+                round(float(beta[3] - 1.96 * se[3]), 6),
+                round(float(beta[3] + 1.96 * se[3]), 6),
+            ),
+            "significant_at_05": bool(p_values[3] < 0.05),
+            "group_means": groups,
+            "parallel_trends_test": parallel_trends,
+            "coefficients": {
+                name: {
+                    "estimate": round(float(beta[i]), 6),
+                    "se": round(float(se[i]), 6),
+                    "p_value": round(float(p_values[i]), 6),
+                }
+                for i, name in enumerate(variable_names)
+            },
+            "r_squared": round(float(r2), 4),
+            "n_observations": n,
+            "n_treated": int(np.sum(treat == 1)),
+            "n_control": int(np.sum(treat == 0)),
+            "clustered_se": cluster is not None,
+        }
+
+
+class RegressionDiscontinuity:
+    """
+    Regression Discontinuity Design (RDD) estimator.
+
+    Estimates causal treatment effects when treatment is assigned
+    based on whether a running variable exceeds a cutoff.
+
+    Sharp RDD: Treatment is deterministic at the cutoff.
+      D_i = 1(X_i ≥ c)
+
+    Fuzzy RDD: Treatment probability jumps at the cutoff.
+      Uses IV/2SLS with the cutoff as instrument.
+
+    Local linear regression on both sides of the cutoff:
+      Y_i = α + τ·D_i + β₁·(X_i - c) + β₂·D_i·(X_i - c) + ε_i
+
+    Applications in Angavu Intelligence:
+    - Alama Score threshold: Do businesses above the credit threshold
+      actually benefit from loans?
+    - Activity threshold: Does exceeding a transaction count threshold
+      change business outcomes?
+    - Price threshold: Do prices above a reference point affect demand?
+
+    References:
+    - Lee, D.S. & Lemieux, T. (2010). Regression discontinuity designs
+      in economics. JEL, 48(2), 281-355.
+    - Imbens, G. & Lemieux, T. (2008). RD designs: A guide to practice.
+      JE, 142(2), 615-635.
+    - Cattaneo, M.D., Idrobo, N. & Titiunik, R. (2020). A Practical
+      Introduction to Regression Discontinuity Designs. Cambridge.
+    """
+
+    @staticmethod
+    def fit(
+        y: np.ndarray,
+        running_variable: np.ndarray,
+        cutoff: float,
+        bandwidth: Optional[float] = None,
+        kernel: str = "triangular",
+        polynomial_order: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Estimate sharp RDD at the cutoff.
+
+        Args:
+            y: Outcome variable
+            running_variable: Running/forcing variable
+            cutoff: Cutoff value for treatment assignment
+            bandwidth: Bandwidth around cutoff (auto-selected if None)
+            kernel: Weighting kernel ('triangular', 'uniform', 'epanechnikov')
+            polynomial_order: Polynomial order for local regression (1 = linear)
+
+        Returns:
+            Dict with RDD estimate (τ), bandwidth, diagnostics
+        """
+        y = np.asarray(y, dtype=float)
+        X = np.asarray(running_variable, dtype=float)
+        n = len(y)
+
+        # Center running variable at cutoff
+        X_c = X - cutoff
+
+        # Auto-select bandwidth (Imbens-Kalyanaraman, simplified)
+        if bandwidth is None:
+            bandwidth = RegressionDiscontinuity._auto_bandwidth(X_c, y)
+
+        # Select observations within bandwidth
+        mask = np.abs(X_c) <= bandwidth
+        if np.sum(mask) < 10:
+            return {"error": f"Too few observations within bandwidth ({np.sum(mask)})"}
+
+        y_local = y[mask]
+        x_local = X_c[mask]
+        treat_local = (x_local >= 0).astype(float)
+        n_local = len(y_local)
+
+        # Kernel weights
+        weights = RegressionDiscontinuity._kernel_weights(x_local, bandwidth, kernel)
+        W = np.diag(weights)
+
+        # Build design matrix
+        if polynomial_order == 1:
+            # Y = α + τ·D + β₁·x + β₂·D·x
+            X_design = np.column_stack([
+                np.ones(n_local),
+                treat_local,
+                x_local,
+                treat_local * x_local,
+            ])
+        else:
+            # Higher-order polynomial
+            cols = [np.ones(n_local), treat_local]
+            for p in range(1, polynomial_order + 1):
+                x_p = x_local ** p
+                cols.append(x_p)
+                cols.append(treat_local * x_p)
+            X_design = np.column_stack(cols)
+
+        # Weighted OLS: β̂ = (X'WX)⁻¹X'Wy
+        try:
+            XtWX_inv = np.linalg.inv(X_design.T @ W @ X_design)
+        except np.linalg.LinAlgError:
+            return {"error": "Singular matrix in RDD estimation"}
+
+        beta = XtWX_inv @ (X_design.T @ W @ y_local)
+        residuals = y_local - X_design @ beta
+
+        # Robust SEs (bias-corrected)
+        k = X_design.shape[1]
+        df = n_local - k
+        Omega = np.diag(residuals ** 2)
+        sandwich = XtWX_inv @ (X_design.T @ W @ Omega @ W @ X_design) @ XtWX_inv
+        se = np.sqrt(np.diag(sandwich))
+
+        tau = beta[1]  # Treatment effect at cutoff
+        tau_se = se[1]
+        tau_t = tau / max(tau_se, 1e-10)
+        tau_p = 2 * (1 - stats.t.cdf(abs(tau_t), df=max(df, 1)))
+
+        # McCrary density test (simplified): check for manipulation at cutoff
+        mccrary = RegressionDiscontinuity._density_test(X, cutoff, bandwidth)
+
+        # Covariate balance at cutoff
+        return {
+            "method": "Sharp RDD",
+            "rdd_estimate": round(float(tau), 6),
+            "rdd_se": round(float(tau_se), 6),
+            "rdd_t_statistic": round(float(tau_t), 4),
+            "rdd_p_value": round(float(tau_p), 6),
+            "rdd_ci_95": (
+                round(float(tau - 1.96 * tau_se), 6),
+                round(float(tau + 1.96 * tau_se), 6),
+            ),
+            "significant_at_05": bool(tau_p < 0.05),
+            "cutoff": cutoff,
+            "bandwidth": round(float(bandwidth), 4),
+            "kernel": kernel,
+            "polynomial_order": polynomial_order,
+            "n_obs_total": n,
+            "n_obs_bandwidth": n_local,
+            "n_below_cutoff": int(np.sum(treat_local == 0)),
+            "n_above_cutoff": int(np.sum(treat_local == 1)),
+            "density_test": mccrary,
+            "outcome_mean_below": round(float(np.mean(y_local[treat_local == 0])), 4),
+            "outcome_mean_above": round(float(np.mean(y_local[treat_local == 1])), 4),
+        }
+
+    @staticmethod
+    def _auto_bandwidth(X_c: np.ndarray, y: np.ndarray) -> float:
+        """
+        Automatic bandwidth selection (simplified IK bandwidth).
+
+        Uses the rule-of-thumb: h = C × σ_X × n^(-1/5)
+        where σ_X is the std of the running variable.
+        """
+        n = len(X_c)
+        sigma_x = float(np.std(X_c))
+        # Silverman-like rule: h = 1.84 × σ × n^(-1/5)
+        h = 1.84 * sigma_x * n ** (-0.2)
+        # Ensure minimum bandwidth
+        return max(h, sigma_x * 0.1)
+
+    @staticmethod
+    def _kernel_weights(x: np.ndarray, bandwidth: float, kernel: str) -> np.ndarray:
+        """Compute kernel weights."""
+        u = np.abs(x) / bandwidth
+        if kernel == "triangular":
+            return np.maximum(0, 1 - u)
+        elif kernel == "uniform":
+            return (u <= 1).astype(float)
+        elif kernel == "epanechnikov":
+            return np.maximum(0, 0.75 * (1 - u ** 2))
+        else:
+            return np.maximum(0, 1 - u)  # Default: triangular
+
+    @staticmethod
+    def _density_test(X: np.ndarray, cutoff: float, bandwidth: float) -> Dict[str, Any]:
+        """
+        Simplified McCrary density test.
+
+        Checks if there's a suspicious bunching of observations
+        just above the cutoff (indicating manipulation).
+        """
+        # Count observations in bins around cutoff
+        bin_width = bandwidth / 5
+        bins_below = np.sum((X >= cutoff - bandwidth) & (X < cutoff))
+        bins_above = np.sum((X >= cutoff) & (X < cutoff + bandwidth))
+        total_below = np.sum(X < cutoff)
+        total_above = np.sum(X >= cutoff)
+
+        # Simple chi-squared test for density discontinuity
+        expected_below = bins_below
+        expected_above = bins_above
+        if expected_below > 0 and expected_above > 0:
+            # Compare density just below vs just above
+            density_below = bins_below / bandwidth
+            density_above = bins_above / bandwidth
+            ratio = density_above / max(density_below, 1e-10)
+            manipulation_suspected = ratio > 1.5 or ratio < 0.67
+        else:
+            ratio = 1.0
+            manipulation_suspected = False
+
+        return {
+            "density_ratio": round(float(ratio), 4),
+            "manipulation_suspected": manipulation_suspected,
+            "n_below_cutoff": int(total_below),
+            "n_above_cutoff": int(total_above),
+        }
+
+
 # Singleton instances
 ols = OLSRegression()
 logit = LogitModel()
@@ -1773,3 +2161,5 @@ heckman = HeckmanCorrection()
 arima = ARIMAModel()
 var_model = VARModel()
 cointegration = CointegrationTester()
+did = DifferenceInDifferences()
+rdd = RegressionDiscontinuity()
