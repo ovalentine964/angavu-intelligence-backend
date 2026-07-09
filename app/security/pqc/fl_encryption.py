@@ -168,8 +168,15 @@ class FlPqcEncryptor:
         if self._device_signing_keypair is None:
             self.generate_device_signing_key()
 
-        # Sign the encrypted payload + metadata for integrity
-        sign_data = encrypted + device_id.encode("utf-8") + str(int(time.time() * 1000)).encode()
+        # Sign the encrypted payload + KEM ciphertext + metadata for integrity
+        # SECURITY: Include ml_kem_ciphertext to prevent ciphertext substitution attacks
+        timestamp_ms = int(time.time() * 1000)
+        sign_data = (
+            encrypted
+            + ml_kem_result.ciphertext
+            + device_id.encode("utf-8")
+            + str(timestamp_ms).encode()
+        )
         signature = self._ml_dsa.sign(sign_data, self._device_signing_keypair.private_key)
 
         logger.info(
@@ -183,7 +190,7 @@ class FlPqcEncryptor:
             signature=signature,
             device_pqc_public_key=self._device_signing_keypair.public_key,
             device_id=device_id,
-            timestamp=int(time.time() * 1000),
+            timestamp=timestamp_ms,
             language=language,
             version=version,
         )
@@ -235,8 +242,11 @@ class FlPqcDecryptor:
         # Step 1: Verify ML-DSA signature
         signature_valid = True
         if verify_signature:
+            # SECURITY: Include ml_kem_ciphertext in signed data to prevent
+            # ciphertext substitution attacks
             sign_data = (
                 payload.encrypted_gradients
+                + payload.ml_kem_ciphertext
                 + payload.device_id.encode("utf-8")
                 + str(payload.timestamp).encode()
             )

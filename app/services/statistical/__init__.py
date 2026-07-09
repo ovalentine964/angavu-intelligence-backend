@@ -29,6 +29,8 @@ from app.services.statistical.multivariate import (
 )
 from app.services.statistical.clustering import ClusterAnalyzer
 from app.services.statistical.simulation import MCMCSampler, MonteCarloEngine
+from app.services.statistical.inequality import InequalityAnalyzer, PovertyAnalyzer
+from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
 
 __all__ = [
     "BayesianUpdater",
@@ -43,4 +45,8 @@ __all__ = [
     "FactorAnalyzer",
     "DiscriminantAnalyzer",
     "MANOVA",
+    "InequalityAnalyzer",
+    "PovertyAnalyzer",
+    "DEAAnalyzer",
+    "SFAAnalyzer",
 ]

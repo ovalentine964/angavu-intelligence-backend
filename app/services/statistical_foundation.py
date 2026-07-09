@@ -34,6 +34,8 @@ from app.services.statistical.multivariate import (
 )
 from app.services.statistical.clustering import ClusterAnalyzer
 from app.services.statistical.simulation import MCMCSampler, MonteCarloEngine
+from app.services.statistical.inequality import InequalityAnalyzer, PovertyAnalyzer
+from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
 
 # Singleton instances for use across services
 bayesian_updater = BayesianUpdater()
@@ -47,3 +49,7 @@ cluster_analyzer = ClusterAnalyzer()
 pca_analyzer = PCAAnalyzer()
 factor_analyzer = FactorAnalyzer()
 discriminant_analyzer = DiscriminantAnalyzer()
+inequality_analyzer = InequalityAnalyzer()
+poverty_analyzer = PovertyAnalyzer()
+dea_analyzer = DEAAnalyzer()
+sfa_analyzer = SFAAnalyzer()

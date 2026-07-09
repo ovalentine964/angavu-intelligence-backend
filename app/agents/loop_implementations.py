@@ -31,18 +31,16 @@ from app.agents.loops import (
     EventStore,
     ExecutionPlan,
     FeedbackAgent,
-    HITLConfig,
     HumanInTheLoopAgent,
     OODAAgent,
-    Observation,
     OrientationState,
     PlanExecuteAgent,
     PlanStep,
     ReActAgent,
     ReflexionAgent,
     SupervisorAgent,
-    UrgencyLevel,
 )
+from app.agents.loops.feedback_loop import LearningSignal, SignalType
 
 logger = structlog.get_logger(__name__)
 
@@ -729,58 +727,70 @@ class PriceAlertOODA(OODAAgent):
                 "fast_alert_generation",
                 "orientation_tracking",
             ],
-            urgency_threshold=UrgencyLevel.HIGH,
         )
 
-    async def _extract_observation(self, event: AgentEvent) -> Observation:
+    async def _extract_observations(self, event: AgentEvent) -> Dict[str, Any]:
         """Extract price-related signals from the event."""
-        payload = event.payload
+        payload = event.payload or {}
 
         # Determine urgency based on event type and payload
-        urgency = UrgencyLevel.MEDIUM
+        urgency = 0.3  # medium
         if event.event_type == EventType.MARKET_ALERT:
-            urgency = UrgencyLevel.CRITICAL
+            urgency = 1.0  # critical
         elif event.event_type == EventType.PRICE_FORECAST_READY:
-            urgency = UrgencyLevel.HIGH
+            urgency = 0.7  # high
         elif "price_change_pct" in payload:
             change = abs(payload.get("price_change_pct", 0))
             if change > 30:
-                urgency = UrgencyLevel.CRITICAL
+                urgency = 1.0
             elif change > 15:
-                urgency = UrgencyLevel.HIGH
+                urgency = 0.7
 
-        return Observation(
-            source=event.source,
-            signal_type=event.event_type.value,
-            data=payload,
-            urgency=urgency,
-            confidence=payload.get("confidence", 0.9),
-        )
+        return {
+            "source": event.source,
+            "signal_type": event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+            "data": payload,
+            "urgency": urgency,
+            "confidence": payload.get("confidence", 0.9),
+        }
 
-    async def _make_decision(
-        self,
-        observation: Observation,
-        orientation: OrientationState,
+    async def _compute_orientation_update(self, observations: Dict[str, Any]) -> Dict[str, float]:
+        """Update orientation axes based on price observations."""
+        updates = {}
+        urgency = observations.get("urgency", 0.3)
+        updates["urgency"] = urgency
+
+        data = observations.get("data", {})
+        price_change = data.get("price_change_pct", 0)
+        if price_change > 0:
+            updates["market_trend"] = min(1.0, price_change / 50.0)
+        elif price_change < 0:
+            updates["market_trend"] = max(-1.0, price_change / 50.0)
+
+        return updates
+
+    async def _ooda_decide(
+        self, event: AgentEvent, observations: Dict[str, Any]
     ) -> AgentDecision:
         """Decide whether to alert based on observation and orientation."""
-        # Check if this is a significant price change
-        price_data = observation.data
-        price_change = price_data.get("price_change_pct", 0)
-        product = price_data.get("product", "unknown")
-        market = price_data.get("market", "unknown")
+        data = observations.get("data", {})
+        price_change = data.get("price_change_pct", 0)
+        product = data.get("product", "unknown")
+        market = data.get("market", "unknown")
+        urgency = observations.get("urgency", 0.3)
 
         # Factor in orientation (accumulated context)
-        risk = orientation.risk_level
-        confidence = orientation.orientation_confidence
+        risk = self._orientation.axes.get("risk_level", 0.0)
+        confidence = self._orientation.axes.get("confidence", 0.5)
 
-        if observation.urgency == UrgencyLevel.CRITICAL:
+        if urgency >= 0.9:  # critical
             action = "alert_immediate"
             reasoning = (
                 f"CRITICAL: {product} price changed {price_change}% in {market}. "
                 f"Risk level: {risk:.2f}. Immediate alert required."
             )
             conf = 0.95
-        elif observation.urgency == UrgencyLevel.HIGH:
+        elif urgency >= 0.6:  # high
             action = "alert_and_recommend"
             reasoning = (
                 f"Significant price movement: {product} {price_change}% in {market}. "
@@ -791,7 +801,7 @@ class PriceAlertOODA(OODAAgent):
             action = "log_and_monitor"
             reasoning = (
                 f"Normal price update: {product} in {market}. "
-                f"Continuing to monitor. Cycles since shift: {orientation.cycles_since_shift}."
+                f"Continuing to monitor."
             )
             conf = 0.7
 
@@ -801,14 +811,14 @@ class PriceAlertOODA(OODAAgent):
                 "product": product,
                 "market": market,
                 "price_change_pct": price_change,
-                "urgency": observation.urgency.value,
+                "urgency": urgency,
                 "risk_level": risk,
             },
             confidence=conf,
             reasoning=reasoning,
         )
 
-    async def _execute_action(self, decision: AgentDecision) -> AgentResult:
+    async def _ooda_act(self, decision: AgentDecision) -> AgentResult:
         """Execute the price alert action."""
         start = time.time()
 
@@ -879,50 +889,39 @@ class MarketFeedbackAgent(FeedbackAgent):
             ],
             decay_half_life_hours=24.0,
             min_signals_for_pattern=5,
-            auto_deploy_threshold=0.75,
         )
 
-    async def _extract_domain_signals(self, event: AgentEvent) -> List["LearningSignal"]:
-        """Extract market-specific learning signals."""
-        from app.agents.loops.feedback_loop import LearningSignal, SignalType
-
-        signals = []
-        payload = event.payload
-
-        # Price prediction accuracy signal
+    async def _compute_outcome_value(self, payload: Dict[str, Any]) -> float:
+        """Compute normalized outcome value from market data."""
+        # Price prediction accuracy
         if "predicted_price" in payload and "actual_price" in payload:
             predicted = payload["predicted_price"]
             actual = payload["actual_price"]
-            error_pct = abs(predicted - actual) / max(actual, 1) * 100
+            if actual > 0:
+                error_pct = abs(predicted - actual) / actual * 100
+                # 0% error = 1.0, 50%+ error = 0.0
+                return max(0.0, 1.0 - error_pct / 50.0)
 
-            if error_pct < 5:
-                signals.append(LearningSignal(
-                    signal_type=SignalType.SUCCESS,
-                    source_action="price_prediction",
-                    outcome={"error_pct": error_pct, "product": payload.get("product")},
-                    strength=1.0 - (error_pct / 100),
-                    context={"product": payload.get("product"), "market": payload.get("market")},
-                ))
-            elif error_pct > 20:
-                signals.append(LearningSignal(
-                    signal_type=SignalType.FAILURE,
-                    source_action="price_prediction",
-                    outcome={"error_pct": error_pct, "product": payload.get("product")},
-                    strength=error_pct / 100,
-                    context={"product": payload.get("product"), "market": payload.get("market")},
-                ))
+        # Default: use success/failure
+        return await super()._compute_outcome_value(payload)
 
-        # Market disruption signal
-        if event.event_type == EventType.MARKET_ALERT:
-            signals.append(LearningSignal(
-                signal_type=SignalType.MARKET_RESPONSE,
-                source_action="market_monitoring",
-                outcome={"alert_type": payload.get("alert_type")},
-                strength=0.8,
-                context={"market": payload.get("market")},
-            ))
+    async def _compute_expected_value(self, payload: Dict[str, Any]) -> float:
+        """Compute expected outcome value for market predictions."""
+        if "predicted_price" in payload:
+            # We expect our predictions to be accurate
+            return 0.8
+        return 0.5
 
-        return signals
+    def _extract_tags(self, payload: Dict[str, Any]) -> List[str]:
+        """Extract market-specific tags for pattern grouping."""
+        tags = super()._extract_tags(payload)
+        if "product" in payload:
+            tags.append(f"product:{payload['product']}")
+        if "market" in payload:
+            tags.append(f"market:{payload['market']}")
+        if "alert_type" in payload:
+            tags.append(f"alert:{payload['alert_type']}")
+        return tags
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -949,26 +948,21 @@ class CreditDecisionHITL(HumanInTheLoopAgent):
     """
 
     def __init__(self, wrapped_agent: Optional[BiasharaAgent] = None):
-        config = HITLConfig(
-            financial_threshold_low=5000.0,
-            financial_threshold_high=50000.0,
-            confidence_threshold=0.7,
-            consecutive_failure_threshold=3,
-            default_autonomy=AutonomyLevel.FULL_HUMAN,
-        )
+        # Create a default wrapped agent if none provided
+        if wrapped_agent is None:
+            wrapped_agent = BiasharaAgent(
+                name="CreditScorer",
+                role="Credit scoring engine",
+                capabilities=["credit_scoring", "loan_assessment"],
+            )
 
         super().__init__(
-            name="CreditDecision",
-            role="Credit decision oversight (HITL-enabled)",
-            capabilities=[
-                "credit_scoring",
-                "loan_assessment",
-                "escalation_management",
-                "trust_tracking",
-                "progressive_autonomy",
-            ],
             wrapped_agent=wrapped_agent,
-            config=config,
+            worker_id="system",
+            initial_autonomy=AutonomyLevel.FULL_HUMAN,
+            financial_threshold=5000.0,  # KSh 5,000 escalation threshold
+            confidence_threshold=0.7,
+            max_consecutive_failures=3,
         )
 
 

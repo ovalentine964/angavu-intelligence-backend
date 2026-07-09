@@ -11,7 +11,9 @@ Endpoints align with FederatedLearningClient.kt in the Android app:
 - Status: GET /api/v1/fl/status
 """
 
+import base64
 import gzip
+import hashlib
 import json
 from typing import Optional
 
@@ -28,11 +30,68 @@ from app.schemas.federated_learning import (
 )
 from app.services.federated_learning import FederatedLearningService
 
+# Post-Quantum Cryptography — ML-KEM-768 + ML-DSA-65
+from app.security.pqc import (
+    MlKemProvider,
+    MlKemParameterSet,
+    MlDsaProvider,
+    MlDsaParameterSet,
+    FlPqcDecryptor,
+    EncryptedGradientPayload,
+    CryptoAuditLogger,
+    AuditEventType,
+)
+
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["Federated Learning"])
 
 # Service singleton (stateful, holds in-memory aggregation state)
 _fl_service = FederatedLearningService()
+
+# ── PQC Infrastructure ──────────────────────────────────────────────
+# Server-side ML-KEM-768 key pair for gradient decapsulation.
+# Generated once at startup; public key distributed to devices.
+_server_ml_kem = MlKemProvider(MlKemParameterSet.ML_KEM_768)
+_server_kem_keypair = _server_ml_kem.generate_key_pair()
+_fl_decryptor = FlPqcDecryptor(server_ml_kem_keypair=_server_kem_keypair)
+_crypto_audit = CryptoAuditLogger()
+
+
+# ════════════════════════════════════════════════════════════════════
+# PQC Public Key — Distribute server's ML-KEM-768 public key
+# ════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/fl/pqc-public-key",
+    summary="Get server's ML-KEM-768 public key",
+    description=(
+        "Returns the server's post-quantum ML-KEM-768 public key for "
+        "encrypting federated learning gradient uploads. Devices use this "
+        "key to encapsulate a shared secret, then encrypt gradients with "
+        "AES-256-GCM."
+    ),
+)
+async def get_pqc_public_key() -> dict:
+    """
+    Distribute the server's ML-KEM-768 public key.
+
+    Devices call this endpoint to obtain the public key needed for
+    PQC-encrypted gradient uploads. The key is rotated periodically
+    (recommended: every 24 hours or per aggregation round).
+
+    Returns:
+        Dict with algorithm, public_key (base64), and key_id
+    """
+    pub_key_b64 = base64.b64encode(_server_kem_keypair.public_key).decode("ascii")
+    key_id = hashlib.sha256(_server_kem_keypair.public_key).hexdigest()[:16]
+    return {
+        "algorithm": "ML-KEM-768",
+        "public_key": pub_key_b64,
+        "key_id": key_id,
+        "security_level": 3,
+        "description": "NIST FIPS 203 — 192-bit post-quantum security",
+    }
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -97,6 +156,90 @@ async def upload_model_update(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process federated learning update",
+        )
+
+
+# ════════════════════════════════════════════════════════════════════
+# PQC-Encrypted Upload — Quantum-safe gradient transport
+# ════════════════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/fl/upload-encrypted",
+    response_model=UploadResponse,
+    summary="Upload PQC-encrypted federated learning update",
+    description=(
+        "Receive a post-quantum encrypted model update from a device. "
+        "Uses ML-KEM-768 for key encapsulation and AES-256-GCM for "
+        "encryption. ML-DSA-65 signature verifies authenticity."
+    ),
+)
+async def upload_encrypted_model_update(
+    request: Request,
+    current_user=Depends(get_current_user),
+) -> UploadResponse:
+    """
+    Receive PQC-encrypted gradient upload from device.
+
+    Security flow:
+    1. Device obtains server's ML-KEM-768 public key via /fl/pqc-public-key
+    2. Device encapsulates shared secret using ML-KEM-768
+    3. Device encrypts gradients with AES-256-GCM using shared secret
+    4. Device signs encrypted payload with ML-DSA-65
+    5. Server decapsulates, verifies signature, decrypts
+
+    This provides:
+    - Confidentiality: AES-256-GCM (128-bit post-quantum security)
+    - Key exchange: ML-KEM-768 (IND-CCA2, NIST Level 3)
+    - Authenticity: ML-DSA-65 (EUF-CMA, NIST Level 3)
+    """
+    try:
+        body = await request.json()
+        payload = EncryptedGradientPayload.from_dict(body)
+
+        # Decrypt and verify
+        gradients_bytes, sig_valid = _fl_decryptor.decrypt_gradients(
+            payload, verify_signature=True
+        )
+
+        _crypto_audit.log_decryption(
+            algorithm_id="ML-KEM-768+AES-256-GCM",
+            data_size=len(gradients_bytes),
+            key_alias="fl_server_kem",
+            success=True,
+        )
+
+        # Parse decrypted gradients into FLUpdate
+        update_data = json.loads(gradients_bytes.decode("utf-8"))
+        update = _parse_kotlin_payload(update_data)
+
+        result = await _fl_service.upload_update(update)
+        return result
+
+    except SecurityException as e:
+        _crypto_audit.log_verification(
+            algorithm_id="ML-DSA-65",
+            data_hash="fl_gradient",
+            valid=False,
+            error=str(e),
+        )
+        logger.warning("fl_pqc_signature_failed", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Quantum-safe signature verification failed",
+        )
+    except Exception as e:
+        _crypto_audit.log_decryption(
+            algorithm_id="ML-KEM-768+AES-256-GCM",
+            data_size=0,
+            key_alias="fl_server_kem",
+            success=False,
+            error=str(e),
+        )
+        logger.error("fl_pqc_upload_failed", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process encrypted federated learning update",
         )
 
 
@@ -290,6 +433,10 @@ async def check_model_version(
 # ════════════════════════════════════════════════════════════════════
 # Helpers
 # ════════════════════════════════════════════════════════════════════
+
+
+# Import SecurityException from PQC module
+from app.security.pqc.fl_encryption import SecurityException
 
 
 def _parse_kotlin_payload(data: dict) -> FLUpdate:

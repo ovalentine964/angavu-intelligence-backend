@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     JWT_PUBLIC_KEY: str = ""   # PEM-encoded RSA public key for RS256 verification
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    JWT_ISSUER: str = "angavu-intelligence"  # Token issuer claim
+    JWT_AUDIENCE: str = "angavu-api"  # Token audience claim
 
     # === Encryption ===
     ENCRYPTION_KEY: str = ""
@@ -137,7 +139,7 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v, info):
-        if not v or v.startswith("CHANGE_ME"):
+        if not v or v.startswith("CHANGE_ME") or v.startswith("change-me"):
             raise ValueError("SECRET_KEY must be set to a unique secret (got default)")
         env = os.getenv("APP_ENV", info.data.get("APP_ENV", "development"))
         if env == "production" and len(v) < 32:
@@ -157,6 +159,15 @@ class Settings(BaseSettings):
         # SECRET_KEY must never be empty in any environment
         if not self.SECRET_KEY:
             raise ValueError("SECRET_KEY must not be empty")
+        # RS256 requires both private and public keys
+        if self.JWT_ALGORITHM == "RS256":
+            if not self.JWT_PRIVATE_KEY:
+                raise ValueError("JWT_PRIVATE_KEY must be set when using RS256")
+            if not self.JWT_PUBLIC_KEY:
+                raise ValueError("JWT_PUBLIC_KEY must be set when using RS256")
+        # Production: ENCRYPTION_KEY must be set
+        if self.APP_ENV == "production" and not self.ENCRYPTION_KEY:
+            raise ValueError("ENCRYPTION_KEY must be set in production")
         return self
 
     @field_validator("ENCRYPTION_KEY")

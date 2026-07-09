@@ -273,6 +273,25 @@ async def lifespan(app: FastAPI):
     app.state.mcp_server = mcp_server
     logger.info("mcp_server_initialized", tools=mcp_server.get_health()["tools_registered"])
 
+    # ── Post-Quantum Cryptography Initialization ───────────────────
+    try:
+        from app.security.pqc import PqcConfig, AlgorithmRegistry, CryptoAuditLogger
+        pqc_registry = AlgorithmRegistry()
+        pqc_audit = CryptoAuditLogger()
+        app.state.pqc_config = PqcConfig
+        app.state.pqc_registry = pqc_registry
+        app.state.pqc_audit = pqc_audit
+        pqc_status = PqcConfig.get_status_report()
+        logger.info(
+            "pqc_initialized",
+            migration_phase=pqc_status["migration_phase"],
+            hybrid_kex=pqc_status["hybrid_key_exchange"],
+            kex_algorithm=pqc_status["recommended_key_exchange"],
+            sig_algorithm=pqc_status["recommended_signature"],
+        )
+    except Exception as exc:
+        logger.warning("pqc_init_failed", error=str(exc))
+
     yield
 
     # Shutdown
@@ -329,14 +348,29 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Device-ID", "X-OpenWA-Signature"],
-    expose_headers=["X-Request-ID", "X-RateLimit-Remaining"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Device-ID", "X-OpenWA-Signature", "X-CSRF-Token"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Remaining", "X-RateLimit-Limit", "X-RateLimit-Reset"],
 )
 
 # Trusted host middleware (prevents Host header attacks)
+# Extract hostnames from URLs for TrustedHostMiddleware
+import urllib.parse
+def _extract_hostnames(origins: list) -> list:
+    """Extract hostnames from URL strings for TrustedHostMiddleware."""
+    hosts = []
+    for origin in origins:
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            if parsed.hostname:
+                hosts.append(parsed.hostname)
+        except Exception:
+            pass
+    return hosts if hosts else ["*"]
+
+_trusted_hosts = _extract_hostnames(_cors_origins) if settings.is_production else ["*"]
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=_cors_origins if settings.is_production else ["*"],
+    allowed_hosts=_trusted_hosts,
 )
 
 # Rate limiting
@@ -347,7 +381,7 @@ from app.infrastructure.metrics import create_metrics_middleware
 app.middleware("http")(create_metrics_middleware())
 
 
-# Security headers middleware
+# Security headers middleware — uses strict CSP, no deprecated headers
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """Add security headers to every response."""
@@ -355,15 +389,26 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; frame-ancestors 'none'; "
-        "script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; connect-src 'self'"
+    # NOTE: X-XSS-Protection intentionally omitted — deprecated and can introduce
+    # vulnerabilities in older browsers. Modern browsers use CSP instead.
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     )
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; frame-ancestors 'none'; "
+        "base-uri 'none'; form-action 'self'"
+    )
+    # Prevent caching of API responses (contains sensitive financial data)
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/auth/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
     return response
 
+
+# Input validation middleware — SQL injection, XSS, path traversal detection
+from app.security.security_middleware import InputValidationMiddleware
+app.add_middleware(InputValidationMiddleware)
 
 # Request ID middleware
 @app.middleware("http")
@@ -602,6 +647,29 @@ async def prometheus_metrics():
     )
 
 
+@app.get("/health/pqc", tags=["Health"])
+async def pqc_status():
+    """
+    Post-Quantum Cryptography status endpoint.
+
+    Returns the current PQC migration phase, configured algorithms,
+    and available providers. Used for monitoring quantum readiness.
+    """
+    try:
+        from app.security.pqc import PqcConfig, AlgorithmRegistry
+        registry = AlgorithmRegistry()
+        status_report = PqcConfig.get_status_report()
+        algorithms = registry.list_algorithms()
+        pq_algorithms = registry.list_pq_algorithms()
+        return {
+            "pqc_status": status_report,
+            "algorithms": algorithms,
+            "post_quantum_algorithms": pq_algorithms,
+        }
+    except Exception as e:
+        return {"pqc_status": "unavailable", "error": str(e)}
+
+
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint — redirects to docs in development."""
@@ -752,4 +820,13 @@ async def startup_banner():
     logger.info(f"   Environment: {settings.APP_ENV}")
     logger.info(f"   API Prefix:  {settings.API_V1_PREFIX}")
     logger.info(f"   Debug:       {settings.DEBUG}")
+    # PQC status in banner
+    try:
+        from app.security.pqc import PqcConfig
+        pqc = PqcConfig.get_status_report()
+        logger.info(f"   PQC Phase:   {pqc['migration_phase']}")
+        logger.info(f"   Key Exchange: {pqc['recommended_key_exchange']}")
+        logger.info(f"   Signatures:   {pqc['recommended_signature']}")
+    except Exception:
+        logger.info("   PQC:         unavailable")
     logger.info("=" * 60)

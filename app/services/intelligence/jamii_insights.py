@@ -37,9 +37,12 @@ from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import BootstrapCI
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
+    BayesianUpdater,
     BootstrapInference,
     ClusterAnalyzer,
+    InequalityAnalyzer,
     KernelDensityEstimator,
+    PovertyAnalyzer,
     bootstrap,
     kde_estimator,
 )
@@ -700,6 +703,10 @@ class JamiiInsightsService:
             "health_economic": health_economic,
             # STA 442: Cluster analysis for community segmentation
             "community_segmentation": community_segmentation,
+            # STA 341/ECO 401: Statistical engine inequality & poverty analysis
+            "advanced_inequality_analysis": self._run_statistical_engine_inequality(
+                user_monthly_incomes, poverty_line_monthly,
+            ),
             # STA 444: Non-parametric analysis
             "nonparametric_analysis": self._run_nonparametric_analysis(
                 sales, users, user_monthly_incomes, user_count,
@@ -716,6 +723,67 @@ class JamiiInsightsService:
 
         logger.info("jamii_insights_generated", region=region, k=user_count)
         return response
+
+    @staticmethod
+    def _run_statistical_engine_inequality(
+        user_monthly_incomes: np.ndarray,
+        poverty_line_monthly: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run statistical engine inequality & poverty analysis (STA 341, ECO 401).
+
+        Uses InequalityAnalyzer and PovertyAnalyzer from the statistical
+        foundation layer to compute Gini, Theil, Atkinson, FGT, Lorenz curve,
+        Watts index, and Sen index with proper uncertainty quantification.
+        """
+        if len(user_monthly_incomes) < 5:
+            return None
+
+        try:
+            incomes = np.array(user_monthly_incomes, dtype=float)
+            incomes = incomes[incomes > 0]
+            if len(incomes) < 3:
+                return None
+
+            # InequalityAnalyzer: Gini, Theil, Atkinson, Lorenz
+            gini = InequalityAnalyzer.gini_coefficient(incomes)
+            theil = InequalityAnalyzer.theil_index(incomes)
+            atkinson = InequalityAnalyzer.atkinson_index(incomes, epsilon=1.0)
+            lorenz = InequalityAnalyzer.lorenz_curve(incomes)
+
+            # PovertyAnalyzer: FGT, Watts, Sen
+            fgt_0 = PovertyAnalyzer.fgt_measure(incomes, poverty_line_monthly, alpha=0)
+            fgt_1 = PovertyAnalyzer.fgt_measure(incomes, poverty_line_monthly, alpha=1)
+            fgt_2 = PovertyAnalyzer.fgt_measure(incomes, poverty_line_monthly, alpha=2)
+            watts = PovertyAnalyzer.watts_index(incomes, poverty_line_monthly)
+            sen = PovertyAnalyzer.sen_index(incomes, poverty_line_monthly)
+            profile = PovertyAnalyzer.poverty_profile(incomes, poverty_line_monthly)
+
+            return {
+                "inequality": {
+                    "gini": gini,
+                    "theil": theil,
+                    "atkinson": atkinson,
+                    "lorenz_curve": {
+                        "n_points": len(lorenz["population_shares"]),
+                        "gini": lorenz["gini"],
+                    },
+                },
+                "poverty": {
+                    "fgt_0_headcount": fgt_0,
+                    "fgt_1_poverty_gap": fgt_1,
+                    "fgt_2_severity": fgt_2,
+                    "watts_index": watts,
+                    "sen_index": sen,
+                    "mean_income": profile["mean_income"],
+                    "median_income": profile["median_income"],
+                },
+                "n_observations": len(incomes),
+                "method": "STA 341/ECO 401 — Statistical engine (InequalityAnalyzer, PovertyAnalyzer)",
+            }
+        except Exception as e:
+            logger.debug("statistical_engine_inequality_failed", error=str(e))
+            return None
 
     @staticmethod
     def _run_nonparametric_analysis(

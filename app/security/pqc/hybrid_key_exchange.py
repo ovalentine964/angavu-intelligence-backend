@@ -158,9 +158,15 @@ class HybridKeyExchange:
         """
         Complete a hybrid key exchange (server side).
 
-        SECURITY: This method uses a placeholder for the X25519 component.
-        For production TLS integration, use complete_with_x25519_secret()
-        with the actual X25519 shared secret computed by the TLS layer.
+        ⚠️  SECURITY WARNING: This method uses a DETERMINISTIC PLACEHOLDER
+        for the X25519 component — NOT a real Diffie-Hellman agreement.
+        It does NOT provide forward secrecy.
+
+        For production, use ONE of these instead:
+        - complete_as_server() — generates server X25519 keypair, real DH
+        - complete_with_x25519_secret() — accepts pre-computed DH secret
+
+        This method exists only for testing/development.
 
         Args:
             peer_ecdh_public_key: Client's X25519 public key
@@ -170,7 +176,7 @@ class HybridKeyExchange:
         Returns:
             Combined shared secret matching the client's
         """
-        # Step 1: X25519 shared secret (placeholder — see docstring)
+        # Step 1: X25519 shared secret (placeholder — NOT for production)
         x25519_secret = self._derive_x25519_secret_placeholder(peer_ecdh_public_key)
 
         # Step 2: ML-KEM decapsulation (real, via liboqs)

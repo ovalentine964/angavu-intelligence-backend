@@ -49,7 +49,7 @@ class SyncAgent(BiasharaAgent):
     ]
 
     def __init__(self):
-        super().__init__(name=self.name, role=self.role, capabilities=self.capabilities, tier=3)
+        super().__init__(name=self.name, role=self.role, capabilities=self.capabilities)
 
     async def think(self, context: Dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})

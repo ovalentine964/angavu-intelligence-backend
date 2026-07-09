@@ -39,6 +39,7 @@ router = APIRouter(prefix="/auth/otp", tags=["OTP Authentication"])
 # In-memory OTP store (production: Redis with TTL)
 # Structure: _otps[phone] = [{code_hash, created_at, expires_at, verified, attempts}]
 _otps: dict = {}
+_MAX_OTP_ENTRIES = 10_000  # Prevent memory exhaustion from OTP flooding
 
 
 # =========================================================================
@@ -160,6 +161,12 @@ async def request_otp(request: OTPRequest):
 
     code = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    # Prevent memory exhaustion: evict oldest entries if store is full
+    if phone not in _otps and len(_otps) >= _MAX_OTP_ENTRIES:
+        # Remove the oldest phone entry (first key)
+        oldest_key = next(iter(_otps))
+        del _otps[oldest_key]
 
     # Store hashed OTP (never store plaintext)
     if phone not in _otps:

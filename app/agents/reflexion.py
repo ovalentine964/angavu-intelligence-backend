@@ -36,6 +36,7 @@ For Msaidizi's use cases:
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -259,7 +260,7 @@ class ReflexionLoop:
         # Check for language consistency
         if expected_language == "sw" and response.isascii():
             score -= 0.05
-            suggestions.add("Consider using Swahili for Swahili-speaking users")
+            suggestions.append("Consider using Swahili for Swahili-speaking users")
 
         score = max(0.0, min(1.0, score))
 
@@ -371,6 +372,3 @@ class ReflexionLoop:
         """Get total number of critiques performed."""
         return len(self._critique_history)
 
-
-# Need asyncio for async function detection
-import asyncio

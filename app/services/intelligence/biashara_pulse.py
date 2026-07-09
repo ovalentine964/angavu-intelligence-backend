@@ -76,11 +76,19 @@ from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.game_theory import NashEquilibriumSolver
 from app.services.intelligence.cache import intelligence_cache
+from app.services.intelligence.markov_chains import MarkovChainAnalyzer, markov_analyzer
 from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
+    BayesianUpdater,
     BootstrapInference,
+    ClusterAnalyzer,
+    DEAAnalyzer,
     KernelDensityEstimator,
+    MonteCarloEngine,
+    PCAAnalyzer,
+    SFAAnalyzer,
+    bayesian_updater,
     bootstrap,
     kde_estimator,
 )
@@ -727,6 +735,18 @@ class BiasharaPulseService:
             ),
             # ECO 321: Nash equilibrium for policy game analysis
             "policy_game_analysis": policy_game_analysis,
+            # STA 347: Markov chain business state transitions
+            "markov_business_transitions": self._run_markov_business_analysis(
+                sales, sector_breakdown, user_count,
+            ),
+            # STA 341: Bayesian business health estimation
+            "bayesian_business_health": self._run_bayesian_business_health(
+                sales, user_count, total_revenue, days_in_period,
+            ),
+            # ECO 311/422: DEA & SFA production frontier
+            "production_frontier": self._run_frontier_analysis(
+                sales, sector_breakdown, user_count,
+            ),
             "users_included": user_count,
             # STA 342: Confidence intervals for key metrics
             "confidence_intervals": {
@@ -861,6 +881,252 @@ class BiasharaPulseService:
                 logger.debug("bootstrap_gdp_estimates_failed", error=str(e))
 
         return result if result else None
+
+    @staticmethod
+    def _run_markov_business_analysis(
+        sales: list,
+        sector_breakdown: list,
+        user_count: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Markov chain analysis of business state transitions (STA 347).
+
+        Models business health states (thriving, stable, struggling, dormant)
+        and estimates transition probabilities between states based on
+        transaction patterns over time.
+        """
+        if len(sales) < 30 or user_count < 5:
+            return None
+
+        try:
+            # Group transactions by user and week to build state sequences
+            from collections import defaultdict
+            import math
+
+            user_weekly: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+            for t in sales:
+                week_key = t.timestamp.strftime("%Y-W%W")
+                user_weekly[str(t.user_id)][week_key] += t.amount
+
+            if len(user_weekly) < 3:
+                return None
+
+            # Define business states based on weekly revenue percentiles
+            all_weekly_rev = []
+            for weeks in user_weekly.values():
+                all_weekly_rev.extend(weeks.values())
+            if len(all_weekly_rev) < 10:
+                return None
+
+            p25 = float(np.percentile(all_weekly_rev, 25))
+            p50 = float(np.percentile(all_weekly_rev, 50))
+            p75 = float(np.percentile(all_weekly_rev, 75))
+
+            def classify_state(rev: float) -> int:
+                if rev <= 0:
+                    return 0  # dormant
+                elif rev < p25:
+                    return 1  # struggling
+                elif rev < p75:
+                    return 2  # stable
+                else:
+                    return 3  # thriving
+
+            state_names = ["dormant", "struggling", "stable", "thriving"]
+
+            # Build transition count matrix from sequential weeks
+            transitions = np.zeros((4, 4), dtype=int)
+            for uid, weeks in user_weekly.items():
+                sorted_weeks = sorted(weeks.items())
+                for i in range(len(sorted_weeks) - 1):
+                    s_from = classify_state(sorted_weeks[i][1])
+                    s_to = classify_state(sorted_weeks[i + 1][1])
+                    transitions[s_from][s_to] += 1
+
+            # Convert to probability matrix
+            row_sums = transitions.sum(axis=1, keepdims=True)
+            row_sums = np.maximum(row_sums, 1)
+            transition_matrix = transitions / row_sums
+
+            # Compute steady-state distribution
+            try:
+                T = transition_matrix.T
+                eigenvalues, eigenvectors = np.linalg.eig(T)
+                idx = np.argmin(np.abs(eigenvalues - 1.0))
+                steady_state = np.real(eigenvectors[:, idx])
+                steady_state = steady_state / steady_state.sum()
+                steady_state = np.abs(steady_state)
+            except Exception:
+                steady_state = np.ones(4) / 4
+
+            return {
+                "transition_matrix": {
+                    state_names[i]: {
+                        state_names[j]: round(float(transition_matrix[i][j]), 4)
+                        for j in range(4)
+                    }
+                    for i in range(4)
+                },
+                "steady_state_distribution": {
+                    state_names[i]: round(float(steady_state[i]), 4)
+                    for i in range(4)
+                },
+                "state_counts": {
+                    state_names[i]: int(transitions[i].sum())
+                    for i in range(4)
+                },
+                "total_transitions": int(transitions.sum()),
+                "businesses_tracked": len(user_weekly),
+                "method": "STA 347 — Markov chain business state transitions",
+            }
+        except Exception as e:
+            logger.debug("markov_business_analysis_failed", error=str(e))
+            return None
+
+    @staticmethod
+    def _run_bayesian_business_health(
+        sales: list,
+        user_count: int,
+        total_revenue: float,
+        days_in_period: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bayesian estimation of business health metrics (STA 341).
+
+        Uses Beta-Binomial model to estimate the proportion of
+        healthy businesses (those with revenue above median) with
+        proper uncertainty quantification via credible intervals.
+        """
+        if len(sales) < 20 or user_count < 5:
+            return None
+
+        try:
+            # Compute per-user revenue
+            user_rev: Dict[str, float] = defaultdict(float)
+            for t in sales:
+                user_rev[str(t.user_id)] += t.amount
+
+            revenues = np.array(list(user_rev.values()), dtype=float)
+            median_rev = float(np.median(revenues))
+
+            # Businesses above median = "healthy"
+            successes = int(np.sum(revenues > median_rev))
+            failures = len(revenues) - successes
+
+            # Beta-Binomial with informative prior
+            # Prior: Beta(2, 2) — mild belief in ~50% healthy
+            post_alpha, post_beta, summary = bayesian_updater.beta_binomial_update(
+                prior_alpha=2.0,
+                prior_beta=2.0,
+                successes=successes,
+                failures=failures,
+            )
+
+            # Bayesian revenue estimation with Normal-Normal conjugate
+            rev_mean = float(np.mean(revenues))
+            rev_var = float(np.var(revenues, ddof=1)) if len(revenues) > 1 else 1.0
+            post_mean, post_var, rev_summary = bayesian_updater.normal_normal_update(
+                prior_mean=rev_mean,
+                prior_var=rev_var * 2,
+                data_mean=rev_mean,
+                data_var=rev_var,
+                n=len(revenues),
+            )
+
+            return {
+                "healthy_business_proportion": {
+                    "posterior_mean": summary["posterior_mean"],
+                    "credible_interval_95": summary["credible_interval_95"],
+                    "prior_mean": summary["prior_mean"],
+                    "data_points": summary["data_points"],
+                    "effective_sample_size": summary["effective_sample_size"],
+                },
+                "revenue_estimation": {
+                    "posterior_mean": rev_summary["posterior_mean"],
+                    "posterior_std": rev_summary["posterior_std"],
+                    "credible_interval_95": rev_summary["credible_interval_95"],
+                    "shrinkage_factor": rev_summary["shrinkage_factor"],
+                    "data_mean": rev_summary["data_mean"],
+                },
+                "method": "STA 341 — Bayesian Beta-Binomial & Normal-Normal conjugate",
+            }
+        except Exception as e:
+            logger.debug("bayesian_business_health_failed", error=str(e))
+            return None
+
+    @staticmethod
+    def _run_frontier_analysis(
+        sales: list,
+        sector_breakdown: list,
+        user_count: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        DEA & SFA production frontier analysis (ECO 311, ECO 422).
+
+        Estimates technical efficiency of business clusters using
+        Data Envelopment Analysis (non-parametric) and Stochastic
+        Frontier Analysis (parametric).
+        """
+        if len(sales) < 30 or user_count < 5:
+            return None
+
+        try:
+            from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
+
+            # Build DMU data: each user is a DMU
+            # Inputs: number of transactions (labor proxy)
+            # Outputs: total revenue
+            user_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"txn_count": 0, "revenue": 0.0})
+            for t in sales:
+                uid = str(t.user_id)
+                user_metrics[uid]["txn_count"] += 1
+                user_metrics[uid]["revenue"] += t.amount
+
+            if len(user_metrics) < 5:
+                return None
+
+            inputs = np.array([[m["txn_count"]] for m in user_metrics.values()], dtype=float)
+            outputs = np.array([[m["revenue"]] for m in user_metrics.values()], dtype=float)
+            dmu_names = list(user_metrics.keys())
+
+            # DEA analysis
+            dea_result = DEAAnalyzer.input_oriented_bcc(inputs, outputs, dmu_names)
+
+            # SFA analysis (Cobb-Douglas)
+            sfa_result = SFAAnalyzer.cobb_douglas_frontier(
+                output=outputs.flatten(),
+                inputs=inputs,
+                input_names=["transaction_count"],
+            )
+
+            return {
+                "dea": {
+                    "mean_efficiency": dea_result["mean_efficiency"],
+                    "median_efficiency": dea_result["median_efficiency"],
+                    "min_efficiency": dea_result["min_efficiency"],
+                    "n_efficient": dea_result["n_efficient"],
+                    "n_inefficient": dea_result["n_inefficient"],
+                    "model": dea_result["model"],
+                },
+                "sfa": {
+                    "mean_efficiency": sfa_result.get("mean_efficiency", 0),
+                    "median_efficiency": sfa_result.get("median_efficiency", 0),
+                    "coefficients": sfa_result.get("coefficients", []),
+                    "elasticities": sfa_result.get("elasticities", {}),
+                    "returns_to_scale": sfa_result.get("returns_to_scale", 0),
+                    "sigma_u": sfa_result.get("sigma_u", 0),
+                    "sigma_v": sfa_result.get("sigma_v", 0),
+                    "gamma": sfa_result.get("gamma", 0),
+                    "r_squared": sfa_result.get("r_squared", 0),
+                    "model": sfa_result.get("model", "cobb_douglas_SFA"),
+                    "inefficiency_detected": sfa_result.get("inefficiency_detected", False),
+                },
+                "n_dmus": len(user_metrics),
+                "method": "ECO 311/422 — DEA (BCC) & SFA (Cobb-Douglas) production frontier",
+            }
+        except Exception as e:
+            logger.debug("frontier_analysis_failed", error=str(e))
+            return None
 
     @staticmethod
     def _determine_region_type(region: str) -> str:
