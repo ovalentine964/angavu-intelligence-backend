@@ -69,5 +69,5 @@ class PqcConfig:
             "recommended_signature": cls.get_recommended_signature_algorithm(),
             "recommended_encryption": cls.get_recommended_encryption_algorithm(),
             "classical_fallback_allowed": cls.allow_classical_fallback(),
-            "whit_house_eo_deadline": "2030-12-31",
+            "white_house_eo_deadline": "2030-12-31",
         }

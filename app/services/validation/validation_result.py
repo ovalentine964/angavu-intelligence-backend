@@ -10,8 +10,49 @@ In financial software, every validation result must:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
+
+def parse_date(value: Any) -> Optional[datetime]:
+    """Parse various date formats into a timezone-aware UTC datetime.
+
+    Accepts:
+    - datetime objects (naive assumed UTC)
+    - Unix timestamps (int/float)
+    - ISO format strings and common date/time patterns
+
+    Returns None if parsing fails.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OSError, ValueError):
+            return None
+
+    if isinstance(value, str):
+        for fmt in [
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        ]:
+            try:
+                dt = datetime.strptime(value, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except ValueError:
+                continue
+
+    return None
 
 
 class ErrorSeverity(str, Enum):

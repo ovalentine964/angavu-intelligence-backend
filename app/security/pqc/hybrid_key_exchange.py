@@ -16,7 +16,7 @@ This is a REAL implementation using:
 import hashlib
 import hmac
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import hashes, serialization
@@ -77,22 +77,33 @@ class HybridKeyExchange:
         """This IS the real provider."""
         return self
 
-    def initiate(self, peer_ml_kem_public_key: bytes) -> HybridKeyExchangeResult:
+    def initiate(
+        self,
+        peer_ml_kem_public_key: bytes,
+        peer_x25519_public_key: Optional[bytes] = None,
+    ) -> HybridKeyExchangeResult:
         """
         Initiate a hybrid key exchange (client side).
 
         Generates both X25519 and ML-KEM key material, then combines them
         into a single shared secret using HKDF.
 
+        If peer_x25519_public_key is provided, computes the real X25519
+        Diffie-Hellman shared secret immediately. Otherwise, stores the
+        ephemeral private key for later use via compute_x25519_shared_secret().
+
         Args:
             peer_ml_kem_public_key: The server's ML-KEM public key
+            peer_x25519_public_key: Optional peer X25519 public key for real DH.
+                If not provided, the X25519 secret is computed later via
+                compute_x25519_shared_secret().
 
         Returns:
             HybridKeyExchangeResult with public material and combined shared secret
         """
         # Step 1: Generate X25519 ephemeral key pair (real)
-        x25519_private_key = x25519.X25519PrivateKey.generate()
-        x25519_public_key_bytes = x25519_private_key.public_key().public_bytes(
+        self._x25519_private_key = x25519.X25519PrivateKey.generate()
+        x25519_public_key_bytes = self._x25519_private_key.public_key().public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         )
@@ -100,15 +111,18 @@ class HybridKeyExchange:
         # Step 2: ML-KEM encapsulation (real, via liboqs)
         ml_kem_result = self._ml_kem.encapsulate(peer_ml_kem_public_key)
 
-        # Step 3: X25519 shared secret
-        # NOTE: In a real protocol, we'd compute this against the peer's X25519 public key.
-        # For the hybrid exchange, we derive a placeholder since the actual X25519
-        # agreement happens when the server completes the exchange.
-        # The ML-KEM part provides the actual PQ security guarantee.
-        x25519_secret = x25519_private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
+        # Step 3: X25519 Diffie-Hellman shared secret
+        if peer_x25519_public_key is not None:
+            # Real X25519 DH agreement with peer's public key
+            peer_key = x25519.X25519PublicKey.from_public_bytes(peer_x25519_public_key)
+            x25519_secret = self._x25519_private_key.exchange(peer_key)
+        else:
+            # No peer key yet — use a placeholder derived from our public key.
+            # Caller MUST later call compute_x25519_shared_secret() or
+            # complete_with_x25519_secret() on the server with the real DH secret.
+            x25519_secret = hashlib.sha256(
+                x25519_public_key_bytes + b"X25519-ephemeral"
+            ).digest()
 
         # Step 4: Combine using HKDF
         combined_secret = self._combine_secrets(x25519_secret, ml_kem_result.shared_secret)
@@ -119,6 +133,22 @@ class HybridKeyExchange:
             shared_secret=combined_secret,
         )
 
+    def get_x25519_public_key(self) -> bytes:
+        """Get the client's X25519 public key (after initiate())."""
+        if not hasattr(self, '_x25519_private_key') or self._x25519_private_key is None:
+            raise RuntimeError("Must call initiate() first")
+        return self._x25519_private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+    def compute_x25519_shared_secret(self, peer_public_key: bytes) -> bytes:
+        """Compute X25519 shared secret with peer's public key (after initiate())."""
+        if not hasattr(self, '_x25519_private_key') or self._x25519_private_key is None:
+            raise RuntimeError("Must call initiate() first")
+        peer_key = x25519.X25519PublicKey.from_public_bytes(peer_public_key)
+        return self._x25519_private_key.exchange(peer_key)
+
     def complete(
         self,
         peer_ecdh_public_key: bytes,
@@ -128,8 +158,9 @@ class HybridKeyExchange:
         """
         Complete a hybrid key exchange (server side).
 
-        Recovers the same combined shared secret as the initiator,
-        using the server's ML-KEM private key and the client's X25519 public key.
+        SECURITY: This method uses a placeholder for the X25519 component.
+        For production TLS integration, use complete_with_x25519_secret()
+        with the actual X25519 shared secret computed by the TLS layer.
 
         Args:
             peer_ecdh_public_key: Client's X25519 public key
@@ -139,16 +170,60 @@ class HybridKeyExchange:
         Returns:
             Combined shared secret matching the client's
         """
-        # Step 1: X25519 shared secret
-        # In a real protocol, the server would use its own X25519 private key
-        # to compute the shared secret with the client's public key.
-        # For now, we use a deterministic derivation from the peer's public key.
+        # Step 1: X25519 shared secret (placeholder — see docstring)
         x25519_secret = self._derive_x25519_secret_placeholder(peer_ecdh_public_key)
 
         # Step 2: ML-KEM decapsulation (real, via liboqs)
         ml_kem_secret = self._ml_kem.decapsulate(ml_kem_ciphertext, ml_kem_private_key)
 
         # Step 3: Combine using HKDF
+        return self._combine_secrets(x25519_secret, ml_kem_secret)
+
+    def generate_server_x25519_keypair(self) -> Tuple[bytes, bytes]:
+        """
+        Generate a server-side X25519 key pair for the hybrid exchange.
+
+        Returns:
+            Tuple of (private_key_bytes, public_key_bytes) for X25519
+        """
+        server_private = x25519.X25519PrivateKey.generate()
+        server_public_bytes = server_private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        # Store for later use
+        self._server_x25519_private = server_private
+        return server_public_bytes
+
+    def complete_as_server(
+        self,
+        peer_ecdh_public_key: bytes,
+        ml_kem_ciphertext: bytes,
+        ml_kem_private_key: bytes,
+    ) -> bytes:
+        """
+        Complete a hybrid key exchange using a real server-side X25519 key.
+
+        Must call generate_server_x25519_keypair() first.
+
+        Args:
+            peer_ecdh_public_key: Client's X25519 public key
+            ml_kem_ciphertext: Client's ML-KEM ciphertext
+            ml_kem_private_key: Server's ML-KEM private key
+
+        Returns:
+            Combined shared secret
+        """
+        if not hasattr(self, '_server_x25519_private') or self._server_x25519_private is None:
+            raise RuntimeError("Must call generate_server_x25519_keypair() first")
+
+        # Real X25519 DH agreement
+        peer_key = x25519.X25519PublicKey.from_public_bytes(peer_ecdh_public_key)
+        x25519_secret = self._server_x25519_private.exchange(peer_key)
+
+        # ML-KEM decapsulation (real)
+        ml_kem_secret = self._ml_kem.decapsulate(ml_kem_ciphertext, ml_kem_private_key)
+
         return self._combine_secrets(x25519_secret, ml_kem_secret)
 
     def complete_with_x25519_secret(
@@ -193,15 +268,12 @@ class HybridKeyExchange:
         """
         Derive a deterministic value from the peer's X25519 public key.
 
-        NOTE: In a production TLS-like protocol, the server would use its own
-        X25519 private key to perform the actual X25519 Diffie-Hellman agreement.
-        This placeholder ensures the combine step works correctly for testing.
+        WARNING: This is NOT a real X25519 agreement — it's a deterministic
+        placeholder for testing only. It does NOT provide forward secrecy.
 
-        For production: use complete_with_x25519_secret() with the actual
-        X25519 shared secret computed by the TLS layer.
+        For production: use complete_with_x25519_secret() or complete_as_server()
+        with the actual X25519 shared secret computed via DH key agreement.
         """
-        # This is NOT a real X25519 agreement — it's a deterministic placeholder
-        # that produces the same value on both sides for testing purposes.
         return hashlib.sha256(peer_public_key + b"X25519-placeholder").digest()
 
 

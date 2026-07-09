@@ -28,6 +28,7 @@ from .validation_result import (
     ErrorSeverity,
     ValidationError,
     ValidationResult,
+    parse_date,
 )
 
 logger = structlog.get_logger(__name__)
@@ -527,37 +528,8 @@ class ApiValidator:
     # =====================================================================
 
     def _parse_date(self, value: Any) -> Optional[datetime]:
-        """Parse various date formats into datetime."""
-        if isinstance(value, datetime):
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value
-
-        if isinstance(value, (int, float)):
-            # Unix timestamp
-            try:
-                return datetime.fromtimestamp(value, tz=timezone.utc)
-            except (OSError, ValueError):
-                return None
-
-        if isinstance(value, str):
-            # Try ISO format
-            for fmt in [
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%SZ",
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%d %H:%M:%S",
-                "%Y-%m-%d",
-            ]:
-                try:
-                    dt = datetime.strptime(value, fmt)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    return dt
-                except ValueError:
-                    continue
-
-        return None
+        """Parse various date formats into datetime. Delegates to shared utility."""
+        return parse_date(value)
 
     def _swahili_field(self, field: str) -> str:
         """Translate common field names to Swahili."""

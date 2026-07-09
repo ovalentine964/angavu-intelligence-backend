@@ -117,7 +117,7 @@ jobs:
       - name: mypy strict on security module
         run: |
           # Strict mode for security-critical code
-          mypy app/core/security/ \
+          mypy app/security/ \
             --strict \
             --ignore-missing-imports \
             --no-error-summary \
@@ -138,7 +138,7 @@ jobs:
           mypy app/ \
             --ignore-missing-imports \
             --no-error-summary \
-            --exclude 'app/core/security/' || true
+            --exclude 'app/security/' || true
         continue-on-error: true
 
   # ──────────────────────────────────────
