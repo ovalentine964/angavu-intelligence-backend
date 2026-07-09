@@ -22,7 +22,7 @@ addopts = [
     "--strict-markers",
     "--tb=short",
     "--cov=app",
-    "--cov-fail-under=60",
+    "--cov-fail-under=80",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
 ]
@@ -48,7 +48,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 80
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

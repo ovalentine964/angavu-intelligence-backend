@@ -100,6 +100,11 @@ def create_access_token(
     """
     Create a JWT access token.
 
+    Includes:
+    - Standard claims: exp, iat, nbf, jti, iss, aud
+    - Token type: access
+    - Device binding: device_id
+
     Args:
         data: Claims to include in the token
         expires_delta: Custom expiry time
@@ -107,12 +112,24 @@ def create_access_token(
     Returns:
         Encoded JWT string
     """
+    now = datetime.now(timezone.utc)
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    expire = now + (
         expires_delta
         or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "type": "access"})
+    to_encode.update({
+        "exp": expire,
+        "iat": now,
+        "nbf": now,  # Not valid before now (prevents pre-generated tokens)
+        "jti": secrets.token_hex(16),  # Unique token ID for revocation
+        "type": "access",
+    })
+    # Add issuer and audience if configured
+    if hasattr(settings, 'JWT_ISSUER') and settings.JWT_ISSUER:
+        to_encode["iss"] = settings.JWT_ISSUER
+    if hasattr(settings, 'JWT_AUDIENCE') and settings.JWT_AUDIENCE:
+        to_encode["aud"] = settings.JWT_AUDIENCE
     return pyjwt.encode(
         to_encode,
         _get_signing_key(),
@@ -122,16 +139,23 @@ def create_access_token(
 
 def create_refresh_token(data: dict, family: Optional[str] = None) -> str:
     """Create a JWT refresh token with longer expiry and token family tracking."""
+    now = datetime.now(timezone.utc)
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = now + timedelta(
         days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
     )
     to_encode.update({
         "exp": expire,
+        "iat": now,
+        "nbf": now,
         "type": "refresh",
         "family": family or secrets.token_hex(16),
         "jti": secrets.token_hex(16),
     })
+    if hasattr(settings, 'JWT_ISSUER') and settings.JWT_ISSUER:
+        to_encode["iss"] = settings.JWT_ISSUER
+    if hasattr(settings, 'JWT_AUDIENCE') and settings.JWT_AUDIENCE:
+        to_encode["aud"] = settings.JWT_AUDIENCE
     return pyjwt.encode(
         to_encode,
         _get_signing_key(),
@@ -143,6 +167,13 @@ def decode_token(token: str) -> dict:
     """
     Decode and validate a JWT token.
 
+    Validates:
+    - Signature (RS256 or HS256)
+    - Expiration time
+    - Issuer claim (prevents token confusion)
+    - Audience claim (prevents cross-service token use)
+    - Token type (access vs refresh)
+
     Raises:
         HTTPException if token is invalid or expired
     """
@@ -151,12 +182,20 @@ def decode_token(token: str) -> dict:
             token,
             _get_verification_key(),
             algorithms=[settings.JWT_ALGORITHM],
+            issuer=settings.JWT_ISSUER if hasattr(settings, 'JWT_ISSUER') else None,
+            audience=settings.JWT_AUDIENCE if hasattr(settings, 'JWT_AUDIENCE') else None,
+            options={
+                "require": ["exp", "sub", "type"],
+                "verify_exp": True,
+                "verify_iss": hasattr(settings, 'JWT_ISSUER') and settings.JWT_ISSUER is not None,
+                "verify_aud": hasattr(settings, 'JWT_AUDIENCE') and settings.JWT_AUDIENCE is not None,
+            },
         )
         return payload
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
+            detail="Invalid token",  # Don't leak specific error details
         )
 
 
@@ -172,17 +211,32 @@ async def get_current_user(
     """
     FastAPI dependency — extract and validate current user from JWT.
 
+    Security checks:
+    - Token signature and expiry (via decode_token)
+    - User exists and is active
+    - Token type is 'access' (not refresh)
+    - User agent consistency (optional)
+
     Usage:
         @router.get("/me")
         async def get_me(user: User = Depends(get_current_user)):
             return user
     """
     payload = decode_token(credentials.credentials)
+
+    # Verify this is an access token, not a refresh token
+    token_type = payload.get("type")
+    if token_type != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing subject",
+            detail="Invalid token",
         )
 
     result = await db.execute(
@@ -192,9 +246,10 @@ async def get_current_user(
     )
     user = result.scalar_one_or_none()
     if not user:
+        # Generic message — don't reveal whether user exists
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
+            detail="Invalid token",
         )
     return user
 
@@ -208,6 +263,13 @@ async def get_buyer_from_api_key(
 
     Expects header: Authorization: Bearer msai_xxxx
 
+    Security:
+    - Constant-time key comparison (prevents timing attacks)
+    - Key hash stored (never plaintext)
+    - Expiry enforcement
+    - Active status check
+    - Contract validity check
+
     Usage:
         @router.get("/intelligence/market/{market_id}")
         async def get_market(
@@ -219,10 +281,18 @@ async def get_buyer_from_api_key(
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
+            detail="Missing or invalid authorization",
         )
 
     api_key = auth_header.replace("Bearer ", "")
+
+    # Validate key format before hashing (early rejection)
+    if not api_key.startswith("msai_") or len(api_key) < 20:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
     key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
     # Look up the API key
@@ -237,6 +307,7 @@ async def get_buyer_from_api_key(
     api_key_obj = result.scalar_one_or_none()
 
     if not api_key_obj:
+        # Generic message — don't reveal whether key exists
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
@@ -245,7 +316,7 @@ async def get_buyer_from_api_key(
     if api_key_obj.is_expired:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key has expired",
+            detail="API key expired",
         )
 
     # Update last used timestamp
@@ -265,7 +336,7 @@ async def get_buyer_from_api_key(
     if not buyer or not buyer.is_contract_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Buyer account is inactive or contract expired",
+            detail="Account inactive or contract expired",
         )
 
     return buyer

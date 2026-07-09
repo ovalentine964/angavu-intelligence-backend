@@ -1,53 +1,112 @@
-name: Backend CI
+name: Backend CI — Hardened
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  lint:
-    name: Lint (ruff)
+  # ──────────────────────────────────────
+  # 1. Secret Detection
+  # ──────────────────────────────────────
+  secret-scan:
+    name: 🔒 Secret Detection
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified --fail
+
+  # ──────────────────────────────────────
+  # 2. Lint + Security Static Analysis
+  # ──────────────────────────────────────
+  lint:
+    name: 🧹 Ruff + Bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [secret-scan]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install tools
+        run: |
+          pip install --upgrade pip
+          pip install ruff bandit[toml]
 
-      - name: Ruff lint
+      - name: Ruff lint (with security rules)
         run: ruff check . --output-format=github
 
       - name: Ruff format check
         run: ruff format --check .
 
+      - name: Bandit security scan
+        run: |
+          bandit -r app/ \
+            -c pyproject.toml \
+            -f json \
+            -o bandit-report.json \
+            --severity-level medium || true
+
+          # Fail on high-severity issues
+          HIGH=$(python3 -c "
+          import json
+          data = json.load(open('bandit-report.json'))
+          count = sum(1 for r in data.get('results', []) if r.get('issue_severity') == 'HIGH')
+          print(count)
+          " 2>/dev/null || echo "0")
+          echo "High-severity issues: $HIGH"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::error::Bandit found $HIGH high-severity security issues"
+            exit 1
+          fi
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ──────────────────────────────────────
+  # 3. Type Check (mypy strict for security)
+  # ──────────────────────────────────────
   typecheck:
-    name: Type Check (mypy)
+    name: 🔬 mypy strict
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [secret-scan]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-mypy-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            pip-mypy-${{ runner.os }}-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -55,13 +114,92 @@ jobs:
           pip install mypy
           pip install -r requirements.txt
 
-      - name: Run mypy
-        run: mypy app/ --ignore-missing-imports --no-error-summary || true
-        # Non-blocking for now — tighten once type annotations are complete
+      - name: mypy strict on security module
+        run: |
+          # Strict mode for security-critical code
+          mypy app/core/security/ \
+            --strict \
+            --ignore-missing-imports \
+            --no-error-summary \
+            --warn-return-any \
+            --warn-unused-configs \
+            --disallow-untyped-defs \
+            --disallow-any-generics 2>&1 | tee mypy-security.txt
 
-  test:
-    name: Unit Tests (pytest)
+          SECURITY_ERRORS=$(grep -c "error:" mypy-security.txt 2>/dev/null || echo "0")
+          echo "Security module type errors: $SECURITY_ERRORS"
+          if [ "$SECURITY_ERRORS" -gt 0 ]; then
+            echo "::error::mypy strict found $SECURITY_ERRORS errors in security module"
+            exit 1
+          fi
+
+      - name: mypy relaxed on rest of app
+        run: |
+          mypy app/ \
+            --ignore-missing-imports \
+            --no-error-summary \
+            --exclude 'app/core/security/' || true
+        continue-on-error: true
+
+  # ──────────────────────────────────────
+  # 4. Dependency Auditing
+  # ──────────────────────────────────────
+  dependency-audit:
+    name: 🔍 pip-audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [secret-scan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pip-audit
+          pip install -r requirements.txt
+
+      - name: Run pip-audit
+        run: |
+          pip-audit \
+            --requirement requirements.txt \
+            --format json \
+            --output pip-audit-report.json \
+            --desc 2>&1 | tee pip-audit-output.txt
+
+          # Fail on any known vulnerability
+          VULN_COUNT=$(python3 -c "
+          import json
+          data = json.load(open('pip-audit-report.json'))
+          print(len([v for v in data.get('dependencies', []) if v.get('vulns')]))
+          " 2>/dev/null || echo "0")
+          echo "Vulnerable dependencies: $VULN_COUNT"
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "::error::pip-audit found $VULN_COUNT vulnerable dependencies"
+            exit 1
+          fi
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: |
+            pip-audit-report.json
+            pip-audit-output.txt
+
+  # ──────────────────────────────────────
+  # 5. Unit Tests with Coverage Gate
+  # ──────────────────────────────────────
+  test:
+    name: 🧪 pytest (80% gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, typecheck]
     services:
       postgres:
         image: postgres:16
@@ -98,28 +236,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-test-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            pip-test-${{ runner.os }}-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest-cov pytest-timeout pytest-asyncio
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (80% gate)
         run: |
           pytest tests/ \
             --cov=app \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov \
+            --cov-fail-under=80 \
             -v --tb=short \
             --timeout=60 \
             -x
@@ -133,18 +266,33 @@ jobs:
             coverage.xml
             htmlcov/
 
-      - name: Coverage summary
+  # ──────────────────────────────────────
+  # 6. Container Security Scan
+  # ──────────────────────────────────────
+  container-scan:
+    name: 🐳 Trivy Container Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -t angavu-backend:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'angavu-backend:scan'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          output: 'trivy-results.txt'
+
+      - name: Upload Trivy results
         if: always()
-        run: |
-          if [ -f coverage.xml ]; then
-            python3 -c "
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('coverage.xml')
-          root = tree.getroot()
-          rate = float(root.attrib.get('line-rate', 0))
-          pct = rate * 100
-          print(f'Line coverage: {pct:.1f}%')
-          if pct < 50:
-              print('⚠️  Coverage below 50% — consider adding more tests')
-          "
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-results.txt

@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Dict, Optional
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from .crypto_provider import CryptoProvider, CryptoKeyPair, KeyEncapsulationProvider
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 class _Aes256GcmProvider(CryptoProvider):
     """AES-256-GCM symmetric encryption provider (quantum-safe)."""
 
-    is_stub: bool = True  # Placeholder — real AES-GCM requires cryptography lib
+    is_stub: bool = False  # REAL implementation using cryptography library
 
     @property
     def algorithm_id(self) -> str:
@@ -33,24 +35,29 @@ class _Aes256GcmProvider(CryptoProvider):
         return 5
 
     def get_real_provider(self):
-        return None
+        return self
 
     def generate_key_pair(self) -> CryptoKeyPair:
+        key = AESGCM.generate_key(bit_length=256)
         return CryptoKeyPair(
-            public_key=os.urandom(32),
-            private_key=os.urandom(32),
+            public_key=key,
+            private_key=key,
             algorithm_id=self.algorithm_id,
         )
 
     def encrypt(self, plaintext: bytes, key: bytes) -> bytes:
-        # STUB: XOR with key-derived stream. Real impl uses AES-256-GCM.
-        stream = hashlib.sha256(key).digest() * (len(plaintext) // 32 + 1)
-        return bytes(a ^ b for a, b in zip(plaintext, stream[:len(plaintext)]))
+        """Encrypt using AES-256-GCM with a random 12-byte nonce."""
+        aesgcm = AESGCM(key)
+        nonce = os.urandom(12)  # 96-bit nonce per NIST SP 800-38D
+        ciphertext = aesgcm.nonce + aesgcm.encrypt(nonce, plaintext, None)
+        return ciphertext
 
     def decrypt(self, ciphertext: bytes, key: bytes) -> bytes:
-        # STUB: XOR is its own inverse.
-        stream = hashlib.sha256(key).digest() * (len(ciphertext) // 32 + 1)
-        return bytes(a ^ b for a, b in zip(ciphertext, stream[:len(ciphertext)]))
+        """Decrypt AES-256-GCM ciphertext (nonce prepended)."""
+        aesgcm = AESGCM(key)
+        nonce = ciphertext[:12]
+        ct = ciphertext[12:]
+        return aesgcm.decrypt(nonce, ct, None)
 
     def sign(self, data: bytes, private_key: bytes) -> bytes:
         raise NotImplementedError("AES-256-GCM is an encryption algorithm, not a signature algorithm")
@@ -62,7 +69,7 @@ class _Aes256GcmProvider(CryptoProvider):
 class _EcdsaP256Provider(CryptoProvider):
     """ECDSA-P256 signature provider (NOT quantum-safe, backward compat)."""
 
-    is_stub: bool = True
+    is_stub: bool = False  # REAL implementation using cryptography library
 
     @property
     def algorithm_id(self) -> str:
@@ -77,25 +84,45 @@ class _EcdsaP256Provider(CryptoProvider):
         return 1
 
     def get_real_provider(self):
-        return None
+        return self
 
     def generate_key_pair(self) -> CryptoKeyPair:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key()
+        from cryptography.hazmat.primitives import serialization
+        pub_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        priv_bytes = private_key.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
         return CryptoKeyPair(
-            public_key=os.urandom(64),
-            private_key=os.urandom(32),
+            public_key=pub_bytes,
+            private_key=priv_bytes,
             algorithm_id=self.algorithm_id,
         )
 
     def sign(self, data: bytes, private_key: bytes) -> bytes:
-        h = hashlib.sha256(private_key + data).digest()
-        return h + os.urandom(32)
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.backends import default_backend
+        key = serialization.load_der_private_key(private_key, password=None, backend=default_backend())
+        return key.sign(data, ec.ECDSA(hashes.SHA256()))
 
     def verify(self, data: bytes, signature: bytes, public_key: bytes) -> bool:
-        if len(signature) < 32:
+        from cryptography.hazmat.primitives.asymmetric import ec, utils
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.backends import default_backend
+        try:
+            key = serialization.load_der_public_key(public_key, backend=default_backend())
+            key.verify(signature, data, ec.ECDSA(hashes.SHA256()))
+            return True
+        except Exception:
             return False
-        # STUB: re-derive from public_key + data (not real ECDSA)
-        expected = hashlib.sha256(public_key[:32] + data).digest()[:16]
-        return signature[:16] == expected
 
     def encrypt(self, plaintext: bytes, key: bytes) -> bytes:
         raise NotImplementedError("ECDSA is a signature algorithm, not encryption")
@@ -211,8 +238,14 @@ class AlgorithmRegistry:
 
         # ML-KEM variants
         for param in MlKemParameterSet:
-            self.register_kem_provider(MlKemProvider(param))
+            try:
+                self.register_kem_provider(MlKemProvider(param))
+            except RuntimeError as e:
+                logger.warning("ML-KEM %s not available: %s", param.name, e)
 
         # ML-DSA variants
         for param in MlDsaParameterSet:
-            self.register_signature_provider(MlDsaProvider(param))
+            try:
+                self.register_signature_provider(MlDsaProvider(param))
+            except RuntimeError as e:
+                logger.warning("ML-DSA %s not available: %s", param.name, e)
