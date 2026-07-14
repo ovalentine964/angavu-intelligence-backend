@@ -797,6 +797,9 @@ from app.api.otp_auth import router as otp_auth_router
 # Evolution / Feedback Sync
 from app.api.evolution import router as evolution_router
 
+# Dialect Dictionary & Language Training Pipeline
+from app.api.dialect_dictionary import router as dialect_dictionary_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -831,6 +834,7 @@ app.include_router(whatsapp_connection_router, prefix=settings.API_V1_PREFIX)
 app.include_router(biashara_sync_router, prefix=settings.API_V1_PREFIX)
 app.include_router(otp_auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(evolution_router, prefix=settings.API_V1_PREFIX)
+app.include_router(dialect_dictionary_router, prefix=settings.API_V1_PREFIX)
 app.include_router(autonomous_router)
 
 # Mount autonomous router (prefix is built into the router)
