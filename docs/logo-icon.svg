@@ -1,69 +1,114 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Angavu Intelligence logo — abstracted eye with concentric arcs">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Angavu Intelligence logo — Neural Network Africa">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#1B4965"/>
       <stop offset="100%" stop-color="#0F2D42"/>
     </linearGradient>
-    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.2"/>
-      <stop offset="50%" stop-color="#E8A838" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#E8A838" stop-opacity="0.2"/>
-    </linearGradient>
     <clipPath id="roundClip">
       <rect width="512" height="512" rx="72" ry="72"/>
     </clipPath>
-  </defs>
-
-  <g clip-path="url(#roundClip)">
-    <!-- Background -->
-    <rect width="512" height="512" fill="url(#bgGrad)"/>
-
-    <!-- Subtle radial glow behind eye -->
-    <radialGradient id="glow" cx="50%" cy="45%" r="35%">
+    <radialGradient id="glow" cx="50%" cy="40%" r="40%">
       <stop offset="0%" stop-color="#E8A838" stop-opacity="0.08"/>
       <stop offset="100%" stop-color="#E8A838" stop-opacity="0"/>
     </radialGradient>
+    <filter id="nodeGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#roundClip)">
+    <rect width="512" height="512" fill="url(#bgGrad)"/>
     <rect width="512" height="512" fill="url(#glow)"/>
 
-    <!-- Eye centered at 256, 228 -->
-    <g transform="translate(256, 228)">
-      <!-- Outer arc (largest) -->
-      <path d="M-180,0 A180,140 0 0 1 180,0" fill="none" stroke="#E8A838" stroke-width="4" opacity="0.2"/>
-      <!-- Second arc -->
-      <path d="M-145,0 A145,112 0 0 1 145,0" fill="none" stroke="#E8A838" stroke-width="4.5" opacity="0.35"/>
-      <!-- Third arc -->
-      <path d="M-110,0 A110,85 0 0 1 110,0" fill="none" stroke="#E8A838" stroke-width="5" opacity="0.55"/>
-      <!-- Fourth arc -->
-      <path d="M-80,0 A80,62 0 0 1 80,0" fill="none" stroke="#E8A838" stroke-width="5.5" opacity="0.75"/>
-      <!-- Inner arc -->
-      <path d="M-55,0 A55,42 0 0 1 55,0" fill="none" stroke="#E8A838" stroke-width="6" opacity="0.9"/>
+    <!-- Neural Network Africa — 18 nodes, centered -->
+    <g transform="translate(256, 215)" filter="url(#nodeGlow)">
+      <!-- Neural connections -->
+      <g stroke="#E8A838" stroke-width="1" opacity="0.35" fill="none">
+        <line x1="0" y1="-140" x2="-28" y2="-110"/>
+        <line x1="0" y1="-140" x2="25" y2="-112"/>
+        <line x1="-28" y1="-110" x2="25" y2="-112"/>
+        <line x1="-28" y1="-110" x2="-50" y2="-78"/>
+        <line x1="25" y1="-112" x2="42" y2="-82"/>
+        <line x1="-28" y1="-110" x2="0" y2="-85"/>
+        <line x1="25" y1="-112" x2="0" y2="-85"/>
+        <line x1="-50" y1="-78" x2="0" y2="-85"/>
+        <line x1="42" y1="-82" x2="0" y2="-85"/>
+        <line x1="-50" y1="-78" x2="-56" y2="-40"/>
+        <line x1="42" y1="-82" x2="53" y2="-42"/>
+        <line x1="0" y1="-85" x2="-56" y2="-40"/>
+        <line x1="0" y1="-85" x2="53" y2="-42"/>
+        <line x1="-50" y1="-78" x2="53" y2="-42"/>
+        <line x1="-56" y1="-40" x2="53" y2="-42"/>
+        <line x1="-56" y1="-40" x2="-42" y2="0"/>
+        <line x1="53" y1="-42" x2="50" y2="0"/>
+        <line x1="-56" y1="-40" x2="-25" y2="8"/>
+        <line x1="53" y1="-42" x2="25" y2="8"/>
+        <line x1="-42" y1="0" x2="-25" y2="8"/>
+        <line x1="50" y1="0" x2="25" y2="8"/>
+        <line x1="-25" y1="8" x2="25" y2="8"/>
+        <line x1="-42" y1="0" x2="25" y2="8"/>
+        <line x1="50" y1="0" x2="-25" y2="8"/>
+        <line x1="-25" y1="8" x2="-30" y2="50"/>
+        <line x1="25" y1="8" x2="31" y2="42"/>
+        <line x1="-42" y1="0" x2="-30" y2="50"/>
+        <line x1="50" y1="0" x2="31" y2="42"/>
+        <line x1="-30" y1="50" x2="31" y2="42"/>
+        <line x1="-30" y1="50" x2="-17" y2="78"/>
+        <line x1="31" y1="42" x2="17" y2="70"/>
+        <line x1="-30" y1="50" x2="17" y2="70"/>
+        <line x1="31" y1="42" x2="-17" y2="78"/>
+        <line x1="-17" y1="78" x2="17" y2="70"/>
+        <line x1="-17" y1="78" x2="0" y2="100"/>
+        <line x1="17" y1="70" x2="0" y2="100"/>
+        <line x1="-17" y1="78" x2="7" y2="120"/>
+        <line x1="17" y1="70" x2="7" y2="120"/>
+        <line x1="0" y1="100" x2="7" y2="120"/>
+        <line x1="50" y1="0" x2="73" y2="28"/>
+        <line x1="31" y1="42" x2="73" y2="28"/>
+        <line x1="0" y1="-140" x2="-50" y2="-78"/>
+        <line x1="-50" y1="-78" x2="-42" y2="0"/>
+        <line x1="-56" y1="-40" x2="-77" y2="-14"/>
+        <line x1="-77" y1="-14" x2="-42" y2="0"/>
+        <line x1="-77" y1="-14" x2="-56" y2="-40"/>
+      </g>
 
-      <!-- Iris circle -->
-      <circle cx="0" cy="0" r="32" fill="none" stroke="#E8A838" stroke-width="5"/>
+      <!-- 18 Nodes as Africa continent -->
+      <circle cx="0" cy="-140" r="7" fill="#E8A838"/>
+      <circle cx="-28" cy="-110" r="6.5" fill="#E8A838"/>
+      <circle cx="25" cy="-112" r="6.5" fill="#E8A838"/>
+      <circle cx="-77" cy="-14" r="5.5" fill="#E8A838"/>
+      <circle cx="-56" cy="-40" r="6" fill="#E8A838"/>
+      <circle cx="-50" cy="-78" r="5.5" fill="#E8A838"/>
+      <circle cx="42" cy="-82" r="5.5" fill="#E8A838"/>
+      <circle cx="0" cy="-85" r="7.5" fill="#E8A838"/>
+      <circle cx="-42" cy="0" r="6.5" fill="#E8A838"/>
+      <circle cx="53" cy="-42" r="6" fill="#E8A838"/>
+      <circle cx="-25" cy="8" r="7" fill="#E8A838"/>
+      <!-- ★ KENYA HQ — larger, brighter, gold with highlight -->
+      <circle cx="25" cy="8" r="10" fill="#F0C060" stroke="#FFFFFF" stroke-width="2"/>
+      <circle cx="-30" cy="50" r="6.5" fill="#E8A838"/>
+      <circle cx="31" cy="42" r="6.5" fill="#E8A838"/>
+      <circle cx="73" cy="28" r="5" fill="#E8A838"/>
+      <circle cx="-17" cy="78" r="6" fill="#E8A838"/>
+      <circle cx="17" cy="70" r="6" fill="#E8A838"/>
+      <circle cx="0" cy="100" r="7" fill="#E8A838"/>
+      <circle cx="7" cy="120" r="5.5" fill="#E8A838"/>
 
-      <!-- Pupil -->
-      <circle cx="0" cy="0" r="14" fill="#E8A838"/>
-
-      <!-- Highlight -->
-      <circle cx="8" cy="-8" r="5" fill="#FFFFFF" opacity="0.5"/>
-      <circle cx="-4" cy="4" r="2.5" fill="#FFFFFF" opacity="0.25"/>
-
-      <!-- Lower arcs (mirror, subtle) -->
-      <path d="M-180,0 A180,140 0 0 0 180,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.08"/>
-      <path d="M-145,0 A145,112 0 0 0 145,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.12"/>
-      <path d="M-110,0 A110,85 0 0 0 110,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.15"/>
+      <!-- Kenya label -->
+      <text x="25" y="-14" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="9" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">KENYA</text>
+      <text x="25" y="-4" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="7" fill="#FFFFFF" opacity="0.7">HQ</text>
     </g>
 
     <!-- Text: ANGAVU -->
-    <text x="256" y="370" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="42" font-weight="700" fill="#FFFFFF" letter-spacing="4">ANGAVU</text>
+    <text x="256" y="380" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="42" font-weight="700" fill="#FFFFFF" letter-spacing="4">ANGAVU</text>
 
     <!-- Text: INTELLIGENCE -->
-    <text x="256" y="405" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="18" font-weight="300" fill="#E8A838" letter-spacing="7" opacity="0.85">INTELLIGENCE</text>
+    <text x="256" y="415" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="18" font-weight="300" fill="#E8A838" letter-spacing="7" opacity="0.85">INTELLIGENCE</text>
 
-    <!-- Divider line -->
-    <line x1="156" y1="420" x2="356" y2="420" stroke="#E8A838" stroke-width="1" opacity="0.3"/>
+    <!-- Divider -->
+    <line x1="156" y1="430" x2="356" y2="430" stroke="#E8A838" stroke-width="1" opacity="0.3"/>
   </g>
 
-  <!-- Rounded border -->
   <rect x="2" y="2" width="508" height="508" rx="72" ry="72" fill="none" stroke="#E8A838" stroke-width="2" opacity="0.15"/>
 </svg>

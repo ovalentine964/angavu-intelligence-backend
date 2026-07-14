@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="Angavu Intelligence — Clarity for Africa's Invisible Economy">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="Angavu Intelligence — Neural Network Africa Icon">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#1B4965"/>
@@ -8,50 +8,128 @@
       <stop offset="0%" stop-color="#E8A838"/>
       <stop offset="100%" stop-color="#F0C060"/>
     </linearGradient>
-    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.3"/>
-      <stop offset="50%" stop-color="#E8A838" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#E8A838" stop-opacity="0.3"/>
-    </linearGradient>
     <clipPath id="roundClip">
       <rect width="1200" height="300" rx="16" ry="16"/>
     </clipPath>
+    <filter id="nodeGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
 
   <g clip-path="url(#roundClip)">
     <!-- Background -->
     <rect width="1200" height="300" fill="url(#bgGrad)"/>
-
-    <!-- Subtle grid pattern -->
     <pattern id="grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
       <rect width="40" height="40" fill="none"/>
       <path d="M40 0 L0 0 0 40" fill="none" stroke="#1E5577" stroke-width="0.3" opacity="0.3"/>
     </pattern>
     <rect width="1200" height="300" fill="url(#grid)"/>
 
-    <!-- Left section: Eye icon -->
-    <g transform="translate(150, 150)">
-      <!-- Outer arc (largest) -->
-      <path d="M-100,0 A100,80 0 0 1 100,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.25"/>
-      <!-- Second arc -->
-      <path d="M-78,0 A78,62 0 0 1 78,0" fill="none" stroke="#E8A838" stroke-width="2.5" opacity="0.45"/>
-      <!-- Third arc -->
-      <path d="M-56,0 A56,44 0 0 1 56,0" fill="none" stroke="#E8A838" stroke-width="3" opacity="0.7"/>
-      <!-- Inner arc -->
-      <path d="M-36,0 A36,28 0 0 1 36,0" fill="none" stroke="#E8A838" stroke-width="3.5" opacity="0.9"/>
+    <!-- Neural Network Africa Icon — 18 nodes forming Africa continent -->
+    <g transform="translate(140, 150) scale(1.2)" filter="url(#nodeGlow)">
+      <!-- Neural connections (drawn first, behind nodes) -->
+      <g stroke="#E8A838" stroke-width="0.8" opacity="0.35" fill="none">
+        <!-- Top cluster connections -->
+        <line x1="0" y1="-100" x2="-20" y2="-78"/>
+        <line x1="0" y1="-100" x2="18" y2="-80"/>
+        <line x1="-20" y1="-78" x2="18" y2="-80"/>
+        <line x1="-20" y1="-78" x2="-35" y2="-55"/>
+        <line x1="18" y1="-80" x2="30" y2="-58"/>
+        <line x1="-20" y1="-78" x2="0" y2="-60"/>
+        <line x1="18" y1="-80" x2="0" y2="-60"/>
+        <!-- Middle cluster -->
+        <line x1="-35" y1="-55" x2="0" y2="-60"/>
+        <line x1="30" y1="-58" x2="0" y2="-60"/>
+        <line x1="-35" y1="-55" x2="-40" y2="-28"/>
+        <line x1="30" y1="-58" x2="38" y2="-30"/>
+        <line x1="0" y1="-60" x2="-40" y2="-28"/>
+        <line x1="0" y1="-60" x2="38" y2="-30"/>
+        <line x1="-35" y1="-55" x2="38" y2="-30"/>
+        <!-- Lower connections -->
+        <line x1="-40" y1="-28" x2="38" y2="-30"/>
+        <line x1="-40" y1="-28" x2="-30" y2="0"/>
+        <line x1="38" y1="-30" x2="35" y2="0"/>
+        <line x1="-40" y1="-28" x2="-18" y2="5"/>
+        <line x1="38" y1="-30" x2="18" y2="5"/>
+        <!-- Central connections -->
+        <line x1="-30" y1="0" x2="-18" y2="5"/>
+        <line x1="35" y1="0" x2="18" y2="5"/>
+        <line x1="-18" y1="5" x2="18" y2="5"/>
+        <line x1="-30" y1="0" x2="18" y2="5"/>
+        <line x1="35" y1="0" x2="-18" y2="5"/>
+        <!-- South connections -->
+        <line x1="-18" y1="5" x2="-22" y2="35"/>
+        <line x1="18" y1="5" x2="22" y2="30"/>
+        <line x1="-30" y1="0" x2="-22" y2="35"/>
+        <line x1="35" y1="0" x2="22" y2="30"/>
+        <line x1="-22" y1="35" x2="22" y2="30"/>
+        <line x1="-22" y1="35" x2="-12" y2="55"/>
+        <line x1="22" y1="30" x2="12" y2="50"/>
+        <line x1="-22" y1="35" x2="12" y2="50"/>
+        <line x1="22" y1="30" x2="-12" y2="55"/>
+        <!-- Bottom connections -->
+        <line x1="-12" y1="55" x2="12" y2="50"/>
+        <line x1="-12" y1="55" x2="0" y2="72"/>
+        <line x1="12" y1="50" x2="0" y2="72"/>
+        <line x1="-12" y1="55" x2="5" y2="85"/>
+        <line x1="12" y1="50" x2="5" y2="85"/>
+        <line x1="0" y1="72" x2="5" y2="85"/>
+        <!-- Madagascar connection -->
+        <line x1="35" y1="0" x2="52" y2="20"/>
+        <line x1="22" y1="30" x2="52" y2="20"/>
+        <!-- Northwest connections -->
+        <line x1="0" y1="-100" x2="-35" y2="-55"/>
+        <line x1="-35" y1="-55" x2="-30" y2="0"/>
+        <!-- West Africa connections -->
+        <line x1="-40" y1="-28" x2="-55" y2="-10"/>
+        <line x1="-55" y1="-10" x2="-30" y2="0"/>
+        <line x1="-55" y1="-10" x2="-40" y2="-28"/>
+      </g>
 
-      <!-- Iris -->
-      <circle cx="0" cy="0" r="18" fill="none" stroke="#E8A838" stroke-width="3"/>
+      <!-- 18 Nodes arranged as Africa continent -->
+      <!-- North Africa (3) -->
+      <circle cx="0" cy="-100" r="5" fill="#E8A838"/><!-- Morocco/Tunisia -->
+      <circle cx="-20" cy="-78" r="4.5" fill="#E8A838"/><!-- Western Sahara -->
+      <circle cx="18" cy="-80" r="4.5" fill="#E8A838"/><!-- Libya/Egypt -->
 
-      <!-- Pupil -->
-      <circle cx="0" cy="0" r="8" fill="#E8A838"/>
+      <!-- West Africa (2) -->
+      <circle cx="-55" cy="-10" r="4" fill="#E8A838"/><!-- Senegal/Ghana -->
+      <circle cx="-40" cy="-28" r="4.5" fill="#E8A838"/><!-- Mali/Niger -->
 
-      <!-- Light reflection -->
-      <circle cx="5" cy="-5" r="3" fill="#FFFFFF" opacity="0.6"/>
+      <!-- Central-North (2) -->
+      <circle cx="-35" cy="-55" r="4" fill="#E8A838"/><!-- Mauritania -->
+      <circle cx="30" cy="-58" r="4" fill="#E8A838"/><!-- Sudan -->
 
-      <!-- Lower arcs (mirror, fainter) -->
-      <path d="M-100,0 A100,80 0 0 0 100,0" fill="none" stroke="#E8A838" stroke-width="1.5" opacity="0.12"/>
-      <path d="M-78,0 A78,62 0 0 0 78,0" fill="none" stroke="#E8A838" stroke-width="1.5" opacity="0.18"/>
+      <!-- Central (3) -->
+      <circle cx="0" cy="-60" r="5.5" fill="#E8A838"/><!-- Chad/CAR -->
+      <circle cx="-30" cy="0" r="4.5" fill="#E8A838"/><!-- Cameroon/Gabon -->
+      <circle cx="38" cy="-30" r="4.5" fill="#E8A838"/><!-- Ethiopia/Somalia -->
+
+      <!-- East Africa — Kenya HQ highlighted in gold (2) -->
+      <circle cx="-18" cy="5" r="5" fill="#E8A838"/><!-- DRC/Congo -->
+      <circle cx="18" cy="5" r="7" fill="#F0C060" stroke="#FFFFFF" stroke-width="1.5"/><!-- ★ KENYA HQ — larger, brighter, gold -->
+
+      <!-- Central-South (2) -->
+      <circle cx="-22" cy="35" r="4.5" fill="#E8A838"/><!-- Angola/Zambia -->
+      <circle cx="22" cy="30" r="4.5" fill="#E8A838"/><!-- Tanzania -->
+
+      <!-- Madagascar (1) -->
+      <circle cx="52" cy="20" r="3.5" fill="#E8A838"/><!-- Madagascar -->
+
+      <!-- Southern Africa (2) -->
+      <circle cx="-12" cy="55" r="4.5" fill="#E8A838"/><!-- Namibia/Botswana -->
+      <circle cx="12" cy="50" r="4.5" fill="#E8A838"/><!-- Mozambique/Zimbabwe -->
+
+      <!-- South Africa (1) -->
+      <circle cx="0" cy="72" r="5" fill="#E8A838"/><!-- South Africa -->
+
+      <!-- Cape (1) -->
+      <circle cx="5" cy="85" r="4" fill="#E8A838"/><!-- Cape of Good Hope -->
+
+      <!-- Kenya HQ label -->
+      <text x="18" y="-8" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="7" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">KENYA</text>
+      <text x="18" y="0" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="5" fill="#FFFFFF" opacity="0.7">HQ</text>
     </g>
 
     <!-- Separator line -->
@@ -59,16 +137,9 @@
 
     <!-- Right section: Text -->
     <g transform="translate(320, 0)">
-      <!-- ANGAVU -->
       <text x="0" y="135" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" letter-spacing="6">ANGAVU</text>
-
-      <!-- INTELLIGENCE -->
       <text x="2" y="180" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="32" font-weight="300" fill="#E8A838" letter-spacing="10" opacity="0.95">INTELLIGENCE</text>
-
-      <!-- Divider -->
       <line x1="2" y1="200" x2="500" y2="200" stroke="#E8A838" stroke-width="1" opacity="0.4"/>
-
-      <!-- Tagline -->
       <text x="2" y="228" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="17" font-weight="300" fill="#FFFFFF" letter-spacing="3" opacity="0.65">Clarity for Africa's Invisible Economy</text>
     </g>
 
@@ -79,6 +150,5 @@
     <circle cx="1170" cy="270" r="3" fill="#E8A838" opacity="0.5"/>
   </g>
 
-  <!-- Border -->
   <rect x="1" y="1" width="1198" height="298" rx="16" ry="16" fill="none" stroke="#E8A838" stroke-width="1" opacity="0.2"/>
 </svg>
