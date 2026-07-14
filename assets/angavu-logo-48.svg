@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="48" height="48">
+  <rect width="512" height="512" rx="80" fill="#0F172A"/>
+
+  <!-- Simplified network - 7 key nodes -->
+  <g stroke="#F59E0B" stroke-width="4" opacity="0.7" fill="none">
+    <line x1="256" y1="100" x2="180" y2="220"/>
+    <line x1="256" y1="100" x2="340" y2="200"/>
+    <line x1="180" y1="220" x2="340" y2="200"/>
+    <line x1="180" y1="220" x2="260" y2="320"/>
+    <line x1="340" y1="200" x2="260" y2="320"/>
+    <line x1="260" y1="320" x2="250" y2="420"/>
+    <line x1="340" y1="200" x2="380" y2="320"/>
+    <line x1="380" y1="320" x2="260" y2="320"/>
+  </g>
+
+  <circle cx="256" cy="100" r="20" fill="#22C55E"/>
+  <circle cx="180" cy="220" r="16" fill="#22C55E"/>
+  <circle cx="340" cy="200" r="16" fill="#22C55E"/>
+  <circle cx="260" cy="320" r="18" fill="#22C55E"/>
+  <circle cx="250" cy="420" r="16" fill="#22C55E"/>
+  <circle cx="380" cy="320" r="12" fill="#F59E0B"/>
+  <circle cx="260" cy="320" r="6" fill="#F59E0B"/>
+</svg>
