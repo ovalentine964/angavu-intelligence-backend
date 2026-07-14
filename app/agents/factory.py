@@ -207,9 +207,11 @@ class AgentFactory:
         domain_agents = self._create_domain_agents()
         self._logger.info("domain_agents_created", count=len(domain_agents))
 
-        # 7. Create Tier 1: MetaAgent + New Agents
+        # 7. Create Tier 1: MetaAgent + New Agents (including SocialHandler)
         meta_agent = self._create_meta_agent()
         new_agents = self._create_new_agents()
+        social_handler = self._create_social_handler()
+        new_agents.append(social_handler)
         self._logger.info("new_agents_created", count=len(new_agents))
 
         # 8. Wire all agents together
@@ -408,7 +410,7 @@ class AgentFactory:
         return MetaAgent()
 
     def _create_domain_agents(self) -> List[BiasharaAgent]:
-        """Create Tier 2 domain agents."""
+        """Create Tier 2 domain agents with real service injection."""
         from app.agents.domain import (
             AgricultureDomainAgent,
             RetailDomainAgent,
@@ -418,14 +420,34 @@ class AgentFactory:
             ServiceDomainAgent,
         )
 
-        return [
-            AgricultureDomainAgent(),
-            RetailDomainAgent(),
-            TransportDomainAgent(),
-            DigitalDomainAgent(),
-            ManufacturingDomainAgent(),
-            ServiceDomainAgent(),
-        ]
+        agri = AgricultureDomainAgent()
+        retail = RetailDomainAgent()
+        transport = TransportDomainAgent()
+        digital = DigitalDomainAgent()
+        manufacturing = ManufacturingDomainAgent()
+        service = ServiceDomainAgent()
+
+        # Wire service-level agents for real data access
+        try:
+            from app.services.agents import (
+                AgricultureAgent,
+                RetailAgent,
+                TransportAgent,
+                DigitalAgent,
+                ManufacturingAgent,
+                ServiceAgent,
+            )
+            agri.set_transaction_service(AgricultureAgent())
+            retail.set_transaction_service(RetailAgent())
+            transport.set_transaction_service(TransportAgent())
+            digital.set_transaction_service(DigitalAgent())
+            manufacturing.set_transaction_service(ManufacturingAgent())
+            service.set_transaction_service(ServiceAgent())
+            self._logger.info("service_agents_wired_to_domain_agents")
+        except (ImportError, Exception) as exc:
+            self._logger.warning("service_agents_wire_failed", error=str(exc))
+
+        return [agri, retail, transport, digital, manufacturing, service]
 
     def _create_utility_agents(self) -> List[BiasharaAgent]:
         """Create Tier 3 utility agents."""
@@ -462,6 +484,30 @@ class AgentFactory:
             SecurityAgent(),
             OnboardingAgent(),
         ]
+
+    def _create_social_handler(self):
+        """Create and wire the SocialHandler for social/community features."""
+        from app.agents.implementations_extra import SocialHandler
+
+        social_handler = SocialHandler()
+
+        # Wire ComparisonEngine if available
+        try:
+            from app.services.comparison_engine import ComparisonEngine
+            social_handler.set_comparison_engine(ComparisonEngine())
+            self._logger.info("comparison_engine_wired_to_social_handler")
+        except (ImportError, Exception) as exc:
+            self._logger.info("comparison_engine_not_available", error=str(exc))
+
+        # Wire StickinessService if available
+        try:
+            from app.services import stickiness_service
+            social_handler.set_stickiness_service(stickiness_service)
+            self._logger.info("stickiness_service_wired_to_social_handler")
+        except (ImportError, Exception) as exc:
+            self._logger.info("stickiness_service_not_available", error=str(exc))
+
+        return social_handler
 
     # ── Internal wiring ────────────────────────────────────────────
 
@@ -541,6 +587,20 @@ class AgentFactory:
                     EventType.SECURITY_SCAN,
                 ]
                 await event_bus.subscribe(agent, domain_event_types)
+
+        # SocialHandler subscribes to social events
+        social_subscription_map = {
+            "SocialHandler": [
+                EventType.SOCIAL_PEER_COMPARISON,
+                EventType.SOCIAL_LEADERBOARD,
+                EventType.SOCIAL_COMMUNITY_TIPS,
+                EventType.SOCIAL_TIP_SUBMITTED,
+            ],
+        }
+
+        for agent in domain_agents:
+            if agent.name in social_subscription_map:
+                await event_bus.subscribe(agent, social_subscription_map[agent.name])
 
         # MetaAgent subscribes to system-wide events
         meta_event_types = [

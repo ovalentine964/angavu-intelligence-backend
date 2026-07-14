@@ -136,6 +136,7 @@ from app.agents.implementations_extra import (
     ComplianceAgent,
     SecurityAgent,
     OnboardingAgent,
+    SocialHandler,
 )
 
 # V2: Communication Protocols
@@ -274,4 +275,6 @@ __all__ = [
     "ComplianceAgent",
     "SecurityAgent",
     "OnboardingAgent",
+    # V5: Social Handler
+    "SocialHandler",
 ]

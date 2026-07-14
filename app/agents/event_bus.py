@@ -32,6 +32,7 @@ Stream topology:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -56,6 +57,16 @@ CONSUMER_GROUP = "biashara_agents"
 
 # Default max length for streams (prevents unbounded growth)
 MAX_STREAM_LENGTH = 10_000
+
+# Idempotency key TTL (seconds) — deduplicate events within this window
+IDEMPOTENCY_TTL = 3600  # 1 hour
+
+# Backpressure thresholds
+BACKPRESSURE_HIGH_WATER = 8_000   # Start throttling
+BACKPRESSURE_LOW_WATER = 2_000    # Stop throttling
+
+# Dead letter queue stream suffix
+DLQ_SUFFIX = ":dead_letter_queue"
 
 # Event persistence directory (relative to workspace)
 _PERSIST_DIR = Path(".openclaw/tmp/event_bus")
@@ -104,6 +115,13 @@ class EventBus:
         # Dead letter queue for events that fail processing
         self._dead_letters: List[Dict[str, Any]] = []
 
+        # Idempotency tracking (event_id → timestamp)
+        self._idempotency_cache: Dict[str, float] = {}
+
+        # Backpressure state
+        self._backpressure_active: bool = False
+        self._backpressure_streams: Dict[str, bool] = defaultdict(lambda: False)
+
         # Event persistence (append-only JSONL for audit/replay)
         self._persist_events = persist_events
         self._persist_dir: Optional[Path] = None
@@ -118,6 +136,9 @@ class EventBus:
         self._consumer_name = f"{CONSUMER_GROUP}:{self._instance_id}"
         # Configurable max stream length (from settings or caller)
         self._max_stream_length = max_stream_length
+
+        # Telemetry (injected after init)
+        self._agent_metrics: Any = None
 
         self._logger = logger.bind(
             component="event_bus",
@@ -218,9 +239,36 @@ class EventBus:
         """
         Publish an event to the appropriate stream.
 
+        Features:
+        - Idempotency: deduplicates events within IDEMPOTENCY_TTL window
+        - Backpressure: throttles when stream depth exceeds high water mark
+        - Telemetry: records publish metrics when available
+
         Returns the event ID (Redis stream ID or generated ID).
         """
         stream_key = f"{STREAM_PREFIX}{event.event_type.value}"
+
+        # Idempotency check — skip duplicate events
+        idempotency_key = self._compute_idempotency_key(event)
+        if self._is_duplicate(idempotency_key):
+            self._logger.debug(
+                "event_deduplicated",
+                event_type=event.event_type.value,
+                source=event.source,
+                idempotency_key=idempotency_key,
+            )
+            return idempotency_key
+
+        # Backpressure check — wait if stream is too deep
+        if await self._check_backpressure(stream_key):
+            released = await self.wait_for_backpressure_release(stream_key, timeout=10.0)
+            if not released:
+                self._logger.warning(
+                    "backpressure_timeout",
+                    stream=stream_key,
+                    event_type=event.event_type.value,
+                )
+
         event_data = event.to_dict()
 
         if self._redis and not self._in_memory_enabled:
@@ -232,8 +280,17 @@ class EventBus:
                     maxlen=self._max_stream_length,
                     approximate=True,
                 )
+                # Record idempotency key
+                self._record_idempotency_key(idempotency_key)
+
                 # Persist event to disk for audit/replay
                 self._persist_event(stream_key, event_data)
+
+                # Record telemetry
+                if self._agent_metrics:
+                    self._agent_metrics.record_event_published(
+                        event.event_type.value, event.source,
+                    )
 
                 self._logger.debug(
                     "event_published",
@@ -256,8 +313,17 @@ class EventBus:
         if len(self._pending_buffer[stream_key]) > self._max_stream_length:
             self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-self._max_stream_length:]
 
+        # Record idempotency key
+        self._record_idempotency_key(idempotency_key)
+
         # Persist event to disk for audit/replay
         self._persist_event(stream_key, event_data)
+
+        # Record telemetry
+        if self._agent_metrics:
+            self._agent_metrics.record_event_published(
+                event.event_type.value, event.source,
+            )
 
         self._logger.debug(
             "event_published_in_memory",
@@ -376,12 +442,7 @@ class EventBus:
                             error=str(exc),
                         )
                         # Track dead letter
-                        self._dead_letters.append({
-                            "stream": stream_key,
-                            "msg_id": msg_id,
-                            "error": str(exc),
-                            "timestamp": time.time(),
-                        })
+                        await self.publish_to_dlq(stream_key, fields, str(exc))
 
         except (ConnectionError, OSError, TimeoutError) as exc:
             self._logger.warning("xreadgroup_failed", error=str(exc))
@@ -431,11 +492,8 @@ class EventBus:
                     event_type=etype,
                     error=str(exc),
                 )
-                self._dead_letters.append({
-                    "event_type": etype,
-                    "error": str(exc),
-                    "timestamp": time.time(),
-                })
+                stream_key = f"{STREAM_PREFIX}{etype}"
+                await self.publish_to_dlq(stream_key, event.to_dict(), str(exc))
 
     # ── Event Persistence ────────────────────────────────────────────
 
@@ -512,6 +570,12 @@ class EventBus:
             "dead_letters_recent": self._dead_letters[-5:],
             "persisted_count": self._persisted_count,
             "persistence_enabled": self._persist_dir is not None,
+            # Idempotency
+            "idempotency_cache_size": len(self._idempotency_cache),
+            # Backpressure
+            "backpressure_active_streams": [
+                k for k, v in self._backpressure_streams.items() if v
+            ],
             # Horizontal scaling info
             "scaling": {
                 "instance_id": self._instance_id,
@@ -540,6 +604,317 @@ class EventBus:
                 "shared consumer group. Redis handles load distribution automatically."
             ),
         }
+
+    # ── Idempotency ────────────────────────────────────────────────
+
+    def _compute_idempotency_key(self, event: AgentEvent) -> str:
+        """
+        Compute an idempotency key for an event.
+
+        Uses event_id if available, otherwise hashes event type + source + payload.
+        """
+        if event.event_id:
+            return event.event_id
+        # Fallback: hash the event content
+        content = f"{event.event_type.value}:{event.source}:{json.dumps(event.payload, sort_keys=True, default=str)}"
+        return hashlib.sha256(content.encode()).hexdigest()[:32]
+
+    def _is_duplicate(self, idempotency_key: str) -> bool:
+        """Check if an event with this key was recently published."""
+        now = time.time()
+        # Expire old entries
+        expired = [k for k, ts in self._idempotency_cache.items() if now - ts > IDEMPOTENCY_TTL]
+        for k in expired:
+            del self._idempotency_cache[k]
+        return idempotency_key in self._idempotency_cache
+
+    def _record_idempotency_key(self, key: str) -> None:
+        """Record an idempotency key with current timestamp."""
+        self._idempotency_cache[key] = time.time()
+        # Cap cache size to prevent unbounded growth
+        if len(self._idempotency_cache) > 50_000:
+            # Evict oldest 20%
+            sorted_keys = sorted(self._idempotency_cache, key=lambda k: self._idempotency_cache[k])
+            for k in sorted_keys[:10_000]:
+                del self._idempotency_cache[k]
+
+    # ── Dead Letter Queue ─────────────────────────────────────────
+
+    async def publish_to_dlq(
+        self,
+        original_stream: str,
+        event_data: Dict[str, Any],
+        error: str,
+    ) -> None:
+        """
+        Publish a failed event to the dead letter queue.
+
+        DLQ is a separate Redis stream per original stream, allowing
+        monitoring and manual replay of failed events.
+        """
+        dlq_key = f"{original_stream}{DLQ_SUFFIX}"
+        dlq_entry = {
+            "original_stream": original_stream,
+            "data": json.dumps(event_data, default=str),
+            "error": error,
+            "dead_lettered_at": str(time.time()),
+        }
+
+        self._dead_letters.append({
+            "stream": original_stream,
+            "error": error,
+            "timestamp": time.time(),
+        })
+        # Cap in-memory dead letter list
+        if len(self._dead_letters) > 1_000:
+            self._dead_letters = self._dead_letters[-1_000:]
+
+        if self._redis and not self._in_memory_enabled:
+            try:
+                await self._redis.xadd(
+                    dlq_key,
+                    {k: str(v) for k, v in dlq_entry.items()},
+                    maxlen=10_000,
+                    approximate=True,
+                )
+                self._logger.warning(
+                    "event_dead_lettered",
+                    stream=original_stream,
+                    error=error,
+                )
+            except (ConnectionError, OSError, TimeoutError) as exc:
+                self._logger.error("dlq_publish_failed", error=str(exc))
+
+        # Record telemetry
+        if self._agent_metrics:
+            self._agent_metrics.record_dead_letter(original_stream, error)
+
+    async def get_dlq_events(
+        self,
+        event_type: str,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Read events from the dead letter queue for inspection.
+
+        Args:
+            event_type: The event type (e.g. "transaction.processed")
+            limit: Maximum number of DLQ events to return
+
+        Returns:
+            List of DLQ entries with original data, error, and timestamp
+        """
+        stream_key = f"{STREAM_PREFIX}{event_type}"
+        dlq_key = f"{stream_key}{DLQ_SUFFIX}"
+
+        if not self._redis or self._in_memory_enabled:
+            return self._dead_letters[-limit:]
+
+        try:
+            entries = await self._redis.xrevrange(dlq_key, count=limit)
+            results = []
+            for msg_id, fields in entries:
+                entry = {"msg_id": msg_id}
+                for k, v in fields.items():
+                    try:
+                        entry[k] = json.loads(v)
+                    except (json.JSONDecodeError, TypeError):
+                        entry[k] = v
+                results.append(entry)
+            return results
+        except (ConnectionError, OSError, TimeoutError) as exc:
+            self._logger.warning("dlq_read_failed", error=str(exc))
+            return self._dead_letters[-limit:]
+
+    async def get_dlq_stats(self) -> Dict[str, Any]:
+        """Get dead letter queue statistics across all streams."""
+        stats = {
+            "total_in_memory": len(self._dead_letters),
+            "streams": {},
+        }
+
+        if not self._redis or self._in_memory_enabled:
+            return stats
+
+        try:
+            # Scan for DLQ streams
+            cursor = 0
+            while True:
+                cursor, keys = await self._redis.scan(
+                    cursor=cursor,
+                    match=f"{STREAM_PREFIX}*{DLQ_SUFFIX}",
+                    count=100,
+                )
+                for key in keys:
+                    try:
+                        info = await self._redis.xinfo_stream(key)
+                        stream_name = key.replace(STREAM_PREFIX, "").replace(DLQ_SUFFIX, "")
+                        stats["streams"][stream_name] = {
+                            "length": info.get("length", 0),
+                            "first_entry": info.get("first-entry", ("",))[0],
+                            "last_entry": info.get("last-entry", ("",))[0],
+                        }
+                    except (ConnectionError, OSError, TimeoutError):
+                        pass
+                if cursor == 0:
+                    break
+        except (ConnectionError, OSError, TimeoutError) as exc:
+            self._logger.warning("dlq_stats_failed", error=str(exc))
+
+        return stats
+
+    # ── Event Replay ───────────────────────────────────────────────
+
+    async def replay_events(
+        self,
+        event_type: str,
+        handler: Callable[[Dict[str, Any]], Coroutine],
+        from_timestamp: Optional[float] = None,
+        to_timestamp: Optional[float] = None,
+        limit: int = 1000,
+        from_dlq: bool = False,
+    ) -> int:
+        """
+        Replay events from persistence (JSONL files) or Redis streams.
+
+        Useful for:
+        - Re-processing events after a bug fix
+        - Recovering from DLQ after fixing the root cause
+        - Backfilling data after schema changes
+
+        Args:
+            event_type: The event type to replay
+            handler: Async function to process each event
+            from_timestamp: Only replay events after this time
+            to_timestamp: Only replay events before this time
+            limit: Max events to replay
+            from_dlq: If True, replay from dead letter queue instead
+
+        Returns:
+            Number of events successfully replayed
+        """
+        replayed = 0
+
+        if from_dlq:
+            # Replay from DLQ
+            dlq_events = await self.get_dlq_events(event_type, limit=limit)
+            for entry in dlq_events:
+                try:
+                    data = entry.get("data", {})
+                    if isinstance(data, str):
+                        data = json.loads(data)
+                    if from_timestamp:
+                        ts = float(data.get("timestamp", 0))
+                        if ts < from_timestamp:
+                            continue
+                    if to_timestamp:
+                        ts = float(data.get("timestamp", 0))
+                        if ts > to_timestamp:
+                            continue
+                    await handler(data)
+                    replayed += 1
+                except Exception as exc:
+                    self._logger.warning(
+                        "replay_dlq_failed",
+                        event_type=event_type,
+                        error=str(exc),
+                    )
+        else:
+            # Replay from persistence files
+            events = self.get_persisted_events(event_type, limit=limit)
+            for event_data in events:
+                try:
+                    if from_timestamp:
+                        ts = float(event_data.get("timestamp", 0))
+                        if ts < from_timestamp:
+                            continue
+                    if to_timestamp:
+                        ts = float(event_data.get("timestamp", 0))
+                        if ts > to_timestamp:
+                            continue
+                    await handler(event_data)
+                    replayed += 1
+                except Exception as exc:
+                    self._logger.warning(
+                        "replay_failed",
+                        event_type=event_type,
+                        error=str(exc),
+                    )
+
+        self._logger.info(
+            "events_replayed",
+            event_type=event_type,
+            replayed=replayed,
+            from_dlq=from_dlq,
+        )
+        return replayed
+
+    # ── Backpressure ───────────────────────────────────────────────
+
+    async def _check_backpressure(self, stream_key: str) -> bool:
+        """
+        Check if a stream is under backpressure (too many pending events).
+
+        Returns True if backpressure is active (should throttle).
+        """
+        if not self._redis or self._in_memory_enabled:
+            # In-memory: check buffer size
+            buffer = self._pending_buffer.get(stream_key, [])
+            current_depth = len(buffer)
+        else:
+            try:
+                info = await self._redis.xinfo_stream(stream_key)
+                current_depth = info.get("length", 0)
+            except (ConnectionError, OSError, TimeoutError):
+                return False
+
+        was_active = self._backpressure_streams.get(stream_key, False)
+
+        if current_depth >= BACKPRESSURE_HIGH_WATER:
+            self._backpressure_streams[stream_key] = True
+            if not was_active:
+                self._logger.warning(
+                    "backpressure_activated",
+                    stream=stream_key,
+                    depth=current_depth,
+                    high_water=BACKPRESSURE_HIGH_WATER,
+                )
+            return True
+        elif current_depth <= BACKPRESSURE_LOW_WATER:
+            if was_active:
+                self._backpressure_streams[stream_key] = False
+                self._logger.info(
+                    "backpressure_released",
+                    stream=stream_key,
+                    depth=current_depth,
+                    low_water=BACKPRESSURE_LOW_WATER,
+                )
+            return False
+
+        return was_active
+
+    async def wait_for_backpressure_release(
+        self,
+        stream_key: str,
+        timeout: float = 30.0,
+    ) -> bool:
+        """
+        Wait for backpressure to release on a stream.
+
+        Returns True if released within timeout, False if timed out.
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            if not await self._check_backpressure(stream_key):
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
+    # ── Telemetry Integration ──────────────────────────────────────
+
+    def set_agent_metrics(self, agent_metrics: Any) -> None:
+        """Inject the agent metrics recorder for telemetry."""
+        self._agent_metrics = agent_metrics
 
     def get_dead_letters(self) -> List[Dict[str, Any]]:
         """Return dead letter events for debugging."""

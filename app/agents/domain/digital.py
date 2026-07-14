@@ -6,7 +6,7 @@ Swahili keywords reflect East African digital economy:
 """
 
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from app.agents.domain.base import DomainAgent
 
 
@@ -50,6 +50,24 @@ class DigitalDomainAgent(DomainAgent):
             ],
         )
 
+    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Query DigitalAgent service for real income analysis."""
+        if not self._transaction_service:
+            return None
+
+        transactions = payload.get("transactions", [])
+        period_days = payload.get("period_days", 30)
+
+        if not transactions:
+            return None
+
+        try:
+            analysis = self._transaction_service.analyze_income(transactions, period_days)
+            return analysis
+        except Exception as exc:
+            self._domain_logger.warning("service_query_failed", error=str(exc))
+            return None
+
     def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Digital economy analysis with East African fintech context."""
         base = super()._analyze(payload)
@@ -66,20 +84,40 @@ class DigitalDomainAgent(DomainAgent):
         elif "saas" in text or "subscription" in text:
             platform_type = "saas"
 
-        base.update({
-            "analysis_type": "digital_economy_analysis",
-            "platform_type": platform_type,
-            "market_signals": {
+        # Use real data from service if available
+        real_data = base.get("real_data", {})
+        if real_data:
+            market_signals = {
                 "digital_adoption_trend": "growing",
                 "mobile_penetration": 0.85,
                 "internet_penetration": 0.45,
                 "fintech_competition": "intense",
-            },
-            "recommendations": [
+                "total_income": real_data.get("total_income", 0),
+                "income_stability": real_data.get("income_smoothing", {}).get("stability_score", 0),
+                "transaction_count": real_data.get("order_count", 0),
+            }
+            recommendations = real_data.get("recommendations", [
                 f"Monitor {platform_type} adoption metrics",
                 "Track API performance and error rates",
                 "Analyze user engagement and retention patterns",
-            ],
+            ])
+        else:
+            market_signals = {
+                "digital_adoption_trend": "unknown",
+                "mobile_penetration": 0,
+                "internet_penetration": 0,
+                "fintech_competition": "unknown",
+            }
+            recommendations = [
+                "Connect transaction data for real analysis",
+                "Record digital transactions to get personalized insights",
+            ]
+
+        base.update({
+            "analysis_type": "digital_economy_analysis",
+            "platform_type": platform_type,
+            "market_signals": market_signals,
+            "recommendations": recommendations,
         })
         return base
 

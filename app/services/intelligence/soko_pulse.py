@@ -89,6 +89,16 @@ from app.services.statistical_foundation import (
 )
 from app.services.intelligence.african_development import AfricanDevelopmentEngine
 
+# ── ML Layer: XGBoost demand forecasting (complements classical stats) ──
+try:
+    from app.services.ml.feature_engineering import FeatureEngineer
+    from app.services.ml.xgboost_service import XGBoostService
+    _xgb_service = XGBoostService()
+    _ml_available = True
+except ImportError:
+    _ml_available = False
+    _xgb_service = None
+
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
@@ -741,6 +751,33 @@ class SokoPulseService:
                 "mape": round(float(np.mean(np.abs(np.array(residuals) / np.array(volumes)))) * 100, 1) if volumes else None,
                 "seasonal_decomposition": seasonal_decomposition,
             }
+
+            # ── ML Layer: XGBoost demand forecast ──────────────────────────
+            # Complements classical ensemble with non-linear feature interactions.
+            # XGBoost captures category×location×temporal patterns that
+            # Holt-Winters and ARIMA cannot model.
+            if _ml_available and _xgb_service and len(transactions) >= 20:
+                try:
+                    ml_features = FeatureEngineer.extract_all_features(transactions)
+                    ml_demand = _xgb_service.predict_demand(ml_features)
+                    if ml_demand.get("available"):
+                        forecast["ml_xgboost_forecast"] = {
+                            "predicted_volume": ml_demand["predicted_volume"],
+                            "confidence": ml_demand["confidence"],
+                            "shap_explanation": ml_demand.get("shap_explanation"),
+                            "note": "XGBoost ML complement to classical ensemble",
+                        }
+                        # Update ensemble to include ML if confidence is high enough
+                        if ml_demand["confidence"] >= 0.5:
+                            ml_pred = ml_demand["predicted_volume"]
+                            # 40% HW, 30% ARIMA, 30% XGBoost ensemble
+                            ml_ensemble = round(
+                                0.4 * hw_fc[0] + 0.3 * arima_fc[0] + 0.3 * ml_pred, 0
+                            ) if hw_fc and arima_fc else ensemble[0]
+                            forecast["ml_enhanced_ensemble"] = [ml_ensemble]
+                            forecast["forecast_method"] = "ml_enhanced_ensemble_holt_winters_arima_xgboost"
+                except Exception as e:
+                    logger.debug("ml_demand_forecast_failed", error=str(e))
 
         # ── Peak demand days ────────────────────────────────────────────────
         daily_volumes = defaultdict(float)

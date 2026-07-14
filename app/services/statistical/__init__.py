@@ -31,6 +31,21 @@ from app.services.statistical.clustering import ClusterAnalyzer
 from app.services.statistical.simulation import MCMCSampler, MonteCarloEngine
 from app.services.statistical.inequality import InequalityAnalyzer, PovertyAnalyzer
 from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
+from app.services.statistical.survival import (
+    CoxModelResult,
+    KaplanMeierEstimator,
+    SurvivalAnalysisService,
+    SurvivalPrediction,
+)
+from app.services.statistical.kalman import (
+    EconomicIndicatorSmoother,
+    GDPNowcastingKalmanFilter,
+    KalmanFilter,
+    KalmanFilterResult,
+    KalmanState,
+    create_gdp_nowcasting_filter,
+    create_indicator_smoother,
+)
 
 __all__ = [
     "BayesianUpdater",
@@ -49,4 +64,17 @@ __all__ = [
     "PovertyAnalyzer",
     "DEAAnalyzer",
     "SFAAnalyzer",
+    # Survival Analysis
+    "SurvivalAnalysisService",
+    "SurvivalPrediction",
+    "CoxModelResult",
+    "KaplanMeierEstimator",
+    # Kalman Filter
+    "KalmanFilter",
+    "KalmanFilterResult",
+    "KalmanState",
+    "GDPNowcastingKalmanFilter",
+    "EconomicIndicatorSmoother",
+    "create_gdp_nowcasting_filter",
+    "create_indicator_smoother",
 ]

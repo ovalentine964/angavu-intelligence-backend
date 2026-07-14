@@ -343,6 +343,24 @@ class MetaAgent(BiasharaAgent):
                 reasoning=f"Routing to {best_agent}" if best_agent else "No suitable agent found",
             )
 
+        # Social/community requests → route to SocialHandler
+        if event_type in (
+            EventType.SOCIAL_PEER_COMPARISON.value,
+            EventType.SOCIAL_LEADERBOARD.value,
+            EventType.SOCIAL_COMMUNITY_TIPS.value,
+            EventType.SOCIAL_TIP_SUBMITTED.value,
+        ):
+            return AgentDecision(
+                action="route_request",
+                parameters={
+                    "target_agent": "SocialHandler",
+                    "capability": "social_features",
+                    "payload": event_data.get("payload", {}),
+                },
+                confidence=0.9,
+                reasoning=f"Routing social event {event_type} to SocialHandler",
+            )
+
         return AgentDecision(
             action="monitor",
             parameters={},

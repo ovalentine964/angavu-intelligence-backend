@@ -215,6 +215,23 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
         self._analysis_count: int = 0
         self._match_history: List[Dict[str, Any]] = []
 
+        # Data access services (injected by factory)
+        self._transaction_service: Any = None  # Service-level domain agent
+        self._clickhouse_client: Any = None     # ClickHouseClient for analytics
+        self._cache: Any = None                 # CacheAside for caching
+
+    def set_transaction_service(self, service: Any) -> None:
+        """Inject the service-level domain agent for real data access."""
+        self._transaction_service = service
+
+    def set_clickhouse_client(self, client: Any) -> None:
+        """Inject ClickHouse client for analytical queries."""
+        self._clickhouse_client = client
+
+    def set_cache(self, cache: Any) -> None:
+        """Inject cache service."""
+        self._cache = cache
+
     async def think(self, context: Dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -375,10 +392,15 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
 
         Override in subclasses for domain-specific analysis.
         Base implementation provides structured output with
-        academic framework references.
+        academic framework references. Uses real data when
+        transaction service is available.
         """
         academic = self._get_academic_context()
-        return {
+
+        # Try to get real data from the service-level agent
+        real_analysis = self._query_service_data(payload)
+
+        result = {
             "domain": self.DOMAIN_NAME,
             "analysis_type": "domain_analysis",
             "signals_detected": len(payload),
@@ -392,7 +414,22 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
             "confidence_intervals": True,  # STA 342: always include CIs
             "quality_control": "spc",      # STA 346: SPC monitoring
             "metrics_tracked": self.DOMAIN_METRICS,
+            "data_source": "service" if real_analysis else "payload_only",
         }
+
+        if real_analysis:
+            result["real_data"] = real_analysis
+
+        return result
+
+    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Query the injected service-level agent for real analysis data.
+
+        Subclasses should override this to call their specific service
+        methods (e.g., analyze_sales, analyze_farm, etc.).
+        """
+        return None
 
     def _process_transaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Process a domain-relevant transaction with validation."""

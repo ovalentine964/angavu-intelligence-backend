@@ -103,3 +103,10 @@ __all__ += [
     "NVIDIAClient",
     "SelfEvolutionService",
 ]
+
+# ML Layer — XGBoost prediction services
+try:
+    from app.services.ml import FeatureEngineer, XGBoostService, ModelTrainer
+    __all__ += ["FeatureEngineer", "XGBoostService", "ModelTrainer"]
+except ImportError:
+    pass  # ML dependencies not installed

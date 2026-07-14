@@ -6,7 +6,7 @@ Swahili keywords reflect East African retail landscape:
 """
 
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from app.agents.domain.base import DomainAgent
 
 
@@ -50,6 +50,27 @@ class RetailDomainAgent(DomainAgent):
             ],
         )
 
+    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Query RetailAgent service for real sales analysis."""
+        if not self._transaction_service:
+            return None
+
+        transactions = payload.get("transactions", [])
+        period_days = payload.get("period_days", 30)
+        inventory = payload.get("inventory")
+
+        if not transactions:
+            return None
+
+        try:
+            analysis = self._transaction_service.analyze_sales(
+                transactions, inventory=inventory, period_days=period_days
+            )
+            return analysis
+        except Exception as exc:
+            self._domain_logger.warning("service_query_failed", error=str(exc))
+            return None
+
     def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Retail-specific analysis with East African market context."""
         base = super()._analyze(payload)
@@ -66,20 +87,41 @@ class RetailDomainAgent(DomainAgent):
         elif any(kw in text for kw in ["wholesale", "distributor"]):
             channel = "wholesale"
 
-        base.update({
-            "analysis_type": "retail_intelligence",
-            "channel_detected": channel,
-            "market_signals": {
-                "demand_pattern": "stable",
-                "price_sensitivity": "high",  # Informal economy is price-sensitive
-                "seasonal_trend": "normal",
+        # Use real data from service if available
+        real_data = base.get("real_data", {})
+        if real_data:
+            market_signals = {
+                "demand_pattern": real_data.get("demand_pattern", "unknown"),
+                "price_sensitivity": "high",
+                "seasonal_trend": real_data.get("seasonal_trend", "normal"),
                 "competition_level": "moderate",
-            },
-            "recommendations": [
+                "total_revenue": real_data.get("total_revenue", 0),
+                "total_profit": real_data.get("total_profit", 0),
+                "avg_margin_pct": real_data.get("avg_margin_pct", 0),
+                "sale_count": real_data.get("sale_count", 0),
+            }
+            recommendations = real_data.get("recommendations", [
                 f"Optimize inventory for {channel} channel",
                 "Monitor pricing against local competitors",
                 "Track customer basket composition",
-            ],
+            ])
+        else:
+            market_signals = {
+                "demand_pattern": "unavailable",
+                "price_sensitivity": "unknown",
+                "seasonal_trend": "unknown",
+                "competition_level": "unknown",
+            }
+            recommendations = [
+                "Connect transaction data for real analysis",
+                "Record sales to get personalized retail insights",
+            ]
+
+        base.update({
+            "analysis_type": "retail_intelligence",
+            "channel_detected": channel,
+            "market_signals": market_signals,
+            "recommendations": recommendations,
         })
         return base
 

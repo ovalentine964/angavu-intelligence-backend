@@ -6,7 +6,7 @@ Swahili keywords reflect East African manufacturing:
 """
 
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from app.agents.domain.base import DomainAgent
 
 
@@ -51,6 +51,24 @@ class ManufacturingDomainAgent(DomainAgent):
             ],
         )
 
+    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Query ManufacturingAgent service for real production analysis."""
+        if not self._transaction_service:
+            return None
+
+        transactions = payload.get("transactions", [])
+        period_days = payload.get("period_days", 30)
+
+        if not transactions:
+            return None
+
+        try:
+            analysis = self._transaction_service.analyze_production(transactions, period_days)
+            return analysis
+        except Exception as exc:
+            self._domain_logger.warning("service_query_failed", error=str(exc))
+            return None
+
     def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Manufacturing analysis with SPC quality control grounding."""
         base = super()._analyze(payload)
@@ -67,6 +85,35 @@ class ManufacturingDomainAgent(DomainAgent):
         elif "construction" in text or "ujenzi" in text:
             sub_sector = "construction_materials"
 
+        # Use real data from service if available
+        real_data = base.get("real_data", {})
+        if real_data:
+            waste_analysis = real_data.get("waste_analysis", {})
+            market_signals = {
+                "capacity_utilization": real_data.get("capacity_utilization", 0),
+                "defect_trend": waste_analysis.get("defect_trend", "unknown"),
+                "input_cost_trend": "unknown",
+                "demand_outlook": "unknown",
+                "total_revenue": real_data.get("total_revenue", 0),
+                "waste_rate_pct": waste_analysis.get("waste_rate_pct", 0),
+            }
+            recommendations = real_data.get("recommendations", [
+                f"Apply SPC monitoring to {sub_sector} production line",
+                "Track defect rates with p-charts (STA 346)",
+                "Monitor input cost trends for procurement planning",
+            ])
+        else:
+            market_signals = {
+                "capacity_utilization": 0,
+                "defect_trend": "unknown",
+                "input_cost_trend": "unknown",
+                "demand_outlook": "unknown",
+            }
+            recommendations = [
+                "Connect production data for real analysis",
+                "Record manufacturing output to get personalized insights",
+            ]
+
         base.update({
             "analysis_type": "manufacturing_intelligence",
             "sub_sector": sub_sector,
@@ -76,17 +123,8 @@ class ManufacturingDomainAgent(DomainAgent):
                 "control_limits": "3_sigma",
                 "western_electric_rules": True,
             },
-            "market_signals": {
-                "capacity_utilization": 0.72,
-                "defect_trend": "decreasing",
-                "input_cost_trend": "stable",
-                "demand_outlook": "moderate_growth",
-            },
-            "recommendations": [
-                f"Apply SPC monitoring to {sub_sector} production line",
-                "Track defect rates with p-charts (STA 346)",
-                "Monitor input cost trends for procurement planning",
-            ],
+            "market_signals": market_signals,
+            "recommendations": recommendations,
         })
         return base
 

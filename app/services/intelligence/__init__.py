@@ -38,6 +38,7 @@ from app.services.intelligence.measure_theory import (
     ConvergenceTheorems,
     MartingaleAnalyzer,
 )
+from app.services.intelligence.proactive_alerts import ProactiveAlertEngine, ProactiveAlert, AlertType, AlertSeverity
 
 __all__ = [
     "SokoPulseService",
@@ -61,4 +62,8 @@ __all__ = [
     "ConditionalExpectation",
     "ConvergenceTheorems",
     "MartingaleAnalyzer",
+    "ProactiveAlertEngine",
+    "ProactiveAlert",
+    "AlertType",
+    "AlertSeverity",
 ]

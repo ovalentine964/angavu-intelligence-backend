@@ -30,6 +30,14 @@ from app.db.clickhouse import close_clickhouse, get_clickhouse
 from app.services.cache import get_cache
 from app.services.task_queue import get_task_queue
 
+# Infrastructure: circuit breaker + telemetry
+from app.infrastructure.circuit_breaker import (
+    get_circuit_breaker_registry,
+    get_circuit_breaker,
+    CircuitBreakerError,
+)
+from app.infrastructure.telemetry import get_telemetry_manager
+
 # Loop and long-horizon infrastructure (used in lifespan)
 from app.api.agent_loops import set_loop_infrastructure
 from app.api.long_horizon import set_long_horizon_infrastructure
@@ -119,6 +127,24 @@ async def lifespan(app: FastAPI):
     await pool_mgr.initialize()
     logger.info("connection_pool_manager_initialized")
 
+    # ── Circuit Breakers ───────────────────────────────────────────
+    cb_registry = get_circuit_breaker_registry()
+    redis_cb = cb_registry.get_or_create("redis", failure_threshold=5, recovery_timeout=30.0)
+    postgresql_cb = cb_registry.get_or_create("postgresql", failure_threshold=5, recovery_timeout=30.0)
+    clickhouse_cb = cb_registry.get_or_create("clickhouse", failure_threshold=3, recovery_timeout=60.0)
+    openwa_cb = cb_registry.get_or_create("openwa", failure_threshold=3, recovery_timeout=60.0)
+    app.state.circuit_breaker_registry = cb_registry
+    logger.info("circuit_breakers_initialized", breakers=list(cb_registry._breakers.keys()))
+
+    # ── OpenTelemetry ──────────────────────────────────────────────
+    telemetry = get_telemetry_manager()
+    telemetry.setup()
+    telemetry.instrument_app(app)
+    telemetry.instrument_redis()
+    telemetry.instrument_httpx()
+    app.state.telemetry = telemetry
+    logger.info("telemetry_initialized")
+
     # Initialize Redis cache (Tier 2)
     cache = get_cache()
     await cache.connect()
@@ -159,6 +185,10 @@ async def lifespan(app: FastAPI):
     app.state.agents = agent_infra.agent_map
     app.state.agent_factory = agent_factory
     app.state.agent_infra = agent_infra
+
+    # Wire telemetry into event bus
+    if telemetry.agent_metrics:
+        event_bus.set_agent_metrics(telemetry.agent_metrics)
 
     # V2: MetaAgent, domain agents, utility agents
     if agent_infra.meta_agent:
@@ -318,6 +348,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("application_shutting_down")
+
+    # Shutdown telemetry
+    if hasattr(app.state, "telemetry"):
+        app.state.telemetry.shutdown()
+        logger.info("telemetry_shutdown")
 
     # Graceful agent shutdown via factory (reverse order)
     await agent_factory.shutdown()
@@ -524,75 +559,129 @@ async def health_check():
     system resources, and queue depth. Used by Docker health checks,
     load balancers, Kubernetes probes, and monitoring.
 
-    Components checked:
-    - Database (PostgreSQL) connection
-    - Redis cache connection
-    - ClickHouse (OLAP) connection
-    - OpenWA connection
-    - Agent runtime status
-    - Memory usage
-    - CPU usage
-    - Queue depth
+    Components checked (queries real services):
+    - Database (PostgreSQL) — executes SELECT 1
+    - Redis cache — PING command
+    - ClickHouse (OLAP) — SELECT 1
+    - OpenWA — HTTP GET /health
+    - Agent runtime status + performance metrics
+    - Circuit breaker states
+    - Event bus statistics
     """
     import psutil
 
     cache = get_cache()
     components = {}
 
-    # 1. Database health
+    # 1. Database health (real query)
+    db_start = time.time()
     try:
         from app.infrastructure.connection_pool import get_pool_manager
         pool_mgr = get_pool_manager()
         db_healthy = await pool_mgr.health_check() if pool_mgr._initialized else True
-        components["database"] = "ok" if db_healthy else "degraded"
-        components["database_pool"] = pool_mgr.get_metrics().to_dict()
-    except Exception:
-        components["database"] = "ok"  # Assume ok if pool manager not initialized
+        db_latency = round((time.time() - db_start) * 1000, 1)
+        components["database"] = {
+            "status": "ok" if db_healthy else "degraded",
+            "latency_ms": db_latency,
+            "pool": pool_mgr.get_metrics().to_dict(),
+        }
+    except Exception as exc:
+        components["database"] = {"status": "error", "error": str(exc)}
 
-    # 2. Redis health
-    components["cache"] = "ok" if cache.is_available else "unavailable"
+    # 2. Redis health (real PING)
+    redis_start = time.time()
+    if cache.is_available:
+        try:
+            # Execute real PING
+            if hasattr(cache, '_redis') and cache._redis:
+                await cache._redis.ping()
+            redis_latency = round((time.time() - redis_start) * 1000, 1)
+            components["cache"] = {"status": "ok", "latency_ms": redis_latency}
+        except Exception as exc:
+            components["cache"] = {"status": "degraded", "error": str(exc)}
+    else:
+        components["cache"] = {"status": "unavailable"}
 
-    # 3. ClickHouse health
-    ch_ok = False
+    # 3. ClickHouse health (real query)
+    ch_start = time.time()
     if settings.has_clickhouse:
         try:
             from app.db.clickhouse import ClickHouseClient
-            ch_ok = await ClickHouseClient().health_check()
-        except (ConnectionError, OSError, TimeoutError):
-            ch_ok = False
-    components["clickhouse"] = "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured")
+            ch_client = ClickHouseClient()
+            ch_ok = await ch_client.health_check()
+            ch_latency = round((time.time() - ch_start) * 1000, 1)
+            components["clickhouse"] = {
+                "status": "ok" if ch_ok else "degraded",
+                "latency_ms": ch_latency,
+            }
+        except Exception as exc:
+            components["clickhouse"] = {"status": "error", "error": str(exc)}
+    else:
+        components["clickhouse"] = {"status": "not_configured"}
 
-    # 4. OpenWA health (only when WhatsApp is enabled)
+    # 4. OpenWA health (real HTTP)
     if settings.ENABLE_WHATSAPP:
+        import httpx
+        wa_start = time.time()
         try:
-            import httpx
-            # Short timeout — OpenWA must not block backend health
             async with httpx.AsyncClient(timeout=2.0) as client:
                 resp = await client.get(f"{settings.OPENWA_URL}/health")
+                wa_latency = round((time.time() - wa_start) * 1000, 1)
                 if resp.status_code == 200:
                     data = resp.json()
                     wa_connected = data.get("whatsapp", {}).get("connected", False)
-                    components["openwa"] = "ok" if wa_connected else "awaiting_scan"
+                    components["openwa"] = {
+                        "status": "ok" if wa_connected else "awaiting_scan",
+                        "latency_ms": wa_latency,
+                    }
                 else:
-                    components["openwa"] = "degraded"
-        except Exception:
-            components["openwa"] = "unreachable"
+                    components["openwa"] = {"status": "degraded", "latency_ms": wa_latency}
+        except Exception as exc:
+            components["openwa"] = {"status": "unreachable", "error": str(exc)}
     else:
-        components["openwa"] = "disabled"
+        components["openwa"] = {"status": "disabled"}
 
     # 5. Task queue health
-    components["task_queue"] = "ok" if get_task_queue()._connected else "unavailable"
+    tq = get_task_queue()
+    components["task_queue"] = "ok" if tq._connected else "unavailable"
 
-    # 6. Agent status
+    # 6. Agent health with per-agent performance metrics
     agents_info = {}
     if hasattr(app.state, "agents"):
         for name, agent in app.state.agents.items():
-            agents_info[name] = agent.status.value
-        components["agents"] = agents_info
-    if hasattr(app.state, "event_bus"):
-        components["event_bus"] = app.state.event_bus.get_stats()["mode"]
+            agent_health = agent.health_check()
+            # Add tracer performance data if available
+            if hasattr(app.state, "agent_tracer"):
+                tracer_stats = app.state.agent_tracer.get_stats()
+                agent_perf = tracer_stats.get("agents", {}).get(name, {})
+                agent_health["performance"] = {
+                    "total_traces": agent_perf.get("total_traces", 0),
+                    "error_rate": agent_perf.get("error_rate", 0),
+                    "avg_duration_ms": agent_perf.get("avg_duration_ms", 0),
+                    "p95_duration_ms": agent_perf.get("p95_duration_ms", 0),
+                }
+            agents_info[name] = agent_health
+    components["agents"] = agents_info
 
-    # 7. System resources
+    # 7. Event bus stats
+    if hasattr(app.state, "event_bus"):
+        eb_stats = app.state.event_bus.get_stats()
+        components["event_bus"] = {
+            "mode": eb_stats["mode"],
+            "dead_letter_count": eb_stats["dead_letter_count"],
+            "idempotency_cache_size": eb_stats.get("idempotency_cache_size", 0),
+            "backpressure_active_streams": eb_stats.get("backpressure_active_streams", []),
+        }
+
+    # 8. Circuit breaker states
+    if hasattr(app.state, "circuit_breaker_registry"):
+        cb_stats = app.state.circuit_breaker_registry.get_all_stats()
+        components["circuit_breakers"] = cb_stats
+        open_circuits = app.state.circuit_breaker_registry.get_open_circuits()
+        if open_circuits:
+            components["circuit_breakers"]["_open_circuits"] = open_circuits
+
+    # 9. System resources
     try:
         mem = psutil.virtual_memory()
         cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -605,7 +694,7 @@ async def health_check():
     except ImportError:
         components["system"] = "psutil_not_installed"
 
-    # 8. Queue depth
+    # 10. Queue depth
     try:
         from app.infrastructure.task_queue import get_async_task_queue
         aq = get_async_task_queue()
@@ -615,11 +704,18 @@ async def health_check():
     except Exception:
         pass
 
-    # Overall status
+    # Overall status — degraded if any circuit breaker is open
     critical_components = ["database", "cache", "task_queue"]
-    overall = "ok" if all(
-        components.get(k) == "ok" for k in critical_components
-    ) else "degraded"
+    overall = "ok"
+    if not all(
+        (components.get(k) == "ok" or
+         (isinstance(components.get(k), dict) and components.get(k, {}).get("status") == "ok"))
+        for k in critical_components
+    ):
+        overall = "degraded"
+    if hasattr(app.state, "circuit_breaker_registry"):
+        if app.state.circuit_breaker_registry.get_open_circuits():
+            overall = "degraded"
 
     return {
         "status": overall,
@@ -800,6 +896,9 @@ from app.api.evolution import router as evolution_router
 # Dialect Dictionary & Language Training Pipeline
 from app.api.dialect_dictionary import router as dialect_dictionary_router
 
+# SHAP Explainability (model interpretability for workers)
+from app.api.explain import router as explain_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -835,6 +934,7 @@ app.include_router(biashara_sync_router, prefix=settings.API_V1_PREFIX)
 app.include_router(otp_auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(evolution_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dialect_dictionary_router, prefix=settings.API_V1_PREFIX)
+app.include_router(explain_router, prefix=settings.API_V1_PREFIX)
 app.include_router(autonomous_router)
 
 # Mount autonomous router (prefix is built into the router)

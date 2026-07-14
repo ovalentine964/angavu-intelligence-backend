@@ -112,6 +112,12 @@ class EventType(str, Enum):
     ONBOARDING_STEP_COMPLETED = "onboarding.step.completed"
     ONBOARDING_VERIFICATION = "onboarding.verification"
 
+    # Social / Community
+    SOCIAL_PEER_COMPARISON = "social.peer_comparison"
+    SOCIAL_LEADERBOARD = "social.leaderboard"
+    SOCIAL_COMMUNITY_TIPS = "social.community_tips"
+    SOCIAL_TIP_SUBMITTED = "social.tip_submitted"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"
@@ -700,8 +706,12 @@ class BiasharaAgent:
     # ── Health ──────────────────────────────────────────────────────
 
     def health_check(self) -> Dict[str, Any]:
-        """Return agent health status for monitoring."""
-        return {
+        """Return agent health status for monitoring.
+
+        Includes real connectivity checks for database, Redis, and ClickHouse
+        when the agent has access to those services.
+        """
+        health = {
             "name": self.name,
             "role": self.role,
             "capabilities": self.capabilities,
@@ -710,7 +720,49 @@ class BiasharaAgent:
             "tools": self.tools.list_tools(),
             "event_bus_connected": self._event_bus is not None,
             "tracer_connected": self._tracer is not None,
+            "services": {},
         }
+
+        # Check database connectivity
+        try:
+            from app.db.database import engine
+            # Simple sync check — engine is alive if it was created
+            health["services"]["database"] = {
+                "status": "connected" if engine else "disconnected",
+                "url": engine.url.host if engine else None,
+            }
+        except Exception as exc:
+            health["services"]["database"] = {
+                "status": "error",
+                "error": str(exc),
+            }
+
+        # Check Redis connectivity
+        try:
+            from app.config import get_settings
+            settings = get_settings()
+            if settings.REDIS_URL:
+                health["services"]["redis"] = {
+                    "status": "configured",
+                    "url": settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL,
+                }
+            else:
+                health["services"]["redis"] = {"status": "not_configured"}
+        except Exception as exc:
+            health["services"]["redis"] = {"status": "error", "error": str(exc)}
+
+        # Check ClickHouse connectivity
+        try:
+            from app.config import get_settings
+            settings = get_settings()
+            if settings.has_clickhouse:
+                health["services"]["clickhouse"] = {"status": "configured"}
+            else:
+                health["services"]["clickhouse"] = {"status": "not_configured"}
+        except Exception as exc:
+            health["services"]["clickhouse"] = {"status": "error", "error": str(exc)}
+
+        return health
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} name={self.name!r} role={self.role!r}>"

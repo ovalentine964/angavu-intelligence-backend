@@ -6,7 +6,7 @@ Swahili keywords reflect East African service sector:
 """
 
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from app.agents.domain.base import DomainAgent
 
 
@@ -50,6 +50,24 @@ class ServiceDomainAgent(DomainAgent):
             ],
         )
 
+    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Query ServiceAgent service for real service analysis."""
+        if not self._transaction_service:
+            return None
+
+        transactions = payload.get("transactions", [])
+        period_days = payload.get("period_days", 30)
+
+        if not transactions:
+            return None
+
+        try:
+            analysis = self._transaction_service.analyze_services(transactions, period_days)
+            return analysis
+        except Exception as exc:
+            self._domain_logger.warning("service_query_failed", error=str(exc))
+            return None
+
     def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Service sector analysis with customer experience focus."""
         base = super()._analyze(payload)
@@ -68,20 +86,41 @@ class ServiceDomainAgent(DomainAgent):
         elif any(kw in text for kw in ["mgahawa", "restaurant", "food"]):
             sub_sector = "food_service"
 
-        base.update({
-            "analysis_type": "service_sector_intelligence",
-            "sub_sector": sub_sector,
-            "market_signals": {
-                "demand_trend": "growing",
+        # Use real data from service if available
+        real_data = base.get("real_data", {})
+        if real_data:
+            client_data = real_data.get("client_analysis", {})
+            market_signals = {
+                "demand_trend": "unknown",
                 "customer_expectations": "rising",
                 "competition_level": "moderate",
                 "digital_adoption": "early_stage",
-            },
-            "recommendations": [
+                "total_revenue": real_data.get("total_revenue", 0),
+                "job_count": real_data.get("job_count", 0),
+                "retention_rate": client_data.get("retention_rate_pct", 0),
+            }
+            recommendations = real_data.get("recommendations", [
                 f"Implement A/B testing for {sub_sector} service improvements (STA 343)",
                 "Track customer satisfaction with structured surveys (ECO 315)",
                 "Analyze booking patterns for capacity optimization",
-            ],
+            ])
+        else:
+            market_signals = {
+                "demand_trend": "unknown",
+                "customer_expectations": "unknown",
+                "competition_level": "unknown",
+                "digital_adoption": "unknown",
+            }
+            recommendations = [
+                "Connect service data for real analysis",
+                "Record service transactions to get personalized insights",
+            ]
+
+        base.update({
+            "analysis_type": "service_sector_intelligence",
+            "sub_sector": sub_sector,
+            "market_signals": market_signals,
+            "recommendations": recommendations,
         })
         return base
 

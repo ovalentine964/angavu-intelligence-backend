@@ -511,12 +511,76 @@ class GDPEstimatorService:
             trend, cycle = _hodrick_prescott_filter(rev_arr, lambd=1600)
             cycle_phase = _detect_business_cycle_phase(cycle)
 
+        # ── Step 6b: Kalman Filter business cycle extraction (STA 244) ────
+        kalman_cycle_result = None
+        kalman_smoothed_trend = None
+        if len(daily_rev_series) >= 14:
+            try:
+                from app.services.statistical.kalman import (
+                    EconomicIndicatorSmoother,
+                    create_gdp_nowcasting_filter,
+                )
+                # Smooth noisy daily revenue with Kalman filter
+                smoother = EconomicIndicatorSmoother(
+                    process_noise=0.01, observation_noise=0.1
+                )
+                smooth_result = smoother.smooth_series(
+                    noisy_data=rev_arr,
+                    indicator_name="daily_revenue",
+                )
+                kalman_smoothed_trend = smooth_result.filtered_values
+
+                # Extract business cycle using Kalman decomposition
+                kalman_cycle = smoother.extract_business_cycle(rev_arr)
+                kalman_cycle_result = {
+                    "phase": kalman_cycle["phase"],
+                    "current_cycle_value": kalman_cycle["current_cycle_value"],
+                    "trend_growth_pct": kalman_cycle["trend_growth"],
+                    "noise_reduction_pct": kalman_smoothed_trend.get("noise_reduction_pct", 0),
+                    "method": "Kalman filter state-space decomposition (STA 244)",
+                }
+
+                # Use Kalman phase if HP filter was indeterminate
+                if cycle_phase == "indeterminate":
+                    cycle_phase = kalman_cycle["phase"]
+
+                logger.info(
+                    "kalman_cycle_extracted",
+                    phase=kalman_cycle["phase"],
+                    cycle_value=round(kalman_cycle["current_cycle_value"], 4),
+                )
+            except Exception as e:
+                logger.debug("kalman_cycle_failed", error=str(e))
+
         # ── Step 7: Nowcasting (STA 244) ────────────────────────────────────
         nowcast_result = None
         if len(daily_rev_series) >= 7:
             sorted_days = sorted(daily_rev_series.keys())
             daily_arr = np.array([daily_rev_series[d] for d in sorted_days], dtype=float)
+
+            # Try Kalman-based nowcasting first
+            try:
+                from app.services.statistical.kalman import create_gdp_nowcasting_filter
+                kalman_filter = create_gdp_nowcasting_filter(
+                    initial_gdp=float(np.mean(daily_arr)),
+                    initial_growth=float(np.std(daily_arr) / max(np.mean(daily_arr), 1)),
+                )
+                kalman_result = kalman_filter.nowcast_from_daily_revenue(daily_arr)
+                kalman_nowcast = {
+                    "kalman_gdp_level": kalman_result.filtered_values.get("gdp_level"),
+                    "kalman_gdp_growth": kalman_result.filtered_values.get("gdp_growth"),
+                    "kalman_cycle": kalman_result.filtered_values.get("business_cycle"),
+                    "forecast": kalman_result.forecast,
+                    "method": "Kalman filter nowcasting (STA 244)",
+                }
+            except Exception as e:
+                logger.debug("kalman_nowcast_failed", error=str(e))
+                kalman_nowcast = None
+
+            # Also run traditional MIDAS nowcast
             nowcast_result = _nowcast_gdp(daily_arr, sector_value_added)
+            if kalman_nowcast and nowcast_result:
+                nowcast_result["kalman_filter"] = kalman_nowcast
 
         # ── Step 8: Growth rate ─────────────────────────────────────────────
         prev_total = sum(t.amount for t in prev_sales) if prev_sales else 0

@@ -58,6 +58,16 @@ from app.services.statistical_foundation import (
 from app.services.intelligence.markov_chains import MarkovChainAnalyzer, markov_analyzer
 from app.services.intelligence.measure_theory import MartingaleAnalyzer, ConditionalExpectation
 
+# ── ML Layer: XGBoost credit scoring (complements classical Alama Score) ──
+try:
+    from app.services.ml.feature_engineering import FeatureEngineer
+    from app.services.ml.xgboost_service import XGBoostService
+    _xgb_credit_service = XGBoostService()
+    _ml_credit_available = True
+except ImportError:
+    _ml_credit_available = False
+    _xgb_credit_service = None
+
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
@@ -832,6 +842,35 @@ class AlamaScoreService:
                 np.array(daily_revenues),
             ) if query_tier == "full" and len(daily_revenues) >= 20 else None,
         }
+
+        # ── ML Layer: XGBoost credit scoring enhancement ────────────────────
+        # Complements classical Alama Score with non-linear feature interactions.
+        # XGBoost captures complex behavioral patterns that logistic regression
+        # (MLE/IRLS) cannot model. SHAP provides explainability.
+        if _ml_credit_available and _xgb_credit_service and len(transactions) >= 20:
+            try:
+                ml_features = FeatureEngineer.extract_all_features(transactions)
+                ml_credit = _xgb_credit_service.predict_credit_score(
+                    ml_features, classical_score=alama_score,
+                )
+                if ml_credit.get("available"):
+                    response["ml_credit_assessment"] = {
+                        "ml_score": ml_credit["ml_score"],
+                        "ensemble_score": ml_credit["ensemble_score"],
+                        "default_probability": ml_credit["default_probability"],
+                        "score_band": ml_credit["score_band"],
+                        "confidence": ml_credit["confidence"],
+                        "shap_explanation": ml_credit.get("shap_explanation"),
+                        "ensemble_weights": ml_credit.get("ensemble_weights"),
+                        "note": "XGBoost ML enhancement of classical Alama Score",
+                    }
+                    # Use ML-enhanced ensemble score as the primary score
+                    # if confidence is high enough
+                    if ml_credit["confidence"] >= 0.6:
+                        response["alama_score"] = ml_credit["ensemble_score"]
+                        response["score_band"] = ml_credit["score_band"]
+            except Exception as e:
+                logger.debug("ml_credit_scoring_failed", error=str(e))
 
         if query_tier == "basic":
             response.pop("bayesian_credit_assessment", None)

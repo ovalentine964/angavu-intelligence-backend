@@ -8,9 +8,19 @@ Provides:
 - Caching layer (cache-aside pattern)
 - Metrics & observability (Prometheus-compatible)
 - Enhanced health checks (comprehensive monitoring)
+- Circuit breaker (resilience for external services)
+- OpenTelemetry (distributed tracing & metrics)
 """
 
 from app.infrastructure.cache import CacheAside, get_cache_aside
+from app.infrastructure.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerError,
+    CircuitBreakerRegistry,
+    CircuitState,
+    get_circuit_breaker,
+    get_circuit_breaker_registry,
+)
 from app.infrastructure.connection_pool import ConnectionPoolManager, get_pool_manager
 from app.infrastructure.metrics import MetricsCollector, get_metrics_collector
 from app.infrastructure.redis_streams import (
@@ -20,11 +30,24 @@ from app.infrastructure.redis_streams import (
     get_streams_manager,
 )
 from app.infrastructure.task_queue import AsyncTaskQueue, Priority, get_async_task_queue
+from app.infrastructure.telemetry import (
+    AgentMetricsRecorder,
+    TelemetryConfig,
+    TelemetryManager,
+    get_telemetry_manager,
+)
 
 __all__ = [
     # Cache
     "CacheAside",
     "get_cache_aside",
+    # Circuit Breaker
+    "CircuitBreaker",
+    "CircuitBreakerError",
+    "CircuitBreakerRegistry",
+    "CircuitState",
+    "get_circuit_breaker",
+    "get_circuit_breaker_registry",
     # Connection Pool
     "ConnectionPoolManager",
     "get_pool_manager",
@@ -40,4 +63,9 @@ __all__ = [
     "AsyncTaskQueue",
     "Priority",
     "get_async_task_queue",
+    # Telemetry
+    "AgentMetricsRecorder",
+    "TelemetryConfig",
+    "TelemetryManager",
+    "get_telemetry_manager",
 ]
