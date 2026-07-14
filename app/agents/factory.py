@@ -92,6 +92,12 @@ class AgentInfrastructure:
     subagent_decomposer: Any = None  # TaskDecomposer
     skill_generator: Any = None      # SkillGenerator
 
+    # V4: Unified harness system
+    execution_harness: Any = None    # AgentExecutionHarness
+    data_pipeline_harness: Any = None  # DataPipelineHarness
+    inference_harness: Any = None    # InferenceHarness
+    deployment_harness: Any = None   # DeploymentHarness
+
     def __post_init__(self):
         if not self.agent_map:
             self.agent_map = {a.name: a for a in self.agents}
@@ -222,7 +228,25 @@ class AgentFactory:
             agent.set_event_bus(event_bus)
             agent.set_tracer(tracer)
 
-        # 9. Register all agents with MetaAgent
+        # 9b. Create and wire execution harness into all agents
+        from app.agents.harness.execution import get_execution_harness
+        execution_harness = get_execution_harness()
+        for agent in all_agents:
+            agent.set_harness(execution_harness)
+        # Register swarm mappings for domain agents
+        for agent in domain_agents:
+            execution_harness.register_agent_swarm(agent.name, "domain_swarm")
+        for agent in core_agents:
+            execution_harness.register_agent_swarm(agent.name, "core_swarm")
+        for agent in utility_agents:
+            execution_harness.register_agent_swarm(agent.name, "utility_swarm")
+        execution_harness.register_agent_swarm(meta_agent.name, "meta_swarm")
+        self._logger.info(
+            "execution_harness_wired",
+            total_agents=len(all_agents),
+        )
+
+        # 9c. Register all agents with MetaAgent
         for agent in all_agents:
             if agent.name != "MetaAgent":
                 meta_agent.register_agent(agent)
@@ -273,7 +297,32 @@ class AgentFactory:
             broadcast_protocol=broadcast_protocol,
             p2p_protocol=p2p_protocol,
             delegation_protocol=delegation_protocol,
+            execution_harness=execution_harness,
         )
+
+        # Wire data pipeline harness
+        try:
+            from app.agents.harness.data_harness import get_data_pipeline_harness
+            infrastructure.data_pipeline_harness = get_data_pipeline_harness()
+            self._logger.info("data_pipeline_harness_attached")
+        except (ImportError, Exception) as exc:
+            self._logger.warning("data_pipeline_harness_setup_failed", error=str(exc))
+
+        # Wire inference harness
+        try:
+            from app.services.ml.inference_harness import get_inference_harness
+            infrastructure.inference_harness = get_inference_harness()
+            self._logger.info("inference_harness_attached")
+        except (ImportError, Exception) as exc:
+            self._logger.warning("inference_harness_setup_failed", error=str(exc))
+
+        # Wire deployment harness
+        try:
+            from app.infrastructure.deployment_harness import get_deployment_harness
+            infrastructure.deployment_harness = get_deployment_harness()
+            self._logger.info("deployment_harness_attached")
+        except (ImportError, Exception) as exc:
+            self._logger.warning("deployment_harness_setup_failed", error=str(exc))
 
         # 13. Optional: loop-enhanced agents
         if enable_loops:
@@ -308,7 +357,7 @@ class AgentFactory:
             + len(infrastructure.financial_agents)
         )
         self._logger.info(
-            "agent_infrastructure_v3_ready",
+            "agent_infrastructure_v4_ready",
             total_agents=total_agents,
             core_agents=len(core_agents),
             domain_agents=len(domain_agents),
@@ -322,6 +371,10 @@ class AgentFactory:
             has_a2a=infrastructure.a2a_server is not None,
             has_subagent_decomposer=infrastructure.subagent_decomposer is not None,
             has_skill_generator=infrastructure.skill_generator is not None,
+            has_execution_harness=infrastructure.execution_harness is not None,
+            has_data_pipeline_harness=infrastructure.data_pipeline_harness is not None,
+            has_inference_harness=infrastructure.inference_harness is not None,
+            has_deployment_harness=infrastructure.deployment_harness is not None,
         )
 
         return infrastructure

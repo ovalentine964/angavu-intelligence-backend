@@ -345,6 +345,7 @@ class BiasharaAgent:
         # Injected after construction
         self._event_bus: Any = None       # EventBus | None
         self._tracer: Any = None          # AgentTracer | None
+        self._harness: Any = None         # AgentExecutionHarness | None
 
         # Background polling lifecycle
         self._poll_task: Optional[asyncio.Task] = None
@@ -362,6 +363,10 @@ class BiasharaAgent:
     def set_tracer(self, tracer: Any) -> None:
         """Inject the tracer (called by orchestrator)."""
         self._tracer = tracer
+
+    def set_harness(self, harness: Any) -> None:
+        """Inject the execution harness (called by orchestrator)."""
+        self._harness = harness
 
     # ── Lifecycle start / stop ──────────────────────────────────────
 
@@ -443,8 +448,17 @@ class BiasharaAgent:
         """
         Full lifecycle: observe → think → act → reflect.
 
-        Orchestrators and the event bus use this to trigger an agent.
+        If an execution harness is injected, routes through it for
+        timeout, retry, circuit breaker, and metrics collection.
         """
+        # Route through harness if available
+        if self._harness:
+            return await self._harness.execute(self, event)
+
+        return await self._handle_event_inner(event)
+
+    async def _handle_event_inner(self, event: AgentEvent) -> AgentResult:
+        """Internal lifecycle implementation (called directly or via harness)."""
         cycle_start = time.time()
         trace_id = None
 
@@ -720,6 +734,7 @@ class BiasharaAgent:
             "tools": self.tools.list_tools(),
             "event_bus_connected": self._event_bus is not None,
             "tracer_connected": self._tracer is not None,
+            "harness_connected": self._harness is not None,
             "services": {},
         }
 

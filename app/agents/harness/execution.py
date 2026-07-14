@@ -58,7 +58,7 @@ class CircuitBreaker:
     States:
         CLOSED → (failures >= threshold) → OPEN
         OPEN → (recovery timeout elapsed) → HALF_OPEN
-        HALF_OPEN → (success) → CLOSED
+        HALF_OPEN → (successes >= half_open_max) → CLOSED
         HALF_OPEN → (failure) → OPEN
 
     Each agent gets its own circuit breaker, so one agent's failure
@@ -69,8 +69,8 @@ class CircuitBreaker:
         self,
         name: str,
         failure_threshold: int = 5,
-        recovery_timeout_s: float = 60.0,
-        half_open_max_calls: int = 1,
+        recovery_timeout_s: float = 30.0,
+        half_open_max_calls: int = 3,
     ):
         self.name = name
         self._failure_threshold = failure_threshold
@@ -196,6 +196,94 @@ class ExecutionRecord:
         }
 
 
+class AgentHealthTracker:
+    """
+    Tracks agent availability and error rates over time.
+
+    Maintains rolling windows of success/failure counts per agent
+    and exposes availability percentages and error rate trends.
+    """
+
+    def __init__(self, window_size: int = 100):
+        self._window_size = window_size
+        self._agent_windows: Dict[str, List[bool]] = {}  # agent_name → [success, ...]
+        self._agent_error_counts: Dict[str, int] = defaultdict(int)
+        self._agent_total_counts: Dict[str, int] = defaultdict(int)
+        self._agent_consecutive_failures: Dict[str, int] = defaultdict(int)
+        self._agent_last_error: Dict[str, Dict[str, Any]] = {}
+        self._logger = logger.bind(component="agent_health")
+
+    def record(self, agent_name: str, success: bool, error: Optional[str] = None) -> None:
+        """Record an execution result for health tracking."""
+        if agent_name not in self._agent_windows:
+            self._agent_windows[agent_name] = []
+
+        window = self._agent_windows[agent_name]
+        window.append(success)
+        if len(window) > self._window_size:
+            window.pop(0)
+
+        self._agent_total_counts[agent_name] += 1
+        if not success:
+            self._agent_error_counts[agent_name] += 1
+            self._agent_consecutive_failures[agent_name] += 1
+            self._agent_last_error[agent_name] = {
+                "error": error or "unknown",
+                "timestamp": time.time(),
+            }
+        else:
+            self._agent_consecutive_failures[agent_name] = 0
+
+    def get_availability(self, agent_name: str) -> float:
+        """Get availability (success rate) over the rolling window. Returns 0.0–1.0."""
+        window = self._agent_windows.get(agent_name, [])
+        if not window:
+            return 1.0  # assume healthy if no data
+        return sum(1 for s in window if s) / len(window)
+
+    def get_error_rate(self, agent_name: str) -> float:
+        """Get error rate over the rolling window. Returns 0.0–1.0."""
+        return 1.0 - self.get_availability(agent_name)
+
+    def get_consecutive_failures(self, agent_name: str) -> int:
+        """Get current consecutive failure streak."""
+        return self._agent_consecutive_failures.get(agent_name, 0)
+
+    def get_health_status(self, agent_name: str) -> Dict[str, Any]:
+        """Get comprehensive health status for an agent."""
+        availability = self.get_availability(agent_name)
+        error_rate = self.get_error_rate(agent_name)
+        consecutive = self.get_consecutive_failures(agent_name)
+        total = self._agent_total_counts.get(agent_name, 0)
+        errors = self._agent_error_counts.get(agent_name, 0)
+        last_error = self._agent_last_error.get(agent_name)
+
+        if availability >= 0.95:
+            status = "healthy"
+        elif availability >= 0.80:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+
+        return {
+            "agent_name": agent_name,
+            "status": status,
+            "availability": round(availability, 4),
+            "error_rate": round(error_rate, 4),
+            "consecutive_failures": consecutive,
+            "total_executions": total,
+            "total_errors": errors,
+            "last_error": last_error,
+        }
+
+    def get_all_health(self) -> Dict[str, Dict[str, Any]]:
+        """Get health status for all tracked agents."""
+        return {
+            name: self.get_health_status(name)
+            for name in self._agent_total_counts
+        }
+
+
 class AgentMetricsCollector:
     """
     Collects and aggregates execution metrics per agent.
@@ -204,7 +292,7 @@ class AgentMetricsCollector:
     - Total calls, successes, failures
     - Latency (avg, p50, p95, p99)
     - Token usage (input, output)
-    - Cost (per agent, per user)
+    - Cost (per agent, per user, per swarm, per day)
     - Circuit breaker events
     """
 
@@ -214,7 +302,69 @@ class AgentMetricsCollector:
         self._agent_latencies: Dict[str, List[float]] = defaultdict(list)
         self._agent_costs: Dict[str, float] = defaultdict(float)
         self._user_costs: Dict[str, float] = defaultdict(float)
+        # Per-day cost tracking: key = "YYYY-MM-DD"
+        self._daily_costs: Dict[str, float] = defaultdict(float)
+        self._daily_agent_costs: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self._daily_user_costs: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        # Per-swarm metrics (swarm = group of agents working together)
+        self._swarm_costs: Dict[str, float] = defaultdict(float)
+        self._swarm_calls: Dict[str, int] = defaultdict(int)
+        self._swarm_successes: Dict[str, int] = defaultdict(int)
+        self._swarm_latencies: Dict[str, List[float]] = defaultdict(list)
+        # Agent → swarm mapping
+        self._agent_swarm_map: Dict[str, str] = {}
+        # Agent health tracker
+        self._health = AgentHealthTracker()
         self._logger = logger.bind(component="agent_metrics")
+
+    def register_agent_swarm(self, agent_name: str, swarm_name: str) -> None:
+        """Register an agent as belonging to a swarm (group of cooperating agents)."""
+        self._agent_swarm_map[agent_name] = swarm_name
+
+    def get_swarm_stats(self, swarm_name: str, hours: int = 24) -> Dict[str, Any]:
+        """Get aggregated stats for a swarm of agents."""
+        cutoff = time.time() - hours * 3600
+        swarm_agents = [
+            name for name, swarm in self._agent_swarm_map.items()
+            if swarm == swarm_name
+        ]
+        records = [
+            r for r in self._records
+            if r.agent_name in swarm_agents and r.started_at > cutoff
+        ]
+
+        if not records:
+            return {"swarm_name": swarm_name, "calls": 0}
+
+        latencies = [r.duration_ms for r in records]
+        successes = sum(1 for r in records if r.success)
+        sorted_lat = sorted(latencies)
+        n = len(sorted_lat)
+
+        return {
+            "swarm_name": swarm_name,
+            "period_hours": hours,
+            "agents": swarm_agents,
+            "total_calls": len(records),
+            "successes": successes,
+            "failures": len(records) - successes,
+            "success_rate": round(successes / len(records), 4),
+            "latency": {
+                "avg_ms": round(sum(latencies) / n, 2),
+                "p50_ms": round(sorted_lat[n // 2], 2),
+                "p95_ms": round(sorted_lat[int(n * 0.95)], 2),
+            },
+            "cost_usd": round(self._swarm_costs.get(swarm_name, 0), 6),
+            "total_tokens": sum(r.input_tokens + r.output_tokens for r in records),
+        }
+
+    def get_all_swarm_stats(self, hours: int = 24) -> Dict[str, Any]:
+        """Get stats for all swarms."""
+        swarms = set(self._agent_swarm_map.values())
+        return {
+            swarm: self.get_swarm_stats(swarm, hours)
+            for swarm in swarms
+        }
 
     def record(self, record: ExecutionRecord) -> None:
         """Record an execution."""
@@ -230,6 +380,28 @@ class AgentMetricsCollector:
             self._agent_costs[record.agent_name] += record.cost_usd
             if record.user_id:
                 self._user_costs[record.user_id] += record.cost_usd
+
+            # Per-day cost tracking
+            day_key = time.strftime("%Y-%m-%d", time.localtime(record.started_at))
+            self._daily_costs[day_key] += record.cost_usd
+            self._daily_agent_costs[day_key][record.agent_name] += record.cost_usd
+            if record.user_id:
+                self._daily_user_costs[day_key][record.user_id] += record.cost_usd
+
+        # Per-swarm tracking
+        swarm = self._agent_swarm_map.get(record.agent_name)
+        if swarm:
+            self._swarm_calls[swarm] += 1
+            if record.success:
+                self._swarm_successes[swarm] += 1
+            self._swarm_latencies[swarm].append(record.duration_ms)
+            if len(self._swarm_latencies[swarm]) > 1000:
+                self._swarm_latencies[swarm] = self._swarm_latencies[swarm][-1000:]
+            if record.cost_usd > 0:
+                self._swarm_costs[swarm] += record.cost_usd
+
+        # Health tracking
+        self._health.record(record.agent_name, record.success, record.error)
 
     def get_agent_stats(self, agent_name: str, hours: int = 24) -> Dict[str, Any]:
         """Get stats for a specific agent."""
@@ -275,10 +447,38 @@ class AgentMetricsCollector:
         agent_names = set(r.agent_name for r in self._records)
         return {
             "agents": {name: self.get_agent_stats(name, hours) for name in agent_names},
+            "swarms": self.get_all_swarm_stats(hours),
             "total_cost_usd": round(sum(self._agent_costs.values()), 6),
             "total_user_cost_usd": round(sum(self._user_costs.values()), 6),
+            "total_swarm_cost_usd": round(sum(self._swarm_costs.values()), 6),
             "total_records": len(self._records),
+            "health": self._health.get_all_health(),
         }
+
+    def get_daily_costs(self, days: int = 7) -> Dict[str, Any]:
+        """Get cost breakdown by day for the last N days."""
+        import datetime
+        today = datetime.date.today()
+        result = {}
+        for i in range(days):
+            day = today - datetime.timedelta(days=i)
+            day_key = day.isoformat()
+            result[day_key] = {
+                "total_usd": round(self._daily_costs.get(day_key, 0), 6),
+                "by_agent": {
+                    k: round(v, 6)
+                    for k, v in self._daily_agent_costs.get(day_key, {}).items()
+                },
+                "by_user": {
+                    k: round(v, 6)
+                    for k, v in self._daily_user_costs.get(day_key, {}).items()
+                },
+            }
+        return result
+
+    def get_health_status(self) -> Dict[str, Dict[str, Any]]:
+        """Get health status for all agents."""
+        return self._health.get_all_health()
 
     def get_user_costs(self, user_id: str) -> Dict[str, Any]:
         """Get cost breakdown for a specific user."""
@@ -304,11 +504,13 @@ class AgentMetricsCollector:
 class HarnessConfig:
     """Configuration for the execution harness."""
     timeout_s: float = 30.0           # Default timeout per agent call
-    max_retries: int = 2              # Default max retries
+    max_retries: int = 3              # Default max retries (3 attempts total)
     retry_base_delay_s: float = 1.0   # Base delay for exponential backoff
-    retry_max_delay_s: float = 10.0   # Max delay between retries
+    retry_multiplier: float = 3.0     # Multiplier for exponential backoff
+    retry_max_delay_s: float = 30.0   # Max delay between retries
     circuit_failure_threshold: int = 5  # Failures before circuit opens
-    circuit_recovery_timeout_s: float = 60.0  # Time before half-open probe
+    circuit_recovery_timeout_s: float = 30.0  # Time before half-open probe
+    circuit_half_open_max: int = 3    # Successes in half-open to close circuit
     enable_cost_tracking: bool = True
     per_agent_timeout: Dict[str, float] = field(default_factory=dict)
     per_agent_retries: Dict[str, int] = field(default_factory=dict)
@@ -356,6 +558,7 @@ class AgentExecutionHarness:
                 name=agent_name,
                 failure_threshold=self._config.circuit_failure_threshold,
                 recovery_timeout_s=self._config.circuit_recovery_timeout_s,
+                half_open_max_calls=self._config.circuit_half_open_max,
             )
         return self._circuit_breakers[agent_name]
 
@@ -431,8 +634,9 @@ class AgentExecutionHarness:
 
             start_time = time.time()
             try:
+                # Call _handle_event_inner directly to avoid re-entering the harness
                 result = await asyncio.wait_for(
-                    agent.handle_event(event),
+                    agent._handle_event_inner(event),
                     timeout=timeout_s,
                 )
 
@@ -512,7 +716,7 @@ class AgentExecutionHarness:
             # Exponential backoff before retry
             if attempt < max_retries:
                 delay = min(
-                    self._config.retry_base_delay_s * (2 ** attempt),
+                    self._config.retry_base_delay_s * (self._config.retry_multiplier ** attempt),
                     self._config.retry_max_delay_s,
                 )
                 self._logger.info(
@@ -549,6 +753,18 @@ class AgentExecutionHarness:
 
     # ── Monitoring API ──────────────────────────────────────────────
 
+    def register_agent_swarm(self, agent_name: str, swarm_name: str) -> None:
+        """Register an agent as belonging to a swarm (group of cooperating agents)."""
+        self._metrics.register_agent_swarm(agent_name, swarm_name)
+
+    def get_swarm_metrics(self, swarm_name: str, hours: int = 24) -> Dict[str, Any]:
+        """Get metrics for a swarm of agents."""
+        return self._metrics.get_swarm_stats(swarm_name, hours)
+
+    def get_all_swarm_metrics(self, hours: int = 24) -> Dict[str, Any]:
+        """Get metrics for all swarms."""
+        return self._metrics.get_all_swarm_stats(hours)
+
     def get_circuit_breakers(self) -> Dict[str, Dict[str, Any]]:
         """Get state of all circuit breakers."""
         return {name: cb.to_dict() for name, cb in self._circuit_breakers.items()}
@@ -564,6 +780,14 @@ class AgentExecutionHarness:
     def get_user_costs(self, user_id: str) -> Dict[str, Any]:
         """Get cost breakdown for a specific user."""
         return self._metrics.get_user_costs(user_id)
+
+    def get_daily_costs(self, days: int = 7) -> Dict[str, Any]:
+        """Get cost breakdown by day."""
+        return self._metrics.get_daily_costs(days)
+
+    def get_agent_health(self) -> Dict[str, Dict[str, Any]]:
+        """Get health status for all tracked agents (availability, error rates)."""
+        return self._metrics.get_health_status()
 
     def get_health(self) -> Dict[str, Any]:
         """Get overall harness health status."""
@@ -582,11 +806,14 @@ class AgentExecutionHarness:
             "half_open_circuits": half_open,
             "total_circuit_breakers": len(self._circuit_breakers),
             "total_executions": len(self._metrics._records),
+            "agent_health": self._metrics.get_health_status(),
             "config": {
                 "timeout_s": self._config.timeout_s,
                 "max_retries": self._config.max_retries,
+                "retry_multiplier": self._config.retry_multiplier,
                 "circuit_failure_threshold": self._config.circuit_failure_threshold,
                 "circuit_recovery_timeout_s": self._config.circuit_recovery_timeout_s,
+                "circuit_half_open_max": self._config.circuit_half_open_max,
             },
         }
 
@@ -747,9 +974,11 @@ def get_execution_harness() -> AgentExecutionHarness:
 
 def create_harness(
     timeout_s: float = 30.0,
-    max_retries: int = 2,
+    max_retries: int = 3,
     circuit_failure_threshold: int = 5,
-    circuit_recovery_timeout_s: float = 60.0,
+    circuit_recovery_timeout_s: float = 30.0,
+    circuit_half_open_max: int = 3,
+    retry_multiplier: float = 3.0,
 ) -> AgentExecutionHarness:
     """Create a harness with custom configuration."""
     config = HarnessConfig(
@@ -757,6 +986,8 @@ def create_harness(
         max_retries=max_retries,
         circuit_failure_threshold=circuit_failure_threshold,
         circuit_recovery_timeout_s=circuit_recovery_timeout_s,
+        circuit_half_open_max=circuit_half_open_max,
+        retry_multiplier=retry_multiplier,
     )
     return AgentExecutionHarness(config)
 
