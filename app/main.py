@@ -14,6 +14,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,19 @@ from app.agents.base import AgentEvent, EventType
 from app.agents.factory import AgentFactory
 
 settings = get_settings()
+
+# ── Sentry Crash Reporting ─────────────────────────────────────────
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.APP_ENV,
+        release=f"angavu-backend@{settings.APP_VERSION if hasattr(settings, 'APP_VERSION') else '0.1.0'}",
+        traces_sample_rate=0.2 if settings.is_production else 1.0,
+        profiles_sample_rate=0.1 if settings.is_production else 1.0,
+        enable_tracing=True,
+        send_default_pii=False,
+        # FastAPI integration is auto-discovered from installed extras
+    )
 
 # Configure structured logging
 structlog.configure(

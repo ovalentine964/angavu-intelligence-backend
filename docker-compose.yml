@@ -92,7 +92,7 @@ services:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: msaidizi-whisper
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     environment:
       - ASR_MODEL=base
       - ASR_ENGINE=openai_whisper
@@ -222,7 +222,7 @@ services:
     container_name: biashara-clickhouse
     ports:
       - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:9001:9000"
     environment:
       - CLICKHOUSE_DB=biashara
       - CLICKHOUSE_USER=admin

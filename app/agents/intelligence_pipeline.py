@@ -51,14 +51,14 @@ logger = structlog.get_logger(__name__)
 
 
 def _get_db_session():
-    """Get a database session for querying real data.
+    """Get a database session factory for querying real data.
 
-    Returns a SQLAlchemy async session or None if DB is unavailable.
+    Returns a SQLAlchemy async session factory or None if DB is unavailable.
     Falls back gracefully — agents return empty results rather than crashing.
     """
     try:
-        from app.database import async_session
-        return async_session
+        from app.db.database import async_session_factory
+        return async_session_factory
     except (ImportError, Exception) as exc:
         logger.debug("db_session_unavailable", error=str(exc))
         return None
@@ -176,6 +176,504 @@ async def _query_distribution_data(product: str) -> Dict[str, Any]:
     return {"regions": [], "source": "query_failed"}
 
 
+async def _query_supply_demand(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+    """Derive supply/demand signals from transaction data.
+
+    Sales transactions represent demand; purchase transactions represent supply.
+    The ratio and volume differences indicate market balance.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"supply_index": None, "demand_index": None, "gap": None, "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            query = select(
+                Transaction.transaction_type,
+                func.count(Transaction.id).label("txn_count"),
+                func.sum(Transaction.amount).label("total_amount"),
+                func.avg(Transaction.amount).label("avg_amount"),
+            )
+            if product:
+                query = query.where(Transaction.item.ilike(f"%{product}%"))
+            query = query.group_by(Transaction.transaction_type)
+
+            result = await session.execute(query)
+            rows = result.all()
+
+            supply_volume = 0.0
+            demand_volume = 0.0
+            supply_count = 0
+            demand_count = 0
+            for r in rows:
+                if r.transaction_type == "SALE":
+                    demand_volume = float(r.total_amount or 0)
+                    demand_count = r.txn_count
+                elif r.transaction_type == "PURCHASE":
+                    supply_volume = float(r.total_amount or 0)
+                    supply_count = r.txn_count
+
+            total = supply_volume + demand_volume
+            if total > 0:
+                supply_index = round(supply_volume / total * 100, 1)
+                demand_index = round(demand_volume / total * 100, 1)
+                gap = round(demand_index - supply_index, 1)
+            else:
+                supply_index = None
+                demand_index = None
+                gap = None
+
+            return {
+                "supply_index": supply_index,
+                "demand_index": demand_index,
+                "gap": gap,
+                "supply_volume": supply_volume,
+                "demand_volume": demand_volume,
+                "supply_txn_count": supply_count,
+                "demand_txn_count": demand_count,
+                "source": "database" if (supply_count + demand_count) > 0 else "no_data",
+            }
+    except Exception as exc:
+        logger.warning("supply_demand_query_failed", error=str(exc), region=region)
+    return {"supply_index": None, "demand_index": None, "gap": None, "source": "query_failed"}
+
+
+async def _query_competitor_density(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+    """Estimate competitor density from distinct sellers in the same market.
+
+    More distinct users selling the same product = more competitive.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"distinct_sellers": 0, "competitor_density": "unknown", "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func, distinct
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            query = select(
+                func.count(distinct(Transaction.user_id)).label("distinct_sellers"),
+                func.count(Transaction.id).label("total_txns"),
+                func.sum(Transaction.amount).label("total_volume"),
+            ).where(
+                Transaction.transaction_type == "SALE"
+            )
+            if product:
+                query = query.where(Transaction.item.ilike(f"%{product}%"))
+
+            result = await session.execute(query)
+            row = result.one_or_none()
+
+            if row and row.distinct_sellers and row.distinct_sellers > 0:
+                sellers = row.distinct_sellers
+                if sellers >= 50:
+                    density = "very_high"
+                elif sellers >= 20:
+                    density = "high"
+                elif sellers >= 10:
+                    density = "moderate"
+                elif sellers >= 3:
+                    density = "low"
+                else:
+                    density = "very_low"
+                return {
+                    "distinct_sellers": sellers,
+                    "total_transactions": row.total_txns,
+                    "total_volume": float(row.total_volume or 0),
+                    "competitor_density": density,
+                    "source": "database",
+                }
+    except Exception as exc:
+        logger.warning("competitor_density_query_failed", error=str(exc), region=region)
+    return {"distinct_sellers": 0, "competitor_density": "unknown", "source": "query_failed"}
+
+
+async def _query_repayment_data(worker_id: str) -> Dict[str, Any]:
+    """Query loan and repayment history for credit scoring.
+
+    Uses Loan and LoanRepayment tables to calculate on-time rate,
+    streak data, and default indicators.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"has_data": False, "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.loan import Loan, LoanRepayment
+
+        async with session_factory() as session:
+            loan_q = select(
+                func.count(Loan.id).label("total_loans"),
+                func.sum(Loan.amount).label("total_borrowed"),
+                func.sum(Loan.amount_repaid).label("total_repaid"),
+                func.sum(Loan.total_due).label("total_due"),
+                func.avg(Loan.current_streak).label("avg_streak"),
+                func.max(Loan.best_streak).label("best_streak"),
+            ).where(Loan.user_id == worker_id)
+
+            loan_result = await session.execute(loan_q)
+            loan_row = loan_result.one_or_none()
+
+            if not loan_row or not loan_row.total_loans or loan_row.total_loans == 0:
+                return {"has_data": False, "source": "no_loans"}
+
+            status_q = select(
+                Loan.status,
+                func.count(Loan.id).label("count"),
+            ).where(Loan.user_id == worker_id).group_by(Loan.status)
+            status_result = await session.execute(status_q)
+            status_rows = status_result.all()
+            status_counts = {r.status: r.count for r in status_rows}
+
+            repay_q = select(
+                func.count(LoanRepayment.id).label("total_payments"),
+                func.avg(LoanRepayment.amount).label("avg_payment"),
+            ).join(Loan, Loan.id == LoanRepayment.loan_id).where(
+                Loan.user_id == worker_id
+            )
+            repay_result = await session.execute(repay_q)
+            repay_row = repay_result.one_or_none()
+
+            total_borrowed = float(loan_row.total_borrowed or 0)
+            total_repaid = float(loan_row.total_repaid or 0)
+            total_due = float(loan_row.total_due or 0)
+
+            on_time_rate = None
+            if total_due > 0:
+                on_time_rate = round(min(total_repaid / total_due, 1.0), 3)
+
+            completed = status_counts.get("completed", 0)
+            defaulted = status_counts.get("defaulted", 0)
+            total = loan_row.total_loans
+
+            return {
+                "has_data": True,
+                "total_loans": total,
+                "total_borrowed": total_borrowed,
+                "total_repaid": total_repaid,
+                "total_due": total_due,
+                "on_time_rate": on_time_rate,
+                "completed_loans": completed,
+                "defaulted_loans": defaulted,
+                "active_loans": status_counts.get("active", 0),
+                "completion_rate": round(completed / total, 3) if total > 0 else 0,
+                "default_rate": round(defaulted / total, 3) if total > 0 else 0,
+                "avg_streak": float(loan_row.avg_streak or 0),
+                "best_streak": int(loan_row.best_streak or 0),
+                "total_repayments": int(repay_row.total_payments or 0) if repay_row else 0,
+                "avg_payment_amount": float(repay_row.avg_payment or 0) if repay_row else 0,
+                "source": "database",
+            }
+    except Exception as exc:
+        logger.warning("repayment_data_query_failed", error=str(exc), worker_id=worker_id)
+    return {"has_data": False, "source": "query_failed"}
+
+
+async def _query_behavioral_data(worker_id: str) -> Dict[str, Any]:
+    """Analyze transaction patterns for behavioral credit signals.
+
+    Calculates regularity, growth trend, and risk flags from
+    the worker's transaction history.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"has_data": False, "source": "no_db"}
+
+    try:
+        import statistics
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            monthly_q = select(
+                func.date_trunc('month', Transaction.timestamp).label("month"),
+                func.count(Transaction.id).label("txn_count"),
+                func.sum(Transaction.amount).label("total_amount"),
+            ).where(
+                Transaction.user_id == worker_id,
+            ).group_by(
+                func.date_trunc('month', Transaction.timestamp)
+            ).order_by(
+                func.date_trunc('month', Transaction.timestamp).desc()
+            ).limit(6)
+
+            monthly_result = await session.execute(monthly_q)
+            monthly_rows = monthly_result.all()
+
+            if not monthly_rows:
+                return {"has_data": False, "source": "no_transactions"}
+
+            monthly_amounts = [float(r.total_amount or 0) for r in monthly_rows]
+            monthly_counts = [r.txn_count for r in monthly_rows]
+
+            if len(monthly_counts) >= 2:
+                mean_count = statistics.mean(monthly_counts)
+                if mean_count > 0:
+                    cv = statistics.stdev(monthly_counts) / mean_count
+                    regularity = round(max(0, 1 - cv), 3)
+                else:
+                    regularity = 0.0
+            else:
+                regularity = None
+
+            growth_trend = "stable"
+            if len(monthly_amounts) >= 4:
+                mid = len(monthly_amounts) // 2
+                recent_avg = statistics.mean(monthly_amounts[:mid])
+                older_avg = statistics.mean(monthly_amounts[mid:])
+                if older_avg > 0:
+                    growth_pct = (recent_avg - older_avg) / older_avg
+                    if growth_pct > 0.15:
+                        growth_trend = "growing"
+                    elif growth_pct < -0.15:
+                        growth_trend = "declining"
+
+            risk_flags = []
+            if len(monthly_amounts) >= 2:
+                if monthly_amounts[0] < monthly_amounts[-1] * 0.3:
+                    risk_flags.append("sudden_activity_drop")
+                zero_months = sum(1 for a in monthly_amounts if a == 0)
+                if zero_months > 0:
+                    risk_flags.append(f"{zero_months}_inactive_months")
+
+            total_q = select(
+                func.count(Transaction.id).label("total"),
+                func.avg(Transaction.amount).label("avg_amount"),
+                func.count(func.distinct(Transaction.item)).label("distinct_items"),
+            ).where(Transaction.user_id == worker_id)
+            total_result = await session.execute(total_q)
+            total_row = total_result.one_or_none()
+
+            return {
+                "has_data": True,
+                "regularity": regularity,
+                "growth_trend": growth_trend,
+                "risk_flags": risk_flags,
+                "months_analyzed": len(monthly_rows),
+                "total_transactions": int(total_row.total or 0) if total_row else 0,
+                "avg_transaction_amount": float(total_row.avg_amount or 0) if total_row else 0,
+                "distinct_products": int(total_row.distinct_items or 0) if total_row else 0,
+                "monthly_amounts": monthly_amounts,
+                "monthly_counts": monthly_counts,
+                "source": "database",
+            }
+    except Exception as exc:
+        logger.warning("behavioral_data_query_failed", error=str(exc), worker_id=worker_id)
+    return {"has_data": False, "source": "query_failed"}
+
+
+async def _query_alama_score(worker_id: str) -> Dict[str, Any]:
+    """Query the AlamaScore table for existing credit scores.
+
+    Falls back to computing via AlamaScoreService if no cached score exists.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"has_score": False, "source": "no_db"}
+
+    try:
+        import hashlib
+        from sqlalchemy import select
+        from app.models.intelligence_products import AlamaScore as AlamaScoreModel
+
+        async with session_factory() as session:
+            biz_hash = hashlib.sha256(str(worker_id).encode()).hexdigest()
+
+            score_q = select(AlamaScoreModel).where(
+                AlamaScoreModel.business_hash == biz_hash
+            ).order_by(AlamaScoreModel.created_at.desc()).limit(1)
+
+            result = await session.execute(score_q)
+            score_row = result.scalar_one_or_none()
+
+            if score_row:
+                return {
+                    "has_score": True,
+                    "score": score_row.alama_score,
+                    "band": score_row.score_band,
+                    "percentile": float(score_row.percentile or 0),
+                    "activity_score": float(score_row.activity_score or 0),
+                    "stability_score": float(score_row.stability_score or 0),
+                    "growth_score": float(score_row.growth_score or 0),
+                    "consistency_score": float(score_row.consistency_score or 0),
+                    "diversity_score": float(score_row.diversity_score or 0),
+                    "avg_daily_revenue": float(score_row.avg_daily_revenue_kes or 0),
+                    "default_probability": float(score_row.default_probability or 0),
+                    "recommended_credit_limit": float(score_row.recommended_credit_limit_kes or 0),
+                    "source": "database",
+                }
+
+            try:
+                from app.services.intelligence.alama_score import AlamaScoreService
+                service = AlamaScoreService(session)
+                computed = await service.compute_score(business_id=str(worker_id))
+                if computed and isinstance(computed, dict) and computed.get("alama_score"):
+                    return {
+                        "has_score": True,
+                        "score": computed["alama_score"],
+                        "band": computed.get("score_band"),
+                        "components": computed.get("components", {}),
+                        "source": "computed",
+                    }
+            except Exception as svc_exc:
+                logger.debug("alama_score_service_fallback_failed", error=str(svc_exc))
+
+    except Exception as exc:
+        logger.warning("alama_score_query_failed", error=str(exc), worker_id=worker_id)
+    return {"has_score": False, "source": "no_score_found"}
+
+
+async def _query_logistics_data(product: str) -> Dict[str, Any]:
+    """Derive logistics insights from transaction location patterns.
+
+    Uses transaction geohash distribution to estimate
+    delivery patterns and potential bottlenecks.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"has_data": False, "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            loc_q = select(
+                func.substring(Transaction.location_geohash, 1, 4).label("area"),
+                func.count(Transaction.id).label("txn_count"),
+                func.sum(Transaction.amount).label("volume"),
+                func.count(func.distinct(Transaction.user_id)).label("sellers"),
+            ).where(
+                Transaction.location_geohash.isnot(None),
+                Transaction.transaction_type == "SALE",
+            )
+            if product:
+                loc_q = loc_q.where(Transaction.item.ilike(f"%{product}%"))
+            loc_q = loc_q.group_by(
+                func.substring(Transaction.location_geohash, 1, 4)
+            ).order_by(func.sum(Transaction.amount).desc())
+
+            result = await session.execute(loc_q)
+            rows = result.all()
+
+            if not rows:
+                return {"has_data": False, "source": "no_location_data"}
+
+            areas = []
+            for r in rows:
+                areas.append({
+                    "area_geohash": r.area,
+                    "txn_count": r.txn_count,
+                    "volume": float(r.volume or 0),
+                    "sellers": r.sellers,
+                })
+
+            total_areas = len(areas)
+            total_volume = sum(a["volume"] for a in areas)
+
+            bottlenecks = []
+            for a in areas:
+                if a["sellers"] <= 2 and a["volume"] > 0:
+                    bottlenecks.append({
+                        "area": a["area_geohash"],
+                        "reason": "high_volume_few_sellers",
+                        "volume": a["volume"],
+                    })
+
+            return {
+                "has_data": True,
+                "total_distribution_areas": total_areas,
+                "total_volume": total_volume,
+                "top_areas": areas[:10],
+                "bottlenecks": bottlenecks[:5],
+                "avg_volume_per_area": round(total_volume / total_areas, 2) if total_areas > 0 else 0,
+                "source": "database",
+            }
+    except Exception as exc:
+        logger.warning("logistics_data_query_failed", error=str(exc), product=product)
+    return {"has_data": False, "source": "query_failed"}
+
+
+async def _query_expansion_opportunities(product: str) -> Dict[str, Any]:
+    """Identify expansion opportunities from coverage gaps.
+
+    Compares active distribution areas to find underserved
+    regions with high revenue-per-seller potential.
+    """
+    session_factory = _get_db_session()
+    if session_factory is None:
+        return {"has_data": False, "source": "no_db"}
+
+    try:
+        from sqlalchemy import select, func
+        from app.models.transaction import Transaction
+
+        async with session_factory() as session:
+            coverage_q = select(
+                func.substring(Transaction.location_geohash, 1, 3).label("region"),
+                func.count(Transaction.id).label("txn_count"),
+                func.sum(Transaction.amount).label("volume"),
+                func.count(func.distinct(Transaction.user_id)).label("active_users"),
+            ).where(
+                Transaction.location_geohash.isnot(None),
+            )
+            if product:
+                coverage_q = coverage_q.where(Transaction.item.ilike(f"%{product}%"))
+            coverage_q = coverage_q.group_by(
+                func.substring(Transaction.location_geohash, 1, 3)
+            )
+
+            result = await session.execute(coverage_q)
+            rows = result.all()
+
+            if not rows:
+                return {"has_data": False, "source": "no_coverage_data"}
+
+            covered_regions = []
+            for r in rows:
+                covered_regions.append({
+                    "region_geohash": r.region,
+                    "txn_count": r.txn_count,
+                    "volume": float(r.volume or 0),
+                    "active_users": r.active_users,
+                })
+
+            covered_regions.sort(key=lambda x: x["volume"], reverse=True)
+
+            priority_regions = []
+            for r in covered_regions:
+                if r["active_users"] >= 3 and r["volume"] > 0:
+                    volume_per_user = r["volume"] / r["active_users"]
+                    if volume_per_user > 10000:
+                        priority_regions.append({
+                            "region": r["region_geohash"],
+                            "reason": "high_revenue_per_seller",
+                            "volume_per_user": round(volume_per_user, 2),
+                            "active_users": r["active_users"],
+                            "volume": r["volume"],
+                        })
+
+            priority_regions.sort(key=lambda x: x["volume_per_user"], reverse=True)
+
+            return {
+                "has_data": True,
+                "total_covered_regions": len(covered_regions),
+                "coverage_regions": covered_regions,
+                "priority_regions": priority_regions[:5],
+                "total_volume": sum(r["volume"] for r in covered_regions),
+                "total_active_users": sum(r["active_users"] for r in covered_regions),
+                "source": "database",
+            }
+    except Exception as exc:
+        logger.warning("expansion_query_failed", error=str(exc), product=product)
+    return {"has_data": False, "source": "query_failed"}
+
+
 # ════════════════════════════════════════════════════════════════════
 # Domain Agents — Specialized for each intelligence pipeline
 # ════════════════════════════════════════════════════════════════════
@@ -237,12 +735,16 @@ class MarketDataAgent(ReActAgent):
                     data["source"] = "no_data_available"
                     logger.info("market_price_no_data", region=region, action=action)
             elif "supply" in action or "demand" in action:
-                # TODO: Wire to real supply/demand data source
-                # Currently no dedicated supply/demand table exists.
-                # When available, query: SELECT * FROM supply_demand_index WHERE region = ?
-                data["supply_demand"] = {"supply_index": None, "demand_index": None, "gap": None}
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to supply/demand data source when available"
+                # Derive supply/demand from transaction SALES vs PURCHASES
+                sd_data = await _query_supply_demand(region, params.get("product"))
+                data["supply_demand"] = {
+                    "supply_index": sd_data["supply_index"],
+                    "demand_index": sd_data["demand_index"],
+                    "gap": sd_data["gap"],
+                    "supply_volume": sd_data.get("supply_volume"),
+                    "demand_volume": sd_data.get("demand_volume"),
+                }
+                data["source"] = sd_data["source"]
             elif "trade" in action or "volume" in action:
                 # Query real trade volume from DB
                 db_dist = await _query_distribution_data(params.get("product", ""))
@@ -254,12 +756,14 @@ class MarketDataAgent(ReActAgent):
                     data["trade_volume"] = {"total_volume": 0, "total_transactions": 0}
                     data["source"] = "no_data_available"
             elif "competitor" in action:
-                # TODO: Wire to real competitor data source
-                # Currently no competitor table exists.
-                # When available, query: SELECT * FROM competitor_profiles WHERE market = ?
-                data["competitors"] = {"count": None, "market_share": {}}
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to competitor data source when available"
+                # Estimate competitor density from distinct sellers in transaction data
+                comp_data = await _query_competitor_density(region, params.get("product"))
+                data["competitors"] = {
+                    "count": comp_data["distinct_sellers"],
+                    "density": comp_data["competitor_density"],
+                    "total_volume": comp_data.get("total_volume"),
+                }
+                data["source"] = comp_data["source"]
             else:
                 data["market_overview"] = {"status": "data_driven", "volatility": "unknown"}
 
@@ -326,22 +830,64 @@ class CreditAnalysisAgent(ReActAgent):
                     "source": history["source"],
                 }
             elif "repay" in action:
-                # TODO: Wire to repayment data when loan tracking table exists
-                # Currently no dedicated repayment/loan table.
-                # When available: SELECT * FROM loan_repayments WHERE worker_id = ?
-                data["repayment"] = {"on_time_rate": None, "late_payments": None, "defaults": None}
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to loan repayment tracking when available"
+                # Query real loan and repayment data from Loan + LoanRepayment tables
+                repay_data = await _query_repayment_data(worker_id)
+                if repay_data["has_data"]:
+                    data["repayment"] = {
+                        "on_time_rate": repay_data["on_time_rate"],
+                        "completed_loans": repay_data["completed_loans"],
+                        "defaulted_loans": repay_data["defaulted_loans"],
+                        "active_loans": repay_data["active_loans"],
+                        "completion_rate": repay_data["completion_rate"],
+                        "default_rate": repay_data["default_rate"],
+                        "total_borrowed": repay_data["total_borrowed"],
+                        "total_repaid": repay_data["total_repaid"],
+                        "avg_streak": repay_data["avg_streak"],
+                        "best_streak": repay_data["best_streak"],
+                        "total_repayments": repay_data["total_repayments"],
+                    }
+                else:
+                    data["repayment"] = {"on_time_rate": None, "completed_loans": 0, "defaulted_loans": 0}
+                data["source"] = repay_data["source"]
             elif "behavior" in action:
-                # TODO: Wire to behavioral analytics when available
-                data["behavioral_score"] = {"regularity": None, "growth_trend": None, "risk_flags": []}
-                data["source"] = "not_implemented"
+                # Analyze transaction patterns for behavioral credit signals
+                behav_data = await _query_behavioral_data(worker_id)
+                if behav_data["has_data"]:
+                    data["behavioral_score"] = {
+                        "regularity": behav_data["regularity"],
+                        "growth_trend": behav_data["growth_trend"],
+                        "risk_flags": behav_data["risk_flags"],
+                        "months_analyzed": behav_data["months_analyzed"],
+                        "total_transactions": behav_data["total_transactions"],
+                        "avg_transaction_amount": behav_data["avg_transaction_amount"],
+                        "distinct_products": behav_data["distinct_products"],
+                    }
+                else:
+                    data["behavioral_score"] = {"regularity": None, "growth_trend": "unknown", "risk_flags": []}
+                data["source"] = behav_data["source"]
             elif "creditworthiness" in action or "credit_score" in action:
-                # TODO: Wire to Alama Score service for real credit scoring
-                # Currently AlamaScoreService exists but needs integration here
-                data["credit_score"] = {"score": None, "rating": "pending", "confidence": 0.0}
-                data["source"] = "not_wired_to_alama_score"
-                data["todo"] = "Wire to AlamaScoreService.compute_score()"
+                # Query AlamaScore table or compute via AlamaScoreService
+                score_data = await _query_alama_score(worker_id)
+                if score_data["has_score"]:
+                    band = score_data.get("band", "unknown")
+                    data["credit_score"] = {
+                        "score": score_data["score"],
+                        "rating": band,
+                        "confidence": 0.85 if score_data["source"] == "database" else 0.7,
+                        "percentile": score_data.get("percentile"),
+                        "components": {
+                            "activity": score_data.get("activity_score"),
+                            "stability": score_data.get("stability_score"),
+                            "growth": score_data.get("growth_score"),
+                            "consistency": score_data.get("consistency_score"),
+                            "diversity": score_data.get("diversity_score"),
+                        },
+                        "default_probability": score_data.get("default_probability"),
+                        "recommended_credit_limit": score_data.get("recommended_credit_limit"),
+                    }
+                else:
+                    data["credit_score"] = {"score": None, "rating": "no_data", "confidence": 0.0}
+                data["source"] = score_data["source"]
             else:
                 data["credit_overview"] = {"risk_level": "unknown", "creditworthy": None}
 
@@ -412,11 +958,19 @@ class DistributionAgent(ReActAgent):
                     data["coverage"] = {"regions_covered": 0, "regions_total": 47, "coverage_pct": 0.0}
                     data["source"] = "no_data_available"
             elif "logistics" in action:
-                # TODO: Wire to logistics data source when available
-                # Currently no dedicated logistics/warehouse table.
-                data["logistics"] = {"avg_delivery_time_days": None, "cost_per_unit": None, "bottlenecks": []}
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to logistics tracking system when available"
+                # Derive logistics insights from transaction location patterns
+                log_data = await _query_logistics_data(product)
+                if log_data["has_data"]:
+                    data["logistics"] = {
+                        "total_distribution_areas": log_data["total_distribution_areas"],
+                        "total_volume": log_data["total_volume"],
+                        "top_areas": log_data["top_areas"],
+                        "bottlenecks": log_data["bottlenecks"],
+                        "avg_volume_per_area": log_data["avg_volume_per_area"],
+                    }
+                else:
+                    data["logistics"] = {"total_distribution_areas": 0, "bottlenecks": []}
+                data["source"] = log_data["source"]
             elif "demand" in action:
                 # Query demand signals from transaction data
                 dist_data = await _query_distribution_data(product)
@@ -431,10 +985,18 @@ class DistributionAgent(ReActAgent):
                     data["demand_map"] = {"high_demand": [], "total_regions_with_data": 0}
                     data["source"] = "no_data_available"
             elif "expansion" in action:
-                # TODO: Wire to expansion planning service when available
-                data["expansion"] = {"priority_regions": [], "estimated_investment": None, "roi_timeline_months": None}
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to expansion planning service when available"
+                # Identify expansion opportunities from transaction coverage gaps
+                exp_data = await _query_expansion_opportunities(product)
+                if exp_data["has_data"]:
+                    data["expansion"] = {
+                        "priority_regions": exp_data["priority_regions"],
+                        "total_covered_regions": exp_data["total_covered_regions"],
+                        "total_volume": exp_data["total_volume"],
+                        "total_active_users": exp_data["total_active_users"],
+                    }
+                else:
+                    data["expansion"] = {"priority_regions": [], "total_covered_regions": 0}
+                data["source"] = exp_data["source"]
             else:
                 data["distribution_overview"] = {"gaps_identified": None, "opportunities": None}
 
@@ -490,46 +1052,93 @@ class CompetitorAgent(ReActAgent):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-            # All competitor intelligence requires external data sources
-            # that don't exist yet. Return clear TODOs rather than fake data.
+            # Use real transaction data for competitive intelligence
             if "mapping" in action:
+                comp_data = await _query_competitor_density(market, params.get("product"))
                 data["competitor_map"] = {
-                    "direct_competitors": None,
-                    "indirect_competitors": None,
-                    "new_entrants": None,
+                    "direct_competitors": comp_data["distinct_sellers"],
+                    "density": comp_data["competitor_density"],
+                    "total_market_volume": comp_data.get("total_volume"),
                 }
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to competitor profiling service or web scraping pipeline"
+                data["source"] = comp_data["source"]
             elif "pricing" in action:
-                data["pricing_analysis"] = {
-                    "our_avg_price": None,
-                    "market_avg": None,
-                    "price_position": "unknown",
-                }
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to market pricing data source"
+                prices = await _query_market_prices(market, params.get("product"))
+                if prices["data_points"] > 0:
+                    data["pricing_analysis"] = {
+                        "market_avg": prices["prices"].get("avg"),
+                        "market_min": prices["prices"].get("min"),
+                        "market_max": prices["prices"].get("max"),
+                        "data_points": prices["data_points"],
+                    }
+                else:
+                    data["pricing_analysis"] = {"market_avg": None, "data_points": 0}
+                data["source"] = prices["source"]
             elif "feature" in action:
-                data["feature_comparison"] = {
-                    "our_features": None,
-                    "leader_features": None,
-                    "gap_features": [],
-                }
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to competitor feature database"
+                # Derive feature insights from transaction categories
+                try:
+                    from sqlalchemy import select, func
+                    from app.models.transaction import Transaction
+                    session_factory = _get_db_session()
+                    if session_factory:
+                        async with session_factory() as session:
+                            cat_q = select(
+                                Transaction.item_category,
+                                func.count(Transaction.id).label("count"),
+                                func.count(func.distinct(Transaction.user_id)).label("sellers"),
+                            ).where(
+                                Transaction.transaction_type == "SALE",
+                                Transaction.item_category.isnot(None),
+                            ).group_by(Transaction.item_category).order_by(
+                                func.count(Transaction.id).desc()
+                            )
+                            result = await session.execute(cat_q)
+                            cats = result.all()
+                            data["feature_comparison"] = {
+                                "market_categories": [
+                                    {"category": c.item_category, "transactions": c.count, "sellers": c.sellers}
+                                    for c in cats
+                                ],
+                                "total_categories": len(cats),
+                            }
+                            data["source"] = "database"
+                    else:
+                        data["feature_comparison"] = {"market_categories": [], "total_categories": 0}
+                        data["source"] = "no_db"
+                except Exception:
+                    data["feature_comparison"] = {"market_categories": [], "total_categories": 0}
+                    data["source"] = "query_failed"
             elif "positioning" in action:
+                # Use transaction volume for positioning analysis
+                comp_data = await _query_competitor_density(market)
                 data["positioning"] = {
-                    "our_position": None,
-                    "market_leader": None,
+                    "market_density": comp_data["competitor_density"],
+                    "total_sellers": comp_data["distinct_sellers"],
                     "differentiator": "informal_economy_focus",
                 }
-                data["source"] = "not_implemented"
+                data["source"] = comp_data["source"]
             elif "threat" in action:
-                data["threats"] = []
-                data["source"] = "not_implemented"
-                data["todo"] = "Wire to threat intelligence feed"
+                # Derive threat level from competitor density and market dynamics
+                comp_data = await _query_competitor_density(market)
+                sd_data = await _query_supply_demand(market)
+                threat_level = "low"
+                if comp_data["competitor_density"] in ("very_high", "high"):
+                    threat_level = "high"
+                elif comp_data["competitor_density"] == "moderate":
+                    threat_level = "medium"
+                data["threats"] = [{
+                    "type": "market_competition",
+                    "level": threat_level,
+                    "competitors": comp_data["distinct_sellers"],
+                    "supply_demand_gap": sd_data.get("gap"),
+                }]
+                data["source"] = comp_data["source"]
             else:
-                data["competitor_overview"] = {"total_competitors": None, "threat_level": "unknown"}
-                data["source"] = "not_implemented"
+                comp_data = await _query_competitor_density(market)
+                data["competitor_overview"] = {
+                    "total_competitors": comp_data["distinct_sellers"],
+                    "density": comp_data["competitor_density"],
+                }
+                data["source"] = comp_data["source"]
 
             return AgentResult(
                 success=True,

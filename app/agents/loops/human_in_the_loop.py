@@ -584,7 +584,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
         """Get recent escalation history."""
         return [e.to_dict() for e in self._escalations[-n:]]
 
-    def get_trust_score(self) -> Dict[str, Any]:
+    def get_trust_score(self, worker_id: Optional[str] = None) -> Dict[str, Any]:
         """Get current trust score."""
         return self._trust_score.to_dict()
 
@@ -603,3 +603,16 @@ class HumanInTheLoopAgent(BiasharaAgent):
     def get_metrics(self) -> Dict[str, Any]:
         """Get HITL metrics."""
         return self._metrics.to_dict()
+
+    def get_all_trust_scores(self) -> List[Dict[str, Any]]:
+        """Get trust scores for all tracked workers."""
+        return [self._trust_score.to_dict()]
+
+    def get_hitl_stats(self) -> Dict[str, Any]:
+        """Get overall HITL statistics."""
+        metrics = self._metrics.to_dict()
+        metrics["total_escalations"] = len(self._escalations)
+        metrics["pending_escalations"] = len([e for e in self._escalations if not e.resolved])
+        metrics["trust_score"] = round(self._trust_score.overall, 3)
+        metrics["autonomy_level"] = self._autonomy_level.name
+        return metrics

@@ -678,9 +678,12 @@ class FeedbackAgent(BiasharaAgent):
         """Get recent learning signals."""
         return [s.to_dict() for s in self._signals[-n:]]
 
-    def get_patterns(self) -> List[Dict[str, Any]]:
+    def get_patterns(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get detected patterns."""
-        return [p.to_dict() for p in self._patterns]
+        patterns = [p.to_dict() for p in self._patterns]
+        if limit is not None:
+            return patterns[-limit:]
+        return patterns
 
     def get_strategy_parameters(self) -> Dict[str, Any]:
         """Get current strategy parameter values."""
@@ -699,3 +702,30 @@ class FeedbackAgent(BiasharaAgent):
             {"value": round(v, 4), "outcome": round(o, 3)}
             for v, o in param.performance_history
         ]
+
+    def get_signals_summary(self) -> Dict[str, Any]:
+        """Get a summary of recent learning signals."""
+        recent = self._signals[-50:] if self._signals else []
+        type_counts: Dict[str, int] = {}
+        for s in recent:
+            st = s.signal_type.value
+            type_counts[st] = type_counts.get(st, 0) + 1
+        return {
+            "total_signals": self._metrics.total_signals,
+            "recent_count": len(recent),
+            "type_distribution": type_counts,
+            "avg_surprise": round(self._metrics.avg_surprise, 3),
+        }
+
+    def get_strategy_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get strategy parameter update history."""
+        history = []
+        for name, param in self._parameters.items():
+            for value, outcome in param.performance_history[-limit:]:
+                history.append({
+                    "parameter": name,
+                    "value": round(value, 4),
+                    "outcome": round(outcome, 3),
+                    "last_updated": param.last_updated,
+                })
+        return history[-limit:]

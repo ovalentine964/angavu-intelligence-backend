@@ -558,3 +558,7 @@ class OODAAgent(BiasharaAgent):
     def get_orientation_drift(self) -> Dict[str, float]:
         """Get orientation drift (environmental change magnitude)."""
         return self._orientation.get_drift()
+
+    def get_decision_velocity(self) -> float:
+        """Get current decision velocity (decisions per second)."""
+        return self._metrics.decision_velocity

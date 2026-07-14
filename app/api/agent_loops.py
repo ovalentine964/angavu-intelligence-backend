@@ -34,7 +34,7 @@ monitoring, and observability:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -362,8 +362,9 @@ async def get_decision_velocity(
     targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
 
     for name, agent in targets.items():
-        if hasattr(agent, "get_decision_velocity"):
-            velocities[name] = agent.get_decision_velocity()
+        if hasattr(agent, "get_metrics"):
+            metrics = agent.get_metrics()
+            velocities[name] = metrics.get("decision_velocity", 0.0)
 
     return {"velocities": velocities}
 
@@ -382,8 +383,8 @@ async def get_orientation_state(
     targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
 
     for name, agent in targets.items():
-        if hasattr(agent, "get_orientation_state"):
-            orientations[name] = agent.get_orientation_state()
+        if hasattr(agent, "get_orientation"):
+            orientations[name] = agent.get_orientation()
 
     return {"orientations": orientations}
 
@@ -397,8 +398,8 @@ async def get_ooda_stats(
     targets = {agent_name: _ooda_agents[agent_name]} if agent_name and agent_name in _ooda_agents else _ooda_agents
 
     for name, agent in targets.items():
-        if hasattr(agent, "get_ooda_stats"):
-            stats[name] = agent.get_ooda_stats()
+        if hasattr(agent, "get_metrics"):
+            stats[name] = agent.get_metrics()
 
     return {"ooda_stats": stats}
 
@@ -422,6 +423,8 @@ async def get_feedback_signals(
     for name, agent in targets.items():
         if hasattr(agent, "get_signals_summary"):
             signals[name] = agent.get_signals_summary()
+        elif hasattr(agent, "get_recent_signals"):
+            signals[name] = agent.get_recent_signals(20)
 
     return {"signals": signals}
 
@@ -442,7 +445,7 @@ async def get_feedback_patterns(
 
     for name, agent in targets.items():
         if hasattr(agent, "get_patterns"):
-            agent_patterns = agent.get_patterns(limit)
+            agent_patterns = agent.get_patterns()
             patterns.extend(agent_patterns)
 
     return {
@@ -467,6 +470,8 @@ async def get_current_strategy(
     for name, agent in targets.items():
         if hasattr(agent, "get_current_strategy"):
             strategies[name] = agent.get_current_strategy()
+        elif hasattr(agent, "get_strategy_parameters"):
+            strategies[name] = agent.get_strategy_parameters()
 
     return {"strategies": strategies}
 
@@ -485,7 +490,7 @@ async def get_strategy_history(
             agent_history = agent.get_strategy_history(limit)
             history.extend(agent_history)
 
-    return {"history": history[-limit:]}
+    return {"history": history[-limit: ]}
 
 
 @router.get("/feedback/stats")
@@ -497,8 +502,8 @@ async def get_feedback_stats(
     targets = {agent_name: _feedback_agents[agent_name]} if agent_name and agent_name in _feedback_agents else _feedback_agents
 
     for name, agent in targets.items():
-        if hasattr(agent, "get_feedback_stats"):
-            stats[name] = agent.get_feedback_stats()
+        if hasattr(agent, "get_metrics"):
+            stats[name] = agent.get_metrics()
 
     return {"feedback_stats": stats}
 
@@ -508,8 +513,8 @@ async def get_feedback_stats(
 
 class ResolveEscalationRequest(BaseModel):
     """Request to resolve a pending escalation."""
-    request_id: str
-    decision: str  # approved | rejected | modified | deferred
+    escalation_id: str
+    decision: str  # accepted | rejected | modified
     human_response: Optional[Dict[str, Any]] = None
 
 
@@ -556,8 +561,11 @@ async def get_trust_scores(
             score = agent.get_trust_score(worker_id)
             scores.append(score)
         else:
-            all_scores = agent.get_all_trust_scores()
-            scores.extend(all_scores)
+            if hasattr(agent, "get_all_trust_scores"):
+                all_scores = agent.get_all_trust_scores()
+                scores.extend(all_scores)
+            else:
+                scores.append(agent.get_trust_score())
 
     return {"trust_scores": scores}
 
@@ -577,6 +585,9 @@ async def get_autonomy_levels(
     for name, agent in targets.items():
         if hasattr(agent, "get_hitl_stats"):
             stats = agent.get_hitl_stats()
+            distribution[name] = stats.get("autonomy_distribution", {})
+        elif hasattr(agent, "get_metrics"):
+            stats = agent.get_metrics()
             distribution[name] = stats.get("autonomy_distribution", {})
 
     return {"autonomy_distribution": distribution}
@@ -609,22 +620,13 @@ async def resolve_escalation(
     """
     Resolve a pending escalation with a human decision.
 
-    Decision values: approved, rejected, modified, deferred
+    Decision values: accepted, rejected, modified
     """
-    from app.agents.loops.human_in_the_loop import HumanDecision
-
-    decision_map = {
-        "approved": HumanDecision.APPROVED,
-        "rejected": HumanDecision.REJECTED,
-        "modified": HumanDecision.MODIFIED,
-        "deferred": HumanDecision.DEFERRED,
-    }
-
-    human_decision = decision_map.get(request.decision)
-    if not human_decision:
+    valid_decisions = {"accepted", "rejected", "modified"}
+    if request.decision not in valid_decisions:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid decision: {request.decision}. Must be one of: {list(decision_map.keys())}",
+            detail=f"Invalid decision: {request.decision}. Must be one of: {sorted(valid_decisions)}",
         )
 
     # Find the agent with this pending escalation
@@ -633,8 +635,8 @@ async def resolve_escalation(
     for name, agent in targets.items():
         if hasattr(agent, "resolve_escalation"):
             result = await agent.resolve_escalation(
-                request_id=request.request_id,
-                decision=human_decision,
+                escalation_id=request.escalation_id,
+                resolution=request.decision,
                 human_response=request.human_response,
             )
             if result.success:
@@ -642,7 +644,7 @@ async def resolve_escalation(
 
     raise HTTPException(
         status_code=404,
-        detail=f"Escalation {request.request_id} not found",
+        detail=f"Escalation {request.escalation_id} not found",
     )
 
 
@@ -657,6 +659,8 @@ async def get_hitl_stats(
     for name, agent in targets.items():
         if hasattr(agent, "get_hitl_stats"):
             stats[name] = agent.get_hitl_stats()
+        elif hasattr(agent, "get_metrics"):
+            stats[name] = agent.get_metrics()
 
     return {"hitl_stats": stats}
 
@@ -704,20 +708,17 @@ async def loop_health():
         if hasattr(agent, "get_audit_trail"):
             agent_health["patterns"].append("event_sourced")
 
-        if hasattr(agent, "get_ooda_stats"):
-            stats = agent.get_ooda_stats()
-            health["ooda_cycles"] += stats.get("total_cycles", 0)
-            agent_health["patterns"].append("ooda")
-
-        if hasattr(agent, "get_feedback_stats"):
-            stats = agent.get_feedback_stats()
-            health["feedback_signals"] += stats.get("signals", {}).get("total_signals", 0)
-            agent_health["patterns"].append("feedback")
-
-        if hasattr(agent, "get_hitl_stats"):
-            stats = agent.get_hitl_stats()
-            health["hitl_escalations"] += stats.get("total_escalations", 0)
-            agent_health["patterns"].append("hitl")
+        if hasattr(agent, "get_metrics"):
+            stats = agent.get_metrics()
+            if "total_cycles" in stats:
+                health["ooda_cycles"] += stats.get("total_cycles", 0)
+                agent_health["patterns"].append("ooda")
+            if "total_signals" in stats:
+                health["feedback_signals"] += stats.get("total_signals", 0)
+                agent_health["patterns"].append("feedback")
+            if "total_decisions" in stats:
+                health["hitl_escalations"] += stats.get("escalated_decisions", 0)
+                agent_health["patterns"].append("hitl")
 
         health["agents"][name] = agent_health
 

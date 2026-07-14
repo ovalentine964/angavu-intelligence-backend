@@ -31,10 +31,12 @@ Key Design Decisions:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import yaml
-from langchain.agents.middleware import AgentMiddleware
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 from app.biashara_tools import get_biashara_tools
 
@@ -107,7 +109,7 @@ def create_biashara_agent(
     model_name: str = "qwen-0.5b-fl-sw",  # On-device model (zero-cost strategy)
     system_prompt: str | None = None,
     plan_mode: bool = False,
-    extra_middleware: list[AgentMiddleware] | None = None,
+    extra_middleware: list | None = None,
 ) -> Any:
     """Create a DeerFlow agent with Angavu tools.
 
