@@ -19,8 +19,11 @@ import json
 from typing import Optional
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
+
+from app.api.auth import get_current_user
+from app.models.user import User
 
 from app.schemas.dialect_dictionary import (
     AggregationStatusResponse,
@@ -55,7 +58,7 @@ router = APIRouter(tags=["Dialect Dictionary"])
         "is satisfied. Submissions are rate-limited and quality-gated."
     ),
 )
-async def submit_words(request: DialectSubmitRequest):
+async def submit_words(request: DialectSubmitRequest, user: User = Depends(get_current_user)):
     """
     Submit a batch of learned words from a worker device.
 
@@ -266,7 +269,7 @@ async def check_model_version(
     summary="Trigger aggregation for a dialect",
     description="Manually trigger aggregation of word submissions for a specific dialect.",
 )
-async def trigger_aggregation(dialect: str):
+async def trigger_aggregation(dialect: str, user: User = Depends(get_current_user)):
     """
     Trigger aggregation for a dialect.
 
@@ -292,7 +295,7 @@ async def trigger_aggregation(dialect: str):
     summary="Trigger aggregation for all dialects",
     description="Run aggregation across all dialects and publish updated models.",
 )
-async def trigger_aggregate_all():
+async def trigger_aggregate_all(user: User = Depends(get_current_user)):
     """Aggregate all dialects and publish updated models."""
     aggregator = get_language_aggregator()
     agg_result = await aggregator.aggregate_all()
