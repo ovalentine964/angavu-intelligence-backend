@@ -786,8 +786,20 @@ fi
 
 cd "$PROJECT_DIR"
 
+# Source .env to check ENABLE_WHATSAPP
+if [ -f "${PROJECT_DIR}/.env" ]; then
+    set -a
+    source "${PROJECT_DIR}/.env"
+    set +a
+fi
+
 # Expected services (check whichever are running)
-SERVICES=("postgres" "redis" "clickhouse" "api" "backend" "openwa" "nginx" "worker")
+SERVICES=("postgres" "redis" "clickhouse" "api" "backend" "nginx" "worker")
+
+# Only monitor OpenWA if WhatsApp is enabled
+if [ "${ENABLE_WHATSAPP:-false}" = "true" ]; then
+    SERVICES+=("openwa" "whisper")
+fi
 
 for svc in "${SERVICES[@]}"; do
     CONTAINER=$(docker ps --filter "name=${svc}" --format '{{.Names}}' 2>/dev/null | head -1)
@@ -887,7 +899,9 @@ echo "  Docs:        http://${IP}:8000/docs"
 echo ""
 echo "  Compose:     $COMPOSE_FILE"
 echo "  Credentials: /root/.angavu/credentials"
-echo "  Backups:     ${SCRIPT_DIR}/backups/ (daily at 2:00 AM)"
+echo "  Backups:     /opt/backups/postgresql/ (daily at 2:00 AM)"
+  echo "  Backup log:  /var/log/angavu-backup.log"
+  echo "  Restore:     bash ${SCRIPT_DIR}/scripts/restore.sh --list"
 echo "  Logs:        ${SCRIPT_DIR}/logs/"
 echo ""
 echo "  Management:"
@@ -898,7 +912,11 @@ echo "    $COMPOSE_CMD restart       # Restart all"
 echo "    $COMPOSE_CMD down          # Stop all"
 echo "    $COMPOSE_CMD up -d         # Start all"
 echo ""
-echo "  WhatsApp (OpenWA):"
-echo "    http://localhost:3000      # Dashboard — scan QR to connect"
+if [ "${ENABLE_WHATSAPP:-false}" = "true" ]; then
+    echo "  WhatsApp (OpenWA):"
+    echo "    http://localhost:3000      # Dashboard — scan QR to connect"
+else
+    echo "  WhatsApp: DISABLED (set ENABLE_WHATSAPP=true in .env to enable)"
+fi
 echo ""
 echo "========================================================"

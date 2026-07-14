@@ -34,8 +34,48 @@ from app.services.whatsapp_bot import WhatsAppBot
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Connection"])
 
-# In-memory verification store (production: use Redis)
-_verifications: dict = {}
+# Verification store — uses Redis if available, falls back to in-memory
+import json
+_verifications: dict = {}  # Fallback when Redis unavailable
+_redis_client = None
+
+async def _get_redis():
+    """Get Redis client for verification storage."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis.asyncio as aioredis
+            from app.config import get_settings
+            settings = get_settings()
+            _redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            await _redis_client.ping()
+        except Exception:
+            _redis_client = None
+    return _redis_client
+
+async def _store_verification(verification_id: str, data: dict, ttl: int = 600):
+    """Store verification in Redis (survives restart) or in-memory fallback."""
+    redis = await _get_redis()
+    if redis:
+        await redis.setex(f"wa_verify:{verification_id}", ttl, json.dumps(data))
+    else:
+        _verifications[verification_id] = data
+
+async def _get_verification(verification_id: str) -> dict:
+    """Retrieve verification from Redis or in-memory."""
+    redis = await _get_redis()
+    if redis:
+        data = await redis.get(f"wa_verify:{verification_id}")
+        return json.loads(data) if data else None
+    return _verifications.get(verification_id)
+
+async def _delete_verification(verification_id: str):
+    """Delete verification from Redis or in-memory."""
+    redis = await _get_redis()
+    if redis:
+        await redis.delete(f"wa_verify:{verification_id}")
+    else:
+        _verifications.pop(verification_id, None)
 
 
 # =========================================================================
@@ -144,7 +184,7 @@ async def connect_whatsapp(
     verification_id = str(uuid.uuid4())
 
     # Store verification in memory (production: Redis with TTL)
-    _verifications[verification_id] = {
+    await _store_verification(verification_id, {
         "user_id": str(user.id),
         "phone": request.phone,
         "code": code,
@@ -203,7 +243,7 @@ async def verify_whatsapp(
     On success, marks the user's WhatsApp as connected and
     stores connection preferences (language, report_time, etc.).
     """
-    verification = _verifications.get(request.verification_id)
+    verification = await _get_verification(request.verification_id)
     if not verification:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -212,7 +252,7 @@ async def verify_whatsapp(
 
     # Check expiry
     if datetime.now(timezone.utc) > verification["expires_at"]:
-        del _verifications[request.verification_id]
+        await _delete_verification(request.verification_id)
         return WhatsAppVerifyResponse(
             status="expired",
             message="Verification code has expired. Please request a new one.",
@@ -221,7 +261,7 @@ async def verify_whatsapp(
     # Check attempts
     verification["attempts"] += 1
     if verification["attempts"] > 5:
-        del _verifications[request.verification_id]
+        await _delete_verification(request.verification_id)
         return WhatsAppVerifyResponse(
             status="failed",
             message="Too many attempts. Please request a new code.",
@@ -275,7 +315,7 @@ async def check_verification_status(
 
     Polls the verification state until it's completed or expired.
     """
-    verification = _verifications.get(verification_id)
+    verification = await _get_verification(verification_id)
     if not verification:
         return WhatsAppVerifyResponse(
             status="expired",
@@ -283,7 +323,7 @@ async def check_verification_status(
         )
 
     if datetime.now(timezone.utc) > verification["expires_at"]:
-        del _verifications[verification_id]
+        await _delete_verification(verification_id)
         return WhatsAppVerifyResponse(
             status="expired",
             message="Verification has expired.",

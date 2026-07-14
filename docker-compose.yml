@@ -60,6 +60,9 @@ services:
       --requirepass ${REDIS_PASSWORD}
       --maxmemory 384mb
       --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --save 300 10
+      --save 900 1
       --appendonly yes
       --appendfsync everysec
     volumes:
@@ -136,6 +139,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - OPENWA_URL=http://openwa:3000
       - OPENWA_WEBHOOK_SECRET=${OPENWA_WEBHOOK_SECRET}
+      - ENABLE_WHATSAPP=${ENABLE_WHATSAPP:-false}
       - CLICKHOUSE_URL=http://clickhouse:8123
       - CLICKHOUSE_DATABASE=biashara
       - CLICKHOUSE_USER=admin
@@ -203,7 +207,10 @@ services:
     networks:
       - biashara-net
 
-  # ─── OpenWA — WhatsApp Automation ────────────────────────
+  # ─── OpenWA — WhatsApp Automation (OPTIONAL) ─────────────
+  # OpenWA does NOT block backend startup.
+  # Backend handles WhatsApp being unavailable gracefully.
+  # Set ENABLE_WHATSAPP=true in .env to enable.
   openwa:
     build:
       context: ./openwa
@@ -218,15 +225,14 @@ services:
       - LOG_LEVEL=info
     volumes:
       - openwa-data:/app/data
-    depends_on:
-      backend:
-        condition: service_healthy
+    # No depends_on: OpenWA starts independently of backend.
+    # This prevents the QR-code scan from blocking the entire stack.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "/app/healthcheck.sh"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 300s  # 5 min: allow time for QR scan; reports unhealthy after timeout
     deploy:
       resources:
         limits:
@@ -235,7 +241,7 @@ services:
         reservations:
           memory: 256M
           cpus: '0.1'
-    restart: unless-stopped
+    restart: unless-stopped  # Auto-restart; won't block other services
     networks:
       - biashara-net
 

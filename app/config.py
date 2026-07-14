@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # === External Services ===
     OPENWA_URL: str = "http://localhost:3000"
     OPENWA_WEBHOOK_SECRET: str = ""
-    ENABLE_WHATSAPP: bool = False  # Set to true to enable WhatsApp (OpenWA) integration
+    ENABLE_WHATSAPP: bool = True  # WhatsApp enabled by default (OpenWA integration)
     # NOTE: GROQ_API_KEY, DEEPSEEK_API_KEY, NVIDIA_NIM_API_KEY removed.
     # Angavu uses zero-cost on-device inference only.
     # No paid API keys are needed or accepted.

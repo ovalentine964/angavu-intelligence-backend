@@ -562,7 +562,8 @@ async def health_check():
     if settings.ENABLE_WHATSAPP:
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=3) as client:
+            # Short timeout — OpenWA must not block backend health
+            async with httpx.AsyncClient(timeout=2.0) as client:
                 resp = await client.get(f"{settings.OPENWA_URL}/health")
                 if resp.status_code == 200:
                     data = resp.json()
