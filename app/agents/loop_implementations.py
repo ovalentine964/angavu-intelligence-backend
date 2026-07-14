@@ -874,6 +874,7 @@ class MarketFeedbackAgent(FeedbackAgent):
     - Detects recurring market patterns
     - Adjusts confidence thresholds based on outcomes
     - Shares anonymized patterns across the network
+    - Emits adaptive learning signals to the FL pipeline
     """
 
     def __init__(self):
@@ -886,10 +887,40 @@ class MarketFeedbackAgent(FeedbackAgent):
                 "strategy_optimization",
                 "implicit_learning",
                 "cross_worker_patterns",
+                "adaptive_learning_emission",
             ],
             decay_half_life_hours=24.0,
             min_signals_for_pattern=5,
         )
+        self._event_bus: Any = None
+        self._emit_interval: int = 10  # Emit adaptive signal every N outcomes
+        self._outcomes_since_emit: int = 0
+
+    def set_event_bus(self, event_bus: Any) -> None:
+        """Set the event bus for adaptive learning signal emission."""
+        self._event_bus = event_bus
+
+    async def _process_outcome(self, event: AgentEvent) -> AgentResult:
+        """Process outcome and emit adaptive learning signal when ready."""
+        result = await super()._process_outcome(event)
+
+        # Track outcomes and periodically emit to adaptive learning
+        self._outcomes_since_emit += 1
+        if (
+            self._event_bus is not None
+            and self._outcomes_since_emit >= self._emit_interval
+        ):
+            self._outcomes_since_emit = 0
+            payload = event.payload or {}
+            worker_id = payload.get("worker_id", payload.get("user_id", "anonymous"))
+            language = payload.get("language", payload.get("dialect", "sw"))
+            await self.emit_adaptive_signal(
+                event_bus=self._event_bus,
+                worker_id=worker_id,
+                language=language,
+            )
+
+        return result
 
     async def _compute_outcome_value(self, payload: Dict[str, Any]) -> float:
         """Compute normalized outcome value from market data."""
@@ -968,6 +999,7 @@ class CreditDecisionHITL(HumanInTheLoopAgent):
 
 def create_loop_enhanced_agents(
     event_store: Optional[EventStore] = None,
+    event_bus: Any = None,
 ) -> Dict[str, Any]:
     """
     Create all loop-enhanced agents for the Angavu Intelligence pipeline.
@@ -976,6 +1008,11 @@ def create_loop_enhanced_agents(
     - agents: List of all agents
     - supervisor: The PipelineSupervisor
     - event_store: The shared EventStore
+    - market_feedback: The MarketFeedbackAgent (for FL integration)
+
+    Args:
+        event_store: Optional shared event store for audit trail
+        event_bus: Optional event bus for adaptive learning signals
     """
     store = event_store or EventStore()
 
@@ -986,6 +1023,10 @@ def create_loop_enhanced_agents(
     price_alert = PriceAlertOODA()
     market_feedback = MarketFeedbackAgent()
     credit_hitl = CreditDecisionHITL()
+
+    # Wire event bus to MarketFeedbackAgent for adaptive learning
+    if event_bus is not None:
+        market_feedback.set_event_bus(event_bus)
 
     # Register new agents with supervisor
     supervisor.register_agent(price_alert)
@@ -998,4 +1039,5 @@ def create_loop_enhanced_agents(
         "agents": all_agents,
         "supervisor": supervisor,
         "event_store": store,
+        "market_feedback": market_feedback,
     }

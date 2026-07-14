@@ -118,6 +118,12 @@ class EventType(str, Enum):
     SOCIAL_COMMUNITY_TIPS = "social.community_tips"
     SOCIAL_TIP_SUBMITTED = "social.tip_submitted"
 
+    # Adaptive Learning
+    ADAPTIVE_LEARNING_SIGNAL = "adaptive_learning.signal"
+    ADAPTIVE_LEARNING_AGGREGATED = "adaptive_learning.aggregated"
+    ADAPTIVE_LEARNING_PUSHED = "adaptive_learning.pushed"
+    ADAPTIVE_LEARNING_SYNCED = "adaptive_learning.synced"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"

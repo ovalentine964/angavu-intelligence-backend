@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from datetime import datetime
+
 import structlog
 
 from app.agents.base import (
@@ -710,6 +712,119 @@ class FeedbackAgent(BiasharaAgent):
 
         self._metrics.deployments += 1
         return AgentResult(success=True, data={"action": "strategies_deployed"})
+
+    # ── Adaptive Learning Integration ──────────────────────────────
+
+    async def emit_adaptive_signal(
+        self,
+        event_bus: Any,
+        worker_id: str = "anonymous",
+        language: str = "sw",
+    ) -> Optional[AgentEvent]:
+        """
+        Emit the current learning state as an adaptive learning signal
+        to the event bus, bridging the FeedbackAgent to the FL pipeline.
+
+        This is the key method that connects the feedback loop to
+        federated learning. It converts accumulated signals into an
+        event that the AdaptiveLearningService can process.
+
+        Should be called after signal extraction and pattern detection
+        stages have accumulated meaningful data.
+
+        Args:
+            event_bus: The event bus to publish to
+            worker_id: The worker whose signals to emit
+            language: The language/dialect for FL routing
+
+        Returns:
+            The published AgentEvent, or None if no signals to emit
+        """
+        from app.agents.base import AgentEvent, EventType
+
+        if not self._signals:
+            return None
+
+        # Aggregate recent signals
+        recent = self._signals[-50:]
+        outcomes = [s.outcome_value for s in recent]
+        surprises = [s.surprise for s in recent]
+        weights = [s.weight for s in recent]
+
+        total_weight = sum(weights)
+        if total_weight == 0:
+            return None
+
+        mean_outcome = sum(o * w for o, w in zip(outcomes, weights)) / total_weight
+        mean_surprise = sum(s * w for s, w in zip(surprises, weights)) / total_weight
+
+        # Compute trend
+        trend = 0.0
+        if len(outcomes) >= 5:
+            n = len(outcomes)
+            x_mean = (n - 1) / 2.0
+            y_mean = sum(outcomes) / n
+            num = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(outcomes))
+            den = sum((i - x_mean) ** 2 for i in range(n))
+            trend = num / den if den > 0 else 0.0
+
+        # Build signal payload for AdaptiveLearningService
+        signal_event = AgentEvent(
+            event_type=EventType.ADAPTIVE_LEARNING_SIGNAL,
+            source=self.name,
+            payload={
+                "worker_id": worker_id,
+                "language": language,
+                "signal_count": len(recent),
+                "mean_outcome": round(mean_outcome, 4),
+                "mean_surprise": round(mean_surprise, 4),
+                "outcome_trend": round(trend, 4),
+                "patterns": [p.to_dict() for p in self._patterns[-5:]],
+                "strategy_params": {
+                    name: p.to_dict() for name, p in self._parameters.items()
+                },
+                "metrics": self._metrics.to_dict(),
+                "signal_types": {
+                    st.value: sum(1 for s in recent if s.signal_type == st)
+                    for st in SignalType
+                },
+            },
+        )
+
+        await event_bus.publish(signal_event)
+
+        self._logger.info(
+            "adaptive_signal_emitted",
+            signal_count=len(recent),
+            mean_outcome=round(mean_outcome, 4),
+            trend=round(trend, 4),
+            language=language,
+        )
+
+        return signal_event
+
+    def get_fl_compatible_signals(
+        self,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent signals in a format compatible with the FL pipeline.
+
+        Returns signals as correction pattern dictionaries that can be
+        used to construct FLUpdate objects.
+        """
+        recent = self._signals[-limit:]
+        patterns = []
+        for signal in recent:
+            patterns.append({
+                "errorType": f"feedback_{signal.signal_type.value}",
+                "errorHash": signal.source_event_id[:16] if signal.source_event_id else "",
+                "correctionHash": signal.signal_id,
+                "phonemePattern": ",".join(signal.tags),
+                "hourOfDay": datetime.fromtimestamp(signal.timestamp).hour if signal.timestamp else 12,
+                "editDistance": max(0.0, min(1.0, signal.surprise)),
+            })
+        return patterns
 
     # ── Query methods ──────────────────────────────────────────────
 

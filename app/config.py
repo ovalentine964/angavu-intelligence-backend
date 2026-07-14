@@ -108,6 +108,18 @@ class Settings(BaseSettings):
     AGENT_SUBAGENT_MAX_DEPTH: int = 3      # Max nesting depth for sub-agents
     AGENT_TASK_TIMEOUT: float = 300.0      # Default task timeout in seconds
 
+    # === Voice Pipeline (ASR / TTS) ===
+    WHISPER_URL: str = "http://localhost:9002"  # Whisper ASR service URL
+    WHISPER_MODEL: str = "base"                  # Whisper model size (tiny/base/small/medium/large)
+    WHISPER_ASR_ENGINE: str = "openai_whisper"   # ASR engine backend
+    PIPER_MODEL: str = "sw_CD-mbaza"              # Piper TTS model for Swahili
+    PIPER_BINARY: str = "piper"                   # Piper binary path (or Docker service URL)
+    VOICE_BACKEND: str = "whisper"                # "whisper" | "sherpa-onnx" | "faster-whisper"
+    VOICE_SAMPLE_RATE: int = 16000                # Audio sample rate in Hz
+    VOICE_MAX_DURATION_S: float = 120.0           # Max voice message duration (seconds)
+    VOICE_TEMP_DIR: str = "/tmp/angavu-voice"     # Temp directory for audio processing
+    SHERPA_ONNX_MODEL: str = ""                   # Path to sherpa-onnx model directory
+
     # === CORS ===
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
 
