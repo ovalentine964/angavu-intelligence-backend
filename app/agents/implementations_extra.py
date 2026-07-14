@@ -970,39 +970,52 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
         Anti-shame design: No public rankings. Shows anonymized percentile
         and level progression instead of exact position.
         """
+        from app.data.gamification import get_level_for_xp, LEVELS
+
         user_id = params.get("user_id")
         locale = params.get("locale", "sw")
+        user_xp = params.get("user_xp", 0)
 
-        if self._stickiness_service:
+        # Use gamification data directly (no DB needed)
+        current_level = get_level_for_xp(user_xp)
+
+        # Calculate community-wide stats (anti-shame: anonymized)
+        total_users = params.get("community_size", 0)
+
+        result = {
+            "type": "leaderboard",
+            "level": current_level["level"],
+            "level_name": current_level["name"],
+            "level_name_en": current_level["name_en"],
+            "level_icon": current_level["icon"],
+            "xp": user_xp,
+            "xp_to_next": current_level["xp_to_next"],
+            "perks_unlocked": current_level.get("perks", []),
+            "community_size": total_users,
+            "message": (
+                f"Wako ngazi ya {current_level['name']}! ({user_xp} XP)"
+                if locale == "sw"
+                else f"You're at {current_level['name_en']} level! ({user_xp} XP)"
+            ),
+        }
+
+        # If stickiness service is available with a DB session, enrich with real data
+        if self._stickiness_service and params.get("db"):
             try:
-                # Get user's level progress (anti-shame: no exact rank)
                 level_data = await self._stickiness_service.get_level_progress(
-                    db=None,  # Will be passed via API context in production
+                    db=params["db"],
                     user_id=user_id,
                 )
-                return {
-                    "type": "leaderboard",
-                    "level": level_data.get("level"),
-                    "level_name": level_data.get("level_name"),
-                    "level_icon": level_data.get("level_icon"),
-                    "xp": level_data.get("xp"),
-                    "progress_percent": level_data.get("progress_percent"),
-                    "perks_unlocked": level_data.get("perks_unlocked", []),
-                    "message": (
-                        f"Wako ngazi ya {level_data.get('level_name', '')}!"
-                        if locale == "sw"
-                        else f"You're at {level_data.get('level_name_en', '')} level!"
-                    ),
-                }
+                result.update({
+                    "level": level_data.get("level", result["level"]),
+                    "xp": level_data.get("xp", result["xp"]),
+                    "progress_percent": level_data.get("progress_percent", 0),
+                    "streak_protection_count": level_data.get("streak_protection_count", 0),
+                })
             except Exception as exc:
-                self._logger.warning("leaderboard_failed", error=str(exc))
+                self._logger.warning("leaderboard_db_enrichment_failed", error=str(exc))
 
-        return {
-            "type": "leaderboard",
-            "level": 1,
-            "level_name": "Mwanafunzi",
-            "message": "Anza safari yako ya biashara!" if locale == "sw" else "Start your business journey!",
-        }
+        return result
 
     async def _view_community_tips(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get community tips and wisdom."""

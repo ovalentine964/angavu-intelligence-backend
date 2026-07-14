@@ -830,7 +830,7 @@ class ModelTrainer:
 
     def _next_version(self, model_type: str) -> str:
         """Generate next version string for a model type."""
-        pattern = f"{model_type}_v*.json"
+        pattern = f"{model_type}_v*.ubj"
         existing = list(self.model_dir.glob(pattern))
         if not existing:
             return "v1"

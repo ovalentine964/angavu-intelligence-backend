@@ -685,6 +685,9 @@ class GDPEstimatorService:
             # Business cycle (ECO 205)
             "business_cycle_phase": cycle_phase,
 
+            # Kalman filter cycle extraction (STA 244)
+            "kalman_filter_analysis": kalman_cycle_result,
+
             # Nowcast (STA 244)
             "nowcast": nowcast_result,
 
@@ -710,10 +713,11 @@ class GDPEstimatorService:
                 "approach": "expenditure_method_from_transactions",
                 "gdp_formula": "GDP = Σ(Sales - Purchases - Expenses) × Sector Multipliers",
                 "deflation": "Fisher ideal index (ECO 203)",
-                "business_cycle": "Hodrick-Prescott filter (ECO 205)",
-                "nowcasting": "MIDAS bridge + ARIMA (STA 244)",
+                "business_cycle": "Hodrick-Prescott filter (ECO 205) + Kalman filter state-space (STA 244)",
+                "nowcasting": "MIDAS bridge + ARIMA + Kalman filter (STA 244)",
                 "confidence_intervals": "Bootstrap percentile (STA 341)",
                 "sector_multipliers": "Kenya I-O tables (ECO 210)",
+                "kalman_filter": "State-space model for trend-cycle decomposition and GDP nowcasting",
             },
         }
 

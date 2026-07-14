@@ -163,14 +163,14 @@ class XGBoostService:
 
         if version == "latest":
             # Find latest model file
-            pattern = f"{model_type}_*.json"
+            pattern = f"{model_type}_*.ubj"
             model_files = sorted(self.model_dir.glob(pattern), reverse=True)
             if not model_files:
                 logger.info("no_model_found", model_type=model_type)
                 return None
             model_path = model_files[0]
         else:
-            model_path = self.model_dir / f"{model_type}_{version}.json"
+            model_path = self.model_dir / f"{model_type}_{version}.ubj"
 
         if not model_path.exists():
             logger.info("model_not_found", path=str(model_path))
@@ -188,7 +188,7 @@ class XGBoostService:
 
     def _save_model(self, model: Any, model_type: str, version: str, metadata: Dict[str, Any]) -> Path:
         """Save a trained model with metadata."""
-        model_path = self.model_dir / f"{model_type}_{version}.json"
+        model_path = self.model_dir / f"{model_type}_{version}.ubj"
         model.save_model(str(model_path))
 
         # Save metadata
@@ -197,6 +197,7 @@ class XGBoostService:
         meta = {
             "model_type": model_type,
             "version": version,
+            "model_file": str(model_path),
             "trained_at": datetime.now(timezone.utc).isoformat(),
             "feature_names": FEATURE_NAMES,
             **metadata,

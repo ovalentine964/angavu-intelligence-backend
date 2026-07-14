@@ -1217,6 +1217,28 @@ class AlamaScoreService:
                 abs(existing.predicted_default_prob - observed_rate), 4
             )
 
+        # ── Drift Detection: Check if model performance has degraded ────
+        drift_alert = None
+        if calibration_error is not None and calibration_error > 0.1:
+            try:
+                from app.agents.intelligence_pipeline import get_intelligence_drift_monitor
+                drift_monitor = get_intelligence_drift_monitor()
+                await drift_monitor.check_alama_score(
+                    predicted_score=int(existing.predicted_default_prob * 850) if existing and existing.predicted_default_prob else 525,
+                    actual_outcome=850 if outcome == "repayment" else 300,
+                )
+                drift_status = drift_monitor.get_status()
+                if drift_status.get("drift_detected_in_any"):
+                    drift_alert = {
+                        "drift_detected": True,
+                        "status": drift_status["overall_status"],
+                        "swahili_alert": drift_monitor.generate_swahili_alert(
+                            "alama_score", calibration_error * 100, "mikopo"
+                        ),
+                    }
+            except Exception as e:
+                logger.debug("drift_check_failed", error=str(e))
+
         logger.info(
             "alama_score_outcome_recorded",
             business=business_id,
@@ -1240,6 +1262,7 @@ class AlamaScoreService:
                 "posterior": f"Beta({post_alpha}, {post_beta})",
                 "calibration_error": calibration_error,
             },
+            "drift_alert": drift_alert,
             "method": "STA 341 — Bayesian calibration via Beta-Binomial conjugacy",
         }
 

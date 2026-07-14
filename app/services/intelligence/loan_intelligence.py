@@ -386,7 +386,33 @@ class LoanIntelligenceService:
             risk_level, risk_factors, features
         )
 
-        return {
+        # ── Survival Analysis: time-to-default prediction ─────────────
+        survival_prediction = None
+        try:
+            from app.services.statistical.survival import SurvivalAnalysisService
+            survival_svc = SurvivalAnalysisService()
+            feature_values = np.array([
+                features.get("income_consistency", 0.5),
+                features.get("income_volatility", 0.5),
+                min(monthly_stats["avg_monthly_income"] / 50000, 1.0),
+                savings_behavior.get("savings_rate", 0),
+                features.get("active_days_ratio", 0.3),
+            ])
+            if survival_svc.is_fitted:
+                pred = survival_svc.predict_time_to_default(
+                    entity_id=worker_id,
+                    features=feature_values,
+                )
+                survival_prediction = {
+                    "median_survival_days": pred.median_survival_time,
+                    "risk_score": pred.risk_score,
+                    "explanation_sw": pred.explanation_sw,
+                    "hazard_ratio": pred.hazard_ratio,
+                }
+        except Exception as e:
+            logger.debug("survival_analysis_unavailable", error=str(e))
+
+        result = {
             "default_probability": round(default_prob, 4),
             "risk_level": risk_level,
             "confidence": round(features.get("confidence", 0.5), 2),
@@ -403,6 +429,11 @@ class LoanIntelligenceService:
                 risk_level, default_prob, risk_factors
             ),
         }
+
+        if survival_prediction:
+            result["survival_analysis"] = survival_prediction
+
+        return result
 
     # ═══════════════════════════════════════════════════════════════
     # PRIVATE HELPERS

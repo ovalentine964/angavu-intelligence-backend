@@ -189,7 +189,7 @@ class FeatureEngineer:
         # Gap analysis (consecutive inactive days)
         if len(active_dates) >= 2:
             sorted_dates = sorted(active_dates)
-            date_objects = [datetime.strptime(d, "%Y-%m-%d") for d in sorted_dates]
+            date_objects = [datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc) for d in sorted_dates]
             gaps = [(date_objects[i+1] - date_objects[i]).days for i in range(len(date_objects)-1)]
             max_gap = max(gaps) if gaps else 0
             avg_gap = float(np.mean(gaps)) if gaps else 0
