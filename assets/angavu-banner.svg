@@ -1,153 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0F172A"/>
-      <stop offset="50%" stop-color="#1a2744"/>
-      <stop offset="100%" stop-color="#0F172A"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F2D42"/>
+      <stop offset="50%" stop-color="#1B4965"/>
+      <stop offset="100%" stop-color="#0F2D42"/>
     </linearGradient>
-    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#E8A838"/>
-      <stop offset="100%" stop-color="#F0C060"/>
-    </linearGradient>
-    <radialGradient id="spotGlow" cx="25%" cy="40%" r="40%">
-      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.08"/>
+    <radialGradient id="glow" cx="30%" cy="50%" r="40%">
+      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.06"/>
       <stop offset="100%" stop-color="#E8A838" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="spotGlow2" cx="75%" cy="60%" r="35%">
-      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.05"/>
+    <radialGradient id="ng" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F0C060" stop-opacity="0.5"/>
       <stop offset="100%" stop-color="#E8A838" stop-opacity="0"/>
     </radialGradient>
-    <filter id="nodeGlow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
-  <rect width="1280" height="640" fill="url(#bgGrad)"/>
-  <rect width="1280" height="640" fill="url(#spotGlow)"/>
-  <rect width="1280" height="640" fill="url(#spotGlow2)"/>
+  <rect width="1200" height="400" fill="url(#bg)"/>
+  <rect width="1200" height="400" fill="url(#glow)"/>
 
-  <!-- Subtle grid -->
-  <g stroke="#1e3a5f" stroke-width="0.5" opacity="0.3">
-    <line x1="0" y1="160" x2="1280" y2="160"/>
-    <line x1="0" y1="320" x2="1280" y2="320"/>
-    <line x1="0" y1="480" x2="1280" y2="480"/>
-    <line x1="320" y1="0" x2="320" y2="640"/>
-    <line x1="640" y1="0" x2="640" y2="640"/>
-    <line x1="960" y1="0" x2="960" y2="640"/>
+  <!-- Africa — left side -->
+  <g transform="translate(280,200)">
+    <path d="M-95,-160 L-50,-168 L-13,-172 L20,-175 L47,-170 L73,-160 L91,-147
+             L100,-127 L104,-107 L107,-87 L105,-70 L110,-47 L108,-23 L104,-7
+             L110,10 L103,27 L113,40 L110,56 L104,73 L93,83 L80,91
+             L60,104 L40,113 L16,127 L0,136 L-11,144
+             L-24,133 L-29,117 L-37,104 L-43,87
+             L-47,67 L-50,47 L-53,23 L-57,0
+             L-60,-20 L-69,-37 L-83,-51 L-96,-67
+             L-103,-80 L-107,-100 L-103,-120 L-95,-140 L-95,-160Z"
+          fill="#E8A838" fill-opacity="0.06" stroke="#E8A838" stroke-width="3" stroke-linejoin="round"/>
+    <!-- Madagascar -->
+    <ellipse cx="117" cy="64" rx="11" ry="24" fill="#E8A838" fill-opacity="0.04" stroke="#E8A838" stroke-width="1.5" transform="rotate(12,117,64)"/>
   </g>
 
-  <!-- Neural Network Africa Icon (left side) -->
-  <g transform="translate(160, 120)" filter="url(#nodeGlow)">
-    <!-- Neural connections -->
-    <g stroke="#E8A838" stroke-width="1.2" opacity="0.35" fill="none">
-      <line x1="0" y1="-80" x2="-16" y2="-63"/>
-      <line x1="0" y1="-80" x2="14" y2="-64"/>
-      <line x1="-16" y1="-63" x2="14" y2="-64"/>
-      <line x1="-16" y1="-63" x2="-28" y2="-45"/>
-      <line x1="14" y1="-64" x2="24" y2="-47"/>
-      <line x1="-16" y1="-63" x2="0" y2="-48"/>
-      <line x1="14" y1="-64" x2="0" y2="-48"/>
-      <line x1="-28" y1="-45" x2="0" y2="-48"/>
-      <line x1="24" y1="-47" x2="0" y2="-48"/>
-      <line x1="-28" y1="-45" x2="-32" y2="-23"/>
-      <line x1="24" y1="-47" x2="30" y2="-24"/>
-      <line x1="0" y1="-48" x2="-32" y2="-23"/>
-      <line x1="0" y1="-48" x2="30" y2="-24"/>
-      <line x1="-28" y1="-45" x2="30" y2="-24"/>
-      <line x1="-32" y1="-23" x2="30" y2="-24"/>
-      <line x1="-32" y1="-23" x2="-24" y2="0"/>
-      <line x1="30" y1="-24" x2="28" y2="0"/>
-      <line x1="-32" y1="-23" x2="-14" y2="5"/>
-      <line x1="30" y1="-24" x2="14" y2="5"/>
-      <line x1="-24" y1="0" x2="-14" y2="5"/>
-      <line x1="28" y1="0" x2="14" y2="5"/>
-      <line x1="-14" y1="5" x2="14" y2="5"/>
-      <line x1="-24" y1="0" x2="14" y2="5"/>
-      <line x1="28" y1="0" x2="-14" y2="5"/>
-      <line x1="-14" y1="5" x2="-17" y2="28"/>
-      <line x1="14" y1="5" x2="18" y2="24"/>
-      <line x1="-24" y1="0" x2="-17" y2="28"/>
-      <line x1="28" y1="0" x2="18" y2="24"/>
-      <line x1="-17" y1="28" x2="18" y2="24"/>
-      <line x1="-17" y1="28" x2="-10" y2="45"/>
-      <line x1="18" y1="24" x2="10" y2="40"/>
-      <line x1="-17" y1="28" x2="10" y2="40"/>
-      <line x1="18" y1="24" x2="-10" y2="45"/>
-      <line x1="-10" y1="45" x2="10" y2="40"/>
-      <line x1="-10" y1="45" x2="0" y2="58"/>
-      <line x1="10" y1="40" x2="0" y2="58"/>
-      <line x1="-10" y1="45" x2="4" y2="68"/>
-      <line x1="10" y1="40" x2="4" y2="68"/>
-      <line x1="0" y1="58" x2="4" y2="68"/>
-      <line x1="28" y1="0" x2="42" y2="16"/>
-      <line x1="18" y1="24" x2="42" y2="16"/>
-      <line x1="0" y1="-80" x2="-28" y2="-45"/>
-      <line x1="-28" y1="-45" x2="-24" y2="0"/>
-      <line x1="-32" y1="-23" x2="-44" y2="-8"/>
-      <line x1="-44" y1="-8" x2="-24" y2="0"/>
-      <line x1="-44" y1="-8" x2="-32" y2="-23"/>
-    </g>
-
-    <!-- 18 Nodes forming Africa continent -->
-    <circle cx="0" cy="-80" r="5" fill="#E8A838"/>
-    <circle cx="-16" cy="-63" r="4.5" fill="#E8A838"/>
-    <circle cx="14" cy="-64" r="4.5" fill="#E8A838"/>
-    <circle cx="-44" cy="-8" r="4" fill="#E8A838"/>
-    <circle cx="-32" cy="-23" r="4.5" fill="#E8A838"/>
-    <circle cx="-28" cy="-45" r="4" fill="#E8A838"/>
-    <circle cx="24" cy="-47" r="4" fill="#E8A838"/>
-    <circle cx="0" cy="-48" r="5.5" fill="#E8A838"/>
-    <circle cx="-24" cy="0" r="5" fill="#E8A838"/>
-    <circle cx="30" cy="-24" r="4.5" fill="#E8A838"/>
-    <circle cx="-14" cy="5" r="5" fill="#E8A838"/>
-    <!-- ★ KENYA HQ -->
-    <circle cx="14" cy="5" r="8" fill="#F0C060" stroke="#FFFFFF" stroke-width="1.5"/>
-    <circle cx="-17" cy="28" r="5" fill="#E8A838"/>
-    <circle cx="18" cy="24" r="5" fill="#E8A838"/>
-    <circle cx="42" cy="16" r="3.5" fill="#E8A838"/>
-    <circle cx="-10" cy="45" r="4.5" fill="#E8A838"/>
-    <circle cx="10" cy="40" r="4.5" fill="#E8A838"/>
-    <circle cx="0" cy="58" r="5" fill="#E8A838"/>
-    <circle cx="4" cy="68" r="4" fill="#E8A838"/>
-
-    <!-- Kenya label -->
-    <text x="14" y="-10" text-anchor="middle" font-family="'Inter','Segoe UI',Arial,sans-serif" font-size="8" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">KENYA</text>
-    <text x="14" y="-1" text-anchor="middle" font-family="'Inter','Segoe UI',Arial,sans-serif" font-size="6" fill="#FFFFFF" opacity="0.7">HQ</text>
+  <!-- Connections -->
+  <g stroke="#E8A838" stroke-linecap="round" opacity="0.45">
+    <line x1="315" y1="252" x2="273" y2="60" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="190" y2="215" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="298" y2="145" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="398" y2="118" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="260" y2="315" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="345" y2="340" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="265" y2="385" stroke-width="2.5"/>
+    <line x1="315" y1="252" x2="180" y2="140" stroke-width="2.5"/>
+    <line x1="273" y1="60" x2="190" y2="215" stroke-width="1.8"/>
+    <line x1="273" y1="60" x2="298" y2="145" stroke-width="1.8"/>
+    <line x1="190" y1="215" x2="180" y2="140" stroke-width="1.8"/>
+    <line x1="190" y1="215" x2="260" y2="315" stroke-width="1.8"/>
+    <line x1="260" y1="315" x2="345" y2="340" stroke-width="1.8"/>
+    <line x1="345" y1="340" x2="265" y2="385" stroke-width="1.8"/>
+    <line x1="398" y1="118" x2="298" y2="145" stroke-width="1.8"/>
+    <line x1="398" y1="118" x2="345" y2="340" stroke-width="1.8"/>
   </g>
 
-  <!-- Text content (right side) -->
-  <g>
-    <text x="560" y="240" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="72" font-weight="700" fill="url(#textGrad)" letter-spacing="-1.5">Angavu</text>
-    <text x="560" y="310" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="72" font-weight="300" fill="#e2e8f0" letter-spacing="-1">Intelligence</text>
-    <text x="562" y="360" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="20" fill="#94a3b8" letter-spacing="6">AFRICA'S INFORMAL ECONOMY OS</text>
+  <!-- Nodes -->
+  <circle cx="273" cy="60" r="9" fill="#E8A838"/>
+  <circle cx="180" cy="140" r="8" fill="#E8A838"/>
+  <circle cx="190" cy="215" r="9" fill="#E8A838"/>
+  <circle cx="298" cy="145" r="8" fill="#E8A838"/>
+  <circle cx="398" cy="118" r="8" fill="#E8A838"/>
+  <circle cx="260" cy="315" r="8.5" fill="#E8A838"/>
+  <circle cx="345" cy="340" r="8.5" fill="#E8A838"/>
+  <circle cx="265" cy="385" r="8" fill="#E8A838"/>
+  <!-- Nairobi HQ -->
+  <circle cx="315" cy="252" r="26" fill="url(#ng)"/>
+  <circle cx="315" cy="252" r="15" fill="#F0C060" stroke="#FFFFFF" stroke-width="3"/>
 
-    <!-- Stats row -->
-    <g transform="translate(560, 410)">
-      <text x="0" y="0" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="36" font-weight="700" fill="#E8A838">$1.3T</text>
-      <text x="0" y="28" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#64748b" letter-spacing="2">INFORMAL ECONOMY</text>
-
-      <text x="200" y="0" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="36" font-weight="700" fill="#E8A838">600M+</text>
-      <text x="200" y="28" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#64748b" letter-spacing="2">WORKERS</text>
-
-      <text x="400" y="0" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="36" font-weight="700" fill="#E8A838">54</text>
-      <text x="400" y="28" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#64748b" letter-spacing="2">COUNTRIES</text>
-    </g>
-
-    <line x1="560" y1="470" x2="1100" y2="470" stroke="#1e3a5f" stroke-width="1"/>
-
-    <text x="562" y="510" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="16" fill="#64748b">
-      Making invisible workers visible through data intelligence
-    </text>
-
-    <text x="562" y="550" font-family="'Inter','Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="14" fill="#475569">
-      Msaidizi · Soko Pulse · Alama Score · Distribution Intelligence
-    </text>
-  </g>
-
-  <!-- Bottom bar -->
-  <rect x="0" y="620" width="1280" height="20" fill="#E8A838" opacity="0.8"/>
-  <rect x="0" y="625" width="427" height="15" fill="#E8A838"/>
-  <rect x="427" y="625" width="426" height="15" fill="#F0C060"/>
-  <rect x="853" y="625" width="427" height="15" fill="#C6922A"/>
+  <!-- Text — right side -->
+  <text x="780" y="175" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" letter-spacing="8">ANGAVU</text>
+  <text x="780" y="220" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="28" font-weight="300" fill="#E8A838" letter-spacing="12" opacity="0.85">INTELLIGENCE</text>
+  <line x1="630" y1="240" x2="930" y2="240" stroke="#E8A838" stroke-width="1.5" opacity="0.3"/>
+  <text x="780" y="280" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="16" font-weight="400" fill="#FFFFFF" opacity="0.5" letter-spacing="2">Africa-Powered AI · Kenya HQ</text>
 </svg>

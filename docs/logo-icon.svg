@@ -1,114 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Angavu Intelligence logo — Neural Network Africa">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#1B4965"/>
       <stop offset="100%" stop-color="#0F2D42"/>
     </linearGradient>
-    <clipPath id="roundClip">
-      <rect width="512" height="512" rx="72" ry="72"/>
-    </clipPath>
-    <radialGradient id="glow" cx="50%" cy="40%" r="40%">
-      <stop offset="0%" stop-color="#E8A838" stop-opacity="0.08"/>
+    <radialGradient id="ng" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F0C060" stop-opacity="0.5"/>
       <stop offset="100%" stop-color="#E8A838" stop-opacity="0"/>
     </radialGradient>
-    <filter id="nodeGlow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <clipPath id="r"><rect width="128" height="128" rx="18" ry="18"/></clipPath>
   </defs>
-
-  <g clip-path="url(#roundClip)">
-    <rect width="512" height="512" fill="url(#bgGrad)"/>
-    <rect width="512" height="512" fill="url(#glow)"/>
-
-    <!-- Neural Network Africa — 18 nodes, centered -->
-    <g transform="translate(256, 215)" filter="url(#nodeGlow)">
-      <!-- Neural connections -->
-      <g stroke="#E8A838" stroke-width="1" opacity="0.35" fill="none">
-        <line x1="0" y1="-140" x2="-28" y2="-110"/>
-        <line x1="0" y1="-140" x2="25" y2="-112"/>
-        <line x1="-28" y1="-110" x2="25" y2="-112"/>
-        <line x1="-28" y1="-110" x2="-50" y2="-78"/>
-        <line x1="25" y1="-112" x2="42" y2="-82"/>
-        <line x1="-28" y1="-110" x2="0" y2="-85"/>
-        <line x1="25" y1="-112" x2="0" y2="-85"/>
-        <line x1="-50" y1="-78" x2="0" y2="-85"/>
-        <line x1="42" y1="-82" x2="0" y2="-85"/>
-        <line x1="-50" y1="-78" x2="-56" y2="-40"/>
-        <line x1="42" y1="-82" x2="53" y2="-42"/>
-        <line x1="0" y1="-85" x2="-56" y2="-40"/>
-        <line x1="0" y1="-85" x2="53" y2="-42"/>
-        <line x1="-50" y1="-78" x2="53" y2="-42"/>
-        <line x1="-56" y1="-40" x2="53" y2="-42"/>
-        <line x1="-56" y1="-40" x2="-42" y2="0"/>
-        <line x1="53" y1="-42" x2="50" y2="0"/>
-        <line x1="-56" y1="-40" x2="-25" y2="8"/>
-        <line x1="53" y1="-42" x2="25" y2="8"/>
-        <line x1="-42" y1="0" x2="-25" y2="8"/>
-        <line x1="50" y1="0" x2="25" y2="8"/>
-        <line x1="-25" y1="8" x2="25" y2="8"/>
-        <line x1="-42" y1="0" x2="25" y2="8"/>
-        <line x1="50" y1="0" x2="-25" y2="8"/>
-        <line x1="-25" y1="8" x2="-30" y2="50"/>
-        <line x1="25" y1="8" x2="31" y2="42"/>
-        <line x1="-42" y1="0" x2="-30" y2="50"/>
-        <line x1="50" y1="0" x2="31" y2="42"/>
-        <line x1="-30" y1="50" x2="31" y2="42"/>
-        <line x1="-30" y1="50" x2="-17" y2="78"/>
-        <line x1="31" y1="42" x2="17" y2="70"/>
-        <line x1="-30" y1="50" x2="17" y2="70"/>
-        <line x1="31" y1="42" x2="-17" y2="78"/>
-        <line x1="-17" y1="78" x2="17" y2="70"/>
-        <line x1="-17" y1="78" x2="0" y2="100"/>
-        <line x1="17" y1="70" x2="0" y2="100"/>
-        <line x1="-17" y1="78" x2="7" y2="120"/>
-        <line x1="17" y1="70" x2="7" y2="120"/>
-        <line x1="0" y1="100" x2="7" y2="120"/>
-        <line x1="50" y1="0" x2="73" y2="28"/>
-        <line x1="31" y1="42" x2="73" y2="28"/>
-        <line x1="0" y1="-140" x2="-50" y2="-78"/>
-        <line x1="-50" y1="-78" x2="-42" y2="0"/>
-        <line x1="-56" y1="-40" x2="-77" y2="-14"/>
-        <line x1="-77" y1="-14" x2="-42" y2="0"/>
-        <line x1="-77" y1="-14" x2="-56" y2="-40"/>
-      </g>
-
-      <!-- 18 Nodes as Africa continent -->
-      <circle cx="0" cy="-140" r="7" fill="#E8A838"/>
-      <circle cx="-28" cy="-110" r="6.5" fill="#E8A838"/>
-      <circle cx="25" cy="-112" r="6.5" fill="#E8A838"/>
-      <circle cx="-77" cy="-14" r="5.5" fill="#E8A838"/>
-      <circle cx="-56" cy="-40" r="6" fill="#E8A838"/>
-      <circle cx="-50" cy="-78" r="5.5" fill="#E8A838"/>
-      <circle cx="42" cy="-82" r="5.5" fill="#E8A838"/>
-      <circle cx="0" cy="-85" r="7.5" fill="#E8A838"/>
-      <circle cx="-42" cy="0" r="6.5" fill="#E8A838"/>
-      <circle cx="53" cy="-42" r="6" fill="#E8A838"/>
-      <circle cx="-25" cy="8" r="7" fill="#E8A838"/>
-      <!-- ★ KENYA HQ — larger, brighter, gold with highlight -->
-      <circle cx="25" cy="8" r="10" fill="#F0C060" stroke="#FFFFFF" stroke-width="2"/>
-      <circle cx="-30" cy="50" r="6.5" fill="#E8A838"/>
-      <circle cx="31" cy="42" r="6.5" fill="#E8A838"/>
-      <circle cx="73" cy="28" r="5" fill="#E8A838"/>
-      <circle cx="-17" cy="78" r="6" fill="#E8A838"/>
-      <circle cx="17" cy="70" r="6" fill="#E8A838"/>
-      <circle cx="0" cy="100" r="7" fill="#E8A838"/>
-      <circle cx="7" cy="120" r="5.5" fill="#E8A838"/>
-
-      <!-- Kenya label -->
-      <text x="25" y="-14" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="9" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">KENYA</text>
-      <text x="25" y="-4" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="7" fill="#FFFFFF" opacity="0.7">HQ</text>
+  <g clip-path="url(#r)">
+    <rect width="128" height="128" fill="url(#bg)"/>
+    <g transform="translate(64,52)">
+      <path d="M-19,-32 L-10,-33.5 L-3,-34.5 L4,-35 L10,-34 L15,-32 L18,-29
+               L20,-25 L21.5,-21 L22,-17 L21.5,-13 L22.5,-9 L22,-5 L21,-1.5
+               L22,2 L21,5 L23,8 L22.5,11 L21,15 L19,17 L16,19
+               L12,22 L8,24 L3.5,27 L0,29 L-2,30
+               L-5,28 L-6,24 L-7.5,21 L-9,17
+               L-10,13 L-10.5,9 L-11,5 L-12,0
+               L-12.5,-4 L-14,-7.5 L-17,-10 L-19.5,-13.5
+               L-21,-16 L-22,-20 L-21,-24 L-19,-28 L-19,-32Z"
+            fill="#E8A838" fill-opacity="0.08" stroke="#E8A838" stroke-width="2" stroke-linejoin="round"/>
     </g>
-
-    <!-- Text: ANGAVU -->
-    <text x="256" y="380" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="42" font-weight="700" fill="#FFFFFF" letter-spacing="4">ANGAVU</text>
-
-    <!-- Text: INTELLIGENCE -->
-    <text x="256" y="415" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="18" font-weight="300" fill="#E8A838" letter-spacing="7" opacity="0.85">INTELLIGENCE</text>
-
-    <!-- Divider -->
-    <line x1="156" y1="430" x2="356" y2="430" stroke="#E8A838" stroke-width="1" opacity="0.3"/>
+    <g stroke="#E8A838" stroke-linecap="round" opacity="0.5">
+      <line x1="68" y1="59" x2="59" y2="24" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="45" y2="47" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="66" y2="39" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="84" y2="35" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="58" y2="70" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="76" y2="73" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="58" y2="84" stroke-width="1.5"/>
+      <line x1="68" y1="59" x2="43" y2="35" stroke-width="1.5"/>
+      <line x1="59" y1="24" x2="45" y2="47" stroke-width="1"/>
+      <line x1="59" y1="24" x2="66" y2="39" stroke-width="1"/>
+      <line x1="45" y1="47" x2="43" y2="35" stroke-width="1"/>
+      <line x1="45" y1="47" x2="58" y2="70" stroke-width="1"/>
+      <line x1="58" y1="70" x2="76" y2="73" stroke-width="1"/>
+      <line x1="76" y1="73" x2="58" y2="84" stroke-width="1"/>
+      <line x1="84" y1="35" x2="66" y2="39" stroke-width="1"/>
+      <line x1="84" y1="35" x2="76" y2="73" stroke-width="1"/>
+    </g>
+    <circle cx="59" cy="24" r="4" fill="#E8A838"/>
+    <circle cx="43" cy="35" r="3.5" fill="#E8A838"/>
+    <circle cx="45" cy="47" r="4" fill="#E8A838"/>
+    <circle cx="66" cy="39" r="3.5" fill="#E8A838"/>
+    <circle cx="84" cy="35" r="3.5" fill="#E8A838"/>
+    <circle cx="58" cy="70" r="3.5" fill="#E8A838"/>
+    <circle cx="76" cy="73" r="3.5" fill="#E8A838"/>
+    <circle cx="58" cy="84" r="3.5" fill="#E8A838"/>
+    <circle cx="68" cy="59" r="11" fill="url(#ng)"/>
+    <circle cx="68" cy="59" r="7" fill="#F0C060" stroke="#FFFFFF" stroke-width="1.5"/>
   </g>
-
-  <rect x="2" y="2" width="508" height="508" rx="72" ry="72" fill="none" stroke="#E8A838" stroke-width="2" opacity="0.15"/>
+  <rect x="0.5" y="0.5" width="127" height="127" rx="18" ry="18" fill="none" stroke="#E8A838" stroke-width="0.8" opacity="0.1"/>
 </svg>
