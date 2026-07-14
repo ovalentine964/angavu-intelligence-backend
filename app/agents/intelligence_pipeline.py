@@ -1694,3 +1694,108 @@ MarketAnalysisFlow = LongHorizonOrchestrator
 CreditScoringFlow = LongHorizonOrchestrator
 DistributionAnalysisFlow = LongHorizonOrchestrator
 CompetitorAnalysisFlow = LongHorizonOrchestrator
+
+
+# ════════════════════════════════════════════════════════════════════
+# Harness Integration — Wire DataPipelineHarness to intelligence flows
+# ════════════════════════════════════════════════════════════════════
+
+
+def create_harnessed_flows(
+    event_store: Optional[EventStore] = None,
+    harness: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Create all intelligence flows wrapped with DataPipelineHarness.
+
+    Each flow is wrapped in a HarnessedIntelligenceFlow that adds:
+    - Input deduplication
+    - Input/output quality scoring
+    - Drift detection
+    - Metrics collection (quality, drift, latency)
+    - Auto-retrain on critical drift
+
+    Args:
+        event_store: Optional event store for long-horizon orchestration
+        harness: Optional DataPipelineHarness instance (uses global if None)
+
+    Returns:
+        Dict mapping flow names to HarnessedIntelligenceFlow instances
+    """
+    from app.agents.harness.data_harness import (
+        HarnessedIntelligenceFlow,
+        get_data_pipeline_harness,
+    )
+
+    flows = create_all_intelligence_flows(event_store=event_store)
+    h = harness or get_data_pipeline_harness()
+
+    # Wire drift monitor to harness alerts
+    drift_monitor = get_intelligence_drift_monitor()
+    h.add_alert_hook(lambda alert: _forward_drift_to_monitor(drift_monitor, alert))
+
+    harnessed = {}
+    for name, orch in flows.items():
+        harnessed[name] = HarnessedIntelligenceFlow(
+            orchestrator=orch,
+            pipeline_name=name,
+            harness=h,
+        )
+
+    logger.info(
+        "harnessed_intelligence_flows_created",
+        flows=list(harnessed.keys()),
+        drift_monitoring=True,
+    )
+    return harnessed
+
+
+async def _forward_drift_to_monitor(
+    drift_monitor: IntelligenceDriftMonitor,
+    alert: Any,
+) -> None:
+    """Forward a harness DriftAlert to the intelligence drift monitor.
+
+    Maps harness alerts to the appropriate CUSUM metric and generates
+    Swahili alerts for local operators.
+    """
+    try:
+        pipeline = getattr(alert, "pipeline_name", "")
+        drift_type = getattr(alert, "drift_type", "")
+        magnitude = getattr(alert, "drift_magnitude", 0.0)
+
+        # Map pipeline to metric check
+        if pipeline == "credit_scoring":
+            drift_monitor.monitor.update("alama_score_accuracy", 1.0 - magnitude)
+        elif pipeline == "market_analysis":
+            drift_monitor.monitor.update("revenue_prediction_error", magnitude)
+        elif pipeline in ("distribution_analysis", "competitor_analysis"):
+            drift_monitor.monitor.update("feature_distribution_shift", magnitude)
+
+        # Generate Swahili alert for critical drift
+        if getattr(alert, "severity", "") == "critical":
+            swahili_msg = drift_monitor.generate_swahili_alert(
+                pipeline, magnitude * 100, pipeline,
+            )
+            logger.warning(
+                "swahili_drift_alert",
+                message=swahili_msg,
+                pipeline=pipeline,
+                severity="critical",
+            )
+    except Exception as exc:
+        logger.debug("drift_forward_error", error=str(exc))
+
+
+# ── Singleton harnessed flows ──
+_harnessed_flows: Optional[Dict[str, Any]] = None
+
+
+def get_harnessed_intelligence_flows(
+    event_store: Optional[EventStore] = None,
+) -> Dict[str, Any]:
+    """Get or create singleton harnessed intelligence flows."""
+    global _harnessed_flows
+    if _harnessed_flows is None:
+        _harnessed_flows = create_harnessed_flows(event_store=event_store)
+    return _harnessed_flows

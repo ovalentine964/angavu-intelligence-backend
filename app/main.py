@@ -899,6 +899,9 @@ from app.api.dialect_dictionary import router as dialect_dictionary_router
 # SHAP Explainability (model interpretability for workers)
 from app.api.explain import router as explain_router
 
+# Deployment Harness — canary releases, feature flags, version tracking
+from app.api.deployment import router as deployment_router
+
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
@@ -935,6 +938,7 @@ app.include_router(otp_auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(evolution_router, prefix=settings.API_V1_PREFIX)
 app.include_router(dialect_dictionary_router, prefix=settings.API_V1_PREFIX)
 app.include_router(explain_router, prefix=settings.API_V1_PREFIX)
+app.include_router(deployment_router, prefix=settings.API_V1_PREFIX)
 app.include_router(autonomous_router)
 
 # Mount autonomous router (prefix is built into the router)

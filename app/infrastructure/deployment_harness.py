@@ -4,9 +4,12 @@ Deployment Harness — Canary deployment control plane for Angavu Intelligence.
 Manages gradual rollout of new agent versions and model updates:
 - Canary stages: 1% → 10% → 50% → 100%
 - Health checks before each promotion
-- Automatic rollback on failure
+- Automatic rollback: error rate >1% or latency >2x baseline
 - Traffic splitting with weighted routing
 - Deployment state machine with audit trail
+- Version tracking: which version serves what % of traffic
+- Feature flags: enable/disable features per user segment
+- Deployment metrics: error rate, latency, throughput per version
 
 Every agent/model deployment goes through this harness.
 No direct promotion to 100% — always through canary stages.
@@ -20,17 +23,23 @@ Usage:
     )
     # Automatically progresses through canary stages
     # Rolls back if health checks fail
+
+    # Feature flags
+    harness.feature_flags.enable("new_scoring", segments=["premium_users"])
+    if harness.feature_flags.is_enabled("new_scoring", user_segment="premium_users"):
+        ...
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
 import structlog
 
@@ -89,6 +98,7 @@ class HealthCheckResult:
             "value": round(self.value, 4),
             "threshold": round(self.threshold, 4),
             "message": self.message,
+            "checked_at": self.checked_at,
         }
 
 
@@ -128,6 +138,475 @@ class DeploymentRecord:
             "stage_history": self.stage_history,
             "rollback_reason": self.rollback_reason,
             "error": self.error,
+            "metadata": self.metadata,
+        }
+
+
+# ════════════════════════════════════════════════════════════════════
+# Version Tracker — which version serves what % of traffic
+# ════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class VersionInfo:
+    """Tracks a deployed version's state."""
+    version: str
+    component: str
+    traffic_pct: float = 0.0
+    deployed_at: float = field(default_factory=time.time)
+    is_active: bool = True
+    is_canary: bool = False
+    promoted_at: Optional[float] = None
+    rolled_back_at: Optional[float] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "component": self.component,
+            "traffic_pct": self.traffic_pct,
+            "deployed_at": self.deployed_at,
+            "is_active": self.is_active,
+            "is_canary": self.is_canary,
+            "promoted_at": self.promoted_at,
+            "rolled_back_at": self.rolled_back_at,
+        }
+
+
+class VersionTracker:
+    """
+    Tracks which version serves what percentage of traffic.
+
+    Maintains a registry of all versions per component, including
+    active, canary, and historical versions.
+    """
+
+    def __init__(self):
+        # component → version → VersionInfo
+        self._versions: Dict[str, Dict[str, VersionInfo]] = defaultdict(dict)
+        self._logger = logger.bind(component="version_tracker")
+
+    def register_version(
+        self, component: str, version: str, traffic_pct: float = 0.0,
+        is_canary: bool = False,
+    ) -> VersionInfo:
+        """Register a new version for a component."""
+        info = VersionInfo(
+            version=version,
+            component=component,
+            traffic_pct=traffic_pct,
+            is_canary=is_canary,
+        )
+        self._versions[component][version] = info
+        self._logger.info(
+            "version_registered",
+            component=component, version=version,
+            traffic_pct=traffic_pct, is_canary=is_canary,
+        )
+        return info
+
+    def update_traffic(
+        self, component: str, version: str, traffic_pct: float,
+    ) -> None:
+        """Update traffic percentage for a version."""
+        info = self._versions.get(component, {}).get(version)
+        if info:
+            info.traffic_pct = traffic_pct
+
+    def mark_promoted(self, component: str, version: str) -> None:
+        """Mark a version as fully promoted."""
+        info = self._versions.get(component, {}).get(version)
+        if info:
+            info.is_canary = False
+            info.traffic_pct = 100.0
+            info.promoted_at = time.time()
+        # Demote old versions
+        for v, vinfo in self._versions.get(component, {}).items():
+            if v != version and vinfo.is_active:
+                vinfo.is_active = False
+                vinfo.traffic_pct = 0.0
+
+    def mark_rolled_back(self, component: str, version: str) -> None:
+        """Mark a version as rolled back."""
+        info = self._versions.get(component, {}).get(version)
+        if info:
+            info.is_active = False
+            info.is_canary = False
+            info.traffic_pct = 0.0
+            info.rolled_back_at = time.time()
+
+    def get_active_versions(self, component: str) -> List[VersionInfo]:
+        """Get all active versions for a component."""
+        return [
+            v for v in self._versions.get(component, {}).values()
+            if v.is_active
+        ]
+
+    def get_version_map(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get full version map: component → [version info, ...]."""
+        return {
+            comp: [v.to_dict() for v in versions.values()]
+            for comp, versions in self._versions.items()
+        }
+
+    def get_serving_versions(self) -> List[Dict[str, Any]]:
+        """Get all versions currently serving traffic."""
+        result = []
+        for comp, versions in self._versions.items():
+            for v in versions.values():
+                if v.is_active and v.traffic_pct > 0:
+                    result.append(v.to_dict())
+        return result
+
+
+# ════════════════════════════════════════════════════════════════════
+# Feature Flags — enable/disable features per user segment
+# ════════════════════════════════════════════════════════════════════
+
+
+class FeatureFlagStatus(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    PERCENTAGE_ROLLOUT = "percentage_rollout"
+
+
+@dataclass
+class FeatureFlag:
+    """A feature flag with segment-based targeting."""
+    name: str
+    description: str = ""
+    status: FeatureFlagStatus = FeatureFlagStatus.DISABLED
+    enabled_segments: Set[str] = field(default_factory=set)
+    rollout_percentage: float = 0.0         # 0-100
+    enabled_at: Optional[float] = None
+    disabled_at: Optional[float] = None
+    created_at: float = field(default_factory=time.time)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "status": self.status.value,
+            "enabled_segments": sorted(self.enabled_segments),
+            "rollout_percentage": self.rollout_percentage,
+            "enabled_at": self.enabled_at,
+            "disabled_at": self.disabled_at,
+            "created_at": self.created_at,
+        }
+
+
+class FeatureFlagStore:
+    """
+    Manages feature flags with per-user-segment targeting.
+
+    Supports:
+    - Global on/off flags
+    - Segment-based targeting (e.g., "premium_users", "beta_testers")
+    - Percentage-based rollouts (deterministic via user ID hashing)
+
+    Usage:
+        flags = FeatureFlagStore()
+        flags.create("new_scoring", description="New ML scoring algorithm")
+        flags.enable("new_scoring", segments=["premium_users", "beta_testers"])
+
+        if flags.is_enabled("new_scoring", user_id="user_123", user_segment="premium_users"):
+            use_new_scoring()
+    """
+
+    def __init__(self):
+        self._flags: Dict[str, FeatureFlag] = {}
+        self._logger = logger.bind(component="feature_flags")
+
+    def create(
+        self,
+        name: str,
+        description: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> FeatureFlag:
+        """Create a new feature flag (disabled by default)."""
+        if name in self._flags:
+            raise ValueError(f"Feature flag '{name}' already exists")
+        flag = FeatureFlag(
+            name=name, description=description, metadata=metadata or {},
+        )
+        self._flags[name] = flag
+        self._logger.info("feature_flag_created", name=name)
+        return flag
+
+    def enable(
+        self,
+        name: str,
+        segments: Optional[List[str]] = None,
+        rollout_percentage: float = 100.0,
+    ) -> None:
+        """
+        Enable a feature flag.
+
+        Args:
+            name: Flag name
+            segments: User segments to enable for (None = all segments)
+            rollout_percentage: Percentage of users to enable for (0-100)
+        """
+        flag = self._flags.get(name)
+        if not flag:
+            raise ValueError(f"Feature flag '{name}' not found")
+
+        flag.status = FeatureFlagStatus.ENABLED
+        flag.enabled_at = time.time()
+        flag.disabled_at = None
+        flag.rollout_percentage = min(100.0, max(0.0, rollout_percentage))
+
+        if segments:
+            flag.enabled_segments.update(segments)
+            if rollout_percentage < 100.0:
+                flag.status = FeatureFlagStatus.PERCENTAGE_ROLLOUT
+
+        self._logger.info(
+            "feature_flag_enabled",
+            name=name, segments=segments,
+            rollout_percentage=rollout_percentage,
+        )
+
+    def disable(self, name: str) -> None:
+        """Disable a feature flag."""
+        flag = self._flags.get(name)
+        if not flag:
+            raise ValueError(f"Feature flag '{name}' not found")
+
+        flag.status = FeatureFlagStatus.DISABLED
+        flag.disabled_at = time.time()
+        self._logger.info("feature_flag_disabled", name=name)
+
+    def is_enabled(
+        self,
+        name: str,
+        user_id: Optional[str] = None,
+        user_segment: Optional[str] = None,
+    ) -> bool:
+        """
+        Check if a feature flag is enabled for a given user.
+
+        Deterministic rollout: same user_id always gets the same result
+        for a given flag, based on consistent hashing.
+        """
+        flag = self._flags.get(name)
+        if not flag:
+            return False
+
+        if flag.status == FeatureFlagStatus.DISABLED:
+            return False
+
+        # If segments are defined, user must be in an enabled segment
+        if flag.enabled_segments and user_segment:
+            if user_segment not in flag.enabled_segments:
+                return False
+
+        # Percentage rollout check
+        if flag.rollout_percentage < 100.0 and user_id:
+            # Deterministic: hash user_id + flag_name → consistent bucket
+            bucket = self._hash_bucket(user_id, name)
+            return bucket < flag.rollout_percentage
+
+        return True
+
+    def get_all(self) -> List[Dict[str, Any]]:
+        """Get all feature flags."""
+        return [f.to_dict() for f in self._flags.values()]
+
+    def get_flag(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific feature flag."""
+        flag = self._flags.get(name)
+        return flag.to_dict() if flag else None
+
+    def delete(self, name: str) -> bool:
+        """Delete a feature flag."""
+        if name in self._flags:
+            del self._flags[name]
+            self._logger.info("feature_flag_deleted", name=name)
+            return True
+        return False
+
+    @staticmethod
+    def _hash_bucket(user_id: str, flag_name: str) -> float:
+        """Deterministic hash → bucket [0, 100)."""
+        h = hashlib.md5(f"{flag_name}:{user_id}".encode()).hexdigest()
+        return (int(h[:8], 16) % 10000) / 100.0
+
+
+# ════════════════════════════════════════════════════════════════════
+# Deployment Metrics — per-version error rate, latency, throughput
+# ════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class VersionMetrics:
+    """Aggregated metrics for a deployed version."""
+    component: str
+    version: str
+    request_count: int = 0
+    error_count: int = 0
+    total_latency_ms: float = 0.0
+    latency_samples: List[float] = field(default_factory=list)
+    max_latency_ms: float = 0.0
+    min_latency_ms: float = float("inf")
+    last_error_at: Optional[float] = None
+    last_request_at: Optional[float] = None
+    window_start: float = field(default_factory=time.time)
+
+    # Sliding window for recent errors (last 5 min)
+    _recent_errors: deque = field(default_factory=lambda: deque(maxlen=10000))
+    _recent_requests: deque = field(default_factory=lambda: deque(maxlen=10000))
+
+    @property
+    def error_rate(self) -> float:
+        """Current error rate (recent window)."""
+        if not self._recent_requests:
+            return 0.0
+        now = time.time()
+        window = 300  # 5 minutes
+        recent = [t for t in self._recent_requests if now - t < window]
+        errors = [t for t in self._recent_errors if now - t < window]
+        if not recent:
+            return 0.0
+        return len(errors) / len(recent)
+
+    @property
+    def avg_latency_ms(self) -> float:
+        if not self.latency_samples:
+            return 0.0
+        return sum(self.latency_samples) / len(self.latency_samples)
+
+    @property
+    def p95_latency_ms(self) -> float:
+        if not self.latency_samples:
+            return 0.0
+        sorted_samples = sorted(self.latency_samples)
+        idx = int(len(sorted_samples) * 0.95)
+        return sorted_samples[min(idx, len(sorted_samples) - 1)]
+
+    @property
+    def throughput_rps(self) -> float:
+        """Requests per second over the last minute."""
+        now = time.time()
+        window = 60
+        recent = [t for t in self._recent_requests if now - t < window]
+        return len(recent) / window if window > 0 else 0.0
+
+    def record_request(self, latency_ms: float, is_error: bool = False) -> None:
+        """Record a request with its latency and error status."""
+        now = time.time()
+        self.request_count += 1
+        self.total_latency_ms += latency_ms
+        self.latency_samples.append(latency_ms)
+        self.max_latency_ms = max(self.max_latency_ms, latency_ms)
+        self.min_latency_ms = min(self.min_latency_ms, latency_ms)
+        self.last_request_at = now
+        self._recent_requests.append(now)
+
+        # Keep only last 1000 samples for percentile calculation
+        if len(self.latency_samples) > 1000:
+            self.latency_samples = self.latency_samples[-1000:]
+
+        if is_error:
+            self.error_count += 1
+            self.last_error_at = now
+            self._recent_errors.append(now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "component": self.component,
+            "version": self.version,
+            "request_count": self.request_count,
+            "error_count": self.error_count,
+            "error_rate": round(self.error_rate, 4),
+            "avg_latency_ms": round(self.avg_latency_ms, 2),
+            "p95_latency_ms": round(self.p95_latency_ms, 2),
+            "max_latency_ms": round(self.max_latency_ms, 2),
+            "min_latency_ms": round(self.min_latency_ms, 2) if self.min_latency_ms != float("inf") else 0,
+            "throughput_rps": round(self.throughput_rps, 2),
+            "last_error_at": self.last_error_at,
+            "last_request_at": self.last_request_at,
+        }
+
+
+class DeploymentMetricsCollector:
+    """
+    Collects and aggregates deployment metrics per version.
+
+    Tracks error rate, latency (avg, p95, max), and throughput
+    for each deployed version of each component.
+    """
+
+    def __init__(self):
+        # component → version → VersionMetrics
+        self._metrics: Dict[str, Dict[str, VersionMetrics]] = defaultdict(dict)
+        self._logger = logger.bind(component="deployment_metrics")
+
+    def get_or_create(
+        self, component: str, version: str,
+    ) -> VersionMetrics:
+        """Get or create metrics for a component version."""
+        if version not in self._metrics[component]:
+            self._metrics[component][version] = VersionMetrics(
+                component=component, version=version,
+            )
+        return self._metrics[component][version]
+
+    def record(
+        self,
+        component: str,
+        version: str,
+        latency_ms: float,
+        is_error: bool = False,
+    ) -> None:
+        """Record a request for a component version."""
+        metrics = self.get_or_create(component, version)
+        metrics.record_request(latency_ms, is_error)
+
+    def get_metrics(
+        self, component: str, version: str,
+    ) -> Dict[str, Any]:
+        """Get metrics for a specific component version."""
+        metrics = self._metrics.get(component, {}).get(version)
+        return metrics.to_dict() if metrics else {}
+
+    def get_component_metrics(
+        self, component: str,
+    ) -> List[Dict[str, Any]]:
+        """Get metrics for all versions of a component."""
+        return [
+            m.to_dict() for m in self._metrics.get(component, {}).values()
+        ]
+
+    def get_all_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get all metrics across all components."""
+        return {
+            comp: [m.to_dict() for m in versions.values()]
+            for comp, versions in self._metrics.items()
+        }
+
+    def get_baseline_metrics(
+        self, component: str, version: str,
+    ) -> Dict[str, Any]:
+        """
+        Get metrics formatted for health checker baseline comparison.
+
+        Returns dict with success_rate, latency_p95_ms, error_rate, etc.
+        """
+        metrics = self._metrics.get(component, {}).get(version)
+        if not metrics:
+            return {
+                "success_rate": 1.0,
+                "latency_p95_ms": 100.0,
+                "error_rate": 0.0,
+                "circuit_breaker_trips": 0,
+            }
+        return {
+            "success_rate": 1.0 - metrics.error_rate,
+            "latency_p95_ms": metrics.p95_latency_ms,
+            "error_rate": metrics.error_rate,
+            "circuit_breaker_trips": 0,
         }
 
 
@@ -140,11 +619,11 @@ class HealthChecker:
     """
     Runs health checks on canary deployments before promotion.
 
-    Default checks:
-    - Success rate ≥ 95% (new version must match old version reliability)
+    Default checks (production-grade thresholds):
+    - Error rate ≤ 1% (strict: catches regressions early)
     - Latency p95 ≤ 2x baseline (new version must not be significantly slower)
-    - Error rate ≤ 5% (no excessive errors)
-    - No circuit breaker trips (agent-level resilience)
+    - Success rate ≥ 99%
+    - No circuit breaker trips
 
     Custom checks can be registered per component.
     """
@@ -180,17 +659,27 @@ class HealthChecker:
         """
         results: List[HealthCheckResult] = []
 
-        # 1. Success rate check
-        success_rate = new_version_metrics.get("success_rate", 0.0)
+        # 1. Error rate check — ≤ 1% (production-grade threshold)
+        error_rate = new_version_metrics.get("error_rate", 0.0)
         results.append(HealthCheckResult(
-            check_name="success_rate",
-            passed=success_rate >= 0.95,
-            value=success_rate,
-            threshold=0.95,
-            message=f"Success rate: {success_rate:.1%} (threshold: ≥95%)",
+            check_name="error_rate",
+            passed=error_rate <= 0.01,
+            value=error_rate,
+            threshold=0.01,
+            message=f"Error rate: {error_rate:.2%} (threshold: ≤1%)",
         ))
 
-        # 2. Latency check (p95)
+        # 2. Success rate check — ≥ 99%
+        success_rate = new_version_metrics.get("success_rate", 1.0)
+        results.append(HealthCheckResult(
+            check_name="success_rate",
+            passed=success_rate >= 0.99,
+            value=success_rate,
+            threshold=0.99,
+            message=f"Success rate: {success_rate:.1%} (threshold: ≥99%)",
+        ))
+
+        # 3. Latency check (p95) — ≤ 2x baseline
         new_p95 = new_version_metrics.get("latency_p95_ms", 0)
         baseline_p95 = old_version_metrics.get("latency_p95_ms", new_p95) if old_version_metrics else new_p95
         latency_ratio = new_p95 / max(baseline_p95, 1)
@@ -200,16 +689,6 @@ class HealthChecker:
             value=latency_ratio,
             threshold=2.0,
             message=f"Latency ratio: {latency_ratio:.2f}x baseline (threshold: ≤2x)",
-        ))
-
-        # 3. Error rate check
-        error_rate = new_version_metrics.get("error_rate", 0.0)
-        results.append(HealthCheckResult(
-            check_name="error_rate",
-            passed=error_rate <= 0.05,
-            value=error_rate,
-            threshold=0.05,
-            message=f"Error rate: {error_rate:.1%} (threshold: ≤5%)",
         ))
 
         # 4. Circuit breaker check
@@ -350,6 +829,9 @@ class DeploymentHarnessConfig:
     auto_rollback_on_failure: bool = True
     # Require manual approval for 50% → 100%
     require_approval_for_full: bool = False
+    # Rollback thresholds (used by health checker)
+    error_rate_threshold: float = 0.01    # 1%
+    latency_ratio_threshold: float = 2.0  # 2x baseline
 
 
 class DeploymentHarness:
@@ -366,24 +848,23 @@ class DeploymentHarness:
     Each stage:
     - Routes traffic using TrafficRouter
     - Runs health checks using HealthChecker
+    - Collects metrics per version
     - Waits for bake time
-    - Promotes if healthy, rolls back if not
+    - Promotes if healthy, rolls back if not (error rate >1% or latency >2x)
 
-    Usage:
-        harness = DeploymentHarness()
-        deployment = await harness.start_deployment(
-            component="IntelligenceGenerator",
-            old_version="v1.2",
-            new_version="v1.3",
-        )
-        # Check status
-        status = harness.get_deployment_status(deployment.deployment_id)
+    Includes:
+    - Version tracking: which version serves what % of traffic
+    - Feature flags: enable/disable features per user segment
+    - Deployment metrics: error rate, latency, throughput per version
     """
 
     def __init__(self, config: Optional[DeploymentHarnessConfig] = None):
         self._config = config or DeploymentHarnessConfig()
         self._health_checker = HealthChecker()
         self._traffic_router = TrafficRouter()
+        self._version_tracker = VersionTracker()
+        self._metrics_collector = DeploymentMetricsCollector()
+        self.feature_flags = FeatureFlagStore()
         self._logger = logger.bind(component="deployment_harness")
 
         # Active deployments
@@ -394,7 +875,7 @@ class DeploymentHarness:
         self._completed: List[DeploymentRecord] = []
         self._max_completed = 100
 
-        # Metrics collection callback
+        # Metrics collection callback (external source)
         self._metrics_fn: Optional[Callable[[str, str], Coroutine]] = None
         # Approval callback
         self._approval_fn: Optional[Callable[[DeploymentRecord], Coroutine]] = None
@@ -459,6 +940,14 @@ class DeploymentHarness:
 
         self._deployments[record.deployment_id] = record
 
+        # Register versions in tracker
+        self._version_tracker.register_version(
+            component, old_version, traffic_pct=100.0,
+        )
+        self._version_tracker.register_version(
+            component, new_version, traffic_pct=0.0, is_canary=True,
+        )
+
         # Set initial traffic split (0% to new)
         self._traffic_router.set_traffic_split(
             component, old_version, new_version, 0.0,
@@ -507,6 +996,15 @@ class DeploymentHarness:
                     record.new_version,
                     traffic_pct,
                 )
+                # Update version tracker
+                self._version_tracker.update_traffic(
+                    record.component, record.old_version,
+                    (1.0 - traffic_pct) * 100,
+                )
+                self._version_tracker.update_traffic(
+                    record.component, record.new_version,
+                    traffic_pct * 100,
+                )
 
                 # Get hold time for this stage
                 hold_time = self._get_hold_time(stage)
@@ -516,7 +1014,7 @@ class DeploymentHarness:
                 while time.time() - bake_start < hold_time:
                     await asyncio.sleep(self._config.health_check_interval_s)
 
-                    # Collect metrics
+                    # Collect metrics from both internal collector and external source
                     new_metrics = await self._collect_metrics(
                         record.component, record.new_version
                     )
@@ -581,6 +1079,9 @@ class DeploymentHarness:
             self._traffic_router.promote_to_full(
                 record.component, record.new_version
             )
+            self._version_tracker.mark_promoted(
+                record.component, record.new_version
+            )
 
             self._logger.info(
                 "deployment_completed",
@@ -631,6 +1132,9 @@ class DeploymentHarness:
 
         # Restore traffic to old version
         self._traffic_router.rollback_to(record.component, record.old_version)
+        self._version_tracker.mark_rolled_back(
+            record.component, record.new_version
+        )
 
         # Execute rollback callback
         if self._rollback_fn:
@@ -702,20 +1206,40 @@ class DeploymentHarness:
     async def _collect_metrics(
         self, component: str, version: str,
     ) -> Dict[str, Any]:
-        """Collect metrics for a component version."""
+        """
+        Collect metrics for a component version.
+
+        First tries the internal metrics collector, then falls back
+        to the external metrics callback.
+        """
+        # Try internal collector first
+        internal = self._metrics_collector.get_baseline_metrics(component, version)
+        if internal.get("request_count", 0) > 0 if "request_count" in internal else True:
+            # Has data from internal collector
+            pass
+
+        # Also try external source
         if self._metrics_fn:
             try:
-                return await self._metrics_fn(component, version)
+                external = await self._metrics_fn(component, version)
+                # Merge: prefer external if it has more data
+                if external.get("request_count", 0) > internal.get("request_count", 0):
+                    return external
             except Exception as exc:
                 self._logger.warning("metrics_collection_error", error=str(exc))
 
-        # Default: return empty metrics (health checks will use defaults)
-        return {
-            "success_rate": 1.0,
-            "latency_p95_ms": 100.0,
-            "error_rate": 0.0,
-            "circuit_breaker_trips": 0,
-        }
+        return internal
+
+    def record_request(
+        self, component: str, version: str,
+        latency_ms: float, is_error: bool = False,
+    ) -> None:
+        """
+        Record a request for metrics tracking.
+
+        Call this from request handlers to feed the metrics collector.
+        """
+        self._metrics_collector.record(component, version, latency_ms, is_error)
 
     def _get_hold_time(self, stage: DeploymentStage) -> float:
         """Get the bake time for a canary stage."""
@@ -757,6 +1281,22 @@ class DeploymentHarness:
         """Get current traffic routing state."""
         return self._traffic_router.get_routes()
 
+    def get_version_map(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get full version map: which version serves what %."""
+        return self._version_tracker.get_version_map()
+
+    def get_serving_versions(self) -> List[Dict[str, Any]]:
+        """Get all versions currently serving traffic."""
+        return self._version_tracker.get_serving_versions()
+
+    def get_all_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get deployment metrics for all components and versions."""
+        return self._metrics_collector.get_all_metrics()
+
+    def get_component_metrics(self, component: str) -> List[Dict[str, Any]]:
+        """Get metrics for all versions of a specific component."""
+        return self._metrics_collector.get_component_metrics(component)
+
     def get_health(self) -> Dict[str, Any]:
         """Get deployment harness health."""
         active = sum(
@@ -774,12 +1314,16 @@ class DeploymentHarness:
             "max_concurrent": self._config.max_concurrent_deployments,
             "recent_rollbacks": recent_rollbacks,
             "total_deployments": len(self._deployments) + len(self._completed),
+            "feature_flags_count": len(self.feature_flags.get_all()),
+            "tracked_versions": len(self._version_tracker.get_serving_versions()),
             "config": {
                 "canary_1pct_hold_s": self._config.canary_1pct_hold_s,
                 "canary_10pct_hold_s": self._config.canary_10pct_hold_s,
                 "canary_50pct_hold_s": self._config.canary_50pct_hold_s,
                 "auto_rollback": self._config.auto_rollback_on_failure,
                 "require_approval_for_full": self._config.require_approval_for_full,
+                "error_rate_threshold": self._config.error_rate_threshold,
+                "latency_ratio_threshold": self._config.latency_ratio_threshold,
             },
         }
 
@@ -806,6 +1350,8 @@ def create_deployment_harness(
     canary_50pct_hold_s: float = 1800.0,
     auto_rollback: bool = True,
     require_approval: bool = False,
+    error_rate_threshold: float = 0.01,
+    latency_ratio_threshold: float = 2.0,
 ) -> DeploymentHarness:
     """Create a deployment harness with custom configuration."""
     config = DeploymentHarnessConfig(
@@ -814,5 +1360,7 @@ def create_deployment_harness(
         canary_50pct_hold_s=canary_50pct_hold_s,
         auto_rollback_on_failure=auto_rollback,
         require_approval_for_full=require_approval,
+        error_rate_threshold=error_rate_threshold,
+        latency_ratio_threshold=latency_ratio_threshold,
     )
     return DeploymentHarness(config)

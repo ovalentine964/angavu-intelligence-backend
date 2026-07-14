@@ -346,6 +346,7 @@ class BiasharaAgent:
         self._event_bus: Any = None       # EventBus | None
         self._tracer: Any = None          # AgentTracer | None
         self._harness: Any = None         # AgentExecutionHarness | None
+        self._inference_harness: Any = None  # InferenceHarness | None
 
         # Background polling lifecycle
         self._poll_task: Optional[asyncio.Task] = None
@@ -367,6 +368,10 @@ class BiasharaAgent:
     def set_harness(self, harness: Any) -> None:
         """Inject the execution harness (called by orchestrator)."""
         self._harness = harness
+
+    def set_inference_harness(self, harness: Any) -> None:
+        """Inject the model inference harness (called by orchestrator)."""
+        self._inference_harness = harness
 
     # ── Lifecycle start / stop ──────────────────────────────────────
 
@@ -627,6 +632,66 @@ class BiasharaAgent:
                     threshold_factor=adjustment["threshold_factor"],
                 )
 
+    async def infer(
+        self,
+        prompt: str,
+        task_type: str = "general",
+        system_prompt: str = "",
+        expect_json: bool = False,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        complexity: Optional[str] = None,
+    ) -> Any:
+        """
+        Convenience method: run inference through the model harness.
+
+        Delegates to the injected InferenceHarness. Falls back to
+        the LLMService if no harness is injected.
+
+        Returns InferenceResult with output, cost, latency, quality.
+        """
+        if self._inference_harness:
+            return await self._inference_harness.infer(
+                prompt=prompt,
+                user_id=self.name,
+                task_type=task_type,
+                system_prompt=system_prompt,
+                expect_json=expect_json,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                complexity=complexity,
+            )
+
+        # Fallback: use LLMService directly (no harness features)
+        try:
+            from app.services.llm_service import get_llm_service, LLMMessage, LLMConfig
+            llm = get_llm_service()
+            messages = []
+            if system_prompt:
+                messages.append(LLMMessage(role="system", content=system_prompt))
+            messages.append(LLMMessage(role="user", content=prompt))
+            config = LLMConfig(
+                temperature=temperature or 0.7,
+                max_tokens=max_tokens or 512,
+            )
+            result = await llm.complete(messages, config)
+            # Wrap in a minimal InferenceResult-like object
+            from app.services.ml.inference_harness import InferenceResult, ModelTier
+            return InferenceResult(
+                success=result.success,
+                output=result.content,
+                model_used=result.model,
+                tier_used=ModelTier.ON_DEVICE,
+                input_tokens=result.usage.get("prompt_tokens", 0),
+                output_tokens=result.usage.get("completion_tokens", 0),
+                latency_ms=result.latency_ms,
+                error=result.error,
+            )
+        except Exception as exc:
+            self._logger.error("infer_fallback_failed", error=str(exc))
+            from app.services.ml.inference_harness import InferenceResult
+            return InferenceResult(success=False, error=str(exc))
+
     async def communicate(self, message: AgentMessage) -> None:
         """
         Send a message to another agent via the event bus.
@@ -735,6 +800,7 @@ class BiasharaAgent:
             "event_bus_connected": self._event_bus is not None,
             "tracer_connected": self._tracer is not None,
             "harness_connected": self._harness is not None,
+            "inference_harness_connected": self._inference_harness is not None,
             "services": {},
         }
 

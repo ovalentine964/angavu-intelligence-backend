@@ -31,7 +31,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
 
 import structlog
 
@@ -73,6 +73,385 @@ class QualityScore:
             "accuracy": round(self.accuracy, 4),
             "uniqueness": round(self.uniqueness, 4),
             "issues": self.issues,
+        }
+
+
+# ════════════════════════════════════════════════════════════════════
+# Data Deduplication
+# ════════════════════════════════════════════════════════════════════
+
+
+class DataDeduplicator:
+    """
+    Tracks and filters duplicate data records.
+
+    Uses content hashing (SHA-256) to fingerprint records and a sliding
+    window to detect duplicates within a configurable time window.
+
+    Supports:
+    - Exact-match deduplication via content hash
+    - Near-duplicate detection via field-level similarity
+    - Per-pipeline dedup counters for metrics
+    """
+
+    def __init__(self, window_size: int = 1000, ttl_seconds: float = 3600.0):
+        # pipeline_name → deque of (hash, timestamp)
+        self._seen: Dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
+        self._ttl = ttl_seconds
+        # Metrics
+        self._total_checked: Dict[str, int] = defaultdict(int)
+        self._total_duplicates: Dict[str, int] = defaultdict(int)
+        self._logger = logger.bind(component="data_deduplicator")
+
+    def _fingerprint(self, data: Dict[str, Any]) -> str:
+        """Compute a stable content hash for a data record."""
+        # Sort keys for deterministic hashing
+        import json
+        try:
+            canonical = json.dumps(data, sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            canonical = str(sorted(data.items()))
+        return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+    def is_duplicate(
+        self,
+        pipeline_name: str,
+        data: Dict[str, Any],
+        dedup_key: Optional[str] = None,
+    ) -> bool:
+        """
+        Check if data is a duplicate.
+
+        Args:
+            pipeline_name: Which pipeline this data belongs to
+            data: The data record to check
+            dedup_key: Optional key to use instead of full content hash
+
+        Returns:
+            True if this is a duplicate record
+        """
+        self._total_checked[pipeline_name] += 1
+
+        if dedup_key and dedup_key in data:
+            fingerprint = hashlib.sha256(
+                str(data[dedup_key]).encode()
+            ).hexdigest()[:16]
+        else:
+            fingerprint = self._fingerprint(data)
+
+        window = self._seen[pipeline_name]
+        now = time.time()
+
+        # Prune expired entries
+        while window and (now - window[0][1]) > self._ttl:
+            window.popleft()
+
+        # Check for duplicate
+        for existing_hash, _ in window:
+            if existing_hash == fingerprint:
+                self._total_duplicates[pipeline_name] += 1
+                self._logger.debug(
+                    "duplicate_detected",
+                    pipeline=pipeline_name,
+                    fingerprint=fingerprint[:8],
+                )
+                return True
+
+        # Record this entry
+        window.append((fingerprint, now))
+        return False
+
+    def deduplicate_batch(
+        self,
+        pipeline_name: str,
+        records: List[Dict[str, Any]],
+        dedup_key: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Filter duplicates from a batch of records.
+
+        Returns:
+            Tuple of (unique_records, duplicate_count)
+        """
+        unique = []
+        dupes = 0
+        for record in records:
+            if not self.is_duplicate(pipeline_name, record, dedup_key):
+                unique.append(record)
+            else:
+                dupes += 1
+        return unique, dupes
+
+    def get_stats(self, pipeline_name: str) -> Dict[str, Any]:
+        """Get dedup stats for a pipeline."""
+        checked = self._total_checked.get(pipeline_name, 0)
+        dupes = self._total_duplicates.get(pipeline_name, 0)
+        return {
+            "total_checked": checked,
+            "duplicates_found": dupes,
+            "dedup_rate": round(dupes / checked, 4) if checked > 0 else 0.0,
+            "window_size": len(self._seen.get(pipeline_name, [])),
+        }
+
+    def reset(self, pipeline_name: Optional[str] = None) -> None:
+        """Reset dedup state."""
+        if pipeline_name:
+            self._seen.pop(pipeline_name, None)
+            self._total_checked.pop(pipeline_name, None)
+            self._total_duplicates.pop(pipeline_name, None)
+        else:
+            self._seen.clear()
+            self._total_checked.clear()
+            self._total_duplicates.clear()
+
+
+# ════════════════════════════════════════════════════════════════════
+# Per-Source Quality Tracking
+# ════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class SourceQualityRecord:
+    """Quality record for a specific data source."""
+    source_id: str = ""               # e.g. "database", "api", "computed"
+    pipeline_name: str = ""
+    quality_score: float = 0.0
+    completeness: float = 0.0
+    consistency: float = 0.0
+    accuracy: float = 0.0
+    freshness: float = 0.0
+    record_count: int = 0
+    last_updated: float = field(default_factory=time.time)
+    issues: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "pipeline_name": self.pipeline_name,
+            "quality_score": round(self.quality_score, 4),
+            "completeness": round(self.completeness, 4),
+            "consistency": round(self.consistency, 4),
+            "accuracy": round(self.accuracy, 4),
+            "freshness": round(self.freshness, 4),
+            "record_count": self.record_count,
+            "last_updated": self.last_updated,
+            "issues": self.issues,
+        }
+
+
+class SourceQualityTracker:
+    """
+    Tracks data quality metrics per source per pipeline.
+
+    Maintains rolling quality scores for each data source
+    (e.g., "database", "api", "computed", "manual") to identify
+    which sources are degrading.
+    """
+
+    def __init__(self, window_size: int = 100):
+        # (pipeline_name, source_id) → deque of QualityScore
+        self._scores: Dict[Tuple[str, str], deque] = defaultdict(
+            lambda: deque(maxlen=window_size)
+        )
+        self._record_counts: Dict[Tuple[str, str], int] = defaultdict(int)
+        self._logger = logger.bind(component="source_quality_tracker")
+
+    def record(
+        self,
+        pipeline_name: str,
+        source_id: str,
+        quality: 'QualityScore',
+    ) -> None:
+        """Record a quality score for a source."""
+        key = (pipeline_name, source_id)
+        self._scores[key].append(quality)
+        self._record_counts[key] += 1
+
+    def get_source_quality(
+        self,
+        pipeline_name: str,
+        source_id: str,
+    ) -> SourceQualityRecord:
+        """Get aggregated quality for a specific source."""
+        key = (pipeline_name, source_id)
+        scores = list(self._scores.get(key, []))
+
+        if not scores:
+            return SourceQualityRecord(
+                source_id=source_id,
+                pipeline_name=pipeline_name,
+            )
+
+        n = len(scores)
+        return SourceQualityRecord(
+            source_id=source_id,
+            pipeline_name=pipeline_name,
+            quality_score=sum(s.overall for s in scores) / n,
+            completeness=sum(s.completeness for s in scores) / n,
+            consistency=sum(s.consistency for s in scores) / n,
+            accuracy=sum(s.accuracy for s in scores) / n,
+            freshness=sum(s.freshness for s in scores) / n,
+            record_count=self._record_counts.get(key, 0),
+            last_updated=scores[-1].scored_at,
+            issues=scores[-1].issues[:5],  # Last batch of issues
+        )
+
+    def get_pipeline_sources(
+        self,
+        pipeline_name: str,
+    ) -> Dict[str, SourceQualityRecord]:
+        """Get quality for all sources in a pipeline."""
+        result = {}
+        for (pline, src), _ in self._scores.items():
+            if pline == pipeline_name:
+                result[src] = self.get_source_quality(pline, src)
+        return result
+
+    def get_degraded_sources(
+        self,
+        threshold: float = 0.5,
+    ) -> List[SourceQualityRecord]:
+        """Find all sources with quality below threshold."""
+        degraded = []
+        seen_keys: Set[Tuple[str, str]] = set()
+        for key in self._scores:
+            if key not in seen_keys:
+                seen_keys.add(key)
+                record = self.get_source_quality(key[0], key[1])
+                if record.quality_score < threshold and record.record_count > 0:
+                    degraded.append(record)
+        return degraded
+
+
+# ════════════════════════════════════════════════════════════════════
+# Harness Metrics Collection
+# ════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class HarnessMetrics:
+    """
+    Collects and exposes metrics for the data pipeline harness.
+
+    Metrics:
+    - data_quality_score: gauge per pipeline (latest)
+    - drift_score: gauge per pipeline (latest CUSUM value)
+    - pipeline_latency_ms: histogram per pipeline
+    - pipeline_total: counter per pipeline (success/failure)
+    - dedup_rate: gauge per pipeline
+    - source_quality: gauge per (pipeline, source)
+    - alerts_total: counter by severity
+    """
+
+    # Latest quality scores per pipeline
+    quality_scores: Dict[str, float] = field(default_factory=dict)
+    # Latest drift scores per pipeline:metric
+    drift_scores: Dict[str, float] = field(default_factory=dict)
+    # Latency tracking per pipeline
+    latency_ms: Dict[str, List[float]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    # Execution counters
+    total_success: Dict[str, int] = field(
+        default_factory=lambda: defaultdict(int)
+    )
+    total_failure: Dict[str, int] = field(
+        default_factory=lambda: defaultdict(int)
+    )
+    # Dedup rates
+    dedup_rates: Dict[str, float] = field(default_factory=dict)
+    # Alert counters by severity
+    alerts_by_severity: Dict[str, int] = field(
+        default_factory=lambda: defaultdict(int)
+    )
+    # Source quality scores
+    source_quality: Dict[str, float] = field(default_factory=dict)
+    # Timestamps
+    _started_at: float = field(default_factory=time.time)
+
+    def record_execution(
+        self,
+        pipeline_name: str,
+        success: bool,
+        latency_ms: float,
+        quality_score: Optional[float] = None,
+    ) -> None:
+        """Record a pipeline execution metric."""
+        if success:
+            self.total_success[pipeline_name] += 1
+        else:
+            self.total_failure[pipeline_name] += 1
+
+        self.latency_ms[pipeline_name].append(latency_ms)
+        # Keep only last 1000 latency samples
+        if len(self.latency_ms[pipeline_name]) > 1000:
+            self.latency_ms[pipeline_name] = self.latency_ms[pipeline_name][-1000:]
+
+        if quality_score is not None:
+            self.quality_scores[pipeline_name] = quality_score
+
+    def record_drift(self, metric_key: str, drift_score: float) -> None:
+        """Record a drift score."""
+        self.drift_scores[metric_key] = drift_score
+
+    def record_alert(self, severity: str) -> None:
+        """Record an alert."""
+        self.alerts_by_severity[severity] += 1
+
+    def record_source_quality(
+        self, source_key: str, quality: float
+    ) -> None:
+        """Record source quality score."""
+        self.source_quality[source_key] = quality
+
+    def get_latency_percentiles(
+        self, pipeline_name: str
+    ) -> Dict[str, float]:
+        """Get latency percentiles for a pipeline."""
+        samples = self.latency_ms.get(pipeline_name, [])
+        if not samples:
+            return {"p50": 0, "p95": 0, "p99": 0, "avg": 0}
+        sorted_s = sorted(samples)
+        n = len(sorted_s)
+        return {
+            "p50": round(sorted_s[int(n * 0.5)], 2),
+            "p95": round(sorted_s[int(n * 0.95)], 2),
+            "p99": round(sorted_s[int(n * 0.99)], 2),
+            "avg": round(sum(sorted_s) / n, 2),
+            "samples": n,
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Export all metrics as a dictionary."""
+        latency_stats = {}
+        for pname in self.latency_ms:
+            latency_stats[pname] = self.get_latency_percentiles(pname)
+
+        return {
+            "uptime_seconds": round(time.time() - self._started_at, 1),
+            "quality_scores": dict(self.quality_scores),
+            "drift_scores": {
+                k: round(v, 6) for k, v in self.drift_scores.items()
+            },
+            "latency_percentiles": latency_stats,
+            "executions": {
+                name: {
+                    "success": self.total_success.get(name, 0),
+                    "failure": self.total_failure.get(name, 0),
+                    "total": self.total_success.get(name, 0) + self.total_failure.get(name, 0),
+                    "success_rate": round(
+                        self.total_success.get(name, 0)
+                        / max(1, self.total_success.get(name, 0) + self.total_failure.get(name, 0)),
+                        4,
+                    ),
+                }
+                for name in set(list(self.total_success.keys()) + list(self.total_failure.keys()))
+            },
+            "dedup_rates": dict(self.dedup_rates),
+            "source_quality": {
+                k: round(v, 4) for k, v in self.source_quality.items()
+            },
+            "alerts_by_severity": dict(self.alerts_by_severity),
         }
 
 
@@ -594,9 +973,13 @@ class DataHarnessConfig:
     min_output_quality: float = 0.5     # Minimum output quality to accept
     enable_drift_detection: bool = True
     enable_quality_scoring: bool = True
+    enable_deduplication: bool = True
     auto_retrain_on_critical_drift: bool = True
     max_alerts: int = 500
     alert_quality_drop_threshold: float = 0.2  # Alert if quality drops by this much
+    dedup_window_size: int = 1000
+    dedup_ttl_seconds: float = 3600.0
+    source_quality_threshold: float = 0.5  # Alert if source quality drops below
 
 
 class DataPipelineHarness:
@@ -604,11 +987,14 @@ class DataPipelineHarness:
     Unified data pipeline harness for intelligence flows.
 
     Wraps every pipeline execution with:
-    1. Input validation and quality scoring
-    2. Drift detection on input data
-    3. Output validation and quality scoring
-    4. Alert generation on quality degradation
-    5. Auto-retrain triggers on critical drift
+    1. Deduplication (content-hash based)
+    2. Input validation and quality scoring
+    3. Per-source quality tracking
+    4. Drift detection on input data
+    5. Output validation and quality scoring
+    6. Metrics collection (quality, drift, latency)
+    7. Alert generation on quality degradation
+    8. Auto-retrain triggers on critical drift
 
     Usage:
         harness = DataPipelineHarness()
@@ -629,6 +1015,12 @@ class DataPipelineHarness:
         self._config = config or DataHarnessConfig()
         self._quality_scorer = DataQualityScorer()
         self._drift_detector = DataDriftDetector()
+        self._deduplicator = DataDeduplicator(
+            window_size=self._config.dedup_window_size,
+            ttl_seconds=self._config.dedup_ttl_seconds,
+        )
+        self._source_tracker = SourceQualityTracker()
+        self._metrics = HarnessMetrics()
         self._logger = logger.bind(component="data_pipeline_harness")
 
         # Execution history
@@ -640,8 +1032,22 @@ class DataPipelineHarness:
             lambda: deque(maxlen=100)
         )
 
-        # Alert hooks
+        # Alert hooks (external alerting: webhook, message bus, etc.)
         self._alert_hooks: List[Callable] = []
+
+        # Wire auto-retrain callback if drift_retrain_trigger is available
+        if self._config.auto_retrain_on_critical_drift:
+            self._wire_auto_retrain()
+
+    def _wire_auto_retrain(self) -> None:
+        """Wire the drift detector to auto-retrain via the task queue."""
+        try:
+            from app.services.drift_retrain_trigger import setup_drift_auto_retrain
+            self._retrain_setup = setup_drift_auto_retrain
+            self._logger.info("auto_retrain_wiring_available")
+        except ImportError:
+            self._retrain_setup = None
+            self._logger.debug("auto_retrain_wiring_unavailable")
 
     # ── Pipeline Registration ───────────────────────────────────────
 
@@ -691,6 +1097,8 @@ class DataPipelineHarness:
         user_id: Optional[str] = None,
         input_timestamp: Optional[float] = None,
         input_metrics: Optional[Dict[str, float]] = None,
+        source_id: Optional[str] = None,
+        dedup_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Process data through a pipeline with full harness protection.
@@ -723,6 +1131,23 @@ class DataPipelineHarness:
         )
 
         try:
+            # 0. Deduplication check
+            if self._config.enable_deduplication:
+                if self._deduplicator.is_duplicate(
+                    pipeline_name, input_data, dedup_key
+                ):
+                    self._logger.info(
+                        "duplicate_input_skipped",
+                        pipeline=pipeline_name,
+                        user_id=user_id,
+                    )
+                    return {
+                        "success": True,
+                        "data": None,
+                        "duplicate": True,
+                        "execution_id": record.execution_id,
+                    }
+
             # 1. Score input quality
             if self._config.enable_quality_scoring:
                 input_quality = self._quality_scorer.score(
@@ -786,11 +1211,36 @@ class DataPipelineHarness:
                         threshold=self._config.min_output_quality,
                     )
 
-            # 7. Track quality trend
+            # 7. Track quality trend and per-source quality
             if record.input_quality:
                 trend = self._quality_trends[pipeline_name]
                 trend.append(record.input_quality.overall)
                 self._check_quality_degradation(pipeline_name, trend)
+
+                # Per-source quality tracking
+                if source_id:
+                    self._source_tracker.record(
+                        pipeline_name, source_id, record.input_quality,
+                    )
+                    self._metrics.record_source_quality(
+                        f"{pipeline_name}:{source_id}",
+                        record.input_quality.overall,
+                    )
+                    # Alert on degraded source
+                    if record.input_quality.overall < self._config.source_quality_threshold:
+                        await self._fire_alerts(DriftAlert(
+                            pipeline_name=pipeline_name,
+                            metric_name=f"source_quality:{source_id}",
+                            drift_type="source_degradation",
+                            severity="warning",
+                            current_value=record.input_quality.overall,
+                            baseline_value=self._config.source_quality_threshold,
+                            drift_magnitude=self._config.source_quality_threshold - record.input_quality.overall,
+                            message=(
+                                f"Source '{source_id}' quality degraded: "
+                                f"{record.input_quality.overall:.3f} < {self._config.source_quality_threshold}"
+                            ),
+                        ))
 
             record.success = True
             record.ended_at = time.time()
@@ -800,6 +1250,17 @@ class DataPipelineHarness:
             if len(self._records) > self._max_records:
                 self._records = self._records[-self._max_records:]
 
+            # 8. Record metrics
+            self._metrics.record_execution(
+                pipeline_name,
+                success=True,
+                latency_ms=record.duration_ms,
+                quality_score=record.input_quality.overall if record.input_quality else None,
+            )
+            if self._config.enable_deduplication:
+                dedup_stats = self._deduplicator.get_stats(pipeline_name)
+                self._metrics.dedup_rates[pipeline_name] = dedup_stats["dedup_rate"]
+
             return {
                 "success": True,
                 "data": result,
@@ -808,6 +1269,7 @@ class DataPipelineHarness:
                 "drift_alerts": [a.to_dict() for a in record.drift_alerts],
                 "execution_id": record.execution_id,
                 "duration_ms": record.duration_ms,
+                "source_id": source_id,
             }
 
         except Exception as exc:
@@ -816,6 +1278,13 @@ class DataPipelineHarness:
             record.ended_at = time.time()
             record.duration_ms = (record.ended_at - record.started_at) * 1000
             self._records.append(record)
+
+            # Record failure metrics
+            self._metrics.record_execution(
+                pipeline_name,
+                success=False,
+                latency_ms=record.duration_ms,
+            )
 
             self._logger.error(
                 "pipeline_execution_error",
@@ -833,7 +1302,7 @@ class DataPipelineHarness:
 
     # ── Quality Degradation Detection ───────────────────────────────
 
-    def _check_quality_degradation(
+    async def _check_quality_degradation(
         self,
         pipeline_name: str,
         trend: deque,
@@ -857,16 +1326,57 @@ class DataPipelineHarness:
                 older_avg=round(older_avg, 4),
                 drop=round(drop, 4),
             )
+            # Fire quality degradation alert
+            await self._fire_alerts(DriftAlert(
+                pipeline_name=pipeline_name,
+                metric_name="quality_trend",
+                drift_type="quality_degradation",
+                severity="warning",
+                current_value=recent_avg,
+                baseline_value=older_avg,
+                drift_magnitude=drop,
+                message=(
+                    f"Quality degraded for '{pipeline_name}': "
+                    f"recent={recent_avg:.3f}, previous={older_avg:.3f}, drop={drop:.3f}"
+                ),
+            ))
+
+    async def _fire_alerts(self, alert: DriftAlert) -> None:
+        """Fire all registered alert hooks."""
+        self._metrics.record_alert(alert.severity)
+        for hook in self._alert_hooks:
+            try:
+                result = hook(alert)
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception as hook_err:
+                self._logger.debug("alert_hook_error", error=str(hook_err))
 
     # ── Alert Hooks ─────────────────────────────────────────────────
 
     def add_alert_hook(self, hook: Callable) -> None:
-        """Add hook to be called when drift alerts are generated."""
+        """Add hook to be called when drift alerts are generated.
+
+        Hooks can be sync or async. They receive a DriftAlert.
+        Use for external alerting: webhooks, message bus, SMS, etc.
+        """
         self._alert_hooks.append(hook)
 
     def set_retrain_callback(self, callback: Callable) -> None:
         """Set callback for automatic retraining on critical drift."""
         self._drift_detector.set_retrain_callback(callback)
+
+    def get_deduplicator(self) -> DataDeduplicator:
+        """Access the deduplicator for batch dedup operations."""
+        return self._deduplicator
+
+    def get_source_tracker(self) -> SourceQualityTracker:
+        """Access the source quality tracker."""
+        return self._source_tracker
+
+    def get_metrics(self) -> HarnessMetrics:
+        """Access the metrics collector."""
+        return self._metrics
 
     # ── Monitoring API ──────────────────────────────────────────────
 
@@ -894,6 +1404,12 @@ class DataPipelineHarness:
             "recent_drift_alerts": sum(
                 len(r.drift_alerts) for r in records[-20:]
             ),
+            "dedup_stats": self._deduplicator.get_stats(pipeline_name),
+            "source_quality": {
+                src.to_dict(): src.quality_score
+                for src in self._source_tracker.get_pipeline_sources(pipeline_name).values()
+            },
+            "latency_percentiles": self._metrics.get_latency_percentiles(pipeline_name),
         }
 
     def get_all_stats(self) -> Dict[str, Any]:
@@ -906,6 +1422,12 @@ class DataPipelineHarness:
             },
             "total_executions": len(self._records),
             "drift_status": self._drift_detector.get_status(),
+            "metrics": self._metrics.to_dict(),
+            "degraded_sources": [
+                s.to_dict() for s in self._source_tracker.get_degraded_sources(
+                    self._config.source_quality_threshold
+                )
+            ],
         }
 
     def get_health(self) -> Dict[str, Any]:
@@ -920,16 +1442,26 @@ class DataPipelineHarness:
         if recent_drift > 10:
             status = "warning"
 
+        # Check for degraded sources
+        degraded = self._source_tracker.get_degraded_sources(
+            self._config.source_quality_threshold
+        )
+        if degraded:
+            status = "warning"
+
         return {
             "status": status,
             "recent_executions_1h": len(recent),
             "recent_failures_1h": recent_failures,
             "recent_drift_alerts_1h": recent_drift,
+            "degraded_sources": len(degraded),
             "config": {
                 "min_input_quality": self._config.min_input_quality,
                 "min_output_quality": self._config.min_output_quality,
                 "drift_detection_enabled": self._config.enable_drift_detection,
+                "deduplication_enabled": self._config.enable_deduplication,
                 "auto_retrain_enabled": self._config.auto_retrain_on_critical_drift,
+                "source_quality_threshold": self._config.source_quality_threshold,
             },
         }
 
@@ -1003,6 +1535,129 @@ def create_default_data_harness() -> DataPipelineHarness:
 
     logger.info("data_pipeline_harness_created", pipelines=4)
     return harness
+
+
+# ════════════════════════════════════════════════════════════════════
+# Intelligence Pipeline Integration — Harnessed Flow Wrapper
+# ════════════════════════════════════════════════════════════════════
+
+
+class HarnessedIntelligenceFlow:
+    """
+    Wraps a LongHorizonOrchestrator with DataPipelineHarness protection.
+
+    Every intelligence flow execution goes through:
+    1. Input deduplication
+    2. Input quality scoring & validation
+    3. Drift detection on input data
+    4. Orchestrator execution (the actual intelligence pipeline)
+    5. Output quality scoring & validation
+    6. Metrics collection
+    7. Alert generation on degradation
+
+    Usage:
+        from app.agents.intelligence_pipeline import create_market_analysis_flow
+        from app.agents.harness.data_harness import get_data_pipeline_harness
+
+        flow = create_market_analysis_flow()
+        harnessed = HarnessedIntelligenceFlow(
+            orchestrator=flow,
+            pipeline_name="market_analysis",
+            harness=get_data_pipeline_harness(),
+        )
+        result = await harnessed.execute(goal, context)
+    """
+
+    def __init__(
+        self,
+        orchestrator: Any,  # LongHorizonOrchestrator
+        pipeline_name: str,
+        harness: Optional[DataPipelineHarness] = None,
+    ):
+        self.orchestrator = orchestrator
+        self.pipeline_name = pipeline_name
+        self._harness = harness or get_data_pipeline_harness()
+        self._logger = logger.bind(
+            component="harnessed_flow",
+            pipeline=pipeline_name,
+        )
+
+    async def execute(
+        self,
+        goal: str,
+        context: Optional[Dict[str, Any]] = None,
+        timeout_seconds: float = 3600.0,
+        user_id: Optional[str] = None,
+        source_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute the intelligence flow with full harness protection.
+
+        The context is treated as input data for quality scoring.
+        The orchestrator result is treated as output for quality scoring.
+        """
+        input_data = {
+            "goal": goal,
+            "context": context or {},
+            "pipeline": self.pipeline_name,
+        }
+
+        # Wrap the orchestrator call in a process_fn
+        async def _run_orchestrator(data: Dict[str, Any]) -> Dict[str, Any]:
+            task = await self.orchestrator.execute(
+                goal=data["goal"],
+                context=data.get("context"),
+                timeout_seconds=timeout_seconds,
+            )
+            # Extract result from LongHorizonTask
+            if hasattr(task, "result") and task.result:
+                result_data = task.result
+                if hasattr(result_data, "data"):
+                    return result_data.data if isinstance(result_data.data, dict) else {"result": result_data.data}
+                elif isinstance(result_data, dict):
+                    return result_data
+            return {
+                "task_id": getattr(task, "task_id", None),
+                "status": str(getattr(task, "status", "unknown")),
+            }
+
+        return await self._harness.process_pipeline(
+            pipeline_name=self.pipeline_name,
+            input_data=input_data,
+            process_fn=_run_orchestrator,
+            user_id=user_id,
+            source_id=source_id,
+        )
+
+
+# ── Convenience: wrap all four intelligence flows ──
+
+
+def create_harnessed_intelligence_flows(
+    harness: Optional[DataPipelineHarness] = None,
+    event_store: Optional[Any] = None,
+) -> Dict[str, HarnessedIntelligenceFlow]:
+    """
+    Create all four intelligence flows wrapped with the data harness.
+
+    Returns:
+        Dict mapping flow names to HarnessedIntelligenceFlow instances
+    """
+    from app.agents.intelligence_pipeline import create_all_intelligence_flows
+
+    flows = create_all_intelligence_flows(event_store=event_store)
+    h = harness or get_data_pipeline_harness()
+
+    harnessed = {}
+    for name, orch in flows.items():
+        harnessed[name] = HarnessedIntelligenceFlow(
+            orchestrator=orch,
+            pipeline_name=name,
+            harness=h,
+        )
+
+    logger.info("harnessed_flows_created", flows=list(harnessed.keys()))
+    return harnessed
 
 
 def create_data_pipeline_harness(

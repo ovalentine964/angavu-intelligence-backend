@@ -19,6 +19,7 @@ Usage:
 # ── Agent Execution Harness ────────────────────────────────────────
 from app.agents.harness.execution import (
     AgentExecutionHarness,
+    AgentHealthTracker,
     AgentMetricsCollector,
     CanaryRouter,
     CircuitBreaker,
@@ -37,18 +38,25 @@ from app.agents.harness.data_harness import (
     DataPipelineHarness,
     DataHarnessConfig,
     DataDriftDetector,
+    DataDeduplicator,
     DataQualityScorer,
     DriftAlert,
+    HarnessMetrics,
+    HarnessedIntelligenceFlow,
     PipelineExecutionRecord,
     QualityDimension,
     QualityScore,
+    SourceQualityRecord,
+    SourceQualityTracker,
     create_data_pipeline_harness,
+    create_harnessed_intelligence_flows,
     get_data_pipeline_harness,
 )
 
 __all__ = [
     # Execution Harness
     "AgentExecutionHarness",
+    "AgentHealthTracker",
     "AgentMetricsCollector",
     "CanaryRouter",
     "CircuitBreaker",
@@ -64,11 +72,17 @@ __all__ = [
     "DataPipelineHarness",
     "DataHarnessConfig",
     "DataDriftDetector",
+    "DataDeduplicator",
     "DataQualityScorer",
     "DriftAlert",
+    "HarnessMetrics",
+    "HarnessedIntelligenceFlow",
     "PipelineExecutionRecord",
     "QualityDimension",
     "QualityScore",
+    "SourceQualityRecord",
+    "SourceQualityTracker",
     "create_data_pipeline_harness",
+    "create_harnessed_intelligence_flows",
     "get_data_pipeline_harness",
 ]

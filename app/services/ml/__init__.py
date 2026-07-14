@@ -15,5 +15,47 @@ Models work alongside existing classical stats — not replacing them.
 from app.services.ml.feature_engineering import FeatureEngineer
 from app.services.ml.xgboost_service import XGBoostService
 from app.services.ml.model_trainer import ModelTrainer
+from app.services.ml.inference_harness import (
+    InferenceHarness,
+    InferenceHarnessConfig,
+    InferenceResult,
+    ModelTier,
+    TaskComplexity,
+    ModelConfig,
+    CostBudgetManager,
+    OutputQualityValidator,
+    TokenTracker,
+    LatencyTracker,
+    SemanticCache,
+    TaskRouter,
+    ModelProvider,
+    LocalGGUFProvider,
+    HTTPModelProvider,
+    get_inference_harness,
+    create_default_inference_harness,
+    create_inference_harness,
+)
 
-__all__ = ["FeatureEngineer", "XGBoostService", "ModelTrainer"]
+__all__ = [
+    "FeatureEngineer",
+    "XGBoostService",
+    "ModelTrainer",
+    "InferenceHarness",
+    "InferenceHarnessConfig",
+    "InferenceResult",
+    "ModelTier",
+    "TaskComplexity",
+    "ModelConfig",
+    "CostBudgetManager",
+    "OutputQualityValidator",
+    "TokenTracker",
+    "LatencyTracker",
+    "SemanticCache",
+    "TaskRouter",
+    "ModelProvider",
+    "LocalGGUFProvider",
+    "HTTPModelProvider",
+    "get_inference_harness",
+    "create_default_inference_harness",
+    "create_inference_harness",
+]
