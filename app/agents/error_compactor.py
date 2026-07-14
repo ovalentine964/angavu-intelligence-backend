@@ -18,7 +18,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
 
@@ -420,7 +420,3 @@ class ErrorCompactor:
             "severity_distribution": dict(severity_counts),
             "resolved_count": sum(1 for e in self._errors.values() if e.resolution),
         }
-
-
-# ── Type alias for Tuple (used in _recent_fingerprints) ────────────
-from typing import Tuple

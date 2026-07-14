@@ -286,6 +286,22 @@ class OODAAgent(BiasharaAgent):
         """Access the current orientation state."""
         return self._orientation
 
+    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+        """Make a fast decision based on orientation state."""
+        event_data = context.get("event", {})
+        event = AgentEvent(
+            event_type=EventType(event_data.get("event_type", "agent.health.check")),
+            source=event_data.get("source", "unknown"),
+            payload=event_data.get("payload", {}),
+        )
+        observations = await self._observe(event)
+        await self._orient(observations)
+        return await self._decide(event, observations)
+
+    async def act(self, decision: AgentDecision) -> AgentResult:
+        """Execute the decision."""
+        return await self._act(decision)
+
     async def handle_event(self, event: AgentEvent) -> AgentResult:
         """Run an OODA cycle for the incoming event."""
         cycle = OODACycle(cycle_number=self._cycle_counter)

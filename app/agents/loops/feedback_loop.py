@@ -294,6 +294,45 @@ class FeedbackAgent(BiasharaAgent):
 
     # ── Core loop ──────────────────────────────────────────────────
 
+    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+        """Process context through feedback learning pipeline."""
+        event_data = context.get("event", {})
+        event_type = event_data.get("event_type", "")
+        if event_type in ("transaction.outcome", "feedback.received"):
+            return AgentDecision(
+                action="process_outcome",
+                parameters=event_data.get("payload", {}),
+                confidence=0.9,
+                reasoning="Processing outcome through feedback pipeline",
+            )
+        elif event_type == "strategy.evaluate":
+            return AgentDecision(
+                action="evaluate_strategies",
+                parameters={},
+                confidence=0.85,
+                reasoning="Triggering strategy evaluation cycle",
+            )
+        return AgentDecision(
+            action="pass_through",
+            parameters={},
+            confidence=0.5,
+            reasoning="No feedback signal in event",
+        )
+
+    async def act(self, decision: AgentDecision) -> AgentResult:
+        """Execute feedback pipeline action."""
+        if decision.action == "process_outcome":
+            # Create a synthetic event for handle_event
+            event = AgentEvent(
+                event_type=EventType.FEEDBACK_RECEIVED,
+                source=self.name,
+                payload=decision.parameters,
+            )
+            return await self._process_outcome(event)
+        elif decision.action == "evaluate_strategies":
+            return await self._evaluate_strategies()
+        return AgentResult(success=True, data={"action": decision.action})
+
     async def handle_event(self, event: AgentEvent) -> AgentResult:
         """
         Process a feedback event through the learning pipeline.

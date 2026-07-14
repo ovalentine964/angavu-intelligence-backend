@@ -195,7 +195,7 @@ async def connect_whatsapp(
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         "verified": False,
         "attempts": 0,
-    }
+    })
 
     # Send verification code via WhatsApp
     try:

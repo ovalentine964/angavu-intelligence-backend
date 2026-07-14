@@ -36,7 +36,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import IntEnum, Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 import structlog
@@ -64,10 +64,6 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
     DEAD_LETTERED = "dead_lettered"
     CANCELLED = "cancelled"
-
-
-# Import str enum
-from enum import Enum
 
 
 # Redis key patterns

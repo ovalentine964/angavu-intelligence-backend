@@ -251,7 +251,7 @@ services:
     container_name: msaidizi-whisper
     profiles: ["with-whisper"]
     ports:
-      - "127.0.0.1:9001:9000"
+      - "127.0.0.1:9002:9000"
     environment:
       - ASR_MODEL=base
       - ASR_ENGINE=openai_whisper

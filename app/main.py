@@ -30,6 +30,10 @@ from app.db.clickhouse import close_clickhouse, get_clickhouse
 from app.services.cache import get_cache
 from app.services.task_queue import get_task_queue
 
+# Loop and long-horizon infrastructure (used in lifespan)
+from app.api.agent_loops import set_loop_infrastructure
+from app.api.long_horizon import set_long_horizon_infrastructure
+
 from app.agents import (
     EventBus,
     AgentTracer,
@@ -753,11 +757,9 @@ from app.api.skills import router as skills_router
 
 # Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
 from app.api.agent_loops import router as agent_loops_router
-from app.api.agent_loops import set_loop_infrastructure
 
 # Long-horizon research (DeerFlow-inspired orchestration)
 from app.api.long_horizon import router as long_horizon_router
-from app.api.long_horizon import set_long_horizon_infrastructure
 
 # MCP (Model Context Protocol) server
 from app.mcp.router import router as mcp_router

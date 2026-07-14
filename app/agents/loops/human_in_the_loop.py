@@ -299,6 +299,17 @@ class HumanInTheLoopAgent(BiasharaAgent):
     def trust_score(self) -> TrustScore:
         return self._trust_score
 
+    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+        """Delegate thinking to wrapped agent."""
+        return await self._wrapped.think(context)
+
+    async def act(self, decision: AgentDecision) -> AgentResult:
+        """Delegate action to wrapped agent with HITL routing."""
+        result = await self._wrapped.act(decision)
+        # Track trust
+        self._trust_score.record_interaction(accepted=True, successful=result.success)
+        return result
+
     async def handle_event(self, event: AgentEvent) -> AgentResult:
         """
         Handle event with human-in-the-loop routing.

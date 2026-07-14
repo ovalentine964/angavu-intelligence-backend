@@ -28,6 +28,9 @@ from app.schemas.federated_learning import (
     GlobalModelResponse,
     UploadResponse,
 )
+
+# Security exception for PQC encryption
+from app.security.pqc.fl_encryption import SecurityException
 from app.services.federated_learning import FederatedLearningService
 
 # Post-Quantum Cryptography — ML-KEM-768 + ML-DSA-65
@@ -433,10 +436,6 @@ async def check_model_version(
 # ════════════════════════════════════════════════════════════════════
 # Helpers
 # ════════════════════════════════════════════════════════════════════
-
-
-# Import SecurityException from PQC module
-from app.security.pqc.fl_encryption import SecurityException
 
 
 def _parse_kotlin_payload(data: dict) -> FLUpdate:
