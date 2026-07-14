@@ -104,6 +104,14 @@ __all__ += [
     "SelfEvolutionService",
 ]
 
+# Hermes Agent Protocol
+from app.services.hermes_service import HermesService, create_hermes_service
+
+__all__ += [
+    "HermesService",
+    "create_hermes_service",
+]
+
 # ML Layer — XGBoost prediction services
 try:
     from app.services.ml import FeatureEngineer, XGBoostService, ModelTrainer

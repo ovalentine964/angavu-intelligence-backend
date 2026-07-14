@@ -98,6 +98,9 @@ class AgentInfrastructure:
     inference_harness: Any = None    # InferenceHarness
     deployment_harness: Any = None   # DeploymentHarness
 
+    # V5: Hermes Agent Protocol
+    hermes_service: Any = None       # HermesService
+
     def __post_init__(self):
         if not self.agent_map:
             self.agent_map = {a.name: a for a in self.agents}
@@ -351,6 +354,9 @@ class AgentFactory:
         # 18. Attach sub-agent orchestration and skill generation
         infrastructure = await self._attach_subagent_infrastructure(infrastructure, event_bus, tracer)
 
+        # 19. Attach Hermes Agent Protocol
+        infrastructure = await self._attach_hermes(infrastructure, event_bus, tracer)
+
         self._infrastructure = infrastructure
         total_agents = (
             len(core_agents) + len(domain_agents) + len(new_agents) + len(utility_agents) + 1
@@ -375,6 +381,7 @@ class AgentFactory:
             has_data_pipeline_harness=infrastructure.data_pipeline_harness is not None,
             has_inference_harness=infrastructure.inference_harness is not None,
             has_deployment_harness=infrastructure.deployment_harness is not None,
+            has_hermes=infrastructure.hermes_service is not None,
         )
 
         return infrastructure
@@ -441,6 +448,13 @@ class AgentFactory:
                 await agent.stop()
             except (RuntimeError, OSError) as exc:
                 self._logger.warning("core_agent_stop_error", agent=agent.name, error=str(exc))
+
+        # Stop Hermes service
+        if infra.hermes_service:
+            try:
+                await infra.hermes_service.shutdown()
+            except (RuntimeError, OSError) as exc:
+                self._logger.warning("hermes_stop_error", error=str(exc))
 
         # Stop financial agents
         for agent in reversed(infra.financial_agents):
@@ -948,6 +962,30 @@ class AgentFactory:
             )
         except (ImportError, AttributeError, RuntimeError) as exc:
             self._logger.warning("subagent_infrastructure_setup_failed", error=str(exc))
+
+        return infrastructure
+
+    async def _attach_hermes(
+        self,
+        infrastructure: AgentInfrastructure,
+        event_bus: EventBus,
+        tracer: AgentTracer,
+    ) -> AgentInfrastructure:
+        """Create and attach Hermes Agent Protocol service."""
+        try:
+            from app.services.hermes_service import create_hermes_service
+
+            hermes_service = create_hermes_service(event_bus=event_bus)
+            await hermes_service.initialize()
+
+            infrastructure.hermes_service = hermes_service
+
+            self._logger.info(
+                "hermes_attached",
+                stats=hermes_service.get_stats(),
+            )
+        except (ImportError, AttributeError, RuntimeError) as exc:
+            self._logger.warning("hermes_setup_failed", error=str(exc))
 
         return infrastructure
 

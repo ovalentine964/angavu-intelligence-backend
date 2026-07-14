@@ -90,6 +90,12 @@ class EventType(str, Enum):
     CUSTOMER_FEEDBACK_RECEIVED = "customer.feedback.received"
     REVENUE_METRIC_RECORDED = "revenue.metric.recorded"
 
+    # V5: Hermes Agent Protocol
+    HERMES_SESSION_CREATED = "hermes.session.created"
+    HERMES_SKILL_DISCOVERED = "hermes.skill.discovered"
+    HERMES_SKILL_IMPROVED = "hermes.skill.improved"
+    HERMES_MEMORY_CONSOLIDATED = "hermes.memory.consolidated"
+
     # V2: Domain & System Coordination
     DOMAIN_ANALYSIS_REQUESTED = "domain.analysis.requested"
     DOMAIN_ANALYSIS_COMPLETED = "domain.analysis.completed"
