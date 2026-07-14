@@ -130,6 +130,10 @@ services:
     env_file: .env
     environment:
       - APP_ENV=production
+      - DEPLOYMENT_HARNESS_ENABLED=true
+      - CANARY_1PCT_HOLD_S=${CANARY_1PCT_HOLD_S:-300}
+      - CANARY_10PCT_HOLD_S=${CANARY_10PCT_HOLD_S:-600}
+      - CANARY_50PCT_HOLD_S=${CANARY_50PCT_HOLD_S:-1800}
     volumes:
       - app-data:/app/data
       - app-logs:/app/logs

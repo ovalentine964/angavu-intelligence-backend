@@ -97,6 +97,10 @@ from app.agents.intelligence_pipeline import (
     create_distribution_analysis_flow,
     create_competitor_analysis_flow,
     create_all_intelligence_flows,
+    create_harnessed_flows,
+    get_harnessed_intelligence_flows,
+    IntelligenceDriftMonitor,
+    get_intelligence_drift_monitor,
 )
 
 # V2: MetaAgent (Tier 1 system orchestrator)
@@ -225,6 +229,10 @@ __all__ = [
     "create_distribution_analysis_flow",
     "create_competitor_analysis_flow",
     "create_all_intelligence_flows",
+    "create_harnessed_flows",
+    "get_harnessed_intelligence_flows",
+    "IntelligenceDriftMonitor",
+    "get_intelligence_drift_monitor",
     # 12-Factor: Context, Errors, State
     "ContextManager",
     "AgentContextManager",

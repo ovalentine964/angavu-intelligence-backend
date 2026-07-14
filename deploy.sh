@@ -818,6 +818,17 @@ for svc in "${SERVICES[@]}"; do
         docker restart "$CONTAINER" 2>/dev/null || true
     fi
 done
+
+# ── Deployment Harness health check ────────────────────────
+API_PREFIX="${API_V1_PREFIX:-/api/v1}"
+DEPLOY_HEALTH=$(curl -sf "http://localhost:8000${API_PREFIX}/deploy/health" 2>/dev/null || echo "")
+if [ -n "$DEPLOY_HEALTH" ]; then
+    ACTIVE=$(echo "$DEPLOY_HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('active_deployments',0))" 2>/dev/null || echo "0")
+    RECENT_ROLLBACKS=$(echo "$DEPLOY_HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('recent_rollbacks',0))" 2>/dev/null || echo "0")
+    if [ "$RECENT_ROLLBACKS" -gt 3 ]; then
+        echo "[$(date -u '+%Y-%m-%d %H:%M:%S')] WARN: Deployment harness has $RECENT_ROLLBACKS recent rollbacks"
+    fi
+fi
 HEALTH_SCRIPT
 
 chmod +x scripts/health.sh
@@ -883,6 +894,16 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 
+# Test Deployment Harness endpoint
+API_V1_PREFIX="${API_V1_PREFIX:-/api/v1}"
+if curl -sf "http://localhost:8000${API_V1_PREFIX}/deploy/health" >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✅${NC} Deployment Harness — active"
+    HEALTHY=$((HEALTHY + 1))
+else
+    echo -e "  ${YELLOW}⚠️${NC}  Deployment Harness — not responding (non-critical)"
+fi
+TOTAL=$((TOTAL + 1))
+
 echo ""
 echo "  Services healthy: $HEALTHY / $TOTAL"
 echo ""
@@ -911,6 +932,11 @@ echo "    $COMPOSE_CMD logs -f       # Logs"
 echo "    $COMPOSE_CMD restart       # Restart all"
 echo "    $COMPOSE_CMD down          # Stop all"
 echo "    $COMPOSE_CMD up -d         # Start all"
+echo ""
+echo "  Deployment Harness (Canary Releases):"
+echo "    bash scripts/canary-deploy.sh --component <name> --new <version>"
+echo "    API: http://${IP}:8000${API_V1_PREFIX}/deploy/health"
+echo "    Docs: http://${IP}:8000/docs → Deployment Harness"
 echo ""
 if [ "${ENABLE_WHATSAPP:-false}" = "true" ]; then
     echo "  WhatsApp (OpenWA):"
