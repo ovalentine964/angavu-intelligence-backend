@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     # === External Services ===
     OPENWA_URL: str = "http://localhost:3000"
     OPENWA_WEBHOOK_SECRET: str = ""
+    ENABLE_WHATSAPP: bool = False  # Set to true to enable WhatsApp (OpenWA) integration
     # NOTE: GROQ_API_KEY, DEEPSEEK_API_KEY, NVIDIA_NIM_API_KEY removed.
     # Angavu uses zero-cost on-device inference only.
     # No paid API keys are needed or accepted.
@@ -183,8 +184,12 @@ class Settings(BaseSettings):
     @field_validator("OPENWA_WEBHOOK_SECRET")
     @classmethod
     def validate_webhook_secret(cls, v, info):
+        # Skip validation when WhatsApp is disabled
+        enable_whatsapp = os.getenv("ENABLE_WHATSAPP", info.data.get("ENABLE_WHATSAPP", "false"))
+        if str(enable_whatsapp).lower() in ("false", "0", "no", ""):
+            return v
         if not v or v == "change-me":
-            raise ValueError("OPENWA_WEBHOOK_SECRET must be set (got default)")
+            raise ValueError("OPENWA_WEBHOOK_SECRET must be set when ENABLE_WHATSAPP=true (got default)")
         env = os.getenv("APP_ENV", info.data.get("APP_ENV", "development"))
         if env == "production" and len(v) < 16:
             raise ValueError("OPENWA_WEBHOOK_SECRET must be at least 16 characters in production")

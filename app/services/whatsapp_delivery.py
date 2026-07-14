@@ -67,6 +67,12 @@ class WhatsAppDelivery:
         self._last_send_time: Dict[str, float] = {}
         self._send_count: int = 0
         self._window_start: float = 0
+        # Check if WhatsApp is enabled via settings
+        try:
+            from app.config import get_settings
+            self.enabled = get_settings().ENABLE_WHATSAPP
+        except Exception:
+            self.enabled = False
 
     async def send_message(
         self,
@@ -88,6 +94,10 @@ class WhatsAppDelivery:
         normalized = self._normalize_phone(phone)
         if not normalized:
             logger.error("invalid_phone", phone=phone)
+            return False
+
+        if not self.enabled:
+            logger.debug("whatsapp_disabled_skip_delivery", phone=normalized[:6] + "****")
             return False
 
         # Truncate if too long

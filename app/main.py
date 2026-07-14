@@ -129,6 +129,10 @@ async def lifespan(app: FastAPI):
     if settings.has_clickhouse:
         try:
             await get_clickhouse()
+            # Apply schema on first boot (idempotent — all IF NOT EXISTS)
+            from app.db.clickhouse import ClickHouseClient
+            ch_client = ClickHouseClient()
+            await ch_client.ensure_schema()
             logger.info("clickhouse_initialized")
         except (ConnectionError, OSError, TimeoutError) as e:
             logger.warning("clickhouse_init_failed", error=str(e))
@@ -554,14 +558,22 @@ async def health_check():
             ch_ok = False
     components["clickhouse"] = "ok" if ch_ok else ("unavailable" if settings.has_clickhouse else "not_configured")
 
-    # 4. OpenWA health
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(f"{settings.OPENWA_URL}/health")
-            components["openwa"] = "ok" if resp.status_code == 200 else "degraded"
-    except Exception:
-        components["openwa"] = "unreachable"
+    # 4. OpenWA health (only when WhatsApp is enabled)
+    if settings.ENABLE_WHATSAPP:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"{settings.OPENWA_URL}/health")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    wa_connected = data.get("whatsapp", {}).get("connected", False)
+                    components["openwa"] = "ok" if wa_connected else "awaiting_scan"
+                else:
+                    components["openwa"] = "degraded"
+        except Exception:
+            components["openwa"] = "unreachable"
+    else:
+        components["openwa"] = "disabled"
 
     # 5. Task queue health
     components["task_queue"] = "ok" if get_task_queue()._connected else "unavailable"

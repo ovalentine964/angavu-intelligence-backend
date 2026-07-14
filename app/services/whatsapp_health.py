@@ -63,7 +63,7 @@ class WhatsAppHealthMonitor:
             - errors: int
             - uptime: int (seconds)
             - last_disconnect: dict or None
-            - status: str ("healthy", "degraded", "down", "disconnected")
+            - status: str ("healthy", "degraded", "down", "disconnected", "disabled")
         """
         result = {
             "service_running": False,
@@ -77,6 +77,13 @@ class WhatsAppHealthMonitor:
             "status": "unknown",
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }
+
+        # If WhatsApp is disabled, return early without attempting connection
+        if not settings.ENABLE_WHATSAPP:
+            result["status"] = "disabled"
+            self._last_check = datetime.now(timezone.utc)
+            self._last_status = result
+            return result
 
         try:
             async with httpx.AsyncClient() as client:
@@ -209,6 +216,7 @@ class WhatsAppHealthMonitor:
             "down": "OpenWA service is unreachable",
             "timeout": "OpenWA health check timed out",
             "error": "Error checking OpenWA health",
+            "disabled": "WhatsApp integration is disabled (ENABLE_WHATSAPP=false)",
         }
 
         return {

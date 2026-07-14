@@ -81,3 +81,4 @@ nginx/ssl/
 
 # === Deployment ===
 /opt/angavu/
+backups/

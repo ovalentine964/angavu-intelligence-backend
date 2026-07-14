@@ -69,6 +69,7 @@ class WhatsAppBot:
         self.db = db
         self.report_gen = ReportGenerator(db)
         self.openwa_url = settings.OPENWA_URL
+        self.enabled = settings.ENABLE_WHATSAPP
 
     async def process_message(
         self,
@@ -522,6 +523,9 @@ class WhatsAppBot:
         Returns:
             True if sent successfully
         """
+        if not self.enabled:
+            logger.debug("whatsapp_disabled_skip_send", phone=phone[:6] + "****")
+            return False
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -566,6 +570,9 @@ class WhatsAppBot:
         Returns:
             True if sent successfully
         """
+        if not self.enabled:
+            logger.debug("whatsapp_disabled_skip_image", phone=phone[:6] + "****")
+            return False
         try:
             import base64
             image_b64 = base64.b64encode(image_data).decode("utf-8")
