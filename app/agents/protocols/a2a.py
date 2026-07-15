@@ -464,8 +464,17 @@ class A2AClient:
     - Multi-agent delegation (parallel and sequential)
     """
 
-    def __init__(self, agent_name: str = "angavu-client"):
+    def __init__(
+        self,
+        agent_name: str = "angavu-client",
+        http_timeout: float = 30.0,
+        http_max_retries: int = 3,
+        auth_token: Optional[str] = None,
+    ):
         self.agent_name = agent_name
+        self._http_timeout = http_timeout
+        self._http_max_retries = http_max_retries
+        self._auth_token = auth_token
         self._discovered_agents: Dict[str, A2AAgentCard] = {}
         self._active_tasks: Dict[str, Dict[str, Any]] = {}
 
@@ -473,18 +482,27 @@ class A2AClient:
 
     # ── Discovery ───────────────────────────────────────────────────
 
-    async def discover_agent(self, url: str) -> A2AAgentCard:
+    async def discover_agent(self, url: str | A2AAgentCard) -> A2AAgentCard:
         """
         Discover an agent by fetching its Agent Card.
 
-        In production, fetches from https://<host>/.well-known/agent.json
+        Fetches from https://<host>/.well-known/agent.json
         For local agents, accepts direct AgentCard objects.
         """
         if isinstance(url, A2AAgentCard):
             card = url
         else:
-            # In production, this would be an HTTP GET
-            raise NotImplementedError(f"HTTP discovery not yet implemented. Got: {url}")
+            # Use HTTP transport for remote discovery
+            from app.agents.protocols.a2a_transport import A2AHttpClient
+            http_client = A2AHttpClient(
+                timeout=self._http_timeout,
+                max_retries=self._http_max_retries,
+                auth_token=self._auth_token,
+            )
+            try:
+                card = await http_client.discover_agent(url)
+            finally:
+                await http_client.close()
 
         self._discovered_agents[card.agent_id] = card
         self._logger.info(
@@ -565,8 +583,30 @@ class A2AClient:
             "request": request,
         }
 
-        # In production, this would be an HTTP POST to card.url
-        # For local agents, we'd route to a registered A2AServer
+        # Send task via HTTP transport if agent has a URL
+        if card.url:
+            from app.agents.protocols.a2a_transport import A2AHttpClient
+            http_client = A2AHttpClient(
+                timeout=self._http_timeout,
+                max_retries=self._http_max_retries,
+                auth_token=self._auth_token,
+            )
+            try:
+                task = await http_client.send_task(
+                    agent_card=card,
+                    message=message,
+                    capability=capability,
+                    data=data,
+                    metadata=task_metadata,
+                )
+                # Update task_id to match what we stored
+                task.task_id = task_id
+                task.history = [task_message]
+                return task
+            finally:
+                await http_client.close()
+
+        # Fallback for agents without URL (local-only)
         return A2ATask(
             task_id=task_id,
             status=A2ATaskStatus(state=A2ATaskState.SUBMITTED),
@@ -644,6 +684,66 @@ class A2AClient:
                     break
 
         return task
+
+    async def poll_task(
+        self,
+        target_agent_id: str,
+        task_id: str,
+    ) -> A2ATask:
+        """
+        Poll task status from an external agent.
+
+        Args:
+            target_agent_id: ID of the target agent
+            task_id: ID of the task to check
+
+        Returns:
+            A2ATask with current status
+        """
+        card = self._discovered_agents.get(target_agent_id)
+        if not card:
+            raise ValueError(f"Agent not discovered: {target_agent_id}")
+
+        from app.agents.protocols.a2a_transport import A2AHttpClient
+        http_client = A2AHttpClient(
+            timeout=self._http_timeout,
+            max_retries=self._http_max_retries,
+            auth_token=self._auth_token,
+        )
+        try:
+            return await http_client.get_task_status(card, task_id)
+        finally:
+            await http_client.close()
+
+    async def cancel_task(
+        self,
+        target_agent_id: str,
+        task_id: str,
+    ) -> A2ATask:
+        """
+        Cancel a task on an external agent.
+
+        Args:
+            target_agent_id: ID of the target agent
+            task_id: ID of the task to cancel
+
+        Returns:
+            A2ATask with canceled status
+        """
+        card = self._discovered_agents.get(target_agent_id)
+        if not card:
+            raise ValueError(f"Agent not discovered: {target_agent_id}")
+
+        from app.agents.protocols.a2a_transport import A2AHttpClient
+        http_client = A2AHttpClient(
+            timeout=self._http_timeout,
+            max_retries=self._http_max_retries,
+            auth_token=self._auth_token,
+        )
+        try:
+            return await http_client.cancel_task(card, task_id)
+        finally:
+            await http_client.close()
 
     # ── Parallel Delegation ─────────────────────────────────────────
 

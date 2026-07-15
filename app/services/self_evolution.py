@@ -21,6 +21,7 @@ Design principles:
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -507,6 +508,142 @@ class SelfEvolutionService:
 
     # ── Adoption Tracking ─────────────────────────────────────────
 
+    def evaluate_quality(
+        self,
+        feedbacks: Optional[List[WorkerFeedback]] = None,
+        adoptions: Optional[Dict[str, FeatureAdoption]] = None,
+    ) -> Dict[str, Any]:
+        """Evaluate overall evolution quality using real metrics.
+
+        Replaces the previous hardcoded 0.5-0.7 judge scores with a
+        multi-signal heuristic that considers:
+
+        1. **Feedback sentiment** — weighted average of sentiment scores,
+           newer feedback weighted more heavily (exponential decay).
+        2. **Feature adoption** — ratio of features with >10% adoption,
+           weighted by affected worker count.
+        3. **Error rate** — proportion of bug reports and complaints
+           relative to total feedback (lower is better).
+        4. **Urgency resolution** — proportion of high-urgency feedback
+           that has moved past COLLECTED status.
+        5. **Feedback diversity** — Shannon entropy of feedback types
+           (higher diversity = healthier evolution signal).
+
+        Returns:
+            Dict with overall_score (0-1), component scores, and
+            diagnostics.
+        """
+        if feedbacks is None:
+            feedbacks = list(self._feedback.values())
+        if adoptions is None:
+            adoptions = self._adoptions
+
+        if not feedbacks:
+            return {
+                "overall_score": 0.0,
+                "components": {},
+                "diagnostics": "no_feedback_available",
+            }
+
+        now = datetime.now(timezone.utc)
+
+        # ── Component 1: Weighted feedback sentiment (0-1) ──
+        # Newer feedback gets more weight (half-life = 30 days)
+        weighted_sentiment_sum = 0.0
+        weight_total = 0.0
+        for fb in feedbacks:
+            age_days = max((now - fb.collected_at).total_seconds() / 86400, 0.01)
+            recency_weight = math.exp(-0.023 * age_days)  # half-life ≈ 30 days
+            weighted_sentiment_sum += fb.sentiment_score * recency_weight
+            weight_total += recency_weight
+
+        avg_sentiment = weighted_sentiment_sum / weight_total if weight_total > 0 else 0.0
+        # Map from [-1, 1] to [0, 1]
+        sentiment_score = (avg_sentiment + 1.0) / 2.0
+
+        # ── Component 2: Feature adoption quality (0-1) ──
+        if adoptions:
+            adoption_scores = []
+            for adoption in adoptions.values():
+                # Each feature contributes based on adoption rate and scale
+                feat_score = adoption.adoption_rate
+                # Bonus for positive satisfaction delta
+                if adoption.satisfaction_delta > 0:
+                    feat_score = min(1.0, feat_score + adoption.satisfaction_delta * 0.3)
+                # Penalty for negative satisfaction
+                elif adoption.satisfaction_delta < 0:
+                    feat_score = max(0.0, feat_score + adoption.satisfaction_delta * 0.3)
+                adoption_scores.append(feat_score)
+            adoption_score = sum(adoption_scores) / len(adoption_scores)
+        else:
+            # No deployed features yet — neutral score based on pipeline activity
+            specs_count = len(self._specs)
+            adoption_score = min(0.5, specs_count * 0.1)  # Partial credit for specs
+
+        # ── Component 3: Error rate (0-1, inverted so lower error = higher score) ──
+        error_types = {FeedbackType.BUG_REPORT, FeedbackType.COMPLAINT, FeedbackType.CORRECTION}
+        error_count = sum(1 for fb in feedbacks if fb.feedback_type in error_types)
+        error_ratio = error_count / len(feedbacks)
+        # Sigmoid mapping: error_ratio=0 → 1.0, error_ratio=0.5 → 0.5, error_ratio=1 → 0.0
+        error_score = 1.0 / (1.0 + math.exp(5.0 * (error_ratio - 0.3)))
+
+        # ── Component 4: Urgency resolution (0-1) ──
+        high_urgency = [fb for fb in feedbacks if fb.urgency_score >= 0.6]
+        if high_urgency:
+            resolved = sum(
+                1 for fb in high_urgency
+                if fb.status not in {FeedbackStatus.COLLECTED, FeedbackStatus.ANALYZING}
+            )
+            urgency_resolution = resolved / len(high_urgency)
+        else:
+            urgency_resolution = 1.0  # No urgent items = perfect score
+
+        # ── Component 5: Feedback type diversity (Shannon entropy) ──
+        type_counts: Dict[str, int] = Counter(fb.feedback_type.value for fb in feedbacks)
+        total = sum(type_counts.values())
+        entropy = 0.0
+        for count in type_counts.values():
+            p = count / total
+            if p > 0:
+                entropy -= p * math.log2(p)
+        max_entropy = math.log2(max(len(FeedbackType), 1))
+        diversity_score = entropy / max_entropy if max_entropy > 0 else 0.0
+
+        # ── Weighted combination ──
+        weights = {
+            "sentiment": 0.25,
+            "adoption": 0.25,
+            "error_rate": 0.20,
+            "urgency_resolution": 0.15,
+            "diversity": 0.15,
+        }
+        components = {
+            "sentiment": round(sentiment_score, 4),
+            "adoption": round(adoption_score, 4),
+            "error_rate": round(error_score, 4),
+            "urgency_resolution": round(urgency_resolution, 4),
+            "diversity": round(diversity_score, 4),
+        }
+
+        overall = sum(
+            components[k] * weights[k] for k in weights
+        )
+        overall = round(max(0.0, min(1.0, overall)), 4)
+
+        return {
+            "overall_score": overall,
+            "components": components,
+            "weights": weights,
+            "diagnostics": {
+                "total_feedback": len(feedbacks),
+                "error_count": error_count,
+                "high_urgency_count": len(high_urgency),
+                "features_deployed": len(adoptions),
+                "specs_generated": len(self._specs),
+                "feedback_types": dict(type_counts),
+            },
+        }
+
     async def track_adoption(self, feature_id: str) -> Dict[str, Any]:
         """
         Track feature adoption and impact.
@@ -644,20 +781,57 @@ class SelfEvolutionService:
         return f"FEEDBACK: {text_clean}"
 
     def _score_sentiment(self, text: str) -> float:
-        """Score sentiment from -1 (negative) to 1 (positive)."""
-        # Simple keyword-based scoring — in production, use NIM sentiment model
+        """Score sentiment from -1 (negative) to 1 (positive).
+
+        Uses a weighted keyword-based heuristic with intensity modifiers.
+        In production, replace with NIM sentiment model.
+        """
         text_lower = text.lower()
 
-        positive_words = ["good", "great", "love", "amazing", "helpful", "thank", "perfect"]
-        negative_words = ["bad", "hate", "terrible", "slow", "broken", "wrong", "frustrating"]
+        # Weighted positive words (stronger sentiment = higher weight)
+        positive_words = {
+            "good": 1, "great": 2, "love": 3, "amazing": 3,
+            "helpful": 2, "thank": 1, "perfect": 3, "excellent": 3,
+            "wonderful": 3, "fantastic": 3, "awesome": 2, "nice": 1,
+            "useful": 1, "impressed": 2, "brilliant": 3,
+        }
+        # Weighted negative words
+        negative_words = {
+            "bad": 1, "hate": 3, "terrible": 3, "slow": 2,
+            "broken": 3, "wrong": 2, "frustrating": 3, "awful": 3,
+            "useless": 3, "annoying": 2, "disappointing": 2,
+            "poor": 1, "horrible": 3, "worst": 3,
+        }
+        # Intensity modifiers amplify nearby sentiment
+        intensifiers = {"very", "really", "extremely", "absolutely", "so"}
+        negators = {"not", "never", "no", "don't", "doesn't", "isn't", "wasn't"}
 
-        pos_count = sum(1 for w in positive_words if w in text_lower)
-        neg_count = sum(1 for w in negative_words if w in text_lower)
+        words = text_lower.split()
+        pos_score = 0.0
+        neg_score = 0.0
 
-        if pos_count + neg_count == 0:
+        for i, word in enumerate(words):
+            # Check for preceding intensifier
+            intensity = 1.5 if i > 0 and words[i - 1] in intensifiers else 1.0
+            # Check for preceding negator (flips sentiment)
+            negated = i > 0 and words[i - 1] in negators
+
+            if word in positive_words:
+                if negated:
+                    neg_score += positive_words[word] * intensity
+                else:
+                    pos_score += positive_words[word] * intensity
+            elif word in negative_words:
+                if negated:
+                    pos_score += negative_words[word] * intensity * 0.5  # Negated negative is weakly positive
+                else:
+                    neg_score += negative_words[word] * intensity
+
+        total = pos_score + neg_score
+        if total == 0:
             return 0.0
 
-        return round((pos_count - neg_count) / (pos_count + neg_count), 3)
+        return round((pos_score - neg_score) / total, 3)
 
     def _score_urgency(self, text: str, feedback_type: FeedbackType) -> float:
         """Score urgency from 0 (low) to 1 (critical)."""

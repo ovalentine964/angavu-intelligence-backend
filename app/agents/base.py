@@ -130,6 +130,27 @@ class EventType(str, Enum):
     ADAPTIVE_LEARNING_PUSHED = "adaptive_learning.pushed"
     ADAPTIVE_LEARNING_SYNCED = "adaptive_learning.synced"
 
+    # Governance Swarm
+    AUDIT_REQUESTED = "audit.requested"
+    AUDIT_COMPLETED = "audit.completed"
+    AUDIT_FINDING = "audit.finding"
+    ETHICS_REVIEW = "ethics.review"
+    ETHICS_VIOLATION = "ethics.violation"
+    ETHICS_ASSESSMENT = "ethics.assessment"
+    PRIVACY_REQUEST = "privacy.request"
+    PRIVACY_AUDIT = "privacy.audit"
+    PRIVACY_BREACH = "privacy.breach"
+    GOVERNANCE_REPORT = "governance.report"
+
+    # Research Swarm
+    RESEARCH_REQUESTED = "research.requested"
+    RESEARCH_COMPLETED = "research.completed"
+    MARKET_TREND_DETECTED = "market.trend.detected"
+    COMPETITOR_ALERT = "competitor.alert"
+    USER_INSIGHT_GENERATED = "user.insight.generated"
+    INNOVATION_PROPOSED = "innovation.proposed"
+    FEATURE_IDEA = "feature.idea"
+
     # System
     AGENT_HEALTH_CHECK = "agent.health.check"
     PIPELINE_ERROR = "pipeline.error"

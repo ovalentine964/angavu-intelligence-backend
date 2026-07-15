@@ -143,6 +143,20 @@ from app.agents.implementations_extra import (
     SocialHandler,
 )
 
+# V6: Governance Swarm (Swarm 5)
+from app.agents.governance import (
+    AuditAgent,
+    EthicsAgent,
+    PrivacyAgent,
+)
+
+# V6: Research Swarm (Swarm 6)
+from app.agents.research import (
+    MarketResearchAgent,
+    UserInsightAgent,
+    InnovationAgent,
+)
+
 # V2: Communication Protocols
 from app.agents.communication import (
     BroadcastProtocol,
@@ -285,4 +299,12 @@ __all__ = [
     "OnboardingAgent",
     # V5: Social Handler
     "SocialHandler",
+    # V6: Governance Swarm (Swarm 5)
+    "AuditAgent",
+    "EthicsAgent",
+    "PrivacyAgent",
+    # V6: Research Swarm (Swarm 6)
+    "MarketResearchAgent",
+    "UserInsightAgent",
+    "InnovationAgent",
 ]

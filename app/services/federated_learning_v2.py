@@ -24,9 +24,11 @@ Academic references:
     - Dwork & Roth (2014) "The Algorithmic Foundations of DP"
 """
 
+import base64
 import hashlib
 import math
 import secrets
+import struct
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -264,6 +266,41 @@ def _check_k_anonymity(category: str, dialect: str) -> bool:
 # ════════════════════════════════════════════════════════════════════
 
 
+# Gradient clipping — critical for differential privacy guarantees
+# Each gradient is clipped to this max L2 norm before aggregation:
+#   clipped = gradient * min(1, max_norm / ||gradient||_2)
+GRADIENT_MAX_NORM = 1.0
+
+
+def _clip_gradient(grad: List[float], max_norm: float = GRADIENT_MAX_NORM) -> List[float]:
+    """Clip a gradient vector to max L2 norm.
+
+    Standard approach for DP-SGD (Abadi et al. 2016):
+        clipped_gradient = gradient * min(1, max_norm / ||gradient||_2)
+
+    This bounds the sensitivity of each individual update, which is
+    required for the Gaussian noise mechanism to provide (ε,δ)-DP.
+    """
+    l2_norm = math.sqrt(sum(v * v for v in grad))
+    if l2_norm <= max_norm:
+        return grad
+    scale = max_norm / l2_norm
+    return [v * scale for v in grad]
+
+
+def _clip_gradient_bytes(raw_bytes: bytes, max_norm: float = GRADIENT_MAX_NORM) -> bytes:
+    """Clip gradient bytes (float32 little-endian) to max L2 norm.
+
+    Decodes the byte array, clips, and re-encodes.
+    """
+    n_floats = len(raw_bytes) // 4
+    if n_floats == 0:
+        return raw_bytes
+    floats = list(struct.unpack(f"<{n_floats}f", raw_bytes[:n_floats * 4]))
+    clipped = _clip_gradient(floats, max_norm)
+    return struct.pack(f"<{n_floats}f", *clipped)
+
+
 def _fedavg(
     updates: List[AnonymizedUpdate],
     category: DataCategory,
@@ -292,8 +329,9 @@ def _fedavg(
     # Behavioral aggregation
     session_durations: List[float] = []
     feature_usage_sums: Dict[str, int] = defaultdict(int)
-    # Adapter deltas (last-device-wins for now; secure aggregation later)
-    last_adapter = None
+    # Adapter delta aggregation — weighted average (not last-device-wins)
+    adapter_arrays: List[Tuple[List[float], float]] = []
+    max_adapter_len = 0
 
     for update in updates:
         weight = max(1, update.pattern_count)
@@ -327,9 +365,19 @@ def _fedavg(
         for k, v in update.feature_usage_counts.items():
             feature_usage_sums[k] += v
 
-        # Adapter
+        # Adapter deltas — clip each gradient then collect for weighted averaging
         if update.gradient_deltas:
-            last_adapter = update.gradient_deltas
+            try:
+                raw = base64.b64decode(update.gradient_deltas)
+                n_floats = len(raw) // 4
+                if n_floats > 0:
+                    floats = list(struct.unpack(f"<{n_floats}f", raw[:n_floats * 4]))
+                    # Gradient clipping for DP guarantees
+                    clipped = _clip_gradient(floats)
+                    adapter_arrays.append((clipped, float(weight)))
+                    max_adapter_len = max(max_adapter_len, len(clipped))
+            except Exception:
+                pass  # Skip malformed deltas
 
     result: Dict[str, Any] = {}
 
@@ -364,8 +412,28 @@ def _fedavg(
         "unique_devices": len(updates),
     }
 
-    # Adapter deltas
-    result["adapter_deltas"] = last_adapter
+    # Adapter deltas — proper weighted FedAvg (not last-device-wins)
+    aggregated_adapter = None
+    if adapter_arrays and max_adapter_len > 0:
+        total_adapter_weight = sum(w for _, w in adapter_arrays)
+        if total_adapter_weight <= 0:
+            total_adapter_weight = float(len(adapter_arrays))
+
+        agg = [0.0] * max_adapter_len
+        weight_sum = [0.0] * max_adapter_len
+        for arr, w in adapter_arrays:
+            for i, val in enumerate(arr):
+                agg[i] += val * w
+                weight_sum[i] += w
+
+        for i in range(max_adapter_len):
+            if weight_sum[i] > 0:
+                agg[i] /= weight_sum[i]
+
+        packed = struct.pack(f"<{max_adapter_len}f", *agg)
+        aggregated_adapter = base64.b64encode(packed).decode("ascii")
+
+    result["adapter_deltas"] = aggregated_adapter
 
     return result
 

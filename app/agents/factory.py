@@ -32,6 +32,8 @@ from app.agents.implementations import (
     SelfEvolutionAgent,
     TransactionProcessorAgent,
 )
+from app.agents.governance import AuditAgent, EthicsAgent, PrivacyAgent
+from app.agents.research import MarketResearchAgent, UserInsightAgent, InnovationAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -100,6 +102,10 @@ class AgentInfrastructure:
 
     # V5: Hermes Agent Protocol
     hermes_service: Any = None       # HermesService
+
+    # V6: Governance & Research swarms
+    governance_agents: List[BiasharaAgent] = field(default_factory=list)
+    research_agents: List[BiasharaAgent] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.agent_map:
@@ -223,8 +229,19 @@ class AgentFactory:
         new_agents.append(social_handler)
         self._logger.info("new_agents_created", count=len(new_agents))
 
+        # 7b. Create Swarm 5: Governance agents
+        governance_agents = self._create_governance_agents()
+        self._logger.info("governance_agents_created", count=len(governance_agents))
+
+        # 7c. Create Swarm 6: Research agents
+        research_agents = self._create_research_agents()
+        self._logger.info("research_agents_created", count=len(research_agents))
+
         # 8. Wire all agents together
-        all_agents = core_agents + domain_agents + utility_agents + new_agents + [meta_agent]
+        all_agents = (
+            core_agents + domain_agents + utility_agents + new_agents
+            + governance_agents + research_agents + [meta_agent]
+        )
 
         # Inject infrastructure into all agents
         for agent in all_agents:
@@ -244,6 +261,10 @@ class AgentFactory:
         for agent in utility_agents:
             execution_harness.register_agent_swarm(agent.name, "utility_swarm")
         execution_harness.register_agent_swarm(meta_agent.name, "meta_swarm")
+        for agent in governance_agents:
+            execution_harness.register_agent_swarm(agent.name, "governance_swarm")
+        for agent in research_agents:
+            execution_harness.register_agent_swarm(agent.name, "research_swarm")
         self._logger.info(
             "execution_harness_wired",
             total_agents=len(all_agents),
@@ -260,7 +281,10 @@ class AgentFactory:
                 agent.get_or_create_orchestrator()
 
         # 10. Subscribe agents to event types
-        await self._subscribe_agents(event_bus, core_agents, domain_agents + new_agents, meta_agent)
+        await self._subscribe_agents(
+            event_bus, core_agents, domain_agents + new_agents,
+            meta_agent, governance_agents, research_agents,
+        )
 
         # 11. Wire reflect→behavior feedback loops
         self._wire_reflect_loops(core_agents)
@@ -276,6 +300,14 @@ class AgentFactory:
 
         # Tier 2 domain
         for agent in domain_agents:
+            await agent.start()
+
+        # Swarm 5: Governance
+        for agent in governance_agents:
+            await agent.start()
+
+        # Swarm 6: Research
+        for agent in research_agents:
             await agent.start()
 
         # MetaAgent last (needs all others registered)
@@ -297,6 +329,8 @@ class AgentFactory:
             meta_agent=meta_agent,
             domain_agents=domain_agents + new_agents,
             utility_agents=utility_agents,
+            governance_agents=governance_agents,
+            research_agents=research_agents,
             broadcast_protocol=broadcast_protocol,
             p2p_protocol=p2p_protocol,
             delegation_protocol=delegation_protocol,
@@ -361,15 +395,18 @@ class AgentFactory:
         total_agents = (
             len(core_agents) + len(domain_agents) + len(new_agents) + len(utility_agents) + 1
             + len(infrastructure.financial_agents)
+            + len(governance_agents) + len(research_agents)
         )
         self._logger.info(
-            "agent_infrastructure_v4_ready",
+            "agent_infrastructure_v6_ready",
             total_agents=total_agents,
             core_agents=len(core_agents),
             domain_agents=len(domain_agents),
             utility_agents=len(utility_agents),
             meta_agent=1,
             financial_agents=len(infrastructure.financial_agents),
+            governance_agents=len(governance_agents),
+            research_agents=len(research_agents),
             loop_agents=len(infrastructure.loop_agents),
             flows=list(infrastructure.intelligence_flows.keys()),
             has_deerflow=infrastructure.deerflow_factory is not None,
@@ -434,6 +471,20 @@ class AgentFactory:
                 await agent.stop()
             except (RuntimeError, OSError) as exc:
                 self._logger.warning("domain_agent_stop_error", agent=agent.name, error=str(exc))
+
+        # Stop research agents (Swarm 6)
+        for agent in reversed(infra.research_agents):
+            try:
+                await agent.stop()
+            except (RuntimeError, OSError) as exc:
+                self._logger.warning("research_agent_stop_error", agent=agent.name, error=str(exc))
+
+        # Stop governance agents (Swarm 5)
+        for agent in reversed(infra.governance_agents):
+            try:
+                await agent.stop()
+            except (RuntimeError, OSError) as exc:
+                self._logger.warning("governance_agent_stop_error", agent=agent.name, error=str(exc))
 
         # Stop utility agents (Tier 3)
         for agent in reversed(infra.utility_agents):
@@ -576,6 +627,22 @@ class AgentFactory:
 
         return social_handler
 
+    def _create_governance_agents(self) -> List[BiasharaAgent]:
+        """Create Swarm 5: Governance agents for oversight and compliance."""
+        return [
+            AuditAgent(),
+            EthicsAgent(),
+            PrivacyAgent(),
+        ]
+
+    def _create_research_agents(self) -> List[BiasharaAgent]:
+        """Create Swarm 6: Research agents for market intelligence."""
+        return [
+            MarketResearchAgent(),
+            UserInsightAgent(),
+            InnovationAgent(),
+        ]
+
     # ── Internal wiring ────────────────────────────────────────────
 
     async def _subscribe_agents(
@@ -584,6 +651,8 @@ class AgentFactory:
         core_agents: List[BiasharaAgent],
         domain_agents: List[BiasharaAgent],
         meta_agent: BiasharaAgent,
+        governance_agents: List[BiasharaAgent] = None,
+        research_agents: List[BiasharaAgent] = None,
     ) -> None:
         """Subscribe each agent to its relevant event types."""
         # Core agent subscriptions
@@ -684,8 +753,78 @@ class AgentFactory:
             EventType.SECURITY_INCIDENT,
             EventType.ONBOARDING_COMPLETED,
             EventType.VOICE_TRANSCRIBED,
+            # Governance swarm events
+            EventType.AUDIT_FINDING,
+            EventType.ETHICS_VIOLATION,
+            EventType.PRIVACY_BREACH,
+            # Research swarm events
+            EventType.RESEARCH_COMPLETED,
+            EventType.MARKET_TREND_DETECTED,
+            EventType.INNOVATION_PROPOSED,
         ]
         await event_bus.subscribe(meta_agent, meta_event_types)
+
+        # Governance swarm (Swarm 5) subscriptions
+        if governance_agents:
+            governance_subscription_map = {
+                "AuditAgent": [
+                    EventType.AUDIT_REQUESTED,
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.INTELLIGENCE_GENERATED,
+                    EventType.REPORT_GENERATED,
+                ],
+                "EthicsAgent": [
+                    EventType.ETHICS_REVIEW,
+                    EventType.INTELLIGENCE_GENERATED,
+                    EventType.REPORT_GENERATED,
+                    EventType.DOMAIN_ANALYSIS_COMPLETED,
+                    EventType.CREDIT_SCORE_READY,
+                ],
+                "PrivacyAgent": [
+                    EventType.PRIVACY_REQUEST,
+                    EventType.PRIVACY_AUDIT,
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.INTELLIGENCE_GENERATED,
+                    EventType.REPORT_GENERATED,
+                ],
+            }
+            for agent in governance_agents:
+                event_types = governance_subscription_map.get(agent.name, [])
+                if event_types:
+                    await event_bus.subscribe(agent, event_types)
+
+        # Research swarm (Swarm 6) subscriptions
+        if research_agents:
+            research_subscription_map = {
+                "MarketResearchAgent": [
+                    EventType.RESEARCH_REQUESTED,
+                    EventType.MARKET_ALERT,
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.DOMAIN_ANALYSIS_COMPLETED,
+                    EventType.PRICE_FORECAST_READY,
+                ],
+                "UserInsightAgent": [
+                    EventType.RESEARCH_REQUESTED,
+                    EventType.TRANSACTION_PROCESSED,
+                    EventType.FEEDBACK_RECEIVED,
+                    EventType.ONBOARDING_COMPLETED,
+                    EventType.ONBOARDING_STARTED,
+                    EventType.REPORT_DELIVERED,
+                ],
+                "InnovationAgent": [
+                    EventType.RESEARCH_REQUESTED,
+                    EventType.USER_INSIGHT_GENERATED,
+                    EventType.MARKET_TREND_DETECTED,
+                    EventType.FEEDBACK_RECEIVED,
+                    EventType.EVOLUTION_CYCLE_COMPLETE,
+                    EventType.COMPETITOR_ALERT,
+                    EventType.FEATURE_SPEC_GENERATED,
+                ],
+            }
+            for agent in research_agents:
+                event_types = research_subscription_map.get(agent.name, [])
+                if event_types:
+                    await event_bus.subscribe(agent, event_types)
 
     def _wire_reflect_loops(self, agents: List[BiasharaAgent]) -> None:
         """

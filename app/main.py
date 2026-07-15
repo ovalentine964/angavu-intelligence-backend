@@ -325,6 +325,11 @@ async def lifespan(app: FastAPI):
     app.state.mcp_server = mcp_server
     logger.info("mcp_server_initialized", tools=mcp_server.get_health()["tools_registered"])
 
+    # ── Protocol Transport Routes (A2A HTTP/SSE + MCP Streamable HTTP) ──
+    from app.agents.protocols.routes import register_protocol_routes
+    register_protocol_routes(app, prefix=settings.API_V1_PREFIX)
+    logger.info("protocol_transport_routes_registered")
+
     # ── Post-Quantum Cryptography Initialization ───────────────────
     try:
         from app.security.pqc import PqcConfig, AlgorithmRegistry, CryptoAuditLogger

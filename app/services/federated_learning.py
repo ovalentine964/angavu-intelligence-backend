@@ -303,7 +303,7 @@ def _secure_aggregate_gradients(
     """
     import struct as _struct
 
-    L2_CLIP_NORM = 5.0  # Maximum L2 norm per update
+    L2_CLIP_NORM = 1.0  # Maximum L2 norm per update (tight for ε=0.1 DP)
 
     secured: List[FLUpdate] = []
     for update in updates:

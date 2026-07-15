@@ -455,14 +455,19 @@ class MCPClient:
         name: str = "angavu-client",
         cache_ttl_seconds: float = 300.0,
         max_retries: int = 3,
+        http_timeout: float = 30.0,
+        auth_token: Optional[str] = None,
     ):
         self.name = name
         self._cache_ttl = cache_ttl_seconds
         self._max_retries = max_retries
+        self._http_timeout = http_timeout
+        self._auth_token = auth_token
 
         self._connected_servers: Dict[str, Dict[str, Any]] = {}  # server_url → manifest
         self._tool_cache: Dict[str, Dict[str, Any]] = {}  # "server:tool" → cached result
         self._tool_cache_times: Dict[str, float] = {}
+        self._http_client: Optional[Any] = None  # Lazy MCPHttpClient
 
         self._logger = logger.bind(component="mcp_client", client=name)
 
@@ -579,6 +584,23 @@ class MCPClient:
 
     # ── Transport ───────────────────────────────────────────────────
 
+    async def _ensure_http_client(self):
+        """Lazy-initialize the HTTP client for remote MCP servers."""
+        if self._http_client is None:
+            from app.agents.protocols.mcp_transport import MCPHttpClient
+            self._http_client = MCPHttpClient(
+                timeout=self._http_timeout,
+                max_retries=self._max_retries,
+                auth_token=self._auth_token,
+            )
+        return self._http_client
+
+    async def close(self) -> None:
+        """Close the HTTP client and release resources."""
+        if self._http_client:
+            await self._http_client.close()
+            self._http_client = None
+
     async def _send_request(
         self,
         server_url: str,
@@ -588,8 +610,9 @@ class MCPClient:
         """
         Send a JSON-RPC request to an MCP server.
 
-        In production, this would use HTTP/SSE transport.
-        For local agents, supports in-process direct invocation.
+        Supports:
+        - local:// URLs: In-process direct invocation
+        - http:// / https:// URLs: Streamable HTTP transport (MCP 2025-06-18)
         """
         request = {
             "jsonrpc": "2.0",
@@ -607,12 +630,46 @@ class MCPClient:
             raise ConnectionError(f"Local MCP server not found: {server_name}")
 
         # HTTP/SSE transport (production)
-        # In a real implementation, this would use aiohttp or httpx
-        # For now, we'll use a simulated transport for development
+        if server_url.startswith("http://") or server_url.startswith("https://"):
+            http_client = await self._ensure_http_client()
+
+            # Connect if not already connected
+            if server_url not in self._connected_servers:
+                await self.connect(server_url)
+
+            # Route to appropriate client method
+            if method == "initialize":
+                return await http_client.connect(server_url)
+            elif method == "tools/list":
+                return {"tools": await http_client.list_tools(server_url)}
+            elif method == "tools/call":
+                return await http_client.call_tool(
+                    server_url,
+                    params.get("name", ""),
+                    params.get("arguments", {}),
+                    use_cache=False,  # Already handled by caller
+                )
+            elif method == "resources/list":
+                return {"resources": await http_client.list_resources(server_url)}
+            elif method == "resources/read":
+                return await http_client._send_request(server_url, method, params)
+            elif method == "prompts/list":
+                return {"prompts": await http_client.list_prompts(server_url)}
+            elif method == "prompts/get":
+                return await http_client.get_prompt(
+                    server_url,
+                    params.get("name", ""),
+                    params.get("arguments"),
+                )
+            else:
+                # Generic pass-through
+                return await http_client._send_request(server_url, method, params)
+
+        # Unknown protocol
         self._logger.debug("mcp_request_sent", method=method, server=server_url)
-        raise NotImplementedError(
-            f"HTTP/SSE transport not yet implemented. "
-            f"Use local:// URLs for in-process MCP. Got: {server_url}"
+        raise ConnectionError(
+            f"Unsupported MCP server URL scheme. "
+            f"Use local://, http://, or https://. Got: {server_url}"
         )
 
     # ── Local Server Registry ───────────────────────────────────────
