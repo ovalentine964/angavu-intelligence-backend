@@ -82,7 +82,7 @@ class OTPResponse(BaseModel):
     """Response from OTP request."""
     status: str
     message: str
-    otp_expires_in_seconds: int = 300
+    otp_expires_in_seconds: int = Field(300, serialization_alias="ttl")
 
 
 class TokenResponse(BaseModel):
@@ -140,7 +140,7 @@ async def _send_otp_sms(phone: str, code: str) -> bool:
 # =========================================================================
 
 
-@router.post("/request", response_model=OTPResponse)
+@router.post("/request", response_model=OTPResponse, response_model_by_alias=True)
 async def request_otp(request: OTPRequest):
     """
     Request an OTP code to be sent to a phone number.

@@ -19,13 +19,14 @@ class TransactionRecord(BaseModel):
         ...,
         description="SALE, PURCHASE, or EXPENSE",
         pattern=r"^(SALE|PURCHASE|EXPENSE)$",
+        alias="type",
     )
     item: Optional[str] = Field(None, max_length=200)
-    item_category: Optional[str] = Field(None, max_length=50)
+    item_category: Optional[str] = Field(None, max_length=50, alias="category")
     quantity: Optional[float] = Field(None, ge=0)
     unit: Optional[str] = Field(None, max_length=20)
     unit_price: Optional[float] = Field(None, ge=0)
-    amount: float = Field(..., ge=0, description="Total amount in KES")
+    amount: float = Field(..., ge=0, description="Total amount in KES", alias="total_amount")
     profit: Optional[float] = None
     payment_method: Optional[str] = Field(
         None,
@@ -39,8 +40,10 @@ class TransactionRecord(BaseModel):
     )
     confidence_score: Optional[float] = Field(1.0, ge=0, le=1)
     source_text: Optional[str] = None
-    timestamp: datetime
+    timestamp: datetime = Field(..., alias="occurred_at")
     location_geohash: Optional[str] = Field(None, max_length=12)
+
+    model_config = {"populate_by_name": True}
 
 
 class InventoryRecord(BaseModel):
@@ -176,11 +179,11 @@ class AnonymizedTransaction(BaseModel):
     HASH: worker_id (one-way hash for privacy)
     """
 
-    transaction_type: str
+    transaction_type: str = Field(..., alias="type")
     item: Optional[str] = None
-    item_category: Optional[str] = None
-    amount: float
-    timestamp: datetime
+    item_category: Optional[str] = Field(None, alias="category")
+    amount: float = Field(..., alias="total_amount")
+    timestamp: datetime = Field(..., alias="occurred_at")
     worker_type: Optional[str] = None
     location_geohash: Optional[str] = Field(
         None,
@@ -201,6 +204,8 @@ class AnonymizedTransaction(BaseModel):
         None,
         description="Language dialect detected from voice input",
     )
+
+    model_config = {"populate_by_name": True}
 
 
 class TransactionBatch(BaseModel):
