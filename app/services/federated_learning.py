@@ -597,7 +597,7 @@ def _is_newer_version(server_version: str, client_version: str) -> bool:
     """
     Compare two version strings (e.g. 'v3.2.5' vs 'v3.2.3').
 
-n    Returns True if server_version > client_version.
+    Returns True if server_version > client_version.
     """
     try:
         def parse(v: str) -> tuple:
@@ -781,7 +781,7 @@ class FederatedLearningService:
 
         Args:
             dialect: Language/dialect code
-n            client_version: Device's current model version
+            client_version: Device's current model version
 
         Returns:
             Dict with update_available, latest_version, and download_url
