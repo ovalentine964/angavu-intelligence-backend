@@ -55,15 +55,19 @@ class OTPRequest(BaseModel):
 class OTPVerifyRequest(BaseModel):
     """Request to verify OTP."""
     phone: str = Field(..., min_length=10, max_length=15)
-    code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
-    device_id: str = Field(..., max_length=100, description="Unique device identifier")
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code", alias="otp")
+    device_id: Optional[str] = Field(None, max_length=100, description="Unique device identifier")
+
+    model_config = {"populate_by_name": True}
 
 
 class OTPRegisterRequest(BaseModel):
     """Request to register a new user with phone + OTP."""
     phone: str = Field(..., min_length=10, max_length=15)
-    code: str = Field(..., min_length=6, max_length=6)
-    device_id: str = Field(..., max_length=100)
+    code: str = Field(..., min_length=6, max_length=6, alias="otp")
+    device_id: Optional[str] = Field(None, max_length=100)
+
+    model_config = {"populate_by_name": True}
     name: Optional[str] = Field(None, max_length=200)
     business_type: str = Field(
         "dukawallah",
@@ -271,7 +275,8 @@ async def verify_otp(
     db.add(rt_record)
 
     # Update device info
-    user.device_id = request.device_id
+    if request.device_id:
+        user.device_id = request.device_id
     user.last_sync_at = datetime.now(timezone.utc)
     await db.flush()
 
@@ -342,7 +347,7 @@ async def register_with_otp(
         language=request.language,
         location_geohash=request.location_geohash,
         location_name=request.location_name,
-        device_id=request.device_id,
+        device_id=request.device_id or "unknown",
         channel="app",
         consent_data_sharing=False,
     )

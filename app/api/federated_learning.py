@@ -411,6 +411,11 @@ async def fl_status(
         "Devices poll this endpoint to decide when to pull the full model."
     ),
 )
+@router.get(
+    "/federated/check-version/{dialect}",
+    summary="Check for model updates (alias)",
+    include_in_schema=False,
+)
 async def check_model_version(
     dialect: str,
     client_version: str = "v0.0.0",

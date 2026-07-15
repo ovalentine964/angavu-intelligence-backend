@@ -125,6 +125,11 @@ class CohortStatsResponse(BaseModel):
         "Raw gradients are never visible to the server."
     ),
 )
+@router.post(
+    "/federated/delta",
+    summary="Submit gradient delta (alias)",
+    include_in_schema=False,
+)
 async def submit_delta(
     req: GradientDeltaRequest,
     user: User = Depends(get_current_user),
@@ -173,6 +178,12 @@ async def submit_delta(
         "Anomalous gradients are detected and removed before aggregation."
     ),
 )
+@router.post(
+    "/federated/aggregate",
+    response_model=AggregateResponse,
+    summary="Trigger aggregation (alias)",
+    include_in_schema=False,
+)
 async def trigger_aggregation(
     req: AggregateRequest,
     user: User = Depends(get_current_user),
@@ -210,6 +221,12 @@ async def trigger_aggregation(
     response_model=AggregatorStatusResponse,
     summary="Aggregator status",
 )
+@router.get(
+    "/federated/status",
+    response_model=AggregatorStatusResponse,
+    summary="Aggregator status (alias)",
+    include_in_schema=False,
+)
 async def get_status():
     """Get system-wide federated aggregator status."""
     if not _aggregator_available or _aggregator is None:
@@ -234,6 +251,12 @@ async def get_status():
     response_model=CohortStatsResponse,
     summary="Cohort statistics",
 )
+@router.get(
+    "/federated/cohort/{cohort_id}",
+    response_model=CohortStatsResponse,
+    summary="Cohort statistics (alias)",
+    include_in_schema=False,
+)
 async def get_cohort_stats(cohort_id: str):
     """Get statistics for a specific cohort."""
     if not _aggregator_available or _aggregator is None:
@@ -249,6 +272,11 @@ async def get_cohort_stats(cohort_id: str):
 @router.get(
     "/fl-aggregator/model/{cohort_id}",
     summary="Get latest aggregated model for a cohort",
+)
+@router.get(
+    "/federated/model/{cohort_id}",
+    summary="Get latest aggregated model (alias)",
+    include_in_schema=False,
 )
 async def get_cohort_model(cohort_id: str):
     """Get the latest aggregated model update for a cohort."""
