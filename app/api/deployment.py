@@ -15,9 +15,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.api.auth import get_current_user
+from app.models.user import User
 from app.infrastructure.deployment_harness import (
     DeploymentHarnessConfig,
     DeploymentStage,
@@ -80,7 +82,10 @@ class RecordMetricsRequest(BaseModel):
 
 
 @router.post("/start", summary="Start a canary deployment")
-async def start_deployment(req: StartDeploymentRequest):
+async def start_deployment(
+    req: StartDeploymentRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Start a canary deployment for a component.
 
@@ -105,7 +110,10 @@ async def start_deployment(req: StartDeploymentRequest):
 
 
 @router.get("/status/{deployment_id}", summary="Get deployment status")
-async def get_deployment_status(deployment_id: str):
+async def get_deployment_status(
+    deployment_id: str,
+    user: User = Depends(get_current_user),
+):
     """Get the status of a specific deployment."""
     harness = get_deployment_harness()
     status = harness.get_deployment_status(deployment_id)
@@ -115,7 +123,10 @@ async def get_deployment_status(deployment_id: str):
 
 
 @router.post("/pause/{deployment_id}", summary="Pause a deployment")
-async def pause_deployment(deployment_id: str):
+async def pause_deployment(
+    deployment_id: str,
+    user: User = Depends(get_current_user),
+):
     """Pause a running deployment at its current canary stage."""
     harness = get_deployment_harness()
     success = await harness.pause_deployment(deployment_id)
@@ -128,7 +139,10 @@ async def pause_deployment(deployment_id: str):
 
 
 @router.post("/resume/{deployment_id}", summary="Resume a deployment")
-async def resume_deployment(deployment_id: str):
+async def resume_deployment(
+    deployment_id: str,
+    user: User = Depends(get_current_user),
+):
     """Resume a paused deployment."""
     harness = get_deployment_harness()
     success = await harness.resume_deployment(deployment_id)
@@ -141,7 +155,11 @@ async def resume_deployment(deployment_id: str):
 
 
 @router.post("/rollback/{deployment_id}", summary="Rollback a deployment")
-async def rollback_deployment(deployment_id: str, req: RollbackRequest):
+async def rollback_deployment(
+    deployment_id: str,
+    req: RollbackRequest,
+    user: User = Depends(get_current_user),
+):
     """Manually rollback a deployment to the previous stable version."""
     harness = get_deployment_harness()
     success = await harness.manual_rollback(deployment_id, req.reason)
@@ -163,14 +181,19 @@ async def rollback_deployment(deployment_id: str, req: RollbackRequest):
 
 
 @router.get("/active", summary="List active deployments")
-async def list_active_deployments():
+async def list_active_deployments(
+    user: User = Depends(get_current_user),
+):
     """Get all currently active (in-progress) deployments."""
     harness = get_deployment_harness()
     return {"deployments": harness.get_active_deployments()}
 
 
 @router.get("/history", summary="Deployment history")
-async def list_all_deployments(limit: int = Query(default=20, ge=1, le=100)):
+async def list_all_deployments(
+    limit: int = Query(default=20, ge=1, le=100),
+    user: User = Depends(get_current_user),
+):
     """Get recent deployments (active + completed), newest first."""
     harness = get_deployment_harness()
     return {"deployments": harness.get_all_deployments(limit)}
@@ -182,7 +205,9 @@ async def list_all_deployments(limit: int = Query(default=20, ge=1, le=100)):
 
 
 @router.get("/versions", summary="Version map")
-async def get_version_map():
+async def get_version_map(
+    user: User = Depends(get_current_user),
+):
     """
     Get the full version map: which version of each component
     serves what percentage of traffic.
@@ -192,14 +217,18 @@ async def get_version_map():
 
 
 @router.get("/versions/serving", summary="Serving versions")
-async def get_serving_versions():
+async def get_serving_versions(
+    user: User = Depends(get_current_user),
+):
     """Get all versions currently serving traffic."""
     harness = get_deployment_harness()
     return {"versions": harness.get_serving_versions()}
 
 
 @router.get("/routes", summary="Traffic routes")
-async def get_traffic_routes():
+async def get_traffic_routes(
+    user: User = Depends(get_current_user),
+):
     """Get current traffic routing state."""
     harness = get_deployment_harness()
     return {"routes": harness.get_traffic_routes()}
@@ -211,14 +240,19 @@ async def get_traffic_routes():
 
 
 @router.get("/flags", summary="List all feature flags")
-async def list_feature_flags():
+async def list_feature_flags(
+    user: User = Depends(get_current_user),
+):
     """Get all feature flags and their current state."""
     harness = get_deployment_harness()
     return {"flags": harness.feature_flags.get_all()}
 
 
 @router.post("/flags", summary="Create a feature flag")
-async def create_feature_flag(req: CreateFlagRequest):
+async def create_feature_flag(
+    req: CreateFlagRequest,
+    user: User = Depends(get_current_user),
+):
     """Create a new feature flag (disabled by default)."""
     harness = get_deployment_harness()
     try:
@@ -229,7 +263,11 @@ async def create_feature_flag(req: CreateFlagRequest):
 
 
 @router.post("/flags/{name}/enable", summary="Enable a feature flag")
-async def enable_feature_flag(name: str, req: EnableFlagRequest):
+async def enable_feature_flag(
+    name: str,
+    req: EnableFlagRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Enable a feature flag with optional segment targeting
     and percentage rollout.
@@ -248,7 +286,10 @@ async def enable_feature_flag(name: str, req: EnableFlagRequest):
 
 
 @router.post("/flags/{name}/disable", summary="Disable a feature flag")
-async def disable_feature_flag(name: str):
+async def disable_feature_flag(
+    name: str,
+    user: User = Depends(get_current_user),
+):
     """Disable a feature flag."""
     harness = get_deployment_harness()
     try:
@@ -260,7 +301,11 @@ async def disable_feature_flag(name: str):
 
 
 @router.post("/flags/{name}/check", summary="Check a feature flag")
-async def check_feature_flag(name: str, req: CheckFlagRequest):
+async def check_feature_flag(
+    name: str,
+    req: CheckFlagRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Check if a feature flag is enabled for a specific user/segment.
 
@@ -284,7 +329,10 @@ async def check_feature_flag(name: str, req: CheckFlagRequest):
 
 
 @router.delete("/flags/{name}", summary="Delete a feature flag")
-async def delete_feature_flag(name: str):
+async def delete_feature_flag(
+    name: str,
+    user: User = Depends(get_current_user),
+):
     """Delete a feature flag."""
     harness = get_deployment_harness()
     deleted = harness.feature_flags.delete(name)
@@ -299,7 +347,9 @@ async def delete_feature_flag(name: str):
 
 
 @router.get("/metrics", summary="All deployment metrics")
-async def get_all_metrics():
+async def get_all_metrics(
+    user: User = Depends(get_current_user),
+):
     """
     Get deployment metrics for all components and versions.
 
@@ -311,7 +361,10 @@ async def get_all_metrics():
 
 
 @router.get("/metrics/{component}", summary="Component metrics")
-async def get_component_metrics(component: str):
+async def get_component_metrics(
+    component: str,
+    user: User = Depends(get_current_user),
+):
     """Get metrics for all versions of a specific component."""
     harness = get_deployment_harness()
     return {
@@ -321,7 +374,10 @@ async def get_component_metrics(component: str):
 
 
 @router.post("/metrics/record", summary="Record a request metric")
-async def record_metric(req: RecordMetricsRequest):
+async def record_metric(
+    req: RecordMetricsRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Record a request for metrics tracking.
 
@@ -341,7 +397,9 @@ async def record_metric(req: RecordMetricsRequest):
 
 
 @router.get("/health", summary="Deployment harness health")
-async def get_harness_health():
+async def get_harness_health(
+    user: User = Depends(get_current_user),
+):
     """Get the overall health of the deployment harness."""
     harness = get_deployment_harness()
     return harness.get_health()

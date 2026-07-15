@@ -18,8 +18,11 @@ Endpoints:
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+
+from app.api.auth import get_current_user
+from app.models.user import User
 
 from app.services.federated_learning_v2 import (
     AnonymizedUpdate,
@@ -152,7 +155,10 @@ async def get_server_health(server_id: Optional[str] = Query(None)):
 
 
 @router.post("/infrastructure/health/metrics")
-async def record_server_metric(req: MetricRecordRequest):
+async def record_server_metric(
+    req: MetricRecordRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Record a server health metric snapshot.
 
@@ -182,7 +188,10 @@ async def get_inference_metrics(model_name: Optional[str] = Query(None)):
 
 
 @router.post("/infrastructure/inference")
-async def record_inference(req: InferenceRecordRequest):
+async def record_inference(
+    req: InferenceRecordRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Record an inference event for latency and cost tracking.
     """
@@ -246,7 +255,10 @@ async def get_model_performance(
 
 
 @router.post("/infrastructure/models")
-async def register_model(req: ModelRegisterRequest):
+async def register_model(
+    req: ModelRegisterRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Register a new model version.
 
@@ -266,7 +278,10 @@ async def register_model(req: ModelRegisterRequest):
 
 
 @router.post("/infrastructure/models/deploy")
-async def deploy_model(req: ModelDeployRequest):
+async def deploy_model(
+    req: ModelDeployRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Deploy a model version to receive traffic.
 
@@ -285,7 +300,10 @@ async def deploy_model(req: ModelDeployRequest):
 
 
 @router.post("/infrastructure/models/{model_name}/rollback")
-async def rollback_model(model_name: str):
+async def rollback_model(
+    model_name: str,
+    user: User = Depends(get_current_user),
+):
     """
     Rollback a model to the previous active version.
     """
@@ -296,7 +314,11 @@ async def rollback_model(model_name: str):
 
 
 @router.post("/infrastructure/models/{model_name}/promote/{version}")
-async def promote_model(model_name: str, version: str):
+async def promote_model(
+    model_name: str,
+    version: str,
+    user: User = Depends(get_current_user),
+):
     """
     Promote a model version to champion (100% traffic).
     """
@@ -315,7 +337,10 @@ async def list_ab_tests(model_name: Optional[str] = Query(None)):
 
 
 @router.post("/infrastructure/ab-test")
-async def start_ab_test(req: ABTestRequest):
+async def start_ab_test(
+    req: ABTestRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Start an A/B test between two model versions.
     """
@@ -332,7 +357,11 @@ async def start_ab_test(req: ABTestRequest):
 
 
 @router.post("/infrastructure/ab-test/{test_id}/end")
-async def end_ab_test(test_id: str, winner: Optional[str] = Query(None)):
+async def end_ab_test(
+    test_id: str,
+    winner: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+):
     """End an A/B test. Optionally specify the winner version."""
     return _registry.end_ab_test(test_id, winner=winner)
 
@@ -343,7 +372,10 @@ async def end_ab_test(test_id: str, winner: Optional[str] = Query(None)):
 
 
 @router.post("/infrastructure/federated")
-async def submit_federated_update(req: FederatedUpdateRequest):
+async def submit_federated_update(
+    req: FederatedUpdateRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Submit anonymized training data via federated learning.
 
@@ -477,7 +509,10 @@ async def get_costs(
 
 
 @router.post("/infrastructure/costs")
-async def record_cost(req: CostRecordRequest):
+async def record_cost(
+    req: CostRecordRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Record an infrastructure cost entry.
     """

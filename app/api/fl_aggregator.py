@@ -18,8 +18,11 @@ import os
 from typing import Any, Dict, List, Optional
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+
+from app.api.auth import get_current_user
+from app.models.user import User
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["Federated Aggregator"])
@@ -122,7 +125,10 @@ class CohortStatsResponse(BaseModel):
         "Raw gradients are never visible to the server."
     ),
 )
-async def submit_delta(req: GradientDeltaRequest):
+async def submit_delta(
+    req: GradientDeltaRequest,
+    user: User = Depends(get_current_user),
+):
     """Submit a gradient delta for federated aggregation."""
     if not _aggregator_available or _aggregator is None:
         raise HTTPException(
@@ -167,7 +173,10 @@ async def submit_delta(req: GradientDeltaRequest):
         "Anomalous gradients are detected and removed before aggregation."
     ),
 )
-async def trigger_aggregation(req: AggregateRequest):
+async def trigger_aggregation(
+    req: AggregateRequest,
+    user: User = Depends(get_current_user),
+):
     """Trigger aggregation for a cohort."""
     if not _aggregator_available or _aggregator is None:
         raise HTTPException(
