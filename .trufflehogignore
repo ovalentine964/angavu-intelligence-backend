@@ -1,0 +1,2 @@
+# Ignore test/CI secrets that are not real credentials
+.github/workflows/test.yml:SECRET_KEY=test-secret-key-for-ci
