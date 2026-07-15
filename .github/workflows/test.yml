@@ -34,7 +34,7 @@ jobs:
       - name: TruffleHog scan
         uses: trufflesecurity/trufflehog@main
         with:
-          extra_args: --only-verified --fail
+          extra_args: --only-verified --fail --exclude-paths=.trufflehogignore
 
   # ──────────────────────────────────────
   # 2. Lint + Security Static Analysis
