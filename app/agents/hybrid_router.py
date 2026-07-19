@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 import structlog
 
-from app.config.gemini import get_gemini_config
+from app.services.gemini_config import get_gemini_config
 from app.services.cloud_reasoning import CloudReasoningService, CloudResponse, QueryComplexity, classify_complexity
 
 logger = structlog.get_logger(__name__)

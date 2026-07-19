@@ -13,7 +13,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import structlog
 
-from app.config.gemini import get_gemini_config
+from app.services.gemini_config import get_gemini_config
 
 logger = structlog.get_logger(__name__)
 
