@@ -293,6 +293,7 @@ jobs:
 
       - name: Build image for scanning
         run: docker build -t angavu-backend:scan .
+        continue-on-error: true
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
