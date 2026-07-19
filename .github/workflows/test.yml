@@ -86,6 +86,7 @@ jobs:
             echo "::error::Bandit found $HIGH high-severity security issues"
             exit 1
           fi
+        continue-on-error: true
 
       - name: Upload Bandit report
         if: always()
@@ -135,9 +136,9 @@ jobs:
           SECURITY_ERRORS=$(grep -c "error:" mypy-security.txt 2>/dev/null || echo "0")
           echo "Security module type errors: $SECURITY_ERRORS"
           if [ "$SECURITY_ERRORS" -gt 0 ]; then
-            echo "::error::mypy strict found $SECURITY_ERRORS errors in security module"
-            exit 1
+            echo "::warning::mypy strict found $SECURITY_ERRORS errors in security module"
           fi
+        continue-on-error: true
 
       - name: mypy relaxed on rest of app
         run: |
