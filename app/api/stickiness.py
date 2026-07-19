@@ -13,7 +13,6 @@ Implements the Hook Model for habit formation:
 Anti-shame design: No public leaderboards, all comparisons positive and anonymized.
 """
 
-from typing import Optional
 from uuid import UUID
 
 import structlog
@@ -74,7 +73,7 @@ class StreakResponse(BaseModel):
     protection_available: bool
     protection_count: int
     streak_at_risk: bool
-    last_active_date: Optional[str]
+    last_active_date: str | None
     freeze_count: int
     message_sw: str
     message_en: str
@@ -98,47 +97,47 @@ class LevelResponse(BaseModel):
     level_name_en: str
     level_icon: str
     xp: int
-    xp_to_next: Optional[int]
+    xp_to_next: int | None
     progress_percent: float
     current_level_description: str
     current_level_description_en: str
     perks_unlocked: list[str]
-    next_level: Optional[dict]
+    next_level: dict | None
     streak_protection_count: int
 
 
 class VariableRewardResponse(BaseModel):
     """Variable reward result."""
     has_reward: bool
-    reward_type: Optional[str] = None
-    title: Optional[str] = None
-    title_en: Optional[str] = None
-    message_sw: Optional[str] = None
-    message_en: Optional[str] = None
-    icon: Optional[str] = None
-    bonus_xp: Optional[int] = None
-    total_xp: Optional[int] = None
-    cooldown_remaining_hours: Optional[float] = None
+    reward_type: str | None = None
+    title: str | None = None
+    title_en: str | None = None
+    message_sw: str | None = None
+    message_en: str | None = None
+    icon: str | None = None
+    bonus_xp: int | None = None
+    total_xp: int | None = None
+    cooldown_remaining_hours: float | None = None
 
 
 class AhaMomentResponse(BaseModel):
     """Aha moment tracking result."""
     success: bool
-    is_new: Optional[bool] = None
+    is_new: bool | None = None
     action: str
-    name: Optional[str] = None
-    name_sw: Optional[str] = None
-    importance: Optional[str] = None
-    xp_reward: Optional[int] = None
-    message_sw: Optional[str] = None
-    message_en: Optional[str] = None
-    error: Optional[str] = None
-    valid_actions: Optional[list[str]] = None
+    name: str | None = None
+    name_sw: str | None = None
+    importance: str | None = None
+    xp_reward: int | None = None
+    message_sw: str | None = None
+    message_en: str | None = None
+    error: str | None = None
+    valid_actions: list[str] | None = None
 
 
 class SocialProofResponse(BaseModel):
     """Anonymized social proof data."""
-    user_id: Optional[str]
+    user_id: str | None
     community_size: int
     active_this_week: int
     average_streak: float
@@ -290,7 +289,7 @@ async def track_aha(
 
 @router.get("/social", response_model=SocialProofResponse)
 async def get_social(
-    user_id: Optional[UUID] = Query(None, description="User ID (optional)"),
+    user_id: UUID | None = Query(None, description="User ID (optional)"),
     db: AsyncSession = Depends(get_db),
 ):
     """

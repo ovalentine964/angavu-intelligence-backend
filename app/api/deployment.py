@@ -12,21 +12,17 @@ All endpoints require admin authentication.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user
-from app.models.user import User
 from app.infrastructure.deployment_harness import (
-    DeploymentHarnessConfig,
-    DeploymentStage,
-    DeploymentStatus,
     get_deployment_harness,
-    create_deployment_harness,
 )
+from app.models.user import User
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/deploy", tags=["Deployment Harness"])
@@ -41,7 +37,7 @@ class StartDeploymentRequest(BaseModel):
     component: str = Field(..., description="Component name (e.g., IntelligenceGenerator)")
     old_version: str = Field(..., description="Current stable version")
     new_version: str = Field(..., description="New version to deploy")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Deployment metadata")
+    metadata: dict[str, Any] | None = Field(default=None, description="Deployment metadata")
 
 
 class RollbackRequest(BaseModel):
@@ -54,7 +50,7 @@ class CreateFlagRequest(BaseModel):
 
 
 class EnableFlagRequest(BaseModel):
-    segments: Optional[List[str]] = Field(
+    segments: list[str] | None = Field(
         default=None,
         description="User segments to enable for (null = all segments)",
     )
@@ -65,8 +61,8 @@ class EnableFlagRequest(BaseModel):
 
 
 class CheckFlagRequest(BaseModel):
-    user_id: Optional[str] = Field(default=None, description="User ID for deterministic rollout")
-    user_segment: Optional[str] = Field(default=None, description="User segment")
+    user_id: str | None = Field(default=None, description="User ID for deterministic rollout")
+    user_segment: str | None = Field(default=None, description="User segment")
 
 
 class RecordMetricsRequest(BaseModel):

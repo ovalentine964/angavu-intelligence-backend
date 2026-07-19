@@ -13,10 +13,7 @@ All explanations are delivered in Swahili for worker-facing channels
 (WhatsApp, USSD, SMS) and English for institutional buyers.
 """
 
-import hashlib
 import time
-from datetime import datetime, timezone
-from typing import Optional
 
 import numpy as np
 import structlog
@@ -24,15 +21,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.services.ml.explainer import (
-    AlamaScoreExplainer,
-    LoanExplainer,
-    GDPExplainer,
-    PredictionExplanation,
-    SHAP_AVAILABLE,
-)
 from app.services.intelligence.alama_score import AlamaScoreService
 from app.services.intelligence.loan_intelligence import LoanIntelligenceService
+from app.services.ml.explainer import (
+    SHAP_AVAILABLE,
+    AlamaScoreExplainer,
+    GDPExplainer,
+    LoanExplainer,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/explain", tags=["Explainability"])
@@ -42,9 +38,9 @@ router = APIRouter(prefix="/explain", tags=["Explainability"])
 # Singleton Explainers
 # ---------------------------------------------------------------------------
 
-_alama_explainer: Optional[AlamaScoreExplainer] = None
-_loan_explainer: Optional[LoanExplainer] = None
-_gdp_explainer: Optional[GDPExplainer] = None
+_alama_explainer: AlamaScoreExplainer | None = None
+_loan_explainer: LoanExplainer | None = None
+_gdp_explainer: GDPExplainer | None = None
 
 
 def _get_alama_explainer() -> AlamaScoreExplainer:
@@ -233,11 +229,11 @@ async def explain_loan_default(
 
     if format == "whatsapp":
         lines = [
-            f"📊 *Hatari ya Kutolipa Mkopo*",
-            f"",
+            "📊 *Hatari ya Kutolipa Mkopo*",
+            "",
             f"Uwezekano: *{default_prob*100:.0f}*%",
             f"Kiwango: *{risk_result.get('risk_level', 'N/A')}*",
-            f"",
+            "",
         ]
         if explanation.top_negative:
             lines.append("⚠️ *Sababu Kuu:*")

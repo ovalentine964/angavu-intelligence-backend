@@ -21,11 +21,11 @@ DeerFlow Pattern: Uses observe → think → act → reflect cycle.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
+from app.agents.base import AgentDecision, AgentResult, EventType
 from app.autonomous.agents.base import AutonomousAgent
 from app.autonomous.config import AgentConfig
 
@@ -51,7 +51,7 @@ class SalesAgent(AutonomousAgent):
         EventType.FEEDBACK_RECEIVED,
     ]
 
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         super().__init__(
             name="SalesAgent",
             role="Autonomous Sales — lead qualification, outreach, follow-up",
@@ -67,9 +67,9 @@ class SalesAgent(AutonomousAgent):
         )
 
         # Sales pipeline state
-        self._leads: Dict[str, Dict[str, Any]] = {}
-        self._outreach_queue: List[Dict[str, Any]] = []
-        self._follow_up_schedule: Dict[str, float] = {}
+        self._leads: dict[str, dict[str, Any]] = {}
+        self._outreach_queue: list[dict[str, Any]] = []
+        self._follow_up_schedule: dict[str, float] = {}
 
         # ICP (Ideal Customer Profile) scoring weights
         self._icp_weights = {
@@ -86,7 +86,7 @@ class SalesAgent(AutonomousAgent):
         self.tools.register("draft_outreach", self._draft_outreach, "Draft outreach message")
         self.tools.register("schedule_follow_up", self._schedule_follow_up, "Schedule follow-up")
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Analyze the event context and decide what sales action to take.
 
@@ -183,7 +183,7 @@ class SalesAgent(AutonomousAgent):
 
     # ── Sales Operations ────────────────────────────────────────────
 
-    async def _qualify_lead(self, lead_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _qualify_lead(self, lead_data: dict[str, Any]) -> dict[str, Any]:
         """Qualify a lead against ICP criteria."""
         if not lead_data:
             return {"status": "no_data"}
@@ -226,7 +226,7 @@ class SalesAgent(AutonomousAgent):
             "next_action": "outreach" if qualified else "nurture",
         }
 
-    async def _execute_follow_ups(self, leads: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _execute_follow_ups(self, leads: list[dict[str, Any]]) -> dict[str, Any]:
         """Execute scheduled follow-ups."""
         results = []
         for lead in leads:
@@ -242,7 +242,7 @@ class SalesAgent(AutonomousAgent):
 
         return {"follow_ups_executed": len(results), "results": results}
 
-    async def _scan_opportunities(self, intelligence: Dict[str, Any]) -> Dict[str, Any]:
+    async def _scan_opportunities(self, intelligence: dict[str, Any]) -> dict[str, Any]:
         """Scan intelligence data for sales opportunities."""
         opportunities = []
         # Look for market signals that indicate potential customers
@@ -259,7 +259,7 @@ class SalesAgent(AutonomousAgent):
             "opportunities": opportunities,
         }
 
-    async def _adjust_strategy(self, feedback: Dict[str, Any]) -> Dict[str, Any]:
+    async def _adjust_strategy(self, feedback: dict[str, Any]) -> dict[str, Any]:
         """Adjust sales strategy based on feedback."""
         sentiment = feedback.get("sentiment", "neutral")
         if sentiment == "negative":
@@ -267,7 +267,7 @@ class SalesAgent(AutonomousAgent):
             return {"adjustment": "review_approach", "feedback": feedback}
         return {"adjustment": "maintain", "feedback": feedback}
 
-    def _score_criterion(self, criterion: str, lead_data: Dict[str, Any]) -> float:
+    def _score_criterion(self, criterion: str, lead_data: dict[str, Any]) -> float:
         """Score a single ICP criterion (0.0 - 1.0)."""
         scoring_rules = {
             "sector_fit": lambda d: 1.0 if d.get("sector") in ("mfi", "sacco", "mobile_money", "fmcg") else 0.3,
@@ -283,7 +283,7 @@ class SalesAgent(AutonomousAgent):
         except Exception:
             return 0.5
 
-    def _get_due_follow_ups(self) -> List[Dict[str, Any]]:
+    def _get_due_follow_ups(self) -> list[dict[str, Any]]:
         """Get leads with due follow-ups."""
         now = time.time()
         due = []

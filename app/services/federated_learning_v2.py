@@ -25,15 +25,14 @@ Academic references:
 """
 
 import base64
-import hashlib
 import math
 import secrets
 import struct
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -92,18 +91,18 @@ class AnonymizedUpdate:
         category: DataCategory,
         dialect: str,
         # Gradient deltas (base64-encoded, encrypted client-side)
-        gradient_deltas: Optional[str] = None,
+        gradient_deltas: str | None = None,
         # Aggregated statistics (no individual records)
         pattern_count: int = 0,
         avg_confidence: float = 0.0,
-        feature_vector: Optional[List[float]] = None,
+        feature_vector: list[float] | None = None,
         # Transaction pattern summary (anonymized)
-        transaction_summary: Optional[Dict[str, float]] = None,
+        transaction_summary: dict[str, float] | None = None,
         # Vocabulary corrections
-        phoneme_corrections: Optional[List[Dict[str, Any]]] = None,
+        phoneme_corrections: list[dict[str, Any]] | None = None,
         # Behavioral signals
-        session_duration_avg_s: Optional[float] = None,
-        feature_usage_counts: Optional[Dict[str, int]] = None,
+        session_duration_avg_s: float | None = None,
+        feature_usage_counts: dict[str, int] | None = None,
         # Metadata
         device_tier: str = "basic",
         timestamp_ms: int = 0,
@@ -121,7 +120,7 @@ class AnonymizedUpdate:
         self.feature_usage_counts = feature_usage_counts or {}
         self.device_tier = device_tier
         self.timestamp_ms = timestamp_ms or int(
-            datetime.now(timezone.utc).timestamp() * 1000
+            datetime.now(UTC).timestamp() * 1000
         )
 
 
@@ -134,18 +133,18 @@ class AggregatedModel:
         dialect: str,
         version: str,
         # Aggregated parameters
-        avg_feature_vector: List[float] = None,
+        avg_feature_vector: list[float] = None,
         avg_confidence: float = 0.0,
-        vocabulary_updates: List[Dict[str, Any]] = None,
-        transaction_patterns: Dict[str, float] = None,
-        behavioral_insights: Dict[str, float] = None,
+        vocabulary_updates: list[dict[str, Any]] = None,
+        transaction_patterns: dict[str, float] = None,
+        behavioral_insights: dict[str, float] = None,
         # Privacy metadata
         dp_epsilon: float = DP_EPSILON,
         dp_noise_applied: bool = True,
         k_anonymity_k: int = K_ANONYMITY_MIN,
         updates_included: int = 0,
         # Adapter deltas (encrypted)
-        adapter_deltas: Optional[str] = None,
+        adapter_deltas: str | None = None,
         timestamp_ms: int = 0,
     ):
         self.category = category
@@ -162,7 +161,7 @@ class AggregatedModel:
         self.updates_included = updates_included
         self.adapter_deltas = adapter_deltas
         self.timestamp_ms = timestamp_ms or int(
-            datetime.now(timezone.utc).timestamp() * 1000
+            datetime.now(UTC).timestamp() * 1000
         )
 
 
@@ -179,22 +178,22 @@ class _FLv2State:
 
     def reset(self):
         # Pending updates: {(category, dialect): [AnonymizedUpdate, ...]}
-        self.pending: Dict[Tuple[str, str], List[AnonymizedUpdate]] = defaultdict(list)
+        self.pending: dict[tuple[str, str], list[AnonymizedUpdate]] = defaultdict(list)
         # K-anonymity cohorts: {(category, dialect): set(device_id_hash)}
-        self.cohorts: Dict[Tuple[str, str], set] = defaultdict(set)
+        self.cohorts: dict[tuple[str, str], set] = defaultdict(set)
         # Aggregated models: {(category, dialect, version): AggregatedModel}
-        self.models: Dict[Tuple[str, str, str], AggregatedModel] = {}
+        self.models: dict[tuple[str, str, str], AggregatedModel] = {}
         # Latest version per (category, dialect)
-        self.latest_versions: Dict[Tuple[str, str], str] = {}
+        self.latest_versions: dict[tuple[str, str], str] = {}
         # Counters
         self.total_updates: int = 0
         self.total_aggregations: int = 0
         self.rejected_updates: int = 0
         self.seen_devices: set = set()
         # Version counters
-        self.version_counters: Dict[Tuple[str, str], int] = defaultdict(int)
+        self.version_counters: dict[tuple[str, str], int] = defaultdict(int)
         # Last aggregation time
-        self.last_aggregation_at: Optional[str] = None
+        self.last_aggregation_at: str | None = None
 
 
 _state = _FLv2State()
@@ -232,12 +231,12 @@ def _add_gaussian_noise(value: float, sigma: float = _NOISE_SCALE) -> float:
     return value + sigma * z
 
 
-def _add_noise_to_vector(vec: List[float], sigma: float = _NOISE_SCALE) -> List[float]:
+def _add_noise_to_vector(vec: list[float], sigma: float = _NOISE_SCALE) -> list[float]:
     """Add Gaussian noise to each element of a feature vector."""
     return [_add_gaussian_noise(v, sigma) for v in vec]
 
 
-def _add_noise_to_dict(d: Dict[str, float], sigma: float = _NOISE_SCALE) -> Dict[str, float]:
+def _add_noise_to_dict(d: dict[str, float], sigma: float = _NOISE_SCALE) -> dict[str, float]:
     """Add Gaussian noise to dict values."""
     return {k: _add_gaussian_noise(v, sigma) for k, v in d.items()}
 
@@ -272,7 +271,7 @@ def _check_k_anonymity(category: str, dialect: str) -> bool:
 GRADIENT_MAX_NORM = 1.0
 
 
-def _clip_gradient(grad: List[float], max_norm: float = GRADIENT_MAX_NORM) -> List[float]:
+def _clip_gradient(grad: list[float], max_norm: float = GRADIENT_MAX_NORM) -> list[float]:
     """Clip a gradient vector to max L2 norm.
 
     Standard approach for DP-SGD (Abadi et al. 2016):
@@ -302,9 +301,9 @@ def _clip_gradient_bytes(raw_bytes: bytes, max_norm: float = GRADIENT_MAX_NORM) 
 
 
 def _fedavg(
-    updates: List[AnonymizedUpdate],
+    updates: list[AnonymizedUpdate],
     category: DataCategory,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Federated Averaging (FedAvg) over anonymized updates.
 
@@ -319,18 +318,18 @@ def _fedavg(
     total_weight = 0.0
     # Feature vector aggregation
     feature_dim = 0
-    feature_sums: List[float] = []
+    feature_sums: list[float] = []
     # Confidence aggregation
     confidence_sum = 0.0
     # Vocabulary aggregation
-    phoneme_counts: Dict[str, int] = defaultdict(int)
+    phoneme_counts: dict[str, int] = defaultdict(int)
     # Transaction pattern aggregation
-    tx_pattern_sums: Dict[str, float] = defaultdict(float)
+    tx_pattern_sums: dict[str, float] = defaultdict(float)
     # Behavioral aggregation
-    session_durations: List[float] = []
-    feature_usage_sums: Dict[str, int] = defaultdict(int)
+    session_durations: list[float] = []
+    feature_usage_sums: dict[str, int] = defaultdict(int)
     # Adapter delta aggregation — weighted average (not last-device-wins)
-    adapter_arrays: List[Tuple[List[float], float]] = []
+    adapter_arrays: list[tuple[list[float], float]] = []
     max_adapter_len = 0
 
     for update in updates:
@@ -379,7 +378,7 @@ def _fedavg(
             except Exception:
                 pass  # Skip malformed deltas
 
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # Weighted average feature vector
     if feature_sums and total_weight > 0:
@@ -456,7 +455,7 @@ def _next_version(category: str, dialect: str) -> str:
 # ════════════════════════════════════════════════════════════════════
 
 
-def _validate_update(update: AnonymizedUpdate) -> Tuple[bool, Optional[str]]:
+def _validate_update(update: AnonymizedUpdate) -> tuple[bool, str | None]:
     """
     Validate a federated learning update.
 
@@ -469,7 +468,7 @@ def _validate_update(update: AnonymizedUpdate) -> Tuple[bool, Optional[str]]:
     if not update.device_id_hash or len(update.device_id_hash) < 8:
         return False, "invalid_device_id"
 
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(datetime.now(UTC).timestamp() * 1000)
     age_hours = (now_ms - update.timestamp_ms) / (1000 * 60 * 60)
 
     if age_hours > MAX_DEVICE_AGE_HOURS:
@@ -512,7 +511,7 @@ class FederatedLearningV2Service:
         Server publishes noisy aggregated model
     """
 
-    def submit_update(self, update: AnonymizedUpdate) -> Dict[str, Any]:
+    def submit_update(self, update: AnonymizedUpdate) -> dict[str, Any]:
         """
         Submit an anonymized update from a device.
 
@@ -589,8 +588,8 @@ class FederatedLearningV2Service:
         self,
         category: str,
         dialect: str,
-        version: Optional[str] = None,
-    ) -> Optional[AggregatedModel]:
+        version: str | None = None,
+    ) -> AggregatedModel | None:
         """
         Get an aggregated model for a (category, dialect) pair.
 
@@ -604,7 +603,7 @@ class FederatedLearningV2Service:
         key = (category, dialect, version)
         return _state.models.get(key)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get federated learning v2 system status."""
         # Count cohorts meeting k-anonymity
         k_met_count = sum(
@@ -613,7 +612,7 @@ class FederatedLearningV2Service:
         )
 
         # Count by category
-        by_category: Dict[str, Dict[str, int]] = defaultdict(lambda: {"updates": 0, "devices": 0})
+        by_category: dict[str, dict[str, int]] = defaultdict(lambda: {"updates": 0, "devices": 0})
         for (cat, dialect), updates in _state.pending.items():
             by_category[cat]["updates"] += len(updates)
             by_category[cat]["devices"] += len(_state.cohorts.get((cat, dialect), set()))
@@ -638,7 +637,7 @@ class FederatedLearningV2Service:
             "last_aggregation_at": _state.last_aggregation_at,
         }
 
-    def list_models(self, dialect: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_models(self, dialect: str | None = None) -> list[dict[str, Any]]:
         """List all aggregated models, optionally filtered by dialect."""
         results = []
         for (cat, dia, ver), model in _state.models.items():
@@ -659,7 +658,7 @@ class FederatedLearningV2Service:
 
     # ── Internal ──
 
-    def _aggregate(self, key: Tuple[str, str]) -> str:
+    def _aggregate(self, key: tuple[str, str]) -> str:
         """
         Run FedAvg aggregation on pending updates for a (category, dialect).
 
@@ -691,7 +690,7 @@ class FederatedLearningV2Service:
 
         # Version
         version = _next_version(category, dialect)
-        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        now_ms = int(datetime.now(UTC).timestamp() * 1000)
 
         # Build aggregated model
         model = AggregatedModel(
@@ -714,7 +713,7 @@ class FederatedLearningV2Service:
         _state.models[(category, dialect, version)] = model
         _state.latest_versions[(category, dialect)] = version
         _state.total_aggregations += 1
-        _state.last_aggregation_at = datetime.now(timezone.utc).isoformat()
+        _state.last_aggregation_at = datetime.now(UTC).isoformat()
 
         logger.info(
             "flv2_aggregation_complete",

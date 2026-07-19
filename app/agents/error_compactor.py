@@ -18,7 +18,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -40,16 +40,16 @@ class CompactedError:
     message: str
     severity: ErrorSeverity
     fingerprint: str  # Deduplication hash
-    context: Dict[str, Any] = field(default_factory=dict)
-    stack_trace: Optional[str] = None
-    agent_name: Optional[str] = None
-    action: Optional[str] = None
+    context: dict[str, Any] = field(default_factory=dict)
+    stack_trace: str | None = None
+    agent_name: str | None = None
+    action: str | None = None
     timestamp: float = field(default_factory=time.time)
     occurrence_count: int = 1
     first_seen: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
-    resolution: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    resolution: str | None = None
+    tags: list[str] = field(default_factory=list)
 
     @property
     def age_seconds(self) -> float:
@@ -79,7 +79,7 @@ class CompactedError:
         }[self.severity]
         return (0.4 * severity_weight) + (0.35 * self.frequency_score) + (0.25 * self.recency_score)
 
-    def to_context_dict(self) -> Dict[str, Any]:
+    def to_context_dict(self) -> dict[str, Any]:
         """Convert to a compact dict suitable for agent context."""
         return {
             "error_fingerprint": self.fingerprint[:8],
@@ -98,10 +98,10 @@ class ErrorPattern:
     """A detected pattern across multiple errors."""
     pattern_type: str  # e.g., "repeated_timeout", "cascade_failure"
     description: str
-    error_fingerprints: List[str]
+    error_fingerprints: list[str]
     frequency: int
     time_window_seconds: float
-    suggested_action: Optional[str] = None
+    suggested_action: str | None = None
     detected_at: float = field(default_factory=time.time)
 
 
@@ -145,13 +145,13 @@ class ErrorCompactor:
         self.max_errors = max_errors
         self.decay_interval = decay_interval
 
-        self._errors: Dict[str, CompactedError] = {}  # fingerprint → error
-        self._patterns: List[ErrorPattern] = []
+        self._errors: dict[str, CompactedError] = {}  # fingerprint → error
+        self._patterns: list[ErrorPattern] = []
         self._total_captured: int = 0
         self._total_deduplicated: int = 0
 
         # Temporal window for burst detection
-        self._recent_fingerprints: List[Tuple[str, float]] = []
+        self._recent_fingerprints: list[tuple[str, float]] = []
 
         self._logger = logger.bind(agent=agent_name, component="error_compactor")
 
@@ -162,10 +162,10 @@ class ErrorCompactor:
         error_type: str,
         message: str,
         severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-        context: Optional[Dict[str, Any]] = None,
-        stack_trace: Optional[str] = None,
-        action: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        context: dict[str, Any] | None = None,
+        stack_trace: str | None = None,
+        action: str | None = None,
+        tags: list[str] | None = None,
     ) -> CompactedError:
         """
         Capture an error with full context.
@@ -230,8 +230,8 @@ class ErrorCompactor:
         self,
         exc: Exception,
         severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-        context: Optional[Dict[str, Any]] = None,
-        action: Optional[str] = None,
+        context: dict[str, Any] | None = None,
+        action: str | None = None,
     ) -> CompactedError:
         """Capture an error from a Python exception."""
         import traceback
@@ -250,7 +250,7 @@ class ErrorCompactor:
         self,
         max_items: int = 5,
         min_importance: float = 0.1,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get compacted errors suitable for injection into agent context.
 
@@ -265,7 +265,7 @@ class ErrorCompactor:
 
         return [e.to_context_dict() for e in errors[:max_items]]
 
-    def get_context_patterns(self) -> List[Dict[str, Any]]:
+    def get_context_patterns(self) -> list[dict[str, Any]]:
         """Get detected error patterns for agent context."""
         return [
             {
@@ -277,7 +277,7 @@ class ErrorCompactor:
             for p in self._patterns[-5:]  # Last 5 patterns
         ]
 
-    def get_full_context(self) -> Dict[str, Any]:
+    def get_full_context(self) -> dict[str, Any]:
         """Get full error context for agent think phase."""
         return {
             "recent_errors": self.get_context_errors(max_items=5),
@@ -300,7 +300,7 @@ class ErrorCompactor:
             return True
         return False
 
-    def get_resolutions(self) -> List[Dict[str, Any]]:
+    def get_resolutions(self) -> list[dict[str, Any]]:
         """Get all resolved errors with their resolutions (for learning)."""
         return [
             {
@@ -377,7 +377,7 @@ class ErrorCompactor:
         self,
         error_type: str,
         message: str,
-        action: Optional[str],
+        action: str | None,
     ) -> str:
         """Compute a deduplication fingerprint for an error."""
         # Normalize: strip numbers, timestamps, IDs from message
@@ -408,7 +408,7 @@ class ErrorCompactor:
 
     # ── Stats ───────────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get error compactor statistics."""
         severity_counts = Counter(e.severity.value for e in self._errors.values())
         return {

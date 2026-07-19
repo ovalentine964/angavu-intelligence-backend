@@ -17,8 +17,6 @@ Usage:
 See: https://csrc.nist.gov/pubs/fips/203/final
 """
 
-import hashlib
-import os
 from enum import Enum
 
 import oqs

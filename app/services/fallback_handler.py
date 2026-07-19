@@ -22,13 +22,14 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from .provider_registry import ProviderRecord, ProviderRegistry, ProviderType
+from .provider_registry import ProviderRecord, ProviderRegistry
 
 logger = structlog.get_logger(__name__)
 
@@ -52,16 +53,16 @@ class FailureRecord:
         error_message: str,
         attempt: int,
         strategy_used: FallbackStrategy,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ):
         self.provider_id = provider_id
         self.error_type = error_type
         self.error_message = error_message
         self.attempt = attempt
         self.strategy_used = strategy_used
-        self.timestamp = timestamp or datetime.now(timezone.utc)
+        self.timestamp = timestamp or datetime.now(UTC)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "provider_id": self.provider_id,
             "error_type": self.error_type,
@@ -78,12 +79,12 @@ class InferenceRequest:
     def __init__(
         self,
         request_id: str,
-        messages: List[Dict[str, str]],
-        model: Optional[str] = None,
+        messages: list[dict[str, str]],
+        model: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
         task_complexity: str = "medium",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.request_id = request_id
         self.messages = messages
@@ -107,8 +108,8 @@ class InferenceResponse:
         output_tokens: int,
         latency_ms: float,
         fallback_count: int = 0,
-        compression_info: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        compression_info: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.request_id = request_id
         self.provider_id = provider_id
@@ -126,7 +127,7 @@ class InferenceResponse:
         """Estimate cost based on token counts (set externally if needed)."""
         return self.metadata.get("cost_estimate", 0.0)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
             "provider_id": self.provider_id,
@@ -173,11 +174,11 @@ class FallbackHandler:
         self.circuit_breaker_reset_seconds = circuit_breaker_reset_seconds
 
         # Failure history (ring buffer)
-        self._failure_history: List[FailureRecord] = []
+        self._failure_history: list[FailureRecord] = []
         self._max_history = 1000
 
         # Circuit breaker state per provider
-        self._circuit_open_until: Dict[str, float] = {}  # provider_id -> timestamp
+        self._circuit_open_until: dict[str, float] = {}  # provider_id -> timestamp
 
         # Stats
         self._total_requests: int = 0
@@ -207,10 +208,10 @@ class FallbackHandler:
 
     def get_fallback_chain(
         self,
-        preferred_providers: Optional[List[str]] = None,
+        preferred_providers: list[str] | None = None,
         task_complexity: str = "medium",
-        exclude: Optional[List[str]] = None,
-    ) -> List[ProviderRecord]:
+        exclude: list[str] | None = None,
+    ) -> list[ProviderRecord]:
         """
         Build an ordered fallback chain of providers.
 
@@ -218,7 +219,7 @@ class FallbackHandler:
         with on-device as final fallback.
         """
         exclude = set(exclude or [])
-        chain: List[ProviderRecord] = []
+        chain: list[ProviderRecord] = []
         seen = set()
 
         # Add preferred providers first
@@ -257,7 +258,7 @@ class FallbackHandler:
         self,
         request: InferenceRequest,
         inference_func: InferenceFunc,
-        preferred_providers: Optional[List[str]] = None,
+        preferred_providers: list[str] | None = None,
     ) -> InferenceResponse:
         """
         Execute an inference request with automatic fallback.
@@ -283,7 +284,7 @@ class FallbackHandler:
             self._total_failures += 1
             raise RuntimeError("No available providers for inference")
 
-        errors: List[FailureRecord] = []
+        errors: list[FailureRecord] = []
         attempt = 0
 
         for provider in chain:
@@ -357,7 +358,7 @@ class FallbackHandler:
         error_summary = "; ".join(f"{e.provider_id}: {e.error_type}" for e in errors[-5:])
         raise RuntimeError(f"All providers failed after {attempt} attempts: {error_summary}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         failure_by_provider = defaultdict(int)
         for f in self._failure_history:
             failure_by_provider[f.provider_id] += 1
@@ -380,9 +381,9 @@ class FallbackHandler:
 
     def get_failure_history(
         self,
-        provider_id: Optional[str] = None,
+        provider_id: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         failures = self._failure_history
         if provider_id:
             failures = [f for f in failures if f.provider_id == provider_id]
@@ -390,10 +391,10 @@ class FallbackHandler:
 
 
 # Singleton
-_handler: Optional[FallbackHandler] = None
+_handler: FallbackHandler | None = None
 
 
-def get_fallback_handler(registry: Optional[ProviderRegistry] = None) -> FallbackHandler:
+def get_fallback_handler(registry: ProviderRegistry | None = None) -> FallbackHandler:
     global _handler
     if _handler is None:
         from .provider_registry import get_provider_registry

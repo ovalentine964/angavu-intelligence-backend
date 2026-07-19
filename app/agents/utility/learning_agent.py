@@ -12,12 +12,14 @@ from __future__ import annotations
 import re
 import time
 from collections import Counter, defaultdict
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
-    AgentDecision, AgentEvent, AgentResult, BiasharaAgent,
+    AgentDecision,
+    AgentResult,
+    BiasharaAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -68,7 +70,7 @@ class LearningAgent(BiasharaAgent):
     def __init__(self):
         super().__init__(name=self.name, role=self.role, capabilities=self.capabilities)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         action = payload.get("action", "analyze_feedback")
@@ -103,7 +105,7 @@ class LearningAgent(BiasharaAgent):
         except Exception as exc:
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
-    def _analyze(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _analyze(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Full feedback analysis pipeline."""
         if not items:
             return {"item_count": 0, "sentiment": "neutral", "topics": [], "feature_requests": []}
@@ -162,7 +164,7 @@ class LearningAgent(BiasharaAgent):
             "clusters": clusters,
         }
 
-    def _cluster_feedback(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _cluster_feedback(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Simple keyword-based feedback clustering."""
         theme_keywords = {
             "pricing": {"price", "cost", "expensive", "cheap", "bei", "gharama"},

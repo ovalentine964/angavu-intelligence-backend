@@ -11,16 +11,16 @@ Each endpoint:
 4. Returns response in the original channel format
 """
 
-import structlog
-from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, Field
-from typing import Any, Dict, Optional
+from typing import Any
 
-from app.triggers.base import TriggerIntent, TriggerResponse
-from app.triggers.whatsapp_trigger import WhatsAppTrigger
-from app.triggers.ussd_trigger import USSDTrigger
+import structlog
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
 from app.triggers.sms_trigger import SMSTrigger
+from app.triggers.ussd_trigger import USSDTrigger
 from app.triggers.voice_trigger import VoiceTrigger
+from app.triggers.whatsapp_trigger import WhatsAppTrigger
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/triggers", tags=["Multi-Channel Triggers"])
@@ -38,10 +38,10 @@ _voice_trigger = VoiceTrigger()
 class WhatsAppTriggerRequest(BaseModel):
     """Incoming WhatsApp message for trigger processing."""
     from_number: str = Field(..., alias="from")
-    body: Optional[str] = None
+    body: str | None = None
     type: str = "text"
-    media_url: Optional[str] = None
-    message_id: Optional[str] = None
+    media_url: str | None = None
+    message_id: str | None = None
 
 
 class USSDTriggerRequest(BaseModel):
@@ -56,7 +56,7 @@ class SMSTriggerRequest(BaseModel):
     """Incoming SMS message."""
     from_number: str = Field(..., alias="from")
     text: str
-    id: Optional[str] = None
+    id: str | None = None
     gateway: str = "generic"
 
 
@@ -64,19 +64,19 @@ class VoiceTriggerRequest(BaseModel):
     """Incoming voice/IVR request."""
     call_id: str
     caller: str
-    dtmf: Optional[str] = None
-    speech: Optional[str] = None
+    dtmf: str | None = None
+    speech: str | None = None
     language: str = "sw"
 
 
 class TriggerResponseModel(BaseModel):
     """Response from trigger processing."""
     status: str
-    intent: Optional[str] = None
-    response_text: Optional[str] = None
+    intent: str | None = None
+    response_text: str | None = None
     channel: str
-    session_id: Optional[str] = None
-    data: Dict[str, Any] = {}
+    session_id: str | None = None
+    data: dict[str, Any] = {}
 
 
 # ── Endpoints ───────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ async def whatsapp_trigger_endpoint(request: WhatsAppTriggerRequest):
         logger.error("whatsapp_trigger_error", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Trigger processing failed: {str(exc)}",
+            detail=f"Trigger processing failed: {exc!s}",
         )
 
 
@@ -155,7 +155,7 @@ async def ussd_trigger_endpoint(request: USSDTriggerRequest):
         logger.error("ussd_trigger_error", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"USSD processing failed: {str(exc)}",
+            detail=f"USSD processing failed: {exc!s}",
         )
 
 
@@ -193,7 +193,7 @@ async def sms_trigger_endpoint(request: SMSTriggerRequest):
         logger.error("sms_trigger_error", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"SMS processing failed: {str(exc)}",
+            detail=f"SMS processing failed: {exc!s}",
         )
 
 
@@ -233,7 +233,7 @@ async def voice_trigger_endpoint(request: VoiceTriggerRequest):
         logger.error("voice_trigger_error", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Voice processing failed: {str(exc)}",
+            detail=f"Voice processing failed: {exc!s}",
         )
 
 

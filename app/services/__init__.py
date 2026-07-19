@@ -3,85 +3,85 @@ Msaidizi / Angavu Intelligence — Report Services
 Voice-based AI CFO for Africa's informal economy.
 """
 
+from .comparison_engine import ComparisonEngine
+from .drift_detector import CUSUMDriftDetector, ModelDriftMonitor
+from .fallback_handler import FallbackHandler, get_fallback_handler
+from .health_score import BusinessHealthScorer
+from .heckman_correction import HeckmanCorrector
+from .model_router import ModelRouter, get_model_router
+from .provider_registry import ProviderRegistry, get_provider_registry
 from .report_generator import ReportGenerator
 from .report_scheduler import ReportScheduler
-from .health_score import BusinessHealthScorer
 from .seasonal_analyzer import SeasonalAnalyzer
-from .comparison_engine import ComparisonEngine
-from .heckman_correction import HeckmanCorrector
-from .drift_detector import CUSUMDriftDetector, ModelDriftMonitor
-from .whatsapp_charts import BarChart, Sparkline, Heatmap, CashFlowDiagram, ProgressBar, TrendLine
-from .provider_registry import ProviderRegistry, get_provider_registry
 from .token_compressor import TokenCompressor, get_token_compressor
-from .fallback_handler import FallbackHandler, get_fallback_handler
-from .model_router import ModelRouter, get_model_router
+from .whatsapp_charts import BarChart, CashFlowDiagram, Heatmap, ProgressBar, Sparkline, TrendLine
 
 __all__ = [
+    "BarChart",
+    "BusinessHealthScorer",
+    "CUSUMDriftDetector",
+    "CashFlowDiagram",
+    "ComparisonEngine",
+    "FallbackHandler",
+    "Heatmap",
+    "HeckmanCorrector",
+    "ModelDriftMonitor",
+    "ModelRouter",
+    "ProgressBar",
+    "ProviderRegistry",
     "ReportGenerator",
     "ReportScheduler",
-    "BusinessHealthScorer",
     "SeasonalAnalyzer",
-    "ComparisonEngine",
-    "HeckmanCorrector",
-    "CUSUMDriftDetector",
-    "ModelDriftMonitor",
-    "BarChart",
     "Sparkline",
-    "Heatmap",
-    "CashFlowDiagram",
-    "ProgressBar",
-    "TrendLine",
-    "ProviderRegistry",
-    "get_provider_registry",
     "TokenCompressor",
-    "get_token_compressor",
-    "FallbackHandler",
+    "TrendLine",
     "get_fallback_handler",
-    "ModelRouter",
     "get_model_router",
+    "get_provider_registry",
+    "get_token_compressor",
 ]
 
 # Intelligence product services
 from app.services.intelligence import (
-    SokoPulseService,
-    BiasharaPulseService,
-    AlamaScoreService,
-    JamiiInsightsService,
-    TaxBaseService,
-    DistributionGapService,
-    MarkovChainAnalyzer,
-    OptimizationEngine,
-    HealthEconomicsEngine,
     AfricanDevelopmentEngine,
+    AlamaScoreService,
+    BiasharaPulseService,
     BusinessCycleAnalyzer,
-    ProbabilitySpace,
     ConditionalExpectation,
     ConvergenceTheorems,
+    DistributionGapService,
+    HealthEconomicsEngine,
+    JamiiInsightsService,
+    MarkovChainAnalyzer,
     MartingaleAnalyzer,
+    OptimizationEngine,
+    ProbabilitySpace,
+    SokoPulseService,
+    TaxBaseService,
 )
 
 __all__ += [
-    "SokoPulseService",
-    "BiasharaPulseService",
-    "AlamaScoreService",
-    "JamiiInsightsService",
-    "TaxBaseService",
-    "DistributionGapService",
-    "MarkovChainAnalyzer",
-    "OptimizationEngine",
-    "HealthEconomicsEngine",
     "AfricanDevelopmentEngine",
+    "AlamaScoreService",
+    "BiasharaPulseService",
     "BusinessCycleAnalyzer",
-    "ProbabilitySpace",
     "ConditionalExpectation",
     "ConvergenceTheorems",
+    "DistributionGapService",
+    "HealthEconomicsEngine",
+    "JamiiInsightsService",
+    "MarkovChainAnalyzer",
     "MartingaleAnalyzer",
+    "OptimizationEngine",
+    "ProbabilitySpace",
+    "SokoPulseService",
+    "TaxBaseService",
 ]
 
 # Quality control (STA 346)
-from app.services.quality_control import SPCChart, DataQualityMonitor
+from app.services.quality_control import DataQualityMonitor, SPCChart
 
-__all__ += ["SPCChart", "DataQualityMonitor"]
+__all__ += ["DataQualityMonitor", "SPCChart"]
 
 # Mathematical foundations (MAT 101/121/124)
 from app.services.math_foundation import AlgebraFoundations, DifferentialCalculus, IntegralCalculus
@@ -94,14 +94,14 @@ from app.services.report_templates.audience_reports import AudienceReportGenerat
 __all__ += ["AudienceReportGenerator", "AudienceType"]
 
 # Training multi-agentic loop
-from app.services.training import TrainingLoop
 from app.services.nvidia_client import NVIDIAClient
 from app.services.self_evolution import SelfEvolutionService
+from app.services.training import TrainingLoop
 
 __all__ += [
-    "TrainingLoop",
     "NVIDIAClient",
     "SelfEvolutionService",
+    "TrainingLoop",
 ]
 
 # Hermes Agent Protocol
@@ -114,7 +114,7 @@ __all__ += [
 
 # ML Layer — XGBoost prediction services
 try:
-    from app.services.ml import FeatureEngineer, XGBoostService, ModelTrainer
-    __all__ += ["FeatureEngineer", "XGBoostService", "ModelTrainer"]
+    from app.services.ml import FeatureEngineer, ModelTrainer, XGBoostService
+    __all__ += ["FeatureEngineer", "ModelTrainer", "XGBoostService"]
 except ImportError:
     pass  # ML dependencies not installed

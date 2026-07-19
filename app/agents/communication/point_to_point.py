@@ -16,11 +16,11 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentEvent, AgentMessage, BiasharaAgent, EventType
+from app.agents.base import AgentEvent, AgentMessage, EventType
 
 
 class AgentCommunicationError(Exception):
@@ -40,17 +40,17 @@ class PointToPointProtocol:
 
     def __init__(self, event_bus: Any):
         self._event_bus = event_bus
-        self._pending_responses: Dict[str, asyncio.Future] = {}
-        self._message_log: List[Dict[str, Any]] = []
+        self._pending_responses: dict[str, asyncio.Future] = {}
+        self._message_log: list[dict[str, Any]] = []
         self._logger = logger.bind(component="p2p_protocol")
 
     async def send(
         self,
         sender: str,
         recipient: str,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         message_type: str = "notification",
-        correlation_id: Optional[str] = None,
+        correlation_id: str | None = None,
         priority: int = 5,
     ) -> str:
         """
@@ -162,9 +162,9 @@ class PointToPointProtocol:
         self,
         sender: str,
         recipient: str,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         timeout_seconds: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Send a request and wait for a response.
 
@@ -205,7 +205,7 @@ class PointToPointProtocol:
             response = await asyncio.wait_for(future, timeout=timeout_seconds)
             return response
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._logger.warning(
                 "p2p_request_timeout",
                 sender=sender,
@@ -229,7 +229,7 @@ class PointToPointProtocol:
         sender: str,
         recipient: str,
         correlation_id: str,
-        content: Dict[str, Any],
+        content: dict[str, Any],
     ) -> str:
         """Send a response to a previous request."""
         # Resolve pending future if exists
@@ -255,9 +255,9 @@ class PointToPointProtocol:
         self,
         sender: str,
         recipient: str,
-        proposal: Dict[str, Any],
+        proposal: dict[str, Any],
         timeout_seconds: float = 15.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Send a negotiation proposal and wait for acceptance/rejection.
 
@@ -273,7 +273,7 @@ class PointToPointProtocol:
             timeout_seconds=timeout_seconds,
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return P2P protocol statistics."""
         return {
             "total_sent": len(self._message_log),

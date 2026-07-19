@@ -27,9 +27,10 @@ import asyncio
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -153,7 +154,7 @@ class CircuitBreaker:
             failure_count=self._failure_count,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize for monitoring API."""
         return {
             "name": self.name,
@@ -177,12 +178,12 @@ class ExecutionRecord:
     execution_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     agent_name: str = ""
     event_type: str = ""
-    user_id: Optional[str] = None
+    user_id: str | None = None
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
     duration_ms: float = 0.0
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     attempt: int = 1
     circuit_state: str = "closed"
     timeout_used_s: float = 30.0
@@ -192,7 +193,7 @@ class ExecutionRecord:
     cost_usd: float = 0.0
     model_used: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "execution_id": self.execution_id,
             "agent_name": self.agent_name,
@@ -220,14 +221,14 @@ class AgentHealthTracker:
 
     def __init__(self, window_size: int = 100):
         self._window_size = window_size
-        self._agent_windows: Dict[str, List[bool]] = {}  # agent_name → [success, ...]
-        self._agent_error_counts: Dict[str, int] = defaultdict(int)
-        self._agent_total_counts: Dict[str, int] = defaultdict(int)
-        self._agent_consecutive_failures: Dict[str, int] = defaultdict(int)
-        self._agent_last_error: Dict[str, Dict[str, Any]] = {}
+        self._agent_windows: dict[str, list[bool]] = {}  # agent_name → [success, ...]
+        self._agent_error_counts: dict[str, int] = defaultdict(int)
+        self._agent_total_counts: dict[str, int] = defaultdict(int)
+        self._agent_consecutive_failures: dict[str, int] = defaultdict(int)
+        self._agent_last_error: dict[str, dict[str, Any]] = {}
         self._logger = logger.bind(component="agent_health")
 
-    def record(self, agent_name: str, success: bool, error: Optional[str] = None) -> None:
+    def record(self, agent_name: str, success: bool, error: str | None = None) -> None:
         """Record an execution result for health tracking."""
         if agent_name not in self._agent_windows:
             self._agent_windows[agent_name] = []
@@ -263,7 +264,7 @@ class AgentHealthTracker:
         """Get current consecutive failure streak."""
         return self._agent_consecutive_failures.get(agent_name, 0)
 
-    def get_health_status(self, agent_name: str) -> Dict[str, Any]:
+    def get_health_status(self, agent_name: str) -> dict[str, Any]:
         """Get comprehensive health status for an agent."""
         availability = self.get_availability(agent_name)
         error_rate = self.get_error_rate(agent_name)
@@ -290,7 +291,7 @@ class AgentHealthTracker:
             "last_error": last_error,
         }
 
-    def get_all_health(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_health(self) -> dict[str, dict[str, Any]]:
         """Get health status for all tracked agents."""
         return {
             name: self.get_health_status(name)
@@ -311,22 +312,22 @@ class AgentMetricsCollector:
     """
 
     def __init__(self, max_records: int = 10_000):
-        self._records: List[ExecutionRecord] = []
+        self._records: list[ExecutionRecord] = []
         self._max_records = max_records
-        self._agent_latencies: Dict[str, List[float]] = defaultdict(list)
-        self._agent_costs: Dict[str, float] = defaultdict(float)
-        self._user_costs: Dict[str, float] = defaultdict(float)
+        self._agent_latencies: dict[str, list[float]] = defaultdict(list)
+        self._agent_costs: dict[str, float] = defaultdict(float)
+        self._user_costs: dict[str, float] = defaultdict(float)
         # Per-day cost tracking: key = "YYYY-MM-DD"
-        self._daily_costs: Dict[str, float] = defaultdict(float)
-        self._daily_agent_costs: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
-        self._daily_user_costs: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self._daily_costs: dict[str, float] = defaultdict(float)
+        self._daily_agent_costs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self._daily_user_costs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
         # Per-swarm metrics (swarm = group of agents working together)
-        self._swarm_costs: Dict[str, float] = defaultdict(float)
-        self._swarm_calls: Dict[str, int] = defaultdict(int)
-        self._swarm_successes: Dict[str, int] = defaultdict(int)
-        self._swarm_latencies: Dict[str, List[float]] = defaultdict(list)
+        self._swarm_costs: dict[str, float] = defaultdict(float)
+        self._swarm_calls: dict[str, int] = defaultdict(int)
+        self._swarm_successes: dict[str, int] = defaultdict(int)
+        self._swarm_latencies: dict[str, list[float]] = defaultdict(list)
         # Agent → swarm mapping
-        self._agent_swarm_map: Dict[str, str] = {}
+        self._agent_swarm_map: dict[str, str] = {}
         # Agent health tracker
         self._health = AgentHealthTracker()
         self._logger = logger.bind(component="agent_metrics")
@@ -335,7 +336,7 @@ class AgentMetricsCollector:
         """Register an agent as belonging to a swarm (group of cooperating agents)."""
         self._agent_swarm_map[agent_name] = swarm_name
 
-    def get_swarm_stats(self, swarm_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_swarm_stats(self, swarm_name: str, hours: int = 24) -> dict[str, Any]:
         """Get aggregated stats for a swarm of agents."""
         cutoff = time.time() - hours * 3600
         swarm_agents = [
@@ -372,7 +373,7 @@ class AgentMetricsCollector:
             "total_tokens": sum(r.input_tokens + r.output_tokens for r in records),
         }
 
-    def get_all_swarm_stats(self, hours: int = 24) -> Dict[str, Any]:
+    def get_all_swarm_stats(self, hours: int = 24) -> dict[str, Any]:
         """Get stats for all swarms."""
         swarms = set(self._agent_swarm_map.values())
         return {
@@ -417,7 +418,7 @@ class AgentMetricsCollector:
         # Health tracking
         self._health.record(record.agent_name, record.success, record.error)
 
-    def get_agent_stats(self, agent_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_agent_stats(self, agent_name: str, hours: int = 24) -> dict[str, Any]:
         """Get stats for a specific agent."""
         cutoff = time.time() - hours * 3600
         records = [r for r in self._records if r.agent_name == agent_name and r.started_at > cutoff]
@@ -456,7 +457,7 @@ class AgentMetricsCollector:
             "cost_usd": round(self._agent_costs.get(agent_name, 0), 6),
         }
 
-    def get_all_stats(self, hours: int = 24) -> Dict[str, Any]:
+    def get_all_stats(self, hours: int = 24) -> dict[str, Any]:
         """Get stats for all agents."""
         agent_names = set(r.agent_name for r in self._records)
         return {
@@ -469,7 +470,7 @@ class AgentMetricsCollector:
             "health": self._health.get_all_health(),
         }
 
-    def get_daily_costs(self, days: int = 7) -> Dict[str, Any]:
+    def get_daily_costs(self, days: int = 7) -> dict[str, Any]:
         """Get cost breakdown by day for the last N days."""
         import datetime
         today = datetime.date.today()
@@ -490,14 +491,14 @@ class AgentMetricsCollector:
             }
         return result
 
-    def get_health_status(self) -> Dict[str, Dict[str, Any]]:
+    def get_health_status(self) -> dict[str, dict[str, Any]]:
         """Get health status for all agents."""
         return self._health.get_all_health()
 
-    def get_user_costs(self, user_id: str) -> Dict[str, Any]:
+    def get_user_costs(self, user_id: str) -> dict[str, Any]:
         """Get cost breakdown for a specific user."""
         records = [r for r in self._records if r.user_id == user_id]
-        agent_costs: Dict[str, float] = defaultdict(float)
+        agent_costs: dict[str, float] = defaultdict(float)
         for r in records:
             agent_costs[r.agent_name] += r.cost_usd
 
@@ -526,8 +527,8 @@ class HarnessConfig:
     circuit_recovery_timeout_s: float = 30.0  # Time before half-open probe
     circuit_half_open_max: int = 3    # Successes in half-open to close circuit
     enable_cost_tracking: bool = True
-    per_agent_timeout: Dict[str, float] = field(default_factory=dict)
-    per_agent_retries: Dict[str, int] = field(default_factory=dict)
+    per_agent_timeout: dict[str, float] = field(default_factory=dict)
+    per_agent_retries: dict[str, int] = field(default_factory=dict)
 
 
 class AgentExecutionHarness:
@@ -559,23 +560,23 @@ class AgentExecutionHarness:
             return await self._handle_event_inner(event)
     """
 
-    def __init__(self, config: Optional[HarnessConfig] = None):
+    def __init__(self, config: HarnessConfig | None = None):
         self._config = config or HarnessConfig()
-        self._circuit_breakers: Dict[str, CircuitBreaker] = {}
+        self._circuit_breakers: dict[str, CircuitBreaker] = {}
         self._metrics = AgentMetricsCollector()
         self._logger = logger.bind(component="execution_harness")
 
         # Pre/Post execution hooks
-        self._pre_hooks: List[Callable] = []
-        self._post_hooks: List[Callable] = []
+        self._pre_hooks: list[Callable] = []
+        self._post_hooks: list[Callable] = []
 
         # Agent loop improvements (injected via setters, feature-flagged)
         self._cost_tracker: Any = None    # AgentCostTracker | None
         self._governance: Any = None      # CircuitBreakerGovernance | None
 
         # Prompt guard integration (feature-flagged)
-        self._prompt_guard: Optional["PromptGuard"] = None
-        self._secure_handlers: Dict[str, "SecureMessageHandler"] = {}
+        self._prompt_guard: PromptGuard | None = None
+        self._secure_handlers: dict[str, SecureMessageHandler] = {}
         self._injection_blocks: int = 0
         if PROMPT_GUARD_ENABLED and _PROMPT_GUARD_AVAILABLE:
             self._prompt_guard = get_prompt_guard()
@@ -600,8 +601,8 @@ class AgentExecutionHarness:
         self,
         agent: BiasharaAgent,
         event: AgentEvent,
-        user_id: Optional[str] = None,
-        timeout_override: Optional[float] = None,
+        user_id: str | None = None,
+        timeout_override: float | None = None,
     ) -> AgentResult:
         """
         Execute an agent call through the harness.
@@ -752,7 +753,7 @@ class AgentExecutionHarness:
 
                 return result
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 elapsed = (time.time() - start_time) * 1000
                 record.ended_at = time.time()
                 record.duration_ms = elapsed
@@ -839,39 +840,39 @@ class AgentExecutionHarness:
         """Register an agent as belonging to a swarm (group of cooperating agents)."""
         self._metrics.register_agent_swarm(agent_name, swarm_name)
 
-    def get_swarm_metrics(self, swarm_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_swarm_metrics(self, swarm_name: str, hours: int = 24) -> dict[str, Any]:
         """Get metrics for a swarm of agents."""
         return self._metrics.get_swarm_stats(swarm_name, hours)
 
-    def get_all_swarm_metrics(self, hours: int = 24) -> Dict[str, Any]:
+    def get_all_swarm_metrics(self, hours: int = 24) -> dict[str, Any]:
         """Get metrics for all swarms."""
         return self._metrics.get_all_swarm_stats(hours)
 
-    def get_circuit_breakers(self) -> Dict[str, Dict[str, Any]]:
+    def get_circuit_breakers(self) -> dict[str, dict[str, Any]]:
         """Get state of all circuit breakers."""
         return {name: cb.to_dict() for name, cb in self._circuit_breakers.items()}
 
-    def get_metrics(self, hours: int = 24) -> Dict[str, Any]:
+    def get_metrics(self, hours: int = 24) -> dict[str, Any]:
         """Get aggregated execution metrics."""
         return self._metrics.get_all_stats(hours)
 
-    def get_agent_metrics(self, agent_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_agent_metrics(self, agent_name: str, hours: int = 24) -> dict[str, Any]:
         """Get metrics for a specific agent."""
         return self._metrics.get_agent_stats(agent_name, hours)
 
-    def get_user_costs(self, user_id: str) -> Dict[str, Any]:
+    def get_user_costs(self, user_id: str) -> dict[str, Any]:
         """Get cost breakdown for a specific user."""
         return self._metrics.get_user_costs(user_id)
 
-    def get_daily_costs(self, days: int = 7) -> Dict[str, Any]:
+    def get_daily_costs(self, days: int = 7) -> dict[str, Any]:
         """Get cost breakdown by day."""
         return self._metrics.get_daily_costs(days)
 
-    def get_agent_health(self) -> Dict[str, Dict[str, Any]]:
+    def get_agent_health(self) -> dict[str, dict[str, Any]]:
         """Get health status for all tracked agents (availability, error rates)."""
         return self._metrics.get_health_status()
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> dict[str, Any]:
         """Get overall harness health status."""
         open_circuits = [
             name for name, cb in self._circuit_breakers.items()
@@ -926,10 +927,10 @@ class AgentExecutionHarness:
 class ValidationResult:
     """Result of output validation."""
     valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "valid": self.valid,
             "errors": self.errors,
@@ -954,10 +955,10 @@ class OutputValidator:
     """
 
     def __init__(self):
-        self._validators: Dict[str, List[Callable[[Dict], tuple]]] = {}
+        self._validators: dict[str, list[Callable[[dict], tuple]]] = {}
         self._logger = logger.bind(component="output_validator")
 
-    def register(self, output_type: str, validator_fn: Callable[[Dict], tuple]) -> None:
+    def register(self, output_type: str, validator_fn: Callable[[dict], tuple]) -> None:
         """
         Register a validation function for an output type.
 
@@ -965,7 +966,7 @@ class OutputValidator:
         """
         self._validators.setdefault(output_type, []).append(validator_fn)
 
-    def validate(self, output_type: str, data: Dict[str, Any]) -> ValidationResult:
+    def validate(self, output_type: str, data: dict[str, Any]) -> ValidationResult:
         """Run all validators for an output type."""
         errors = []
         warnings = []
@@ -984,7 +985,7 @@ class OutputValidator:
             warnings=warnings,
         )
 
-    def get_registered_types(self) -> List[str]:
+    def get_registered_types(self) -> list[str]:
         """List all registered output types."""
         return list(self._validators.keys())
 
@@ -992,7 +993,7 @@ class OutputValidator:
 # ── Built-in Validators ────────────────────────────────────────────
 
 
-def validate_credit_score(data: Dict[str, Any]) -> tuple:
+def validate_credit_score(data: dict[str, Any]) -> tuple:
     """Validate credit score is in range 300-850."""
     score = data.get("credit_score") or data.get("alama_score", 0)
     if not (300 <= score <= 850):
@@ -1000,15 +1001,15 @@ def validate_credit_score(data: Dict[str, Any]) -> tuple:
     return True, ""
 
 
-def validate_confidence(data: Dict[str, Any]) -> tuple:
+def validate_confidence(data: dict[str, Any]) -> tuple:
     """Validate confidence is in range 0.0-1.0."""
-    confidence = data.get("confidence", None)
+    confidence = data.get("confidence")
     if confidence is not None and not (0.0 <= confidence <= 1.0):
         return False, f"Confidence {confidence} outside valid range 0.0-1.0"
     return True, ""
 
 
-def validate_market_forecast(data: Dict[str, Any]) -> tuple:
+def validate_market_forecast(data: dict[str, Any]) -> tuple:
     """Validate market forecast has required fields."""
     required = ["product_category", "region", "forecast_horizon"]
     missing = [f for f in required if f not in data]
@@ -1017,7 +1018,7 @@ def validate_market_forecast(data: Dict[str, Any]) -> tuple:
     return True, ""
 
 
-def validate_report_content(data: Dict[str, Any]) -> tuple:
+def validate_report_content(data: dict[str, Any]) -> tuple:
     """Validate report has non-empty content."""
     content = data.get("content") or data.get("report_content", "")
     if not content or len(str(content).strip()) < 10:
@@ -1025,7 +1026,7 @@ def validate_report_content(data: Dict[str, Any]) -> tuple:
     return True, ""
 
 
-def validate_transaction_amount(data: Dict[str, Any]) -> tuple:
+def validate_transaction_amount(data: dict[str, Any]) -> tuple:
     """Validate transaction amount is positive."""
     amount = data.get("amount", 0)
     if amount <= 0:
@@ -1051,7 +1052,7 @@ def create_default_validator() -> OutputValidator:
 # ════════════════════════════════════════════════════════════════════
 
 
-_global_harness: Optional[AgentExecutionHarness] = None
+_global_harness: AgentExecutionHarness | None = None
 
 
 def get_execution_harness() -> AgentExecutionHarness:
@@ -1107,7 +1108,7 @@ class CanaryRouter:
     """
 
     def __init__(self):
-        self._versions: Dict[str, List[tuple]] = {}
+        self._versions: dict[str, list[tuple]] = {}
         # agent_name → [(agent_instance, weight), ...]
         self._logger = logger.bind(component="canary_router")
 
@@ -1144,7 +1145,7 @@ class CanaryRouter:
                 return agent
         return versions[-1][0]
 
-    def get_weights(self, agent_name: str) -> List[Dict[str, Any]]:
+    def get_weights(self, agent_name: str) -> list[dict[str, Any]]:
         """Get current traffic weights for an agent."""
         versions = self._versions.get(agent_name, [])
         total = sum(w for _, w, _ in versions)

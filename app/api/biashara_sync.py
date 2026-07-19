@@ -12,20 +12,17 @@ Device → Backend: Anonymized transactions (no PII)
 Backend → Device: Intelligence products (Soko Pulse, Alama Score, etc.)
 """
 
-import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.transaction import Transaction
-from app.models.user import User
 from app.services.intelligence_delivery import IntelligenceDelivery
 
 logger = structlog.get_logger(__name__)
@@ -55,7 +52,7 @@ class BiasharaSyncPayload(BaseModel):
     device_id: str = Field(..., max_length=64, description="SHA-256 hashed device ID")
     worker_type: str = Field("", description="Worker classification")
     coarse_location: str = Field("")
-    transactions: List[AnonymizedTransaction] = Field(
+    transactions: list[AnonymizedTransaction] = Field(
         ..., max_length=200, description="Batch of anonymized transactions"
     )
     sync_timestamp: int = Field(..., description="Unix timestamp when batch created")
@@ -75,14 +72,14 @@ class BiasharaSyncResponse(BaseModel):
     synced_id: str = Field(..., description="Unique sync operation ID")
     transactions_accepted: int = 0
     transactions_rejected: int = 0
-    rejection_reasons: Optional[List[str]] = None
+    rejection_reasons: list[str] | None = None
     intelligence_available: bool = Field(
         False,
         description="Whether new intelligence products are ready"
     )
     next_sync_recommended_seconds: int = 3600
     server_time: int = Field(
-        default_factory=lambda: int(datetime.now(timezone.utc).timestamp()),
+        default_factory=lambda: int(datetime.now(UTC).timestamp()),
         description="Server time as Unix timestamp"
     )
 
@@ -93,39 +90,39 @@ class IntelligencePullRequest(BaseModel):
     worker_type: str = Field("")
     coarse_location: str = Field("")
     language: str = Field("sw", pattern=r"^(sw|en|sh)$")
-    since: Optional[int] = Field(None, description="Unix timestamp — only updates since this time")
+    since: int | None = Field(None, description="Unix timestamp — only updates since this time")
 
 
 class SokoPulseData(BaseModel):
     """Market price intelligence."""
-    price_alerts: List[Dict] = Field(default_factory=list)
-    market_trends: Dict[str, str] = Field(default_factory=dict)
-    last_updated: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp()))
+    price_alerts: list[dict] = Field(default_factory=list)
+    market_trends: dict[str, str] = Field(default_factory=dict)
+    last_updated: int = Field(default_factory=lambda: int(datetime.now(UTC).timestamp()))
 
 
 class AlamaScoreData(BaseModel):
     """Credit readiness assessment."""
     score: int = Field(0, ge=0, le=100)
-    components: Dict[str, float] = Field(default_factory=dict)
+    components: dict[str, float] = Field(default_factory=dict)
     credit_readiness: float = Field(0.0, ge=0, le=1)
     recommended_loan_amount: float = Field(0.0)
-    last_updated: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp()))
+    last_updated: int = Field(default_factory=lambda: int(datetime.now(UTC).timestamp()))
 
 
 class BiasharaPulseData(BaseModel):
     """Business health intelligence."""
     health_score: float = Field(0.0, ge=0, le=100)
-    peer_benchmark: Dict[str, float] = Field(default_factory=dict)
+    peer_benchmark: dict[str, float] = Field(default_factory=dict)
     growth_trend: str = Field("stable", description="growing | stable | declining")
-    last_updated: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp()))
+    last_updated: int = Field(default_factory=lambda: int(datetime.now(UTC).timestamp()))
 
 
 class JamiiInsightsData(BaseModel):
     """Community economic context."""
     area_activity: float = Field(0.0, ge=0, le=1)
     worker_count: int = Field(0)
-    top_categories: List[str] = Field(default_factory=list)
-    last_updated: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp()))
+    top_categories: list[str] = Field(default_factory=list)
+    last_updated: int = Field(default_factory=lambda: int(datetime.now(UTC).timestamp()))
 
 
 class IntelligenceUpdateResponse(BaseModel):
@@ -134,7 +131,7 @@ class IntelligenceUpdateResponse(BaseModel):
     alama_score: AlamaScoreData = Field(default_factory=AlamaScoreData)
     biashara_pulse: BiasharaPulseData = Field(default_factory=BiasharaPulseData)
     jamii_insights: JamiiInsightsData = Field(default_factory=JamiiInsightsData)
-    received_at: int = Field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp()))
+    received_at: int = Field(default_factory=lambda: int(datetime.now(UTC).timestamp()))
 
 
 # =========================================================================
@@ -175,7 +172,7 @@ async def biashara_sync(
     )
 
     # Deduplication check — same device + same timestamp window
-    sync_time = datetime.fromtimestamp(payload.sync_timestamp, tz=timezone.utc)
+    sync_time = datetime.fromtimestamp(payload.sync_timestamp, tz=UTC)
     existing = await db.execute(
         select(Transaction).where(
             and_(
@@ -215,8 +212,8 @@ async def biashara_sync(
                 continue
 
             # Timestamp sanity
-            txn_time = datetime.fromtimestamp(record.timestamp, tz=timezone.utc)
-            now = datetime.now(timezone.utc)
+            txn_time = datetime.fromtimestamp(record.timestamp, tz=UTC)
+            now = datetime.now(UTC)
             if txn_time > now + timedelta(hours=1):
                 rejected += 1
                 reasons.append(f"Future timestamp: {record.timestamp}")
@@ -237,7 +234,7 @@ async def biashara_sync(
                 recorded_via="voice",
                 confidence_score=record.confidence,
                 timestamp=txn_time,
-                synced_at=datetime.now(timezone.utc),
+                synced_at=datetime.now(UTC),
                 device_id=payload.device_id,
                 location_geohash=record.coarse_location[:5] if record.coarse_location else None,
             )
@@ -246,7 +243,7 @@ async def biashara_sync(
 
         except Exception as e:
             rejected += 1
-            reasons.append(f"Error: {str(e)}")
+            reasons.append(f"Error: {e!s}")
 
     await db.flush()
 
@@ -273,7 +270,7 @@ async def pull_intelligence(
     worker_type: str = Query(""),
     coarse_location: str = Query(""),
     language: str = Query("sw", regex=r"^(sw|en|sh)$"),
-    since: Optional[int] = Query(None, description="Unix timestamp"),
+    since: int | None = Query(None, description="Unix timestamp"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -293,7 +290,7 @@ async def pull_intelligence(
 
     # Get intelligence from delivery service
     delivery = IntelligenceDelivery(db)
-    since_dt = datetime.fromtimestamp(since, tz=timezone.utc) if since else None
+    since_dt = datetime.fromtimestamp(since, tz=UTC) if since else None
 
     try:
         intel = await delivery.get_intelligence_for_worker(

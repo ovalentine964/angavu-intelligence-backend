@@ -37,12 +37,12 @@ Architecture:
 
 from __future__ import annotations
 
-import asyncio
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence
+from typing import Any
 
 import structlog
 
@@ -50,7 +50,6 @@ from app.agents.base import (
     AgentDecision,
     AgentEvent,
     AgentResult,
-    AgentStatus,
     BiasharaAgent,
     EventType,
 )
@@ -84,7 +83,7 @@ class OrientationState:
     just a per-event context window.
     """
     state_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    axes: Dict[str, float] = field(default_factory=lambda: {
+    axes: dict[str, float] = field(default_factory=lambda: {
         "market_trend": 0.0,       # -1.0 (bearish) to 1.0 (bullish)
         "volatility": 0.0,         # 0.0 (calm) to 1.0 (volatile)
         "urgency": 0.0,            # 0.0 (routine) to 1.0 (critical)
@@ -95,7 +94,7 @@ class OrientationState:
     })
     last_updated: float = field(default_factory=time.time)
     cycle_count: int = 0
-    drift_history: List[Dict[str, float]] = field(default_factory=list)
+    drift_history: list[dict[str, float]] = field(default_factory=list)
 
     def update_axis(self, axis: str, value: float, weight: float = 0.3) -> None:
         """
@@ -117,7 +116,7 @@ class OrientationState:
             self.drift_history = self.drift_history[-100:]
         self.cycle_count += 1
 
-    def get_drift(self) -> Dict[str, float]:
+    def get_drift(self) -> dict[str, float]:
         """
         Calculate orientation drift since last cycle.
 
@@ -148,7 +147,7 @@ class OrientationState:
             return "medium"
         return "low"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "state_id": self.state_id,
             "axes": {k: round(v, 3) for k, v in self.axes.items()},
@@ -165,7 +164,7 @@ class OODACycle:
     cycle_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     cycle_number: int = 0
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
     # Phase timings (ms)
     observe_ms: float = 0.0
@@ -174,16 +173,16 @@ class OODACycle:
     act_ms: float = 0.0
 
     # Phase outputs
-    observations: Dict[str, Any] = field(default_factory=dict)
-    orientation_snapshot: Dict[str, Any] = field(default_factory=dict)
-    decision: Optional[Dict[str, Any]] = None
-    action_result: Optional[Dict[str, Any]] = None
+    observations: dict[str, Any] = field(default_factory=dict)
+    orientation_snapshot: dict[str, Any] = field(default_factory=dict)
+    decision: dict[str, Any] | None = None
+    action_result: dict[str, Any] | None = None
 
     # Outcome
     success: bool = False
     total_ms: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "cycle_id": self.cycle_id,
             "cycle_number": self.cycle_number,
@@ -218,7 +217,7 @@ class OODAMetrics:
     orientation_stability: float = 0.0  # 0=chaotic, 1=stable
     escalations: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_cycles": self.total_cycles,
             "success_rate": round(self.successful_cycles / max(1, self.total_cycles), 3),
@@ -274,7 +273,7 @@ class OODAAgent(BiasharaAgent):
     ):
         super().__init__(name, role, capabilities)
         self._orientation = OrientationState()
-        self._cycle_history: List[OODACycle] = []
+        self._cycle_history: list[OODACycle] = []
         self._max_cycle_history = 200
         self._escalation_threshold = escalation_threshold
         self._max_cycle_ms = max_cycle_ms
@@ -286,7 +285,7 @@ class OODAAgent(BiasharaAgent):
         """Access the current orientation state."""
         return self._orientation
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Make a fast decision based on orientation state."""
         event_data = context.get("event", {})
         event = AgentEvent(
@@ -381,7 +380,7 @@ class OODAAgent(BiasharaAgent):
 
     # ── Phase implementations ──────────────────────────────────────
 
-    async def _observe(self, event: AgentEvent) -> Dict[str, Any]:
+    async def _observe(self, event: AgentEvent) -> dict[str, Any]:
         """
         Gather signals from the event and recent context.
 
@@ -408,7 +407,7 @@ class OODAAgent(BiasharaAgent):
 
         return observations
 
-    async def _extract_observations(self, event: AgentEvent) -> Dict[str, Any]:
+    async def _extract_observations(self, event: AgentEvent) -> dict[str, Any]:
         """
         Extract domain-specific observations from the event.
 
@@ -417,7 +416,7 @@ class OODAAgent(BiasharaAgent):
         """
         return {"payload": event.payload}
 
-    async def _orient(self, observations: Dict[str, Any]) -> None:
+    async def _orient(self, observations: dict[str, Any]) -> None:
         """
         Update orientation state based on new observations.
 
@@ -437,8 +436,8 @@ class OODAAgent(BiasharaAgent):
         self._orientation.record_drift()
 
     async def _compute_orientation_update(
-        self, observations: Dict[str, Any]
-    ) -> Dict[str, float]:
+        self, observations: dict[str, Any]
+    ) -> dict[str, float]:
         """
         Compute orientation axis updates from observations.
 
@@ -448,7 +447,7 @@ class OODAAgent(BiasharaAgent):
         return {}
 
     async def _decide(
-        self, event: AgentEvent, observations: Dict[str, Any]
+        self, event: AgentEvent, observations: dict[str, Any]
     ) -> AgentDecision:
         """
         Make a fast decision based on orientation state.
@@ -458,7 +457,7 @@ class OODAAgent(BiasharaAgent):
         return await self._ooda_decide(event, observations)
 
     async def _ooda_decide(
-        self, event: AgentEvent, observations: Dict[str, Any]
+        self, event: AgentEvent, observations: dict[str, Any]
     ) -> AgentDecision:
         """
         Domain-specific decision logic.
@@ -559,19 +558,19 @@ class OODAAgent(BiasharaAgent):
             orientation=self._orientation.to_dict(),
         )
 
-    def get_recent_cycles(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_cycles(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent OODA cycle records."""
         return [c.to_dict() for c in self._cycle_history[-n:]]
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get aggregated OODA performance metrics."""
         return self._metrics.to_dict()
 
-    def get_orientation(self) -> Dict[str, Any]:
+    def get_orientation(self) -> dict[str, Any]:
         """Get current orientation state."""
         return self._orientation.to_dict()
 
-    def get_orientation_drift(self) -> Dict[str, float]:
+    def get_orientation_drift(self) -> dict[str, float]:
         """Get orientation drift (environmental change magnitude)."""
         return self._orientation.get_drift()
 

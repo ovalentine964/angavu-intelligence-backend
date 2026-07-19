@@ -13,9 +13,9 @@ Endpoints:
 - GET  /fl-aggregator/model/{cohort_id}  — Get latest aggregated model
 """
 
-import sys
 import os
-from typing import Any, Dict, List, Optional
+import sys
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,10 +37,10 @@ if os.path.isdir(_pipeline_path):
 
 try:
     from federated_learning import (
-        FederatedAggregator,
-        GradientDelta,
         AggregationMethod,
         DifferentialPrivacy,
+        FederatedAggregator,
+        GradientDelta,
     )
     _aggregator = FederatedAggregator()
     _aggregator_available = True
@@ -61,12 +61,12 @@ class GradientDeltaRequest(BaseModel):
     user_id_hash: str = Field("", description="SHA-256 hashed user ID")
     dialect: str = Field(..., description="Language/dialect code (e.g. 'sw', 'luo')")
     adapter_type: str = Field("user", description="Adapter type: 'user' or 'dialect'")
-    weight_delta: Dict[str, Any] = Field(..., description="LoRA weight changes (serialized)")
+    weight_delta: dict[str, Any] = Field(..., description="LoRA weight changes (serialized)")
     delta_l2_norm: float = Field(..., description="L2 norm of the delta")
     num_examples: int = Field(1, description="Number of training examples used")
     training_loss: float = Field(0.0, description="Final training loss")
     round_id: int = Field(0, description="Federated round ID")
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AggregateRequest(BaseModel):
@@ -77,13 +77,13 @@ class AggregateRequest(BaseModel):
 class AggregateResponse(BaseModel):
     """Response from aggregation."""
     status: str
-    cohort_id: Optional[str] = None
-    version: Optional[str] = None
+    cohort_id: str | None = None
+    version: str | None = None
     num_contributors: int = 0
     avg_loss: float = 0.0
     quality_score: float = 0.0
     is_anomaly_detected: bool = False
-    anomaly_details: Optional[str] = None
+    anomaly_details: str | None = None
 
 
 class AggregatorStatusResponse(BaseModel):

@@ -25,8 +25,8 @@ Enterprise clients get additional steps:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
@@ -40,7 +40,6 @@ from app.agents.base import (
 from app.autonomous.models.onboarding import (
     OnboardingFlow,
     OnboardingStatus,
-    OnboardingStep,
     StepStatus,
     create_default_onboarding_steps,
 )
@@ -72,7 +71,7 @@ class OnboardingAgent(BiasharaAgent):
             ],
         )
         # Onboarding store (in-memory; wire to DB in production)
-        self._flows: Dict[str, OnboardingFlow] = {}
+        self._flows: dict[str, OnboardingFlow] = {}
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -87,7 +86,7 @@ class OnboardingAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide what onboarding action to take.
 
@@ -197,9 +196,9 @@ class OnboardingAgent(BiasharaAgent):
 
     async def _create_onboarding(
         self,
-        params: Dict[str, Any],
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Create a new onboarding flow for a client."""
         client_id = params.get("client_id", "")
         client_name = params.get("client_name", "")
@@ -215,15 +214,15 @@ class OnboardingAgent(BiasharaAgent):
             product_tier=product_tier,
             status=OnboardingStatus.CREATED,
             steps=steps,
-            started_at=datetime.now(timezone.utc),
-            target_completion=datetime.now(timezone.utc) + timedelta(days=30),
+            started_at=datetime.now(UTC),
+            target_completion=datetime.now(UTC) + timedelta(days=30),
         )
 
         # Auto-complete the welcome email step (day 0)
         if flow.steps:
             welcome_step = flow.steps[0]
             welcome_step.status = StepStatus.COMPLETED
-            welcome_step.completed_at = datetime.now(timezone.utc)
+            welcome_step.completed_at = datetime.now(UTC)
 
         # Store
         self._flows[flow.flow_id] = flow
@@ -261,9 +260,9 @@ class OnboardingAgent(BiasharaAgent):
 
     async def _process_feedback(
         self,
-        params: Dict[str, Any],
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Process onboarding feedback from a client."""
         flow_id = params.get("flow_id", "")
         flow = self._flows.get(flow_id)
@@ -280,7 +279,7 @@ class OnboardingAgent(BiasharaAgent):
         # If satisfaction is high and all steps done, mark complete
         if satisfaction >= 4.0 and flow.progress_pct >= 100:
             flow.status = OnboardingStatus.COMPLETED
-            flow.completed_at = datetime.now(timezone.utc)
+            flow.completed_at = datetime.now(UTC)
 
             events.append(AgentEvent(
                 event_type=EventType.ONBOARDING_COMPLETED,
@@ -310,8 +309,8 @@ class OnboardingAgent(BiasharaAgent):
 
     async def _check_progress(
         self,
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Check all onboarding flows for stalled progress."""
         stalled_count = 0
         active_count = 0
@@ -327,7 +326,7 @@ class OnboardingAgent(BiasharaAgent):
             active_count += 1
 
             # Auto-advance steps that are due
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for step in flow.steps:
                 if step.status == StepStatus.PENDING:
                     due_date = flow.started_at + timedelta(days=step.due_days) if flow.started_at else None
@@ -368,7 +367,7 @@ class OnboardingAgent(BiasharaAgent):
 
     # ── Public helpers ──────────────────────────────────────────────
 
-    def complete_step(self, flow_id: str, step_name: str) -> Optional[Dict[str, Any]]:
+    def complete_step(self, flow_id: str, step_name: str) -> dict[str, Any] | None:
         """Mark a specific onboarding step as completed."""
         flow = self._flows.get(flow_id)
         if not flow:
@@ -377,13 +376,13 @@ class OnboardingAgent(BiasharaAgent):
         for step in flow.steps:
             if step.name == step_name:
                 step.status = StepStatus.COMPLETED
-                step.completed_at = datetime.now(timezone.utc)
+                step.completed_at = datetime.now(UTC)
 
                 # Check if all steps are done
                 all_done = all(s.status in (StepStatus.COMPLETED, StepStatus.SKIPPED) for s in flow.steps)
                 if all_done:
                     flow.status = OnboardingStatus.COMPLETED
-                    flow.completed_at = datetime.now(timezone.utc)
+                    flow.completed_at = datetime.now(UTC)
 
                 return {
                     "flow_id": flow_id,
@@ -394,11 +393,11 @@ class OnboardingAgent(BiasharaAgent):
 
         return None
 
-    def get_flow(self, flow_id: str) -> Optional[Dict[str, Any]]:
+    def get_flow(self, flow_id: str) -> dict[str, Any] | None:
         """Get onboarding flow details."""
         flow = self._flows.get(flow_id)
         return flow.to_dict() if flow else None
 
-    def get_all_flows(self) -> List[Dict[str, Any]]:
+    def get_all_flows(self) -> list[dict[str, Any]]:
         """Get all onboarding flows."""
         return [f.to_dict() for f in self._flows.values()]

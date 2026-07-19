@@ -19,9 +19,10 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence
+from typing import Any
 
 import structlog
 
@@ -60,13 +61,13 @@ class MCPTool:
     """
     name: str
     description: str
-    input_schema: Dict[str, Any]  # JSON Schema for parameters
-    handler: Optional[Callable[..., Coroutine]] = None
+    input_schema: dict[str, Any]  # JSON Schema for parameters
+    handler: Callable[..., Coroutine] | None = None
     permission: MCPToolPermission = MCPToolPermission.READ
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     version: str = "1.0.0"
 
-    def to_manifest(self) -> Dict[str, Any]:
+    def to_manifest(self) -> dict[str, Any]:
         """Export tool manifest for MCP tools/list response."""
         return {
             "name": self.name,
@@ -90,9 +91,9 @@ class MCPResource:
     name: str
     description: str
     mime_type: str = "application/json"
-    reader: Optional[Callable[..., Coroutine]] = None
+    reader: Callable[..., Coroutine] | None = None
 
-    def to_manifest(self) -> Dict[str, Any]:
+    def to_manifest(self) -> dict[str, Any]:
         return {
             "uri": self.uri,
             "name": self.name,
@@ -106,10 +107,10 @@ class MCPPrompt:
     """An MCP-compatible prompt template."""
     name: str
     description: str
-    arguments: List[Dict[str, Any]] = field(default_factory=list)
-    template: Optional[Callable[..., Coroutine]] = None
+    arguments: list[dict[str, Any]] = field(default_factory=list)
+    template: Callable[..., Coroutine] | None = None
 
-    def to_manifest(self) -> Dict[str, Any]:
+    def to_manifest(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -157,16 +158,16 @@ class MCPServer:
     ):
         self.name = name
         self.version = version
-        self._tools: Dict[str, MCPTool] = {}
-        self._resources: Dict[str, MCPResource] = {}
-        self._prompts: Dict[str, MCPPrompt] = {}
+        self._tools: dict[str, MCPTool] = {}
+        self._resources: dict[str, MCPResource] = {}
+        self._prompts: dict[str, MCPPrompt] = {}
 
         # Rate limiting
         self._rate_limit = max_requests_per_minute
-        self._request_timestamps: List[float] = []
+        self._request_timestamps: list[float] = []
 
         # Audit trail
-        self._request_log: List[Dict[str, Any]] = []
+        self._request_log: list[dict[str, Any]] = []
         self._max_log_size = 1000
 
         self._logger = logger.bind(component="mcp_server", server=name)
@@ -203,7 +204,7 @@ class MCPServer:
 
     # ── Request Handling ────────────────────────────────────────────
 
-    async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """
         Handle an incoming MCP JSON-RPC request.
 
@@ -242,9 +243,9 @@ class MCPServer:
                 return self._error_response(req_id, -32601, f"Method not found: {method}")
         except Exception as exc:
             self._logger.error("mcp_request_error", method=method, error=str(exc))
-            return self._error_response(req_id, -32603, f"Internal error: {str(exc)}")
+            return self._error_response(req_id, -32603, f"Internal error: {exc!s}")
 
-    def _handle_initialize(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_initialize(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle MCP initialize handshake."""
         return self._success_response(req_id, {
             "protocolVersion": "2025-06-18",
@@ -259,12 +260,12 @@ class MCPServer:
             },
         })
 
-    def _handle_tools_list(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_tools_list(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tools/list — return all registered tools."""
         tools = [t.to_manifest() for t in self._tools.values()]
         return self._success_response(req_id, {"tools": tools})
 
-    async def _handle_tools_call(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_tools_call(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tools/call — execute a registered tool."""
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
@@ -305,17 +306,17 @@ class MCPServer:
             )
             return self._success_response(req_id, {
                 "content": [
-                    {"type": "text", "text": f"Error: {str(exc)}"}
+                    {"type": "text", "text": f"Error: {exc!s}"}
                 ],
                 "isError": True,
             })
 
-    def _handle_resources_list(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_resources_list(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle resources/list — return all registered resources."""
         resources = [r.to_manifest() for r in self._resources.values()]
         return self._success_response(req_id, {"resources": resources})
 
-    async def _handle_resources_read(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_resources_read(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle resources/read — read a registered resource."""
         uri = params.get("uri", "")
 
@@ -338,14 +339,14 @@ class MCPServer:
                 ],
             })
         except Exception as exc:
-            return self._error_response(req_id, -32603, f"Read error: {str(exc)}")
+            return self._error_response(req_id, -32603, f"Read error: {exc!s}")
 
-    def _handle_prompts_list(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_prompts_list(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle prompts/list — return all registered prompts."""
         prompts = [p.to_manifest() for p in self._prompts.values()]
         return self._success_response(req_id, {"prompts": prompts})
 
-    async def _handle_prompts_get(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_prompts_get(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Handle prompts/get — render a prompt template."""
         name = params.get("name", "")
         arguments = params.get("arguments", {})
@@ -365,7 +366,7 @@ class MCPServer:
                 ],
             })
         except Exception as exc:
-            return self._error_response(req_id, -32603, f"Template error: {str(exc)}")
+            return self._error_response(req_id, -32603, f"Template error: {exc!s}")
 
     # ── Helpers ─────────────────────────────────────────────────────
 
@@ -379,7 +380,7 @@ class MCPServer:
         self._request_timestamps.append(now)
         return True
 
-    def _log_request(self, method: str, params: Dict[str, Any], req_id: Any) -> None:
+    def _log_request(self, method: str, params: dict[str, Any], req_id: Any) -> None:
         """Log request for audit trail."""
         self._request_log.append({
             "method": method,
@@ -391,16 +392,16 @@ class MCPServer:
             self._request_log = self._request_log[-self._max_log_size:]
 
     @staticmethod
-    def _success_response(req_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _success_response(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
     @staticmethod
-    def _error_response(req_id: Any, code: int, message: str) -> Dict[str, Any]:
+    def _error_response(req_id: Any, code: int, message: str) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
     # ── Status ──────────────────────────────────────────────────────
 
-    def get_manifest(self) -> Dict[str, Any]:
+    def get_manifest(self) -> dict[str, Any]:
         """Get full server manifest for discovery."""
         return {
             "name": self.name,
@@ -410,7 +411,7 @@ class MCPServer:
             "prompts": [p.to_manifest() for p in self._prompts.values()],
         }
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "version": self.version,
@@ -456,7 +457,7 @@ class MCPClient:
         cache_ttl_seconds: float = 300.0,
         max_retries: int = 3,
         http_timeout: float = 30.0,
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
     ):
         self.name = name
         self._cache_ttl = cache_ttl_seconds
@@ -464,16 +465,16 @@ class MCPClient:
         self._http_timeout = http_timeout
         self._auth_token = auth_token
 
-        self._connected_servers: Dict[str, Dict[str, Any]] = {}  # server_url → manifest
-        self._tool_cache: Dict[str, Dict[str, Any]] = {}  # "server:tool" → cached result
-        self._tool_cache_times: Dict[str, float] = {}
-        self._http_client: Optional[Any] = None  # Lazy MCPHttpClient
+        self._connected_servers: dict[str, dict[str, Any]] = {}  # server_url → manifest
+        self._tool_cache: dict[str, dict[str, Any]] = {}  # "server:tool" → cached result
+        self._tool_cache_times: dict[str, float] = {}
+        self._http_client: Any | None = None  # Lazy MCPHttpClient
 
         self._logger = logger.bind(component="mcp_client", client=name)
 
     # ── Connection ──────────────────────────────────────────────────
 
-    async def connect(self, server_url: str) -> Dict[str, Any]:
+    async def connect(self, server_url: str) -> dict[str, Any]:
         """
         Connect to an MCP server and cache its manifest.
 
@@ -499,7 +500,7 @@ class MCPClient:
         )
         return manifest
 
-    async def discover_tools(self, server_url: str) -> List[Dict[str, Any]]:
+    async def discover_tools(self, server_url: str) -> list[dict[str, Any]]:
         """Discover tools from a connected MCP server."""
         result = await self._send_request(server_url, "tools/list", {})
         tools = result.get("tools", [])
@@ -512,7 +513,7 @@ class MCPClient:
         self,
         server_url: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         use_cache: bool = True,
     ) -> Any:
         """
@@ -605,8 +606,8 @@ class MCPClient:
         self,
         server_url: str,
         method: str,
-        params: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Send a JSON-RPC request to an MCP server.
 
@@ -674,7 +675,7 @@ class MCPClient:
 
     # ── Local Server Registry ───────────────────────────────────────
 
-    _local_servers: Dict[str, MCPServer] = {}
+    _local_servers: dict[str, MCPServer] = {}
 
     @classmethod
     def register_local_server(cls, server: MCPServer) -> None:
@@ -690,7 +691,7 @@ class MCPClient:
         self._tool_cache_times.clear()
         self._logger.info("mcp_cache_cleared")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "connected_servers": len(self._connected_servers),
@@ -704,7 +705,7 @@ class MCPClient:
 # ════════════════════════════════════════════════════════════════════
 
 
-def create_angavu_mcp_tools() -> List[MCPTool]:
+def create_angavu_mcp_tools() -> list[MCPTool]:
     """
     Create the standard set of MCP tools for Angavu Intelligence.
 
@@ -802,7 +803,7 @@ def create_angavu_mcp_tools() -> List[MCPTool]:
     ]
 
 
-def create_external_mcp_configs() -> List[Dict[str, Any]]:
+def create_external_mcp_configs() -> list[dict[str, Any]]:
     """
     Define external MCP servers that Angavu agents should connect to.
 

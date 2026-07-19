@@ -10,8 +10,7 @@ Provides HTTP endpoints that bridge FastAPI with the MCP server:
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,16 +34,16 @@ class MCPJsonRpcRequest(BaseModel):
     """MCP JSON-RPC request."""
 
     jsonrpc: str = "2.0"
-    id: Optional[int | str] = None
+    id: int | str | None = None
     method: str
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
 class MCPToolCallRequest(BaseModel):
     """Direct tool call request (simplified)."""
 
     tool_name: str = Field(..., description="Name of the tool to call")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
 
 
 class MCPToolCallResponse(BaseModel):
@@ -53,7 +52,7 @@ class MCPToolCallResponse(BaseModel):
     tool_name: str
     result: Any
     is_error: bool = False
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 # ── Endpoints ───────────────────────────────────────────────────────

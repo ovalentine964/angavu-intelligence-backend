@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import statistics
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
-    AgentDecision, AgentEvent, AgentResult, BiasharaAgent,
+    AgentDecision,
+    AgentResult,
+    BiasharaAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -51,7 +53,7 @@ class PredictionAgent(BiasharaAgent):
     def __init__(self):
         super().__init__(name=self.name, role=self.role, capabilities=self.capabilities)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         action = payload.get("action", "forecast")
@@ -104,7 +106,7 @@ class PredictionAgent(BiasharaAgent):
         except Exception as exc:
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
-    def _forecast(self, values: List[float], periods: int, method: str) -> List[Dict[str, Any]]:
+    def _forecast(self, values: list[float], periods: int, method: str) -> list[dict[str, Any]]:
         """Run the specified forecast method."""
         if not values or periods <= 0:
             return []
@@ -118,7 +120,7 @@ class PredictionAgent(BiasharaAgent):
         else:
             return self._exponential_smoothing_forecast(values, periods)
 
-    def _moving_average_forecast(self, values: List[float], periods: int, window: int = 5) -> List[Dict[str, Any]]:
+    def _moving_average_forecast(self, values: list[float], periods: int, window: int = 5) -> list[dict[str, Any]]:
         """Simple moving average forecast."""
         if len(values) < window:
             window = max(1, len(values))
@@ -138,7 +140,7 @@ class PredictionAgent(BiasharaAgent):
 
         return results
 
-    def _exponential_smoothing_forecast(self, values: List[float], periods: int, alpha: float = 0.3) -> List[Dict[str, Any]]:
+    def _exponential_smoothing_forecast(self, values: list[float], periods: int, alpha: float = 0.3) -> list[dict[str, Any]]:
         """Exponential smoothing forecast."""
         if not values:
             return []
@@ -160,7 +162,7 @@ class PredictionAgent(BiasharaAgent):
 
         return results
 
-    def _linear_forecast(self, values: List[float], periods: int) -> List[Dict[str, Any]]:
+    def _linear_forecast(self, values: list[float], periods: int) -> list[dict[str, Any]]:
         """Linear trend extrapolation forecast."""
         if len(values) < 2:
             return [{"period": i + 1, "forecast": round(values[0] if values else 0, 2), "method": "linear"} for i in range(periods)]
@@ -188,7 +190,7 @@ class PredictionAgent(BiasharaAgent):
 
         return results
 
-    def _confidence_interval(self, historical: List[float], forecast: List[Dict], confidence: float = 0.95) -> Dict[str, Any]:
+    def _confidence_interval(self, historical: list[float], forecast: list[dict], confidence: float = 0.95) -> dict[str, Any]:
         """Calculate simple confidence intervals based on historical variance."""
         if len(historical) < 2:
             return {"lower": 0, "upper": 0, "confidence": confidence}

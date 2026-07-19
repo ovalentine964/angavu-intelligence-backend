@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import date, datetime
-from typing import Any, Dict, Optional
+from datetime import datetime
+from typing import Any
 
 import structlog
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.config import MCPToolDefinition, MCPToolParameter
@@ -174,10 +174,10 @@ WORKER_DATA_TOOLS = [
 
 async def handle_worker_data_tool(
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     requester_id: str,
     db: AsyncSession,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Dispatch a worker data tool call.
 
@@ -228,16 +228,17 @@ async def handle_worker_data_tool(
         logger.error("mcp_worker_data_tool_error", tool=tool_name, error=str(e), exc_info=True)
         return {
             "isError": True,
-            "content": [{"type": "text", "text": f"Tool execution error: {str(e)}"}],
+            "content": [{"type": "text", "text": f"Tool execution error: {e!s}"}],
         }
 
 
 async def _get_transactions(
-    args: Dict[str, Any], requester_id: str, db: AsyncSession
-) -> Dict[str, Any]:
+    args: dict[str, Any], requester_id: str, db: AsyncSession
+) -> dict[str, Any]:
     """Fetch transaction records."""
-    from app.models.transaction import Transaction
     from datetime import timedelta
+
+    from app.models.transaction import Transaction
 
     user_id = args["user_id"]
     period_days = min(args.get("period_days", 30), 365)
@@ -285,8 +286,8 @@ async def _get_transactions(
 
 
 async def _get_goals(
-    args: Dict[str, Any], requester_id: str, db: AsyncSession
-) -> Dict[str, Any]:
+    args: dict[str, Any], requester_id: str, db: AsyncSession
+) -> dict[str, Any]:
     """Fetch goal records."""
     from app.models.worker_features import GoalRecord as Goal
 
@@ -326,8 +327,8 @@ async def _get_goals(
 
 
 async def _get_loans(
-    args: Dict[str, Any], requester_id: str, db: AsyncSession
-) -> Dict[str, Any]:
+    args: dict[str, Any], requester_id: str, db: AsyncSession
+) -> dict[str, Any]:
     """Fetch loan records."""
     from app.models.worker_features import LoanRecord as Loan
 
@@ -365,11 +366,12 @@ async def _get_loans(
 
 
 async def _get_tithe(
-    args: Dict[str, Any], requester_id: str, db: AsyncSession
-) -> Dict[str, Any]:
+    args: dict[str, Any], requester_id: str, db: AsyncSession
+) -> dict[str, Any]:
     """Fetch tithe/giving records."""
-    from app.models.worker_features import TitheRecord
     from datetime import timedelta
+
+    from app.models.worker_features import TitheRecord
 
     user_id = args["user_id"]
     period_days = min(args.get("period_days", 90), 365)

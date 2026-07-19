@@ -13,7 +13,6 @@ Endpoints for Msaidizi's core worker-facing features:
 """
 
 from datetime import date
-from typing import Optional
 from uuid import UUID
 
 import structlog
@@ -22,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.services import tithe_service, goal_service, loan_service, mindset_service
+from app.services import goal_service, loan_service, mindset_service, tithe_service
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/worker", tags=["Worker Features"])
@@ -38,19 +37,19 @@ class TitheRecordRequest(BaseModel):
     amount: float = Field(..., gt=0)
     category: str = Field(default="offering")
     currency: str = Field(default="KES", max_length=3)
-    custom_category_name: Optional[str] = None
-    recipient: Optional[str] = None
-    giving_date: Optional[date] = None
+    custom_category_name: str | None = None
+    recipient: str | None = None
+    giving_date: date | None = None
     input_method: str = Field(default="manual")
-    voice_transcript: Optional[str] = None
-    notes: Optional[str] = None
+    voice_transcript: str | None = None
+    notes: str | None = None
 
 
 class TitheReportRequest(BaseModel):
     user_id: UUID
     period: str = Field(default="monthly")
-    year: Optional[int] = None
-    month: Optional[int] = None
+    year: int | None = None
+    month: int | None = None
 
 
 class GoalCreateRequest(BaseModel):
@@ -59,16 +58,16 @@ class GoalCreateRequest(BaseModel):
     title: str = Field(..., max_length=200)
     target_amount: float = Field(..., gt=0)
     current_amount: float = Field(default=0, ge=0)
-    title_sw: Optional[str] = None
-    description: Optional[str] = None
-    deadline: Optional[date] = None
-    deeper_purpose: Optional[str] = None
+    title_sw: str | None = None
+    description: str | None = None
+    deadline: date | None = None
+    deeper_purpose: str | None = None
     currency: str = Field(default="KES", max_length=3)
 
 
 class GoalProgressRequest(BaseModel):
     user_id: UUID
-    goal_id: Optional[UUID] = None
+    goal_id: UUID | None = None
 
 
 class LoanRecordRequest(BaseModel):
@@ -77,18 +76,18 @@ class LoanRecordRequest(BaseModel):
     interest_rate: float = Field(..., ge=0)
     purpose: str = Field(..., description="stock, equipment, emergency, education, improvement, other")
     source: str = Field(default="manual")
-    purpose_details: Optional[dict] = None
-    disbursed_at: Optional[str] = None
-    due_date: Optional[date] = None
+    purpose_details: dict | None = None
+    disbursed_at: str | None = None
+    due_date: date | None = None
     repayment_type: str = Field(default="flexible")
     repayment_frequency: str = Field(default="weekly")
-    commitment_text: Optional[str] = None
+    commitment_text: str | None = None
     currency: str = Field(default="KES", max_length=3)
 
 
 class LoanStatusRequest(BaseModel):
     user_id: UUID
-    loan_id: Optional[UUID] = None
+    loan_id: UUID | None = None
 
 
 class HabitUpdateRequest(BaseModel):
@@ -137,8 +136,8 @@ async def record_giving(
 async def giving_report(
     user_id: UUID,
     period: str = Query("monthly", pattern="^(monthly|annual)$"),
-    year: Optional[int] = None,
-    month: Optional[int] = None,
+    year: int | None = None,
+    month: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -200,7 +199,7 @@ async def create_goal(
 @router.get("/goals/progress")
 async def goal_progress(
     user_id: UUID,
-    goal_id: Optional[UUID] = None,
+    goal_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -271,7 +270,7 @@ async def record_loan(
 @router.get("/loans/status")
 async def loan_status(
     user_id: UUID,
-    loan_id: Optional[UUID] = None,
+    loan_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -325,7 +324,7 @@ async def todays_lesson(
 @router.get("/mindset/score")
 async def rich_habits_score(
     user_id: UUID,
-    score_date: Optional[date] = None,
+    score_date: date | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """

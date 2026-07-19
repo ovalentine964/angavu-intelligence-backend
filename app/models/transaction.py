@@ -9,7 +9,7 @@ Inventory tracks what products a user currently has in stock.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,7 +19,6 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
-    Integer,
     String,
     Text,
 )
@@ -154,7 +153,7 @@ class Transaction(Base):
     timestamp = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         doc="When the transaction actually occurred",
     )
     synced_at = Column(
@@ -288,8 +287,8 @@ class Inventory(Base):
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # Relationships

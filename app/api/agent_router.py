@@ -13,8 +13,6 @@ backend's transaction data and analytics engine.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
@@ -348,7 +346,7 @@ def _extract_insights(
         ("job_count", "Total Jobs", "activity", "jobs"),
         ("order_count", "Total Orders", "activity", "orders"),
     ]:
-        if key in analysis and analysis[key]:
+        if analysis.get(key):
             insights.append(AgentInsight(
                 agent_name=agent_name,
                 worker_type=worker_type,
@@ -360,7 +358,7 @@ def _extract_insights(
 
     # Margin
     for key in ["avg_margin_pct", "profit_margin_pct", "gross_margin_pct"]:
-        if key in analysis and analysis[key]:
+        if analysis.get(key):
             insights.append(AgentInsight(
                 agent_name=agent_name,
                 worker_type=worker_type,

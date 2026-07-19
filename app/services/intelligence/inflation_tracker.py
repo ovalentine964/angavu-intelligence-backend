@@ -46,12 +46,12 @@ Buyers: CBK (monetary policy), Treasury, KNBS, financial institutions, media
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -77,13 +77,13 @@ settings = get_settings()
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _compute_price_indices(
-    base_prices: Dict[str, np.ndarray],
-    current_prices: Dict[str, np.ndarray],
-    base_quantities: Dict[str, np.ndarray],
-    current_quantities: Dict[str, np.ndarray],
-    base_expenditure_shares: Dict[str, np.ndarray],
-    current_expenditure_shares: Dict[str, np.ndarray],
-) -> Dict[str, Any]:
+    base_prices: dict[str, np.ndarray],
+    current_prices: dict[str, np.ndarray],
+    base_quantities: dict[str, np.ndarray],
+    current_quantities: dict[str, np.ndarray],
+    base_expenditure_shares: dict[str, np.ndarray],
+    current_expenditure_shares: dict[str, np.ndarray],
+) -> dict[str, Any]:
     """
     Compute all four price indices from sector-level data.
 
@@ -181,7 +181,7 @@ def _compute_inflation_rate(
     current_index: float,
     previous_index: float,
     periods_per_year: int = 12,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Compute inflation rates from index values.
 
@@ -234,12 +234,12 @@ class InflationTrackerService:
         self,
         county: str,
         period: str = "daily",
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        base_period_start: Optional[date] = None,
-        base_period_end: Optional[date] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        period_start: date | None = None,
+        period_end: date | None = None,
+        base_period_start: date | None = None,
+        base_period_end: date | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Compute inflation indices for a county or nationally.
 
@@ -482,8 +482,8 @@ class InflationTrackerService:
         response = {
             "product": "inflation_tracker",
             "version": "1.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, user_count / 100),
             "confidence_level": min(1.0, len(current_sales) / 500),
@@ -570,7 +570,7 @@ class InflationTrackerService:
         county: str,
         periods: int = 30,
         period_type: str = "daily",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get historical inflation time series.
 

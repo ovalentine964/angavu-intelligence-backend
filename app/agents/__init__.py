@@ -33,115 +33,27 @@ Loop Patterns (from agentic AI research):
 """
 
 from app.agents.base import BiasharaAgent
-from app.agents.event_bus import EventBus
-from app.agents.observability import AgentTracer
-from app.agents.implementations import (
-    TransactionProcessorAgent,
-    IntelligenceGeneratorAgent,
-    ReportGeneratorAgent,
-    SelfEvolutionAgent,
-)
-from app.agents.factory import AgentFactory, AgentInfrastructure
-from app.agents.context_manager import ContextManager, AgentContextManager
-from app.agents.error_compactor import ErrorCompactor, ErrorSeverity
-from app.agents.unified_state import UnifiedStateManager
-from app.agents.loops import (
-    ReActAgent,
-    ReflexionAgent,
-    PlanExecuteAgent,
-    EventSourcedAgent,
-    SupervisorAgent,
-    EventStore,
-    ReActTrace,
-    ReasoningStep,
-    Critique,
-    ExecutionPlan,
-    PlanStep,
-    SupervisionPolicy,
-    SupervisedExecution,
-)
 
-# Long-horizon orchestration (DeerFlow-inspired)
-from app.agents.long_horizon import (
-    LongHorizonOrchestrator,
-    TaskPlanner,
-    SubAgentDelegator,
-    ProgressTracker,
-    ResultAggregator,
-    LongHorizonTask,
-    SubTask,
-    TaskCheckpoint,
-    TaskStatus,
-    SubTaskStatus,
+# V2: Communication Protocols
+from app.agents.communication import (
+    BroadcastProtocol,
+    DelegationProtocol,
+    PointToPointProtocol,
 )
-
-# Research flow agents
-from app.agents.research_flow import (
-    ResearchPlanner,
-    DataCollector,
-    ResearchAnalyzer,
-    ResearchReportGenerator,
-    QualityValidator,
-    ResearchResultAggregator,
-    create_research_orchestrator,
-)
-
-# Intelligence pipeline flows
-from app.agents.intelligence_pipeline import (
-    MarketDataAgent,
-    CreditAnalysisAgent,
-    DistributionAgent,
-    CompetitorAgent,
-    create_market_analysis_flow,
-    create_credit_scoring_flow,
-    create_distribution_analysis_flow,
-    create_competitor_analysis_flow,
-    create_all_intelligence_flows,
-    create_harnessed_flows,
-    get_harnessed_intelligence_flows,
-    IntelligenceDriftMonitor,
-    get_intelligence_drift_monitor,
-)
-
-# V2: MetaAgent (Tier 1 system orchestrator)
-from app.agents.meta_agent import (
-    MetaAgent,
-    CapabilityRouter,
-    ConflictResolver,
-    CrossAgentLearningManager,
-    AgentMetrics,
-    ConflictRecord,
-    LearningShare,
-)
+from app.agents.context_manager import AgentContextManager, ContextManager
 
 # V2: Domain Agents (Tier 2)
 from app.agents.domain import (
     AgricultureDomainAgent,
-    RetailDomainAgent,
-    TransportDomainAgent,
     DigitalDomainAgent,
     ManufacturingDomainAgent,
+    RetailDomainAgent,
     ServiceDomainAgent,
+    TransportDomainAgent,
 )
-
-# V2: Utility Agents (Tier 3)
-from app.agents.utility import (
-    DataQualityAgent,
-    AnomalyDetectorAgent,
-    PredictionAgent,
-    CommunicationAgent,
-    LearningAgent,
-    SyncAgent,
-)
-
-# V4: Newly Added Agents (Voice, Compliance, Security, Onboarding)
-from app.agents.implementations_extra import (
-    VoicePipelineAgent,
-    ComplianceAgent,
-    SecurityAgent,
-    OnboardingAgent,
-    SocialHandler,
-)
+from app.agents.error_compactor import ErrorCompactor, ErrorSeverity
+from app.agents.event_bus import EventBus
+from app.agents.factory import AgentFactory, AgentInfrastructure
 
 # V6: Governance Swarm (Swarm 5)
 from app.agents.governance import (
@@ -149,41 +61,129 @@ from app.agents.governance import (
     EthicsAgent,
     PrivacyAgent,
 )
+from app.agents.implementations import (
+    IntelligenceGeneratorAgent,
+    ReportGeneratorAgent,
+    SelfEvolutionAgent,
+    TransactionProcessorAgent,
+)
+
+# V4: Newly Added Agents (Voice, Compliance, Security, Onboarding)
+from app.agents.implementations_extra import (
+    ComplianceAgent,
+    OnboardingAgent,
+    SecurityAgent,
+    SocialHandler,
+    VoicePipelineAgent,
+)
+
+# Intelligence pipeline flows
+from app.agents.intelligence_pipeline import (
+    CompetitorAgent,
+    CreditAnalysisAgent,
+    DistributionAgent,
+    IntelligenceDriftMonitor,
+    MarketDataAgent,
+    create_all_intelligence_flows,
+    create_competitor_analysis_flow,
+    create_credit_scoring_flow,
+    create_distribution_analysis_flow,
+    create_harnessed_flows,
+    create_market_analysis_flow,
+    get_harnessed_intelligence_flows,
+    get_intelligence_drift_monitor,
+)
+
+# Long-horizon orchestration (DeerFlow-inspired)
+from app.agents.long_horizon import (
+    LongHorizonOrchestrator,
+    LongHorizonTask,
+    ProgressTracker,
+    ResultAggregator,
+    SubAgentDelegator,
+    SubTask,
+    SubTaskStatus,
+    TaskCheckpoint,
+    TaskPlanner,
+    TaskStatus,
+)
+from app.agents.loops import (
+    Critique,
+    EventSourcedAgent,
+    EventStore,
+    ExecutionPlan,
+    PlanExecuteAgent,
+    PlanStep,
+    ReActAgent,
+    ReActTrace,
+    ReasoningStep,
+    ReflexionAgent,
+    SupervisedExecution,
+    SupervisionPolicy,
+    SupervisorAgent,
+)
+
+# V2: MetaAgent (Tier 1 system orchestrator)
+from app.agents.meta_agent import (
+    AgentMetrics,
+    CapabilityRouter,
+    ConflictRecord,
+    ConflictResolver,
+    CrossAgentLearningManager,
+    LearningShare,
+    MetaAgent,
+)
+from app.agents.observability import AgentTracer
 
 # V6: Research Swarm (Swarm 6)
 from app.agents.research import (
+    InnovationAgent,
     MarketResearchAgent,
     UserInsightAgent,
-    InnovationAgent,
 )
 
-# V2: Communication Protocols
-from app.agents.communication import (
-    BroadcastProtocol,
-    PointToPointProtocol,
-    DelegationProtocol,
-)
-
-# V3: Sub-Agent Orchestration
-from app.agents.subagent import (
-    SubAgentOrchestrator,
-    SubAgentTask,
-    SubAgentResult,
-    SubAgentCapableMixin,
-)
-
-# V3: Task Decomposition
-from app.agents.task_decomposition import (
-    TaskDecomposer,
-    DecompositionPlan,
-    DecompositionResult,
-    SubTaskDefinition,
+# Research flow agents
+from app.agents.research_flow import (
+    DataCollector,
+    QualityValidator,
+    ResearchAnalyzer,
+    ResearchPlanner,
+    ResearchReportGenerator,
+    ResearchResultAggregator,
+    create_research_orchestrator,
 )
 
 # V3: Skill Generator
 from app.agents.skill_generator import (
-    SkillGenerator,
     GeneratedSkill,
+    SkillGenerator,
+)
+
+# V3: Sub-Agent Orchestration
+from app.agents.subagent import (
+    SubAgentCapableMixin,
+    SubAgentOrchestrator,
+    SubAgentResult,
+    SubAgentTask,
+)
+
+# V3: Task Decomposition
+from app.agents.task_decomposition import (
+    DecompositionPlan,
+    DecompositionResult,
+    SubTaskDefinition,
+    TaskDecomposer,
+)
+from app.agents.unified_state import UnifiedStateManager
+
+# V2: Utility Agents (Tier 3)
+from app.agents.utility import (
+    AnomalyDetectorAgent,
+    CommunicationAgent,
+    DataQualityAgent,
+    LearningAgent,
+    PredictionAgent,
+    SyncAgent,
 )
 
 __all__ = [

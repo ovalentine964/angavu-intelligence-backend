@@ -16,9 +16,10 @@ from __future__ import annotations
 import hashlib
 import time
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -36,14 +37,14 @@ class ContextPriority(int, Enum):
 @dataclass
 class ContextItem:
     """A single item in the agent's context window."""
-    content: Dict[str, Any]
+    content: dict[str, Any]
     priority: ContextPriority = ContextPriority.NORMAL
     token_estimate: int = 0  # Approximate token count
     created_at: float = field(default_factory=time.time)
     access_count: int = 0
     last_accessed: float = field(default_factory=time.time)
     item_id: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.item_id:
@@ -78,11 +79,11 @@ class ContextItem:
 @dataclass
 class ContextSummary:
     """A compressed summary of evicted context items."""
-    original_ids: List[str]
+    original_ids: list[str]
     summary_text: str
     token_estimate: int
     item_count: int
-    time_range: Tuple[float, float]
+    time_range: tuple[float, float]
     created_at: float = field(default_factory=time.time)
 
 
@@ -106,7 +107,7 @@ class ContextManager:
         self,
         agent_name: str,
         max_tokens: int = 4000,
-        summarizer: Optional[Callable[[List[ContextItem]], str]] = None,
+        summarizer: Callable[[list[ContextItem]], str] | None = None,
         compression_threshold: float = 0.8,  # Trigger compression at 80% full
     ):
         self.agent_name = agent_name
@@ -114,15 +115,15 @@ class ContextManager:
         self.compression_threshold = compression_threshold
         self._summarizer = summarizer or self._default_summarizer
 
-        self._items: List[ContextItem] = []
-        self._summaries: List[ContextSummary] = []
+        self._items: list[ContextItem] = []
+        self._summaries: list[ContextSummary] = []
         self._total_tokens: int = 0
         self._eviction_count: int = 0
         self._compression_count: int = 0
 
         # Pattern tracking for compression
         self._pattern_counter: Counter = Counter()
-        self._pattern_items: Dict[str, List[ContextItem]] = defaultdict(list)
+        self._pattern_items: dict[str, list[ContextItem]] = defaultdict(list)
 
         self._logger = logger.bind(agent=agent_name, component="context_manager")
 
@@ -130,9 +131,9 @@ class ContextManager:
 
     def add(
         self,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         priority: ContextPriority = ContextPriority.NORMAL,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> ContextItem:
         """Add an item to the context window. Triggers compression if needed."""
         item = ContextItem(
@@ -166,10 +167,10 @@ class ContextManager:
 
     def get_context(
         self,
-        max_items: Optional[int] = None,
+        max_items: int | None = None,
         include_summaries: bool = True,
-        filter_tags: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        filter_tags: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Get the current context window, fitting within token budget.
 
@@ -231,7 +232,7 @@ class ContextManager:
             "summary_count": len(self._summaries),
         }
 
-    def get_token_usage(self) -> Dict[str, Any]:
+    def get_token_usage(self) -> dict[str, Any]:
         """Get current token usage statistics."""
         return {
             "agent": self.agent_name,
@@ -388,7 +389,7 @@ class ContextManager:
 
     # ── Pattern Detection ───────────────────────────────────────────
 
-    def _extract_pattern_key(self, content: Dict[str, Any]) -> Optional[str]:
+    def _extract_pattern_key(self, content: dict[str, Any]) -> str | None:
         """Extract a pattern key from content for compression tracking."""
         # Use event type + primary entity as pattern key
         event_type = content.get("event_type", content.get("type", ""))
@@ -397,7 +398,7 @@ class ContextManager:
             return f"{event_type}:{source}"
         return None
 
-    def _detect_patterns(self) -> List[Dict[str, Any]]:
+    def _detect_patterns(self) -> list[dict[str, Any]]:
         """Detect repeated patterns in current context."""
         patterns = []
         for key, count in self._pattern_counter.most_common(5):
@@ -412,13 +413,13 @@ class ContextManager:
     # ── Default Summarizer ──────────────────────────────────────────
 
     @staticmethod
-    def _default_summarizer(items: List[ContextItem]) -> str:
+    def _default_summarizer(items: list[ContextItem]) -> str:
         """Default summarizer: extract key fields from items."""
         if not items:
             return ""
 
         # Group by event type
-        by_type: Dict[str, int] = Counter()
+        by_type: dict[str, int] = Counter()
         for item in items:
             etype = item.content.get("event_type", item.content.get("type", "unknown"))
             by_type[etype] += 1
@@ -449,16 +450,14 @@ class AgentContextManager:
         self.auto_add_events = auto_add_events
         self._logger = logger.bind(agent=agent_name, component="agent_context")
 
-    def on_observe(self, event_data: Dict[str, Any]) -> None:
+    def on_observe(self, event_data: dict[str, Any]) -> None:
         """Called when agent observes an event. Adds to context."""
         if not self.auto_add_events:
             return
 
         # Determine priority based on event type
         event_type = event_data.get("event_type", "")
-        if "error" in event_type.lower():
-            priority = ContextPriority.HIGH
-        elif "feedback" in event_type.lower():
+        if "error" in event_type.lower() or "feedback" in event_type.lower():
             priority = ContextPriority.HIGH
         elif "health" in event_type.lower():
             priority = ContextPriority.LOW
@@ -471,7 +470,7 @@ class AgentContextManager:
             tags=[event_type],
         )
 
-    def on_act_result(self, result_data: Dict[str, Any]) -> None:
+    def on_act_result(self, result_data: dict[str, Any]) -> None:
         """Called after act phase. Adds result to context."""
         success = result_data.get("success", True)
         priority = ContextPriority.NORMAL if success else ContextPriority.HIGH
@@ -482,7 +481,7 @@ class AgentContextManager:
             tags=["result", "success" if success else "failure"],
         )
 
-    def on_error(self, error_data: Dict[str, Any]) -> None:
+    def on_error(self, error_data: dict[str, Any]) -> None:
         """Called on error. Adds with high priority."""
         self.context_manager.add(
             content={"type": "error", **error_data},
@@ -490,10 +489,10 @@ class AgentContextManager:
             tags=["error"],
         )
 
-    def get_context_for_think(self) -> Dict[str, Any]:
+    def get_context_for_think(self) -> dict[str, Any]:
         """Get optimized context for the think phase."""
         return self.context_manager.get_context()
 
-    def get_usage(self) -> Dict[str, Any]:
+    def get_usage(self) -> dict[str, Any]:
         """Get token usage stats."""
         return self.context_manager.get_token_usage()

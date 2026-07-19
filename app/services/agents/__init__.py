@@ -15,18 +15,18 @@ Domain agents are activated per worker type and loaded on-demand
 to conserve memory on 2GB devices.
 """
 
-from app.services.agents.transport_agent import TransportAgent
-from app.services.agents.retail_agent import RetailAgent
 from app.services.agents.agriculture_agent import AgricultureAgent
-from app.services.agents.service_agent import ServiceAgent
 from app.services.agents.digital_agent import DigitalAgent
 from app.services.agents.manufacturing_agent import ManufacturingAgent
+from app.services.agents.retail_agent import RetailAgent
+from app.services.agents.service_agent import ServiceAgent
+from app.services.agents.transport_agent import TransportAgent
 
 __all__ = [
-    "TransportAgent",
-    "RetailAgent",
     "AgricultureAgent",
-    "ServiceAgent",
     "DigitalAgent",
     "ManufacturingAgent",
+    "RetailAgent",
+    "ServiceAgent",
+    "TransportAgent",
 ]

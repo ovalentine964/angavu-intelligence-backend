@@ -11,7 +11,6 @@ Endpoints:
 """
 
 from datetime import date
-from typing import List, Optional
 from uuid import UUID
 
 import structlog
@@ -37,15 +36,15 @@ class GoalCreateRequest(BaseModel):
     title: str = Field(default="", max_length=200, description="Goal title (auto-parsed if voice_transcript provided)")
     category: str = Field(default="personal", description="business, personal, savings, or debt")
     target_amount: float = Field(..., gt=0, description="Target amount in local currency")
-    target_date: Optional[date] = Field(None, description="Target completion date")
-    description: Optional[str] = None
-    title_sw: Optional[str] = Field(None, description="Swahili translation of title")
-    deeper_purpose: Optional[str] = Field(None, description="Why this goal matters")
-    what_i_lose: Optional[str] = Field(None, description="What you lose by not achieving this")
-    milestones: Optional[List[dict]] = Field(None, description="Custom milestones (auto-generated if omitted)")
-    commitment_declaration: Optional[str] = Field(None, description="Public commitment statement")
-    accountability_partner_id: Optional[UUID] = Field(None, description="Accountability partner user ID")
-    voice_transcript: Optional[str] = Field(None, description="Raw voice input for parsing")
+    target_date: date | None = Field(None, description="Target completion date")
+    description: str | None = None
+    title_sw: str | None = Field(None, description="Swahili translation of title")
+    deeper_purpose: str | None = Field(None, description="Why this goal matters")
+    what_i_lose: str | None = Field(None, description="What you lose by not achieving this")
+    milestones: list[dict] | None = Field(None, description="Custom milestones (auto-generated if omitted)")
+    commitment_declaration: str | None = Field(None, description="Public commitment statement")
+    accountability_partner_id: UUID | None = Field(None, description="Accountability partner user ID")
+    voice_transcript: str | None = Field(None, description="Raw voice input for parsing")
     currency: str = Field(default="KES", max_length=3)
 
 
@@ -53,41 +52,41 @@ class GoalProgressUpdateRequest(BaseModel):
     """Update progress toward a goal."""
     user_id: UUID
     amount: float = Field(..., gt=0, description="Contribution amount")
-    notes: Optional[str] = Field(None, description="Notes about this contribution")
+    notes: str | None = Field(None, description="Notes about this contribution")
     source: str = Field(default="manual", description="manual, voice, mpesa, or auto_save")
-    voice_transcript: Optional[str] = Field(None, description="Raw voice input")
-    mood: Optional[str] = Field(None, description="motivated, neutral, or struggling")
-    entry_date: Optional[date] = Field(None, description="Date of contribution (defaults to today)")
+    voice_transcript: str | None = Field(None, description="Raw voice input")
+    mood: str | None = Field(None, description="motivated, neutral, or struggling")
+    entry_date: date | None = Field(None, description="Date of contribution (defaults to today)")
 
 
 class MilestoneResponse(BaseModel):
     percentage: int
     title: str
-    title_sw: Optional[str]
+    title_sw: str | None
     target_amount: float
     completed: bool
-    completed_at: Optional[str]
+    completed_at: str | None
 
 
 class PredictionResponse(BaseModel):
     status: str
-    weekly_rate: Optional[float] = None
-    trend: Optional[str] = None
-    weeks_remaining: Optional[float] = None
-    expected_date: Optional[str] = None
-    best_case_date: Optional[str] = None
-    worst_case_date: Optional[str] = None
-    ahead_of_schedule: Optional[bool] = None
-    confidence: Optional[str] = None
-    message_sw: Optional[str] = None
-    message_en: Optional[str] = None
+    weekly_rate: float | None = None
+    trend: str | None = None
+    weeks_remaining: float | None = None
+    expected_date: str | None = None
+    best_case_date: str | None = None
+    worst_case_date: str | None = None
+    ahead_of_schedule: bool | None = None
+    confidence: str | None = None
+    message_sw: str | None = None
+    message_en: str | None = None
 
 
 class ObstacleResponse(BaseModel):
     type: str
     severity: str
-    detail_sw: Optional[str] = None
-    detail_en: Optional[str] = None
+    detail_sw: str | None = None
+    detail_en: str | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

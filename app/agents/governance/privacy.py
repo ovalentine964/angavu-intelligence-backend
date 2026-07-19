@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import hashlib
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -108,8 +108,8 @@ class PrivacyAgent(BiasharaAgent):
         )
         self._checks_performed = 0
         self._violations_detected = 0
-        self._dsar_requests: List[Dict[str, Any]] = []
-        self._consent_registry: Dict[str, Dict[str, Any]] = {}
+        self._dsar_requests: list[dict[str, Any]] = []
+        self._consent_registry: dict[str, dict[str, Any]] = {}
         self._pii_detections = 0
 
     async def observe(self, event: AgentEvent) -> None:
@@ -124,7 +124,7 @@ class PrivacyAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine privacy action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -232,7 +232,7 @@ class PrivacyAgent(BiasharaAgent):
                         "violations": result["violations"],
                         "severity": result.get("severity", "medium"),
                         "action": action,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -249,7 +249,7 @@ class PrivacyAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _handle_privacy_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_privacy_request(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle DSAR and other privacy requests."""
         request_type = params.get("request_type", "dsar")
         user_id = params.get("user_id", "unknown")
@@ -259,7 +259,7 @@ class PrivacyAgent(BiasharaAgent):
             self._dsar_requests.append({
                 "user_id": user_id,
                 "request_type": "dsar",
-                "received_at": datetime.now(timezone.utc).isoformat(),
+                "received_at": datetime.now(UTC).isoformat(),
                 "status": "processing",
                 "deadline_days": self.PRIVACY_CONFIG["dsar_response_days"],
             })
@@ -307,7 +307,7 @@ class PrivacyAgent(BiasharaAgent):
 
         return {"status": "unknown_request_type", "request_type": request_type}
 
-    def _validate_data_minimization(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_data_minimization(self, params: dict[str, Any]) -> dict[str, Any]:
         """Check that only necessary data is collected/processed."""
         payload = params.get("payload", {})
         violations = []
@@ -341,7 +341,7 @@ class PrivacyAgent(BiasharaAgent):
             "pii_detected": len(detected_pii),
         }
 
-    def _validate_output_privacy(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_output_privacy(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate privacy on intelligence outputs."""
         payload = params.get("payload", {})
         violations = []
@@ -371,7 +371,7 @@ class PrivacyAgent(BiasharaAgent):
             "checks": params.get("checks", []),
         }
 
-    def _validate_report_privacy(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_report_privacy(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate report does not leak PII or enable re-identification."""
         payload = params.get("payload", {})
         violations = []
@@ -402,7 +402,7 @@ class PrivacyAgent(BiasharaAgent):
             "checks": params.get("checks", []),
         }
 
-    def _full_privacy_audit(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_privacy_audit(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run full privacy audit."""
         return {
             "compliant": True,
@@ -426,7 +426,7 @@ class PrivacyAgent(BiasharaAgent):
             "status": "all_checks_passed",
         }
 
-    def _scan_pii(self, data: Dict[str, Any]) -> List[str]:
+    def _scan_pii(self, data: dict[str, Any]) -> list[str]:
         """Scan a dictionary for PII field names."""
         detected = []
         if isinstance(data, dict):
@@ -438,7 +438,7 @@ class PrivacyAgent(BiasharaAgent):
                     detected.append(key)
         return detected
 
-    def get_privacy_stats(self) -> Dict[str, Any]:
+    def get_privacy_stats(self) -> dict[str, Any]:
         """Return privacy agent statistics."""
         return {
             "checks_performed": self._checks_performed,

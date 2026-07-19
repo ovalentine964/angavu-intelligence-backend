@@ -38,15 +38,6 @@ from app.agents.loops.core import (
     SupervisorAgent,
 )
 
-# ── OODA Loop ──────────────────────────────────────────────────────
-from app.agents.loops.ooda_loop import (
-    OODAAgent,
-    OODACycle,
-    OODAMetrics,
-    OrientationAxis,
-    OrientationState,
-)
-
 # ── Self-Improving Feedback Loop ───────────────────────────────────
 from app.agents.loops.feedback_loop import (
     ABTestResult,
@@ -66,6 +57,15 @@ from app.agents.loops.human_in_the_loop import (
     HITLMetrics,
     HumanInTheLoopAgent,
     TrustScore,
+)
+
+# ── OODA Loop ──────────────────────────────────────────────────────
+from app.agents.loops.ooda_loop import (
+    OODAAgent,
+    OODACycle,
+    OODAMetrics,
+    OrientationAxis,
+    OrientationState,
 )
 
 # ── State Machine ──────────────────────────────────────────────────

@@ -16,7 +16,7 @@ Purpose categories reflect actual informal worker loan patterns:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -35,7 +35,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
 from app.db.database import Base
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Purpose Categories — Aligned to informal worker reality
@@ -240,13 +239,13 @@ class Loan(Base):
     # ── Metadata ──────────────────────────────────────────────────────
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -316,7 +315,7 @@ class LoanRepayment(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -405,13 +404,13 @@ class PurposeVerification(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (

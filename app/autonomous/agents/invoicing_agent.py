@@ -17,9 +17,8 @@ Capabilities:
 from __future__ import annotations
 
 import time
-import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
@@ -37,7 +36,7 @@ logger = structlog.get_logger(__name__)
 # ── Pricing configuration ──────────────────────────────────────────
 
 # Product tier pricing (KES per month)
-TIER_PRICING: Dict[str, Dict[str, Any]] = {
+TIER_PRICING: dict[str, dict[str, Any]] = {
     "standard": {
         "base_price": 15_000,
         "description": "Angavu Standard — Market intelligence for SMEs",
@@ -56,7 +55,7 @@ TIER_PRICING: Dict[str, Dict[str, Any]] = {
 }
 
 # Add-on pricing
-ADDON_PRICING: Dict[str, float] = {
+ADDON_PRICING: dict[str, float] = {
     "extra_users": 2_000,         # per additional user
     "api_access": 10_000,         # monthly
     "custom_reports": 5_000,      # per custom report template
@@ -92,7 +91,7 @@ class InvoicingAgent(BiasharaAgent):
             ],
         )
         # Invoice store (in-memory; wire to DB in production)
-        self._invoices: Dict[str, Invoice] = {}
+        self._invoices: dict[str, Invoice] = {}
         # Invoice counter for numbering
         self._invoice_counter: int = 0
 
@@ -109,7 +108,7 @@ class InvoicingAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide what invoicing action to take.
 
@@ -237,12 +236,12 @@ class InvoicingAgent(BiasharaAgent):
 
     async def _draft_invoice(
         self,
-        params: Dict[str, Any],
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Draft a new invoice for a client."""
         self._invoice_counter += 1
-        invoice_number = f"ANG-{datetime.now(timezone.utc).year}-{self._invoice_counter:04d}"
+        invoice_number = f"ANG-{datetime.now(UTC).year}-{self._invoice_counter:04d}"
 
         client_id = params.get("client_id", "")
         client_name = params.get("client_name", "")
@@ -279,7 +278,7 @@ class InvoicingAgent(BiasharaAgent):
             client_name=client_name,
             client_email=client_email,
             items=items,
-            due_date=datetime.now(timezone.utc) + timedelta(days=PAYMENT_TERMS_DAYS),
+            due_date=datetime.now(UTC) + timedelta(days=PAYMENT_TERMS_DAYS),
             notes=f"Product tier: {tier}. Payment terms: Net {PAYMENT_TERMS_DAYS}.",
         )
         invoice.calculate_totals()
@@ -302,7 +301,7 @@ class InvoicingAgent(BiasharaAgent):
 
         # Auto-send (in production, integrate with email service)
         invoice.status = InvoiceStatus.SENT
-        invoice.sent_at = datetime.now(timezone.utc)
+        invoice.sent_at = datetime.now(UTC)
         events.append(AgentEvent(
             event_type=EventType.INVOICE_SENT,
             source=self.name,
@@ -335,9 +334,9 @@ class InvoicingAgent(BiasharaAgent):
 
     async def _send_reminder(
         self,
-        params: Dict[str, Any],
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Send a payment reminder for an overdue invoice."""
         invoice_id = params.get("invoice_id", "")
         invoice = self._invoices.get(invoice_id)
@@ -346,7 +345,7 @@ class InvoicingAgent(BiasharaAgent):
             return {"error": f"Invoice {invoice_id} not found"}
 
         invoice.reminder_count += 1
-        invoice.last_reminder_at = datetime.now(timezone.utc)
+        invoice.last_reminder_at = datetime.now(UTC)
 
         self._logger.info(
             "payment_reminder_sent",
@@ -366,8 +365,8 @@ class InvoicingAgent(BiasharaAgent):
 
     async def _check_payments(
         self,
-        events: List[AgentEvent],
-    ) -> Dict[str, Any]:
+        events: list[AgentEvent],
+    ) -> dict[str, Any]:
         """Check all sent invoices for overdue status."""
         overdue_count = 0
         total_outstanding = 0.0
@@ -406,7 +405,7 @@ class InvoicingAgent(BiasharaAgent):
 
     # ── Revenue forecasting ─────────────────────────────────────────
 
-    def get_revenue_forecast(self, months: int = 3) -> Dict[str, Any]:
+    def get_revenue_forecast(self, months: int = 3) -> dict[str, Any]:
         """
         Generate revenue forecast from invoice pipeline.
 
@@ -447,14 +446,14 @@ class InvoicingAgent(BiasharaAgent):
         invoice_id: str,
         payment_method: str = "mpesa",
         payment_reference: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Mark an invoice as paid (called from payment webhook)."""
         invoice = self._invoices.get(invoice_id)
         if not invoice:
             return None
 
         invoice.status = InvoiceStatus.PAID
-        invoice.paid_at = datetime.now(timezone.utc)
+        invoice.paid_at = datetime.now(UTC)
         invoice.payment_method = payment_method
         invoice.payment_reference = payment_reference
 

@@ -11,7 +11,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -27,15 +27,15 @@ router = APIRouter(prefix="/skills", tags=["Skills"])
 class SkillExecuteRequest(BaseModel):
     """Request body for skill execution."""
     action: str = Field(..., description="Skill action to execute")
-    params: Dict[str, Any] = Field(default_factory=dict, description="Action parameters")
+    params: dict[str, Any] = Field(default_factory=dict, description="Action parameters")
 
 
 class SkillExecuteResponse(BaseModel):
     """Response from skill execution."""
     success: bool
     skill_name: str
-    data: Dict[str, Any] = {}
-    error: Optional[str] = None
+    data: dict[str, Any] = {}
+    error: str | None = None
     duration_ms: float = 0.0
     confidence: float = 0.0
 

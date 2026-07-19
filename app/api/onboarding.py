@@ -24,8 +24,6 @@ Only AFTER this value is delivered does data flow to intelligence.
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -50,24 +48,24 @@ class OnboardingRequest(BaseModel):
 
     # Identity (minimal — privacy-first)
     phone: str = Field(..., description="Worker's phone number")
-    name: Optional[str] = Field(None, description="Worker's name (optional)")
+    name: str | None = Field(None, description="Worker's name (optional)")
 
     # Business classification
-    business_type: Optional[str] = Field(
+    business_type: str | None = Field(
         None,
         description="Business type: mama_mboga, dukawallah, boda_boda, vendor, tailor, restaurant, other",
     )
-    business_description: Optional[str] = Field(
+    business_description: str | None = Field(
         None,
         description="Free-text description of business (for voice input)",
     )
 
     # Location
-    location_name: Optional[str] = Field(
+    location_name: str | None = Field(
         None,
         description="Market or area name (e.g., Gikomba Market, Korogocho)",
     )
-    location_geohash: Optional[str] = Field(
+    location_geohash: str | None = Field(
         None,
         description="Geohash-5 of business location (~5km²)",
     )
@@ -89,11 +87,11 @@ class OnboardingRequest(BaseModel):
     )
 
     # Voice metadata (optional)
-    voice_transcript: Optional[str] = Field(
+    voice_transcript: str | None = Field(
         None,
         description="Raw voice transcript if onboarding was via voice",
     )
-    detected_dialect: Optional[str] = Field(
+    detected_dialect: str | None = Field(
         None,
         description="Detected dialect code (e.g., sw-KE, luo, kikuyu)",
     )
@@ -107,15 +105,15 @@ class ValueDeliveryFeedback(BaseModel):
         ...,
         description="Did the worker get value from Day 1?",
     )
-    value_type: Optional[str] = Field(
+    value_type: str | None = Field(
         None,
         description="Type of value: profit_summary, restock_alert, price_check, other",
     )
-    feedback_text: Optional[str] = Field(
+    feedback_text: str | None = Field(
         None,
         description="Optional free-text feedback from worker",
     )
-    rating: Optional[int] = Field(
+    rating: int | None = Field(
         None,
         ge=1, le=5,
         description="Satisfaction rating 1-5",
@@ -130,12 +128,12 @@ class OnboardingResponse(BaseModel):
     business_type: str
     language: str
     channel: str
-    location_name: Optional[str] = None
+    location_name: str | None = None
     dialect_adapter: str
     value_delivered: bool = True
     welcome_message: str
-    next_steps: List[str] = []
-    estimated_daily_savings_kes: Optional[float] = None
+    next_steps: list[str] = []
+    estimated_daily_savings_kes: float | None = None
 
 
 class DialectAdapter:
@@ -162,10 +160,10 @@ class DialectAdapter:
     @classmethod
     def detect_and_select(
         cls,
-        language: Optional[str] = None,
-        detected_dialect: Optional[str] = None,
-        voice_transcript: Optional[str] = None,
-        location_geohash: Optional[str] = None,
+        language: str | None = None,
+        detected_dialect: str | None = None,
+        voice_transcript: str | None = None,
+        location_geohash: str | None = None,
     ) -> str:
         """
         Select the best dialect adapter based on available signals.
@@ -208,7 +206,7 @@ class DialectAdapter:
         return "sw-KE"
 
     @classmethod
-    def get_adapter_info(cls, adapter_code: str) -> Dict[str, str]:
+    def get_adapter_info(cls, adapter_code: str) -> dict[str, str]:
         """Get info about a dialect adapter."""
         for lang, info in cls.SUPPORTED_DIALECTS.items():
             if info["adapter"] == adapter_code:
@@ -254,8 +252,8 @@ BUSINESS_TYPE_KEYWORDS = {
 
 
 def classify_business_type(
-    business_type: Optional[str] = None,
-    business_description: Optional[str] = None,
+    business_type: str | None = None,
+    business_description: str | None = None,
 ) -> str:
     """
     Classify business type from explicit type or free-text description.

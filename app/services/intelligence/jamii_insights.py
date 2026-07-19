@@ -21,12 +21,12 @@ Buyers: NGOs, development organizations (World Bank, USAID, DFID)
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -34,19 +34,15 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import BootstrapCI
+from app.services.intelligence.health_economics import HealthEconomicsEngine
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BayesianUpdater,
-    BootstrapInference,
     ClusterAnalyzer,
     InequalityAnalyzer,
-    KernelDensityEstimator,
     PovertyAnalyzer,
     bootstrap,
     kde_estimator,
 )
-from app.services.intelligence.health_economics import HealthEconomicsEngine
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -80,7 +76,7 @@ def _gini_coefficient(incomes: np.ndarray) -> float:
     cumulative = np.cumsum(sorted_inc)
     mu = np.mean(sorted_inc)
     # Fast formula
-    gini = (2 * np.sum((np.arange(1, n + 1) * sorted_inc)) / (n * n * mu)) - (n + 1) / n
+    gini = (2 * np.sum(np.arange(1, n + 1) * sorted_inc) / (n * n * mu)) - (n + 1) / n
     return round(float(max(0, min(1, gini))), 4)
 
 
@@ -186,7 +182,7 @@ def _fgt_poverty_measure(
         return round(float(np.sum(gaps**alpha) / n), 4)
 
 
-def _lorenz_curve(incomes: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _lorenz_curve(incomes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Lorenz Curve: cumulative income share vs cumulative population share.
 
@@ -212,10 +208,10 @@ def _lorenz_curve(incomes: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _construct_abridged_life_table(
-    age_groups: List[str],
+    age_groups: list[str],
     population: np.ndarray,
     deaths: np.ndarray,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Construct an abridged life table from age-group population and deaths.
 
@@ -283,7 +279,7 @@ def _construct_abridged_life_table(
 
 def _compute_dependency_ratio(
     youth_pop: float, working_age_pop: float, elderly_pop: float
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Dependency ratios.
 
@@ -316,7 +312,7 @@ def _microfinance_impact_score(
     credit_access: float,
     savings_behavior: float,
     group_membership_pct: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Composite microfinance inclusion score.
 
@@ -379,12 +375,12 @@ class JamiiInsightsService:
     async def generate_inclusion_report(
         self,
         region: str,
-        demographic_segment: Optional[str] = None,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        program_name: Optional[str] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        demographic_segment: str | None = None,
+        period_start: date | None = None,
+        period_end: date | None = None,
+        program_name: str | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Generate financial inclusion intelligence.
 
@@ -647,8 +643,8 @@ class JamiiInsightsService:
         response = {
             "product": "jamii_insights",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, user_count / 100),
             "confidence_level": min(1.0, len(sales) / 100),
@@ -728,7 +724,7 @@ class JamiiInsightsService:
     def _run_statistical_engine_inequality(
         user_monthly_incomes: np.ndarray,
         poverty_line_monthly: float,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run statistical engine inequality & poverty analysis (STA 341, ECO 401).
 
@@ -794,7 +790,7 @@ class JamiiInsightsService:
         poverty_line_monthly: float,
         digital_adoption: float,
         credit_access: float,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -806,7 +802,7 @@ class JamiiInsightsService:
         if len(sales) < 20 or len(user_monthly_incomes) < 10:
             return None
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for income distribution ───────────────────────────
         try:
@@ -878,7 +874,7 @@ class JamiiInsightsService:
         # ── STA 444: Kruskal-Wallis — compare financial inclusion across communities ──
         try:
             # Group users by business type as proxy for community
-            community_incomes: Dict[str, list] = defaultdict(list)
+            community_incomes: dict[str, list] = defaultdict(list)
             for u in users:
                 uid = u.id
                 u_income = sum(t.amount for t in sales if t.user_id == uid)
@@ -979,7 +975,7 @@ class JamiiInsightsService:
     @staticmethod
     def _assess_barriers(
         digital: float, credit: float, savings: float, count: int
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Assess barriers to financial inclusion."""
         barriers = []
         if digital < 50:
@@ -1102,10 +1098,10 @@ class HealthEconomicIntelligence:
     def health_shock_tracker(
         cls,
         user_id: str,
-        transactions: List[Any],
+        transactions: list[Any],
         lookback_days: int = 180,
         poverty_line_monthly: float = 8800,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect and track health shocks from transaction patterns.
 
@@ -1231,7 +1227,7 @@ class HealthEconomicIntelligence:
         depreciation_rate: float = 0.05,
         interest_rate: float = 0.12,
         medical_cost_index: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Grossman health capital model — optimal health investment.
 
@@ -1335,10 +1331,10 @@ class HealthEconomicIntelligence:
     def health_insurance_intelligence(
         cls,
         user_count: int,
-        transactions: List[Any],
+        transactions: list[Any],
         region: str,
         avg_monthly_income: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Health insurance coverage and gap analysis.
 
@@ -1430,10 +1426,10 @@ class HealthEconomicIntelligence:
     @classmethod
     def epidemiological_early_warning(
         cls,
-        transactions: List[Any],
+        transactions: list[Any],
         region: str,
         lookback_days: int = 90,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Epidemiological early warning from transaction patterns.
 
@@ -1572,9 +1568,9 @@ class HealthEconomicIntelligence:
     @classmethod
     def health_productivity_correlation(
         cls,
-        transactions: List[Any],
+        transactions: list[Any],
         lookback_days: int = 180,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Measure correlation between health indicators and productivity.
 
@@ -1687,12 +1683,12 @@ class HealthEconomicIntelligence:
     def full_health_economic_report(
         cls,
         user_id: str,
-        transactions: List[Any],
+        transactions: list[Any],
         region: str,
         user_count: int,
         avg_monthly_income: float,
         poverty_line_monthly: float = 8800,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Comprehensive health-economic intelligence report.
 
@@ -1718,7 +1714,7 @@ class HealthEconomicIntelligence:
             "product": "jamii_insights_health",
             "user_id": user_id,
             "region": region,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         # 1. Health shock tracker
@@ -1819,7 +1815,7 @@ class HealthEconomicIntelligence:
         return round(freq_score + loss_score, 1)
 
     @staticmethod
-    def _epidemiological_recommendations(risk_level: str) -> List[str]:
+    def _epidemiological_recommendations(risk_level: str) -> list[str]:
         """Generate recommendations based on epidemiological risk level."""
         if risk_level == "high":
             return [

@@ -5,14 +5,12 @@ Allows runtime selection and swapping of cryptographic algorithms without
 changing application code. Critical for PQC migration.
 """
 
-import hashlib
 import logging
 import os
-from typing import Dict, Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .crypto_provider import CryptoProvider, CryptoKeyPair, KeyEncapsulationProvider
+from .crypto_provider import CryptoKeyPair, CryptoProvider, KeyEncapsulationProvider
 
 logger = logging.getLogger(__name__)
 
@@ -107,16 +105,16 @@ class _EcdsaP256Provider(CryptoProvider):
         )
 
     def sign(self, data: bytes, private_key: bytes) -> bytes:
-        from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.primitives import serialization, hashes
         from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
         key = serialization.load_der_private_key(private_key, password=None, backend=default_backend())
         return key.sign(data, ec.ECDSA(hashes.SHA256()))
 
     def verify(self, data: bytes, signature: bytes, public_key: bytes) -> bool:
-        from cryptography.hazmat.primitives.asymmetric import ec, utils
-        from cryptography.hazmat.primitives import serialization, hashes
         from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
         try:
             key = serialization.load_der_public_key(public_key, backend=default_backend())
             key.verify(signature, data, ec.ECDSA(hashes.SHA256()))
@@ -143,9 +141,9 @@ class AlgorithmRegistry:
     """
 
     def __init__(self):
-        self._encrypt_providers: Dict[str, CryptoProvider] = {}
-        self._signature_providers: Dict[str, CryptoProvider] = {}
-        self._kem_providers: Dict[str, KeyEncapsulationProvider] = {}
+        self._encrypt_providers: dict[str, CryptoProvider] = {}
+        self._signature_providers: dict[str, CryptoProvider] = {}
+        self._kem_providers: dict[str, KeyEncapsulationProvider] = {}
 
         self._default_encrypt = "AES-256-GCM"
         self._default_signature = "ML-DSA-65"
@@ -173,19 +171,19 @@ class AlgorithmRegistry:
         self._kem_providers[provider.algorithm_id] = provider
         logger.debug("Registered KEM provider: %s (PQ=%s)", provider.algorithm_id, provider.is_post_quantum)
 
-    def get_encrypt_provider(self, algorithm_id: Optional[str] = None) -> CryptoProvider:
+    def get_encrypt_provider(self, algorithm_id: str | None = None) -> CryptoProvider:
         aid = algorithm_id or self._default_encrypt
         if aid not in self._encrypt_providers:
             raise ValueError(f"Unknown encrypt algorithm: {aid}. Available: {list(self._encrypt_providers.keys())}")
         return self._encrypt_providers[aid]
 
-    def get_signature_provider(self, algorithm_id: Optional[str] = None) -> CryptoProvider:
+    def get_signature_provider(self, algorithm_id: str | None = None) -> CryptoProvider:
         aid = algorithm_id or self._default_signature
         if aid not in self._signature_providers:
             raise ValueError(f"Unknown signature algorithm: {aid}. Available: {list(self._signature_providers.keys())}")
         return self._signature_providers[aid]
 
-    def get_kem_provider(self, algorithm_id: Optional[str] = None) -> KeyEncapsulationProvider:
+    def get_kem_provider(self, algorithm_id: str | None = None) -> KeyEncapsulationProvider:
         aid = algorithm_id or self._default_kem
         if aid not in self._kem_providers:
             raise ValueError(f"Unknown KEM algorithm: {aid}. Available: {list(self._kem_providers.keys())}")
@@ -233,8 +231,8 @@ class AlgorithmRegistry:
         self.register_signature_provider(ecdsa_provider)
 
     def _register_pqc(self):
-        from .ml_kem import MlKemProvider, MlKemParameterSet
-        from .ml_dsa import MlDsaProvider, MlDsaParameterSet
+        from .ml_dsa import MlDsaParameterSet, MlDsaProvider
+        from .ml_kem import MlKemParameterSet, MlKemProvider
 
         # ML-KEM variants
         for param in MlKemParameterSet:

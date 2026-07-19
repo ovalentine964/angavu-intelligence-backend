@@ -20,9 +20,7 @@ from __future__ import annotations
 import structlog
 
 from app.services.drift_detector import (
-    AlertSeverity,
     DriftAlert,
-    DriftDirection,
     ModelDriftMonitor,
 )
 from app.services.task_queue import get_task_queue

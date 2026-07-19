@@ -22,7 +22,8 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional
+from collections.abc import AsyncIterator, Callable, Coroutine
+from typing import Any
 
 import httpx
 import structlog
@@ -79,13 +80,13 @@ class A2AHttpClient:
         self,
         timeout: float = 30.0,
         max_retries: int = 3,
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
     ):
         self._timeout = timeout
         self._max_retries = max_retries
         self._auth_token = auth_token
-        self._client: Optional[httpx.AsyncClient] = None
-        self._discovered_agents: Dict[str, A2AAgentCard] = {}
+        self._client: httpx.AsyncClient | None = None
+        self._discovered_agents: dict[str, A2AAgentCard] = {}
 
         self._logger = logger.bind(component="a2a_http_client")
 
@@ -172,9 +173,9 @@ class A2AHttpClient:
         self,
         agent_card: A2AAgentCard,
         message: str,
-        capability: Optional[str] = None,
-        data: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        capability: str | None = None,
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> A2ATask:
         """
         Send a task to an external A2A agent via HTTP POST.
@@ -313,7 +314,7 @@ class A2AHttpClient:
         agent_card: A2AAgentCard,
         task_id: str,
         timeout: float = 300.0,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Subscribe to task updates via Server-Sent Events.
 
@@ -396,8 +397,8 @@ class A2AHttpClient:
     async def _post_jsonrpc(
         self,
         endpoint: str,
-        request: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        request: dict[str, Any],
+    ) -> dict[str, Any]:
         """Send a JSON-RPC POST request with retry logic."""
         endpoint = endpoint.rstrip("/")
         client = await self._get_client()
@@ -474,17 +475,17 @@ class A2AHttpClient:
 class A2AJsonRpcRequest(BaseModel):
     """A2A JSON-RPC request envelope."""
     jsonrpc: str = "2.0"
-    id: Optional[str | int] = None
+    id: str | int | None = None
     method: str
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
 class A2ATaskSendParams(BaseModel):
     """Parameters for tasks/send."""
-    id: Optional[str] = None
-    sessionId: Optional[str] = None
-    message: Dict[str, Any]
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    id: str | None = None
+    sessionId: str | None = None
+    message: dict[str, Any]
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class A2ATaskGetParams(BaseModel):
@@ -502,7 +503,7 @@ class A2ATaskCancelParams(BaseModel):
 
 def create_a2a_router(
     a2a_server: A2AServer,
-    auth_handler: Optional[Callable[..., Coroutine]] = None,
+    auth_handler: Callable[..., Coroutine] | None = None,
 ) -> APIRouter:
     """
     Create a FastAPI router with A2A protocol endpoints.

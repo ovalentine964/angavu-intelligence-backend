@@ -8,11 +8,11 @@ Implements 3 communication patterns:
 """
 
 from app.agents.communication.broadcast import BroadcastProtocol
-from app.agents.communication.point_to_point import PointToPointProtocol
 from app.agents.communication.delegation import DelegationProtocol
+from app.agents.communication.point_to_point import PointToPointProtocol
 
 __all__ = [
     "BroadcastProtocol",
-    "PointToPointProtocol",
     "DelegationProtocol",
+    "PointToPointProtocol",
 ]

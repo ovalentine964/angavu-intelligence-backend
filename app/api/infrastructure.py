@@ -16,17 +16,16 @@ The flywheel:
 """
 
 import asyncio
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query
-from datetime import datetime, timezone
-from typing import Optional
+from fastapi import APIRouter, HTTPException
 
 from app.services.infrastructure.roadmap import DataCenterRoadmap
 from app.services.infrastructure.worker_value import WorkerValueTracker
 
 # Singleton instances (initialized lazily)
-_roadmap: Optional[DataCenterRoadmap] = None
-_worker_tracker: Optional[WorkerValueTracker] = None
+_roadmap: DataCenterRoadmap | None = None
+_worker_tracker: WorkerValueTracker | None = None
 
 
 def _get_roadmap() -> DataCenterRoadmap:
@@ -294,7 +293,7 @@ async def infrastructure_status():
             "intelligence that funds better infrastructure — which means "
             "faster service, better credit access, and more opportunities for you."
         ),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -371,7 +370,7 @@ async def infrastructure_roadmap():
             "intelligence that funds better infrastructure — which means "
             "faster service, better credit access, and more opportunities for you."
         ),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -482,7 +481,7 @@ async def infrastructure_fund():
             "Intelligence generates revenue → Revenue builds infrastructure → "
             "Better infrastructure serves more workers."
         ),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
 

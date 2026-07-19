@@ -10,14 +10,13 @@ stored as geohash-5 (≈5km²) only — never exact GPS coordinates.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
     Enum,
-    Float,
     Index,
     String,
     Text,
@@ -139,13 +138,13 @@ class User(Base):
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
 

@@ -10,7 +10,6 @@ All responses enforce k-anonymity and differential privacy.
 
 import time
 from datetime import date
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -35,7 +34,7 @@ router = APIRouter(prefix="/fmcg", tags=["FMCG Intelligence"])
 async def fmcg_dashboard(
     company: str,
     request: Request,
-    region: Optional[str] = Query(None, description="Region filter (e.g., coast, nairobi)"),
+    region: str | None = Query(None, description="Region filter (e.g., coast, nairobi)"),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -148,7 +147,7 @@ async def distribution_analysis(
     company: str,
     region: str,
     request: Request,
-    product: Optional[str] = Query(None, description="Specific product to analyze"),
+    product: str | None = Query(None, description="Specific product to analyze"),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -229,7 +228,7 @@ async def pricing_intelligence(
     company: str,
     product: str,
     request: Request,
-    region: Optional[str] = Query(None, description="Region filter"),
+    region: str | None = Query(None, description="Region filter"),
     period_days: int = Query(30, ge=7, le=180, description="Analysis window in days"),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
@@ -327,8 +326,8 @@ async def promotion_analysis(
     company: str,
     promotion_id: str,
     request: Request,
-    promotion_start: Optional[date] = Query(None),
-    promotion_end: Optional[date] = Query(None),
+    promotion_start: date | None = Query(None),
+    promotion_end: date | None = Query(None),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):

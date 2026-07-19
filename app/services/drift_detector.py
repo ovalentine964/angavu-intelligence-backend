@@ -31,12 +31,12 @@ Typical usage:
 from __future__ import annotations
 
 import asyncio
-import time
 from collections import deque
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Deque, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -103,7 +103,7 @@ class DriftAlert:
     samples_since_last_alert: int
     recommendation: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize alert to dictionary."""
         return {
             "timestamp": self.timestamp.isoformat(),
@@ -227,13 +227,13 @@ class CUSUMDriftDetector:
 
         # State
         self._state = CUSUMState(running_mean=baseline_mean)
-        self._burn_in_values: List[float] = []
-        self._history: Deque[ModelPerformanceSnapshot] = deque(maxlen=1000)
-        self._alerts: List[DriftAlert] = []
-        self._recent_values: Deque[float] = deque(maxlen=window_size)
+        self._burn_in_values: list[float] = []
+        self._history: deque[ModelPerformanceSnapshot] = deque(maxlen=1000)
+        self._alerts: list[DriftAlert] = []
+        self._recent_values: deque[float] = deque(maxlen=window_size)
 
         # Callback invoked when drift is detected (closes drift→retrain loop)
-        self._on_drift_callback: Optional[Callable[["DriftAlert"], Coroutine]] = None
+        self._on_drift_callback: Callable[[DriftAlert], Coroutine] | None = None
 
         logger.info(
             "cusum_initialized",
@@ -256,7 +256,7 @@ class CUSUMDriftDetector:
             return ModelStatus.WARNING
         return ModelStatus.STABLE
 
-    def set_drift_callback(self, callback: Callable[["DriftAlert"], Coroutine]) -> None:
+    def set_drift_callback(self, callback: Callable[[DriftAlert], Coroutine]) -> None:
         """Register an async callback to invoke when drift is detected.
 
         The callback receives the DriftAlert and should trigger
@@ -265,21 +265,21 @@ class CUSUMDriftDetector:
         self._on_drift_callback = callback
 
     @property
-    def alert_history(self) -> List[DriftAlert]:
+    def alert_history(self) -> list[DriftAlert]:
         """All generated alerts."""
         return list(self._alerts)
 
     @property
-    def performance_history(self) -> List[ModelPerformanceSnapshot]:
+    def performance_history(self) -> list[ModelPerformanceSnapshot]:
         """Performance snapshot history."""
         return list(self._history)
 
     def update(
         self,
         metric_value: float,
-        prediction: Optional[float] = None,
-        actual: Optional[float] = None,
-    ) -> Optional[DriftAlert]:
+        prediction: float | None = None,
+        actual: float | None = None,
+    ) -> DriftAlert | None:
         """Process a new observation and check for drift.
 
         This is the main entry point for online monitoring. Call this
@@ -334,7 +334,7 @@ class CUSUMDriftDetector:
         # --- Record snapshot ---
         status = self._evaluate_status()
         snapshot = ModelPerformanceSnapshot(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             metric_name=self.metric_name,
             metric_value=metric_value,
             cusum_upper=self._state.s_upper,
@@ -387,7 +387,7 @@ class CUSUMDriftDetector:
 
         return alert
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current monitoring status as a dictionary.
 
         Returns:
@@ -439,7 +439,7 @@ class CUSUMDriftDetector:
 
     def get_performance_trend(
         self, window: int = 50
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get performance trend over recent observations.
 
         Args:
@@ -531,7 +531,7 @@ class CUSUMDriftDetector:
 
     def _check_alert(
         self, metric_value: float, z_score: float
-    ) -> Optional[DriftAlert]:
+    ) -> DriftAlert | None:
         """Check if an alert should be generated.
 
         Args:
@@ -541,7 +541,7 @@ class CUSUMDriftDetector:
         Returns:
             DriftAlert if threshold breached, None otherwise
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         samples_since = (
             self._state.n_observations - self._state.last_alert_index
             if self._state.last_alert_index >= 0
@@ -668,16 +668,16 @@ class ModelDriftMonitor:
 
     def __init__(
         self,
-        metrics_config: Optional[Dict[str, Dict[str, float]]] = None,
+        metrics_config: dict[str, dict[str, float]] | None = None,
         delta: float = 1.0,
         h: float = 4.0,
         burn_in: int = 30,
     ):
-        self._detectors: Dict[str, CUSUMDriftDetector] = {}
+        self._detectors: dict[str, CUSUMDriftDetector] = {}
         self._delta = delta
         self._h = h
         self._burn_in = burn_in
-        self._drift_callback: Optional[Callable[[DriftAlert], Coroutine]] = None
+        self._drift_callback: Callable[[DriftAlert], Coroutine] | None = None
 
         if metrics_config:
             for name, config in metrics_config.items():
@@ -692,9 +692,9 @@ class ModelDriftMonitor:
         name: str,
         baseline_mean: float = 0.85,
         baseline_std: float = 0.05,
-        delta: Optional[float] = None,
-        h: Optional[float] = None,
-        burn_in: Optional[int] = None,
+        delta: float | None = None,
+        h: float | None = None,
+        burn_in: int | None = None,
     ) -> None:
         """Add a metric to monitor.
 
@@ -731,7 +731,7 @@ class ModelDriftMonitor:
 
     def update(
         self, metric_name: str, value: float
-    ) -> Optional[DriftAlert]:
+    ) -> DriftAlert | None:
         """Update a specific metric and check for drift.
 
         Args:
@@ -750,8 +750,8 @@ class ModelDriftMonitor:
         return self._detectors[metric_name].update(value)
 
     def update_batch(
-        self, metrics: Dict[str, float]
-    ) -> List[DriftAlert]:
+        self, metrics: dict[str, float]
+    ) -> list[DriftAlert]:
         """Update multiple metrics at once.
 
         Args:
@@ -768,7 +768,7 @@ class ModelDriftMonitor:
                     alerts.append(alert)
         return alerts
 
-    def get_overall_status(self) -> Dict[str, Any]:
+    def get_overall_status(self) -> dict[str, Any]:
         """Get unified status across all monitored metrics.
 
         Returns:
@@ -799,12 +799,12 @@ class ModelDriftMonitor:
             "metrics_monitored": len(self._detectors),
             "drift_detected_in_any": any_drift,
             "metrics": metric_statuses,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     def get_all_alerts(
         self, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get recent alerts across all metrics.
 
         Args:

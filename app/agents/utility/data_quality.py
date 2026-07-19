@@ -10,11 +10,11 @@ Tier: 3 (Utility) — stateless, on-demand invocation.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, BiasharaAgent
+from app.agents.base import AgentDecision, AgentResult, BiasharaAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +42,7 @@ class DataQualityAgent(BiasharaAgent):
             ],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
 
@@ -83,7 +83,7 @@ class DataQualityAgent(BiasharaAgent):
             duration_ms=(time.time() - start) * 1000,
         )
 
-    def _check_quality(self, data: Dict[str, Any]) -> List[str]:
+    def _check_quality(self, data: dict[str, Any]) -> list[str]:
         """Check data quality, return list of issues."""
         issues = []
         if not data:

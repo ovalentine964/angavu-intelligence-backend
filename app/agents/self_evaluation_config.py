@@ -6,13 +6,13 @@ quality gates are applied before outputs propagate downstream.
 """
 
 from app.agents.self_evaluation import (
-    SelfEvaluationMiddleware,
-    NonEmptyOutputRule,
-    NoErrorRule,
-    SchemaValidationRule,
-    RangeCheckRule,
-    OutputLengthRule,
     ConfidenceThresholdRule,
+    NoErrorRule,
+    NonEmptyOutputRule,
+    OutputLengthRule,
+    RangeCheckRule,
+    SchemaValidationRule,
+    SelfEvaluationMiddleware,
 )
 
 

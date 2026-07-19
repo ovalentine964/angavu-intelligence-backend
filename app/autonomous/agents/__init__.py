@@ -10,8 +10,8 @@ Agents:
     OperationsAgent — Invoicing, expense tracking, finance
 """
 
-from app.autonomous.agents.sales_agent import SalesAgent
 from app.autonomous.agents.content_agent import ContentAgent
 from app.autonomous.agents.operations_agent import OperationsAgent
+from app.autonomous.agents.sales_agent import SalesAgent
 
-__all__ = ["SalesAgent", "ContentAgent", "OperationsAgent"]
+__all__ = ["ContentAgent", "OperationsAgent", "SalesAgent"]

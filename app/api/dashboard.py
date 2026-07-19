@@ -20,19 +20,17 @@ Also tracks:
 - Geographic coverage
 """
 
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_user
 from app.db.database import get_db
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.api.auth import get_current_user
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -294,7 +292,7 @@ async def critical_mass_dashboard(
     active_with_txn = active_with_txn_result.scalar() or 0
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
 
         # ── Worker Counts ──────────────────────────────────────────────────
         "workers": {

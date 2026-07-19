@@ -35,7 +35,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -165,7 +165,7 @@ class AgentTrustState:
     streak_successes: int = 0        # Current success streak
     best_streak: int = 0
     last_updated: float = field(default_factory=time.time)
-    trust_history: List[Dict[str, Any]] = field(default_factory=list)
+    trust_history: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def success_rate(self) -> float:
@@ -174,7 +174,7 @@ class AgentTrustState:
             return 0.0
         return self.successful_tasks / self.total_tasks
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize trust record to dictionary for API response."""
         return {
             "agent_name": self.agent_name,
@@ -216,8 +216,8 @@ class ProgressiveAutonomyManager:
     """
 
     def __init__(self):
-        self._states: Dict[str, AgentTrustState] = {}
-        self._events: List[TrustEvent] = []
+        self._states: dict[str, AgentTrustState] = {}
+        self._events: list[TrustEvent] = []
         self._max_events = 10000
         self._logger = logger.bind(component="progressive_autonomy")
 
@@ -478,12 +478,12 @@ class ProgressiveAutonomyManager:
 
     # ── Queries ────────────────────────────────────────────────────
 
-    def get_trust_state(self, agent_name: str) -> Dict[str, Any]:
+    def get_trust_state(self, agent_name: str) -> dict[str, Any]:
         """Get the current trust state for an agent."""
         state = self._get_or_create_state(agent_name)
         return state.to_dict()
 
-    def get_all_trust_states(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_trust_states(self) -> dict[str, dict[str, Any]]:
         """Get trust states for all tracked agents."""
         return {name: state.to_dict() for name, state in self._states.items()}
 
@@ -491,12 +491,12 @@ class ProgressiveAutonomyManager:
         """Get the current trust level for an agent."""
         return self._get_or_create_state(agent_name).trust_level
 
-    def get_capabilities(self, agent_name: str) -> Dict[str, Any]:
+    def get_capabilities(self, agent_name: str) -> dict[str, Any]:
         """Get the capabilities for an agent at its current trust level."""
         state = self._get_or_create_state(agent_name)
         return TRUST_LEVEL_CAPABILITIES[state.trust_level]
 
-    def get_recent_events(self, agent_name: Optional[str] = None, n: int = 20) -> List[Dict[str, Any]]:
+    def get_recent_events(self, agent_name: str | None = None, n: int = 20) -> list[dict[str, Any]]:
         """Get recent trust events, optionally filtered by agent."""
         events = self._events
         if agent_name:
@@ -513,7 +513,7 @@ class ProgressiveAutonomyManager:
             for e in events[-n:]
         ]
 
-    def get_system_summary(self) -> Dict[str, Any]:
+    def get_system_summary(self) -> dict[str, Any]:
         """Get a summary of all agents' trust levels."""
         levels = {level.name: 0 for level in TrustLevel}
         for state in self._states.values():

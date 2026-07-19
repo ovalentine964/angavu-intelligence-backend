@@ -27,19 +27,17 @@ Security Properties:
 """
 
 import base64
-import hashlib
-import json
 import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from .ml_kem import MlKemProvider, MlKemParameterSet
-from .ml_dsa import MlDsaProvider, MlDsaParameterSet
-from .crypto_provider import CryptoKeyPair, EncapsulatedKey
+from .crypto_provider import CryptoKeyPair
+from .ml_dsa import MlDsaParameterSet, MlDsaProvider
+from .ml_kem import MlKemParameterSet, MlKemProvider
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +64,7 @@ class EncryptedGradientPayload:
     language: str
     version: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize for network transport."""
         return {
             "ml_kem_ciphertext": base64.b64encode(self.ml_kem_ciphertext).decode("ascii"),
@@ -80,7 +78,7 @@ class EncryptedGradientPayload:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EncryptedGradientPayload":
+    def from_dict(cls, data: dict[str, Any]) -> "EncryptedGradientPayload":
         """Deserialize from network transport."""
         return cls(
             ml_kem_ciphertext=base64.b64decode(data["ml_kem_ciphertext"]),
@@ -115,14 +113,14 @@ class FlPqcEncryptor:
 
     def __init__(
         self,
-        ml_kem_provider: Optional[MlKemProvider] = None,
-        ml_dsa_provider: Optional[MlDsaProvider] = None,
+        ml_kem_provider: MlKemProvider | None = None,
+        ml_dsa_provider: MlDsaProvider | None = None,
     ):
         self._ml_kem = ml_kem_provider or MlKemProvider(MlKemParameterSet.ML_KEM_768)
         self._ml_dsa = ml_dsa_provider or MlDsaProvider(MlDsaParameterSet.ML_DSA_65)
 
         # Device's signing key pair (generated once, stored securely)
-        self._device_signing_keypair: Optional[CryptoKeyPair] = None
+        self._device_signing_keypair: CryptoKeyPair | None = None
 
     def generate_device_signing_key(self) -> CryptoKeyPair:
         """Generate the device's ML-DSA signing key pair."""
@@ -208,8 +206,8 @@ class FlPqcDecryptor:
     def __init__(
         self,
         server_ml_kem_keypair: CryptoKeyPair,
-        ml_kem_provider: Optional[MlKemProvider] = None,
-        ml_dsa_provider: Optional[MlDsaProvider] = None,
+        ml_kem_provider: MlKemProvider | None = None,
+        ml_dsa_provider: MlDsaProvider | None = None,
     ):
         self._server_kem_keypair = server_ml_kem_keypair
         self._ml_kem = ml_kem_provider or MlKemProvider(MlKemParameterSet.ML_KEM_768)
@@ -219,7 +217,7 @@ class FlPqcDecryptor:
         self,
         payload: EncryptedGradientPayload,
         verify_signature: bool = True,
-    ) -> Tuple[bytes, bool]:
+    ) -> tuple[bytes, bool]:
         """
         Decrypt gradient data from a device.
 

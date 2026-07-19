@@ -19,9 +19,7 @@ Key Applications:
 This module is wired into SokoPulseService for cross-border intelligence.
 """
 
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -68,7 +66,7 @@ class AfricanDevelopmentEngine:
         trade_volume: float,
         tariff_rate: float,
         ntariff_barriers: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute EAC integration score for a bilateral trade pair.
 
@@ -158,9 +156,9 @@ class AfricanDevelopmentEngine:
     @classmethod
     def structural_transformation_index(
         cls,
-        sector_shares: Dict[str, float],
-        employment_shares: Dict[str, float],
-    ) -> Dict[str, Any]:
+        sector_shares: dict[str, float],
+        employment_shares: dict[str, float],
+    ) -> dict[str, Any]:
         """
         Compute structural transformation index.
 
@@ -237,7 +235,7 @@ class AfricanDevelopmentEngine:
         women_revenue_share: float,
         women_digital_adoption: float,
         women_credit_access: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Gender-disaggregated development metrics.
 
@@ -299,7 +297,7 @@ class AfricanDevelopmentEngine:
         destination: str,
         product_category: str,
         current_volume: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate cross-border trade potential using development indicators.
 
@@ -394,7 +392,7 @@ class AfricanDevelopmentEngine:
             return "Pre-transformation. Economy heavily agriculture-dependent with large productivity gap."
 
     @staticmethod
-    def _gender_recommendations(empowerment: float, gap: float) -> List[str]:
+    def _gender_recommendations(empowerment: float, gap: float) -> list[str]:
         recs = []
         if empowerment < 0.4:
             recs.append("Target women-owned businesses for financial inclusion programs")

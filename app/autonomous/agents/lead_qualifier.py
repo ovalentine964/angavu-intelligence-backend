@@ -23,8 +23,8 @@ Thresholds:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -42,7 +42,7 @@ logger = structlog.get_logger(__name__)
 # ── Scoring configuration ──────────────────────────────────────────
 
 # Industries ranked by fit for Angavu Intelligence
-INDUSTRY_FIT_SCORES: Dict[str, float] = {
+INDUSTRY_FIT_SCORES: dict[str, float] = {
     "fmcg": 95.0,
     "retail": 90.0,
     "wholesale": 85.0,
@@ -59,7 +59,7 @@ INDUSTRY_FIT_SCORES: Dict[str, float] = {
 }
 
 # Company size bands → score
-COMPANY_SIZE_SCORES: Dict[str, float] = {
+COMPANY_SIZE_SCORES: dict[str, float] = {
     "1-10": 20.0,
     "11-50": 45.0,
     "51-200": 70.0,
@@ -114,7 +114,7 @@ class LeadQualifierAgent(BiasharaAgent):
             "engagement": 0.15,
         }
         # Track conversions for learning
-        self._conversion_outcomes: List[Dict[str, Any]] = []
+        self._conversion_outcomes: list[dict[str, Any]] = []
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ class LeadQualifierAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Score the lead and decide: qualify, reject, or escalate.
 
@@ -219,7 +219,7 @@ class LeadQualifierAgent(BiasharaAgent):
             if action == "escalate":
                 lead.status = LeadStatus.ESCALATED
                 lead.assigned_to = "valentine"
-                lead.qualified_at = datetime.now(timezone.utc)
+                lead.qualified_at = datetime.now(UTC)
                 events_to_publish.append(AgentEvent(
                     event_type=EventType.LEAD_ESCALATED,
                     source=self.name,
@@ -239,7 +239,7 @@ class LeadQualifierAgent(BiasharaAgent):
 
             elif action == "qualify":
                 lead.status = LeadStatus.QUALIFIED
-                lead.qualified_at = datetime.now(timezone.utc)
+                lead.qualified_at = datetime.now(UTC)
                 events_to_publish.append(AgentEvent(
                     event_type=EventType.LEAD_QUALIFIED,
                     source=self.name,
@@ -257,7 +257,7 @@ class LeadQualifierAgent(BiasharaAgent):
 
             else:  # reject
                 lead.status = LeadStatus.REJECTED
-                lead.qualified_at = datetime.now(timezone.utc)
+                lead.qualified_at = datetime.now(UTC)
                 events_to_publish.append(AgentEvent(
                     event_type=EventType.LEAD_REJECTED,
                     source=self.name,
@@ -335,7 +335,7 @@ class LeadQualifierAgent(BiasharaAgent):
 
     # ── Scoring helpers ─────────────────────────────────────────────
 
-    def _score_lead(self, lead: Lead, payload: Dict[str, Any]) -> LeadScore:
+    def _score_lead(self, lead: Lead, payload: dict[str, Any]) -> LeadScore:
         """Score a lead across all 5 dimensions."""
         scores = LeadScore()
 
@@ -377,7 +377,7 @@ class LeadQualifierAgent(BiasharaAgent):
         return 5.0
 
     @staticmethod
-    def _score_timing(payload: Dict[str, Any]) -> float:
+    def _score_timing(payload: dict[str, Any]) -> float:
         """Score based on timing signals."""
         score = 50.0  # baseline
 
@@ -407,7 +407,7 @@ class LeadQualifierAgent(BiasharaAgent):
         return min(score, 100.0)
 
     @staticmethod
-    def _score_engagement(payload: Dict[str, Any]) -> float:
+    def _score_engagement(payload: dict[str, Any]) -> float:
         """Score based on engagement signals."""
         score = 30.0  # baseline for inbound
 

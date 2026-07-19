@@ -19,34 +19,29 @@ structured intelligence products for delivery via WhatsApp.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
     AgentDecision,
-    AgentEvent,
     AgentResult,
-    BiasharaAgent,
-    EventType,
 )
 from app.agents.long_horizon import (
     LongHorizonOrchestrator,
-    LongHorizonTask,
     ResultAggregator,
     SubAgentDelegator,
     SubTask,
     TaskPlanner,
-    TaskStatus,
 )
 from app.agents.loops import EventStore, ReActAgent
 
 # ── ML Layer: XGBoost predictions for intelligence pipeline ──
 try:
+    from app.services.intelligence.proactive_alerts import ProactiveAlertEngine
     from app.services.ml.feature_engineering import FeatureEngineer
     from app.services.ml.xgboost_service import XGBoostService
-    from app.services.intelligence.proactive_alerts import ProactiveAlertEngine
     _ml_pipeline_available = True
     _ml_service_pipeline = XGBoostService()
     _alert_engine = ProactiveAlertEngine()
@@ -77,7 +72,7 @@ def _get_db_session():
         return None
 
 
-async def _query_market_prices(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+async def _query_market_prices(region: str, product: str | None = None) -> dict[str, Any]:
     """Query real market price data from the database.
 
     Falls back to empty structure if DB is unavailable.
@@ -87,7 +82,8 @@ async def _query_market_prices(region: str, product: Optional[str] = None) -> Di
         return {"prices": {}, "data_points": 0, "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -114,7 +110,7 @@ async def _query_market_prices(region: str, product: Optional[str] = None) -> Di
     return {"prices": {}, "data_points": 0, "source": "query_failed"}
 
 
-async def _query_transaction_history(worker_id: str) -> Dict[str, Any]:
+async def _query_transaction_history(worker_id: str) -> dict[str, Any]:
     """Query real transaction history for credit scoring.
 
     Falls back to empty structure if DB is unavailable.
@@ -124,7 +120,8 @@ async def _query_transaction_history(worker_id: str) -> Dict[str, Any]:
         return {"months_available": 0, "transactions": [], "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -151,7 +148,7 @@ async def _query_transaction_history(worker_id: str) -> Dict[str, Any]:
     return {"total_transactions": 0, "source": "query_failed"}
 
 
-async def _query_distribution_data(product: str) -> Dict[str, Any]:
+async def _query_distribution_data(product: str) -> dict[str, Any]:
     """Query real distribution/coverage data from the database.
 
     Falls back to empty structure if DB is unavailable.
@@ -161,7 +158,8 @@ async def _query_distribution_data(product: str) -> Dict[str, Any]:
         return {"regions": [], "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -189,7 +187,7 @@ async def _query_distribution_data(product: str) -> Dict[str, Any]:
     return {"regions": [], "source": "query_failed"}
 
 
-async def _query_supply_demand(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+async def _query_supply_demand(region: str, product: str | None = None) -> dict[str, Any]:
     """Derive supply/demand signals from transaction data.
 
     Sales transactions represent demand; purchase transactions represent supply.
@@ -200,7 +198,8 @@ async def _query_supply_demand(region: str, product: Optional[str] = None) -> Di
         return {"supply_index": None, "demand_index": None, "gap": None, "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -254,7 +253,7 @@ async def _query_supply_demand(region: str, product: Optional[str] = None) -> Di
     return {"supply_index": None, "demand_index": None, "gap": None, "source": "query_failed"}
 
 
-async def _query_competitor_density(region: str, product: Optional[str] = None) -> Dict[str, Any]:
+async def _query_competitor_density(region: str, product: str | None = None) -> dict[str, Any]:
     """Estimate competitor density from distinct sellers in the same market.
 
     More distinct users selling the same product = more competitive.
@@ -264,7 +263,8 @@ async def _query_competitor_density(region: str, product: Optional[str] = None) 
         return {"distinct_sellers": 0, "competitor_density": "unknown", "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func, distinct
+        from sqlalchemy import distinct, func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -305,7 +305,7 @@ async def _query_competitor_density(region: str, product: Optional[str] = None) 
     return {"distinct_sellers": 0, "competitor_density": "unknown", "source": "query_failed"}
 
 
-async def _query_repayment_data(worker_id: str) -> Dict[str, Any]:
+async def _query_repayment_data(worker_id: str) -> dict[str, Any]:
     """Query loan and repayment history for credit scoring.
 
     Uses Loan and LoanRepayment tables to calculate on-time rate,
@@ -316,7 +316,8 @@ async def _query_repayment_data(worker_id: str) -> Dict[str, Any]:
         return {"has_data": False, "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.loan import Loan, LoanRepayment
 
         async with session_factory() as session:
@@ -387,7 +388,7 @@ async def _query_repayment_data(worker_id: str) -> Dict[str, Any]:
     return {"has_data": False, "source": "query_failed"}
 
 
-async def _query_behavioral_data(worker_id: str) -> Dict[str, Any]:
+async def _query_behavioral_data(worker_id: str) -> dict[str, Any]:
     """Analyze transaction patterns for behavioral credit signals.
 
     Calculates regularity, growth trend, and risk flags from
@@ -399,7 +400,9 @@ async def _query_behavioral_data(worker_id: str) -> Dict[str, Any]:
 
     try:
         import statistics
-        from sqlalchemy import select, func
+
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -480,7 +483,7 @@ async def _query_behavioral_data(worker_id: str) -> Dict[str, Any]:
     return {"has_data": False, "source": "query_failed"}
 
 
-async def _query_alama_score(worker_id: str) -> Dict[str, Any]:
+async def _query_alama_score(worker_id: str) -> dict[str, Any]:
     """Query the AlamaScore table for existing credit scores.
 
     Falls back to computing via AlamaScoreService if no cached score exists.
@@ -491,7 +494,9 @@ async def _query_alama_score(worker_id: str) -> Dict[str, Any]:
 
     try:
         import hashlib
+
         from sqlalchemy import select
+
         from app.models.intelligence_products import AlamaScore as AlamaScoreModel
 
         async with session_factory() as session:
@@ -541,7 +546,7 @@ async def _query_alama_score(worker_id: str) -> Dict[str, Any]:
     return {"has_score": False, "source": "no_score_found"}
 
 
-async def _query_logistics_data(product: str) -> Dict[str, Any]:
+async def _query_logistics_data(product: str) -> dict[str, Any]:
     """Derive logistics insights from transaction location patterns.
 
     Uses transaction geohash distribution to estimate
@@ -552,7 +557,8 @@ async def _query_logistics_data(product: str) -> Dict[str, Any]:
         return {"has_data": False, "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -612,7 +618,7 @@ async def _query_logistics_data(product: str) -> Dict[str, Any]:
     return {"has_data": False, "source": "query_failed"}
 
 
-async def _query_expansion_opportunities(product: str) -> Dict[str, Any]:
+async def _query_expansion_opportunities(product: str) -> dict[str, Any]:
     """Identify expansion opportunities from coverage gaps.
 
     Compares active distribution areas to find underserved
@@ -623,7 +629,8 @@ async def _query_expansion_opportunities(product: str) -> Dict[str, Any]:
         return {"has_data": False, "source": "no_db"}
 
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.transaction import Transaction
 
         async with session_factory() as session:
@@ -710,7 +717,7 @@ class MarketDataAgent(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         params = payload.get("parameters", {})
@@ -729,10 +736,10 @@ class MarketDataAgent(ReActAgent):
             action = decision.action
             params = decision.parameters
             region = params.get("region", "Nairobi")
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 "action": action,
                 "status": "completed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             if "price" in action:
@@ -823,7 +830,7 @@ class CreditAnalysisAgent(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         params = payload.get("parameters", {})
@@ -842,10 +849,10 @@ class CreditAnalysisAgent(ReActAgent):
             action = decision.action
             params = decision.parameters
             worker_id = params.get("worker_id", "unknown")
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 "action": action,
                 "status": "completed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             if "history" in action or "transaction" in action:
@@ -967,7 +974,7 @@ class DistributionAgent(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         params = payload.get("parameters", {})
@@ -986,10 +993,10 @@ class DistributionAgent(ReActAgent):
             action = decision.action
             params = decision.parameters
             product = params.get("product", "")
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 "action": action,
                 "status": "completed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             if "mapping" in action or "coverage" in action:
@@ -1076,7 +1083,7 @@ class CompetitorAgent(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         params = payload.get("parameters", {})
@@ -1095,10 +1102,10 @@ class CompetitorAgent(ReActAgent):
             action = decision.action
             params = decision.parameters
             market = params.get("market", "Kenya")
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 "action": action,
                 "status": "completed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             # Use real transaction data for competitive intelligence
@@ -1125,7 +1132,8 @@ class CompetitorAgent(ReActAgent):
             elif "feature" in action:
                 # Derive feature insights from transaction categories
                 try:
-                    from sqlalchemy import select, func
+                    from sqlalchemy import func, select
+
                     from app.models.transaction import Transaction
                     session_factory = _get_db_session()
                     if session_factory:
@@ -1206,7 +1214,7 @@ class CompetitorAgent(ReActAgent):
 class MarketAnalysisPlanner(TaskPlanner):
     """Plans market analysis into data collection → analysis → insight steps."""
 
-    async def _decompose(self, goal: str, context: Dict[str, Any], available_agents: List[str]) -> List[SubTask]:
+    async def _decompose(self, goal: str, context: dict[str, Any], available_agents: list[str]) -> list[SubTask]:
         scope = context.get("scope", {})
         region = scope.get("region", "Nairobi")
 
@@ -1249,7 +1257,7 @@ class MarketAnalysisPlanner(TaskPlanner):
 class CreditScoringPlanner(TaskPlanner):
     """Plans credit assessment into history → behavior → scoring → validation."""
 
-    async def _decompose(self, goal: str, context: Dict[str, Any], available_agents: List[str]) -> List[SubTask]:
+    async def _decompose(self, goal: str, context: dict[str, Any], available_agents: list[str]) -> list[SubTask]:
         scope = context.get("scope", {})
         worker_id = scope.get("worker_id", "unknown")
 
@@ -1294,7 +1302,7 @@ class CreditScoringPlanner(TaskPlanner):
 class DistributionPlanner(TaskPlanner):
     """Plans distribution analysis into mapping → gaps → logistics → expansion."""
 
-    async def _decompose(self, goal: str, context: Dict[str, Any], available_agents: List[str]) -> List[SubTask]:
+    async def _decompose(self, goal: str, context: dict[str, Any], available_agents: list[str]) -> list[SubTask]:
         scope = context.get("scope", {})
         product = scope.get("product_category", "general")
 
@@ -1338,7 +1346,7 @@ class DistributionPlanner(TaskPlanner):
 class CompetitorPlanner(TaskPlanner):
     """Plans competitive intelligence into mapping → pricing → features → threats."""
 
-    async def _decompose(self, goal: str, context: Dict[str, Any], available_agents: List[str]) -> List[SubTask]:
+    async def _decompose(self, goal: str, context: dict[str, Any], available_agents: list[str]) -> list[SubTask]:
         scope = context.get("scope", {})
         market = scope.get("region", "Kenya")
 
@@ -1387,7 +1395,7 @@ class CompetitorPlanner(TaskPlanner):
 
 class MarketResultAggregator(ResultAggregator):
     """Aggregates market analysis results from multiple sub-tasks."""
-    def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge(self, results: dict[str, dict[str, Any]], errors: dict[str, dict[str, Any]]) -> dict[str, Any]:
         market_data = {}
         for tid, td in results.items():
             rd = td.get("result", {})
@@ -1405,7 +1413,7 @@ class MarketResultAggregator(ResultAggregator):
 
 class CreditResultAggregator(ResultAggregator):
     """Aggregates credit scoring results from multiple sub-tasks."""
-    def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge(self, results: dict[str, dict[str, Any]], errors: dict[str, dict[str, Any]]) -> dict[str, Any]:
         credit_data = {}
         for tid, td in results.items():
             rd = td.get("result", {})
@@ -1423,7 +1431,7 @@ class CreditResultAggregator(ResultAggregator):
 
 class DistributionResultAggregator(ResultAggregator):
     """Aggregates distribution gap analysis results from multiple sub-tasks."""
-    def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge(self, results: dict[str, dict[str, Any]], errors: dict[str, dict[str, Any]]) -> dict[str, Any]:
         dist_data = {}
         for tid, td in results.items():
             rd = td.get("result", {})
@@ -1440,7 +1448,7 @@ class DistributionResultAggregator(ResultAggregator):
 
 
 class CompetitorResultAggregator(ResultAggregator):
-    def _merge(self, results: Dict[str, Dict[str, Any]], errors: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge(self, results: dict[str, dict[str, Any]], errors: dict[str, dict[str, Any]]) -> dict[str, Any]:
         comp_data = {}
         for tid, td in results.items():
             rd = td.get("result", {})
@@ -1462,7 +1470,7 @@ class CompetitorResultAggregator(ResultAggregator):
 
 
 def create_market_analysis_flow(
-    event_store: Optional[EventStore] = None,
+    event_store: EventStore | None = None,
 ) -> LongHorizonOrchestrator:
     """Create a market analysis orchestrator."""
     delegator = SubAgentDelegator()
@@ -1479,7 +1487,7 @@ def create_market_analysis_flow(
 
 
 def create_credit_scoring_flow(
-    event_store: Optional[EventStore] = None,
+    event_store: EventStore | None = None,
 ) -> LongHorizonOrchestrator:
     """Create a credit scoring orchestrator."""
     delegator = SubAgentDelegator()
@@ -1496,7 +1504,7 @@ def create_credit_scoring_flow(
 
 
 def create_distribution_analysis_flow(
-    event_store: Optional[EventStore] = None,
+    event_store: EventStore | None = None,
 ) -> LongHorizonOrchestrator:
     """Create a distribution analysis orchestrator."""
     delegator = SubAgentDelegator()
@@ -1513,7 +1521,7 @@ def create_distribution_analysis_flow(
 
 
 def create_competitor_analysis_flow(
-    event_store: Optional[EventStore] = None,
+    event_store: EventStore | None = None,
 ) -> LongHorizonOrchestrator:
     """Create a competitor analysis orchestrator."""
     delegator = SubAgentDelegator()
@@ -1530,8 +1538,8 @@ def create_competitor_analysis_flow(
 
 
 def create_all_intelligence_flows(
-    event_store: Optional[EventStore] = None,
-) -> Dict[str, LongHorizonOrchestrator]:
+    event_store: EventStore | None = None,
+) -> dict[str, LongHorizonOrchestrator]:
     """Create all intelligence pipeline orchestrators."""
     return {
         "market_analysis": create_market_analysis_flow(event_store),
@@ -1566,7 +1574,7 @@ class IntelligenceDriftMonitor:
 
         self.monitor = ModelDriftMonitor()
         self._setup_metrics()
-        self._last_alerts: Dict[str, Any] = {}
+        self._last_alerts: dict[str, Any] = {}
 
     def _setup_metrics(self) -> None:
         """Configure CUSUM detectors for key intelligence metrics."""
@@ -1646,7 +1654,7 @@ class IntelligenceDriftMonitor:
             error = abs(estimated_gdp - reference_gdp) / reference_gdp
             self.monitor.update("gdp_estimation_error", error)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current drift monitoring status across all metrics."""
         return self.monitor.get_overall_status()
 
@@ -1678,7 +1686,7 @@ class IntelligenceDriftMonitor:
 
 
 # Singleton instance for use across the application
-_intelligence_drift_monitor: Optional[IntelligenceDriftMonitor] = None
+_intelligence_drift_monitor: IntelligenceDriftMonitor | None = None
 
 
 def get_intelligence_drift_monitor() -> IntelligenceDriftMonitor:
@@ -1702,9 +1710,9 @@ CompetitorAnalysisFlow = LongHorizonOrchestrator
 
 
 def create_harnessed_flows(
-    event_store: Optional[EventStore] = None,
-    harness: Optional[Any] = None,
-) -> Dict[str, Any]:
+    event_store: EventStore | None = None,
+    harness: Any | None = None,
+) -> dict[str, Any]:
     """
     Create all intelligence flows wrapped with DataPipelineHarness.
 
@@ -1788,12 +1796,12 @@ async def _forward_drift_to_monitor(
 
 
 # ── Singleton harnessed flows ──
-_harnessed_flows: Optional[Dict[str, Any]] = None
+_harnessed_flows: dict[str, Any] | None = None
 
 
 def get_harnessed_intelligence_flows(
-    event_store: Optional[EventStore] = None,
-) -> Dict[str, Any]:
+    event_store: EventStore | None = None,
+) -> dict[str, Any]:
     """Get or create singleton harnessed intelligence flows."""
     global _harnessed_flows
     if _harnessed_flows is None:

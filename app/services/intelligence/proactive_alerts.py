@@ -20,9 +20,9 @@ receive them via WhatsApp with actionable recommendations.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -56,11 +56,11 @@ class ProactiveAlert:
         severity: AlertSeverity,
         title: str,
         message: str,
-        worker_id: Optional[str] = None,
+        worker_id: str | None = None,
         confidence: float = 0.0,
-        ml_explanation: Optional[Dict[str, Any]] = None,
-        recommended_action: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        ml_explanation: dict[str, Any] | None = None,
+        recommended_action: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.alert_type = alert_type
         self.severity = severity
@@ -71,9 +71,9 @@ class ProactiveAlert:
         self.ml_explanation = ml_explanation
         self.recommended_action = recommended_action
         self.metadata = metadata or {}
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "alert_type": self.alert_type.value,
             "severity": self.severity.value,
@@ -135,9 +135,9 @@ class ProactiveAlertEngine:
     async def generate_alerts(
         self,
         worker_id: str,
-        transactions: List[Any],
-        inventory: Optional[List[Any]] = None,
-    ) -> List[ProactiveAlert]:
+        transactions: list[Any],
+        inventory: list[Any] | None = None,
+    ) -> list[ProactiveAlert]:
         """
         Generate all applicable alerts for a worker.
 
@@ -250,8 +250,8 @@ class ProactiveAlertEngine:
                         severity=AlertSeverity.WARNING,
                         title="💳 Credit Score at Risk",
                         message=(
-                            f"Your business patterns suggest credit risk. "
-                            f"Keep consistent sales to maintain your Alama Score."
+                            "Your business patterns suggest credit risk. "
+                            "Keep consistent sales to maintain your Alama Score."
                         ),
                         worker_id=worker_id,
                         confidence=credit_result.get("confidence", 0),
@@ -267,8 +267,8 @@ class ProactiveAlertEngine:
     async def check_demand_alerts(
         self,
         product_category: str,
-        region: Optional[str] = None,
-    ) -> List[ProactiveAlert]:
+        region: str | None = None,
+    ) -> list[ProactiveAlert]:
         """
         Check for demand-related alerts for a product category/region.
 
@@ -289,9 +289,9 @@ class ProactiveAlertEngine:
     async def check_stockout_risk(
         self,
         worker_id: str,
-        transactions: List[Any],
-        inventory: List[Any],
-    ) -> List[ProactiveAlert]:
+        transactions: list[Any],
+        inventory: list[Any],
+    ) -> list[ProactiveAlert]:
         """
         Check for stockout risk based on demand forecast vs inventory.
 

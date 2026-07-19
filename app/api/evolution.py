@@ -11,17 +11,11 @@ Feedback is anonymized before storage — no PII leaves the device.
 Used for pattern analysis and feature prioritization.
 """
 
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.database import get_db
-from fastapi import Depends
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/evolution", tags=["Evolution / Feedback"])
@@ -43,12 +37,12 @@ class AnonymizedFeedback(BaseModel):
     text: str = Field(..., max_length=2000)
     language: str = Field("sw")
     timestamp: int = Field(..., description="Unix timestamp (ms)")
-    category: Optional[str] = None
+    category: str | None = None
 
 
 class FeedbackSyncRequest(BaseModel):
     """Batch feedback sync request."""
-    feedback: List[AnonymizedFeedback] = Field(..., max_length=100)
+    feedback: list[AnonymizedFeedback] = Field(..., max_length=100)
 
 
 class FeedbackSyncResponse(BaseModel):
@@ -56,7 +50,7 @@ class FeedbackSyncResponse(BaseModel):
     status: str = "ok"
     synced: int = 0
     failed: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class FeatureRequestCluster(BaseModel):
@@ -64,7 +58,7 @@ class FeatureRequestCluster(BaseModel):
     cluster_id: str
     description: str
     request_count: int
-    worker_types: List[str]
+    worker_types: list[str]
     priority: float
     status: str = "NEW"
     created_at: str
@@ -75,7 +69,7 @@ class FeatureRequestCluster(BaseModel):
 # In-memory store (production: database table)
 # =========================================================================
 
-_feedback_store: List[dict] = []
+_feedback_store: list[dict] = []
 
 
 # =========================================================================
@@ -115,7 +109,7 @@ async def sync_feedback(
                 "language": item.language,
                 "timestamp": item.timestamp,
                 "category": item.category,
-                "received_at": datetime.now(timezone.utc).isoformat(),
+                "received_at": datetime.now(UTC).isoformat(),
             })
             synced += 1
 

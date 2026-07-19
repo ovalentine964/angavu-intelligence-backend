@@ -7,7 +7,6 @@ Cache keys are deterministic based on query parameters.
 
 import hashlib
 import json
-from typing import Any, Optional
 
 import redis.asyncio as redis
 import structlog
@@ -37,7 +36,7 @@ class IntelligenceCache:
     """
 
     def __init__(self):
-        self._redis: Optional[redis.Redis] = None
+        self._redis: redis.Redis | None = None
 
     async def _get_client(self) -> redis.Redis:
         """Get or create Redis client."""
@@ -67,7 +66,7 @@ class IntelligenceCache:
         param_hash = hashlib.md5(sorted_params.encode()).hexdigest()[:16]
         return f"intel:{product}:{param_hash}"
 
-    async def get(self, product: str, **params) -> Optional[dict]:
+    async def get(self, product: str, **params) -> dict | None:
         """
         Get cached intelligence response.
 
@@ -95,7 +94,7 @@ class IntelligenceCache:
         self,
         product: str,
         data: dict,
-        ttl_override: Optional[int] = None,
+        ttl_override: int | None = None,
         **params,
     ) -> bool:
         """

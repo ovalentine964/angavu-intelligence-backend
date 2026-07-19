@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID
+from datetime import datetime
+from typing import Any
 
 import structlog
 
@@ -47,10 +46,10 @@ class RetailAgent:
 
     def analyze_sales(
         self,
-        transactions: List[Dict[str, Any]],
-        inventory: Optional[List[Dict[str, Any]]] = None,
+        transactions: list[dict[str, Any]],
+        inventory: list[dict[str, Any]] | None = None,
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze sales transactions for retail-specific insights.
 
@@ -123,10 +122,10 @@ class RetailAgent:
         }
 
     def _analyze_products(
-        self, sales: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, sales: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Analyze performance per product."""
-        product_data: Dict[str, Dict[str, float]] = defaultdict(
+        product_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "profit": 0, "qty": 0, "count": 0}
         )
         for t in sales:
@@ -160,9 +159,9 @@ class RetailAgent:
 
     def _analyze_margins(
         self,
-        sales: List[Dict[str, Any]],
-        purchases: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        sales: list[dict[str, Any]],
+        purchases: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Analyze profit margins across products."""
         margins = []
         for t in sales:
@@ -184,14 +183,14 @@ class RetailAgent:
         }
 
     def _analyze_daily_patterns(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze sales patterns by day of week."""
         day_names = [
             "Monday", "Tuesday", "Wednesday", "Thursday",
             "Friday", "Saturday", "Sunday",
         ]
-        day_data: Dict[int, Dict[str, float]] = defaultdict(
+        day_data: dict[int, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "count": 0}
         )
         for t in sales:
@@ -224,8 +223,8 @@ class RetailAgent:
         }
 
     def _abc_classification(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, List[str]]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, list[str]]:
         """
         ABC analysis: classify products by revenue contribution.
 
@@ -233,7 +232,7 @@ class RetailAgent:
         B = next 15% (important)
         C = remaining 5% (trivial many)
         """
-        product_revenue: Dict[str, float] = defaultdict(float)
+        product_revenue: dict[str, float] = defaultdict(float)
         for t in sales:
             product_revenue[t.get("item", "Unknown")] += t.get("amount", 0)
 
@@ -245,7 +244,7 @@ class RetailAgent:
         )
         total = sum(v for _, v in sorted_products)
 
-        result: Dict[str, List[str]] = {"A": [], "B": [], "C": []}
+        result: dict[str, list[str]] = {"A": [], "B": [], "C": []}
         cumulative = 0.0
         for name, revenue in sorted_products:
             cumulative += revenue
@@ -261,13 +260,13 @@ class RetailAgent:
 
     def _predict_restock(
         self,
-        sales: List[Dict[str, Any]],
-        inventory: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        sales: list[dict[str, Any]],
+        inventory: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Predict when each product needs restocking."""
         # Calculate daily sales velocity per product
-        product_daily: Dict[str, List[float]] = defaultdict(list)
-        product_dates: Dict[str, set] = defaultdict(set)
+        product_daily: dict[str, list[float]] = defaultdict(list)
+        product_dates: dict[str, set] = defaultdict(set)
 
         for t in sales:
             item = t.get("item", "Unknown")
@@ -312,9 +311,9 @@ class RetailAgent:
 
     def _assess_spoilage_risk(
         self,
-        sales: List[Dict[str, Any]],
-        inventory: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        sales: list[dict[str, Any]],
+        inventory: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Assess spoilage risk for perishable items."""
         # Common perishable categories in Kenya
         perishable_keywords = [
@@ -371,9 +370,9 @@ class RetailAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate retail-specific recommendations."""
         recs = []
 
@@ -466,7 +465,7 @@ class RetailAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

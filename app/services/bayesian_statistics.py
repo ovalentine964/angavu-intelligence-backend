@@ -15,12 +15,10 @@ Academic Foundation:
 Bayes' theorem: p(θ|x) = [f(x|θ) × p(θ)] / m(x)
 """
 
-from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import structlog
 from scipy import stats
-from scipy.stats import norm
 
 logger = structlog.get_logger(__name__)
 
@@ -47,7 +45,7 @@ class BayesianUpdater:
         prior_beta: float,
         successes: int,
         failures: int,
-    ) -> Tuple[float, float, Dict[str, float]]:
+    ) -> tuple[float, float, dict[str, float]]:
         """
         Beta-Binomial conjugate update.
 
@@ -95,7 +93,7 @@ class BayesianUpdater:
         data_mean: float,
         data_var: float,
         n: int,
-    ) -> Tuple[float, float, Dict[str, float]]:
+    ) -> tuple[float, float, dict[str, float]]:
         """
         Normal-Normal conjugate update.
 

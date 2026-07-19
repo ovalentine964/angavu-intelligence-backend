@@ -10,7 +10,7 @@ Supports Msaidizi's core worker-facing features:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -31,14 +31,12 @@ from sqlalchemy.dialects.postgresql import JSON, UUID
 
 from app.db.database import Base
 
-
 # =========================================================================
 # 1. TitheRecord — Giving & Tithe Tracking
 # =========================================================================
 # Canonical definition lives in app.models.tithe; re-exported here for
 # backward compatibility with existing imports.
 from app.models.tithe import TitheRecord  # noqa: F401
-
 
 # =========================================================================
 # 2. GoalRecord — Goal Planning & Tracking
@@ -79,7 +77,7 @@ class GoalRecord(Base):
     # Timeline
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     deadline = Column(Date, nullable=True, doc="Target completion date")
@@ -132,8 +130,8 @@ class GoalRecord(Base):
 
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -169,7 +167,7 @@ class GoalContribution(Base):
     )
     recorded_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -250,13 +248,13 @@ class LoanRecord(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # ROI tracking
@@ -328,7 +326,7 @@ class LoanRepayment(Base):
     accepted = Column(Boolean, nullable=True, doc="Did user accept the suggestion?")
     recorded_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -359,7 +357,7 @@ class LoanROICheckin(Base):
     notes = Column(Text, nullable=True)
     recorded_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -409,7 +407,7 @@ class MindsetLesson(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -446,7 +444,7 @@ class MindsetLessonProgress(Base):
     listen_count = Column(Integer, nullable=False, default=0)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -508,13 +506,13 @@ class RichHabitScore(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (

@@ -16,9 +16,10 @@ import json
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any
 
 import structlog
 
@@ -45,9 +46,9 @@ class StateEvent:
     agent_name: str
     timestamp: float
     version: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event_id": self.event_id,
             "operation": self.operation.value,
@@ -76,7 +77,7 @@ class StateEvent:
 class StateSnapshot:
     """A point-in-time snapshot of agent state."""
     agent_name: str
-    state: Dict[str, Any]
+    state: dict[str, Any]
     version: int
     timestamp: float
     event_count: int
@@ -120,24 +121,24 @@ class UnifiedStateManager:
         self.auto_sync_interval = auto_sync_interval
 
         # In-memory state (the canonical state)
-        self._state: Dict[str, Any] = {}
+        self._state: dict[str, Any] = {}
 
         # Event log (event sourcing)
-        self._events: List[StateEvent] = []
+        self._events: list[StateEvent] = []
         self._version: int = 0
 
         # Conflict tracking
-        self._conflicts: List[Dict[str, Any]] = []
+        self._conflicts: list[dict[str, Any]] = []
 
         # External state providers (e.g., Room DAOs on Android, SQLAlchemy on backend)
-        self._external_providers: Dict[str, Callable[..., Coroutine]] = {}
+        self._external_providers: dict[str, Callable[..., Coroutine]] = {}
 
         # Subscribers for state changes
-        self._subscribers: Dict[str, List[Callable[..., Coroutine]]] = defaultdict(list)
+        self._subscribers: dict[str, list[Callable[..., Coroutine]]] = defaultdict(list)
 
         # Sync state
         self._last_sync: float = 0
-        self._dirty_keys: Set[str] = set()
+        self._dirty_keys: set[str] = set()
 
         self._logger = logger.bind(agent=agent_name, component="unified_state")
 
@@ -166,8 +167,8 @@ class UnifiedStateManager:
         self,
         key: str,
         value: Any,
-        agent_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        agent_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> StateEvent:
         """Set a value in unified state. Returns the state event."""
         previous = self._state.get(key)
@@ -204,8 +205,8 @@ class UnifiedStateManager:
     async def update(
         self,
         key: str,
-        updates: Dict[str, Any],
-        agent_name: Optional[str] = None,
+        updates: dict[str, Any],
+        agent_name: str | None = None,
     ) -> StateEvent:
         """Merge updates into an existing dict value."""
         current = await self.get(key, {})
@@ -223,8 +224,8 @@ class UnifiedStateManager:
         self,
         key: str,
         item: Any,
-        max_length: Optional[int] = None,
-        agent_name: Optional[str] = None,
+        max_length: int | None = None,
+        agent_name: str | None = None,
     ) -> StateEvent:
         """Append an item to a list value."""
         current = await self.get(key, [])
@@ -240,7 +241,7 @@ class UnifiedStateManager:
     async def delete(
         self,
         key: str,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
     ) -> StateEvent:
         """Delete a key from state."""
         previous = self._state.pop(key, None)
@@ -312,8 +313,8 @@ class UnifiedStateManager:
     def get_events(
         self,
         since_version: int = 0,
-        key_filter: Optional[str] = None,
-    ) -> List[StateEvent]:
+        key_filter: str | None = None,
+    ) -> list[StateEvent]:
         """Get state events, optionally filtered."""
         events = [e for e in self._events if e.version > since_version]
         if key_filter:
@@ -379,7 +380,7 @@ class UnifiedStateManager:
 
     # ── Database Sync ───────────────────────────────────────────────
 
-    async def sync_to_db(self) -> Dict[str, Any]:
+    async def sync_to_db(self) -> dict[str, Any]:
         """
         Sync dirty state to database.
 
@@ -482,7 +483,7 @@ class UnifiedStateManager:
         if len(self._events) > self.max_events:
             self._events = self._events[-self.max_events:]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get state manager statistics."""
         return {
             "agent": self.agent_name,
@@ -496,6 +497,6 @@ class UnifiedStateManager:
             "last_sync": self._last_sync,
         }
 
-    def get_all_keys(self) -> List[str]:
+    def get_all_keys(self) -> list[str]:
         """Get all state keys."""
         return list(self._state.keys())

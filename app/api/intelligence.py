@@ -12,8 +12,7 @@ All responses enforce:
 """
 
 import time
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import UTC, date, datetime
 
 import numpy as np
 import structlog
@@ -23,21 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_buyer_from_api_key
 from app.db.database import get_db
 from app.models.buyer import Buyer
-from app.schemas.intelligence import (
-    BuyerQueryParams,
-    CorrectedScoreResponse,
-    CreditSignal,
-    DemandPattern,
-    DriftAlertsResponse,
-    DriftStatusResponse,
-    EconomicActivity,
-    HeckmanCorrectionResponse,
-    HeckmanCorrectionRequest,
-    HeckmanDiagnosticsResponse,
-    MarketIntelligence,
-    MetricStatusResponse,
-    PerformanceTrendResponse,
-)
 from app.services.anonymizer import Anonymizer
 from app.services.drift_detector import ModelDriftMonitor
 from app.services.heckman_correction import HeckmanCorrector
@@ -48,8 +32,8 @@ router = APIRouter(prefix="/intelligence", tags=["Intelligence API"])
 
 # Module-level singletons for drift monitoring
 # In production, these would be initialized from config/persistence
-_drift_monitor: Optional[ModelDriftMonitor] = None
-_heckman_corrector: Optional[HeckmanCorrector] = None
+_drift_monitor: ModelDriftMonitor | None = None
+_heckman_corrector: HeckmanCorrector | None = None
 
 
 def _get_drift_monitor() -> ModelDriftMonitor:
@@ -81,8 +65,8 @@ def _get_heckman_corrector() -> HeckmanCorrector:
 async def get_market_intelligence(
     market_id: str,
     request: Request,
-    period_start: Optional[date] = Query(None),
-    period_end: Optional[date] = Query(None),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -159,9 +143,9 @@ async def get_market_intelligence(
 async def get_demand_patterns(
     product: str,
     request: Request,
-    region: Optional[str] = Query(None, description="Geographic region"),
-    period_start: Optional[date] = Query(None),
-    period_end: Optional[date] = Query(None),
+    region: str | None = Query(None, description="Geographic region"),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -209,7 +193,8 @@ async def get_demand_patterns(
     normalized = pipeline.normalize_product_name(product)
 
     # Query transactions for this product in the region
-    from sqlalchemy import and_, func, select
+    from sqlalchemy import and_, select
+
     from app.models.transaction import Transaction
     from app.models.user import User
 
@@ -243,8 +228,9 @@ async def get_demand_patterns(
         )
 
     # Aggregate
-    import numpy as np
     from collections import defaultdict
+
+    import numpy as np
 
     amounts = [t.amount for t in transactions]
     daily_volumes = defaultdict(float)
@@ -339,7 +325,7 @@ async def get_demand_patterns(
             "k_anonymity": k,
             "quality_score": 1.0,
         },
-        "data_freshness": datetime.now(timezone.utc).isoformat(),
+        "data_freshness": datetime.now(UTC).isoformat(),
         "confidence_level": min(1.0, len(transactions) / 100),
     }
 
@@ -348,8 +334,8 @@ async def get_demand_patterns(
 async def get_economic_activity(
     region: str,
     request: Request,
-    period_start: Optional[date] = Query(None),
-    period_end: Optional[date] = Query(None),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -393,7 +379,8 @@ async def get_economic_activity(
         period_start = period_end - timedelta(days=30)
 
     # Get all users in this region
-    from sqlalchemy import and_, func, select
+    from sqlalchemy import and_, select
+
     from app.models.transaction import Transaction
     from app.models.user import User
 
@@ -427,8 +414,9 @@ async def get_economic_activity(
     result = await db.execute(txn_query)
     transactions = result.scalars().all()
 
-    import numpy as np
     from collections import defaultdict
+
+    import numpy as np
 
     sales = [t for t in transactions if t.transaction_type == "SALE"]
     total_revenue = sum(t.amount for t in sales)
@@ -515,7 +503,7 @@ async def get_economic_activity(
         },
         "sector_breakdown": sector_breakdown,
         "mpesa_penetration_pct": round(mpesa_pct, 1),
-        "data_freshness": datetime.now(timezone.utc).isoformat(),
+        "data_freshness": datetime.now(UTC).isoformat(),
         "confidence_level": min(1.0, len(sales) / 100),
         "users_contributing": user_count,
     }

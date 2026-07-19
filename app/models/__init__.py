@@ -1,22 +1,61 @@
 """ORM Models for Msaidizi backend."""
 
-from app.models.user import User
-from app.models.transaction import Transaction, Inventory
-from app.models.intelligence import IntelligenceProduct, DataAccessLog
-from app.models.buyer import Buyer, BuyerAPIKey
-from app.models.intelligence_products import (
-    SokoPulseReport,
-    BiasharaPulseReport,
-    AlamaScore,
-    JamiiInsightsReport,
-    TaxBaseEstimation,
-    DistributionGapReport,
+from app.models.agent_models import (
+    AgentConfig,
+    AgentInsight,
+    AgentRecommendation,
+    WorkerType,
 )
-from app.models.tithe import TitheRecord, TitheReport, AbundancePattern
+from app.models.buyer import Buyer, BuyerAPIKey
+from app.models.goal import (
+    Goal,
+    GoalMilestone,
+    GoalProgressEntry,
+)
+from app.models.infrastructure import (
+    CostTracking,
+    FederatedUpdate,
+    ModelVersion,
+    ServerMetric,
+)
+from app.models.intelligence import DataAccessLog, IntelligenceProduct
+from app.models.intelligence_products import (
+    AlamaScore,
+    BiasharaPulseReport,
+    DistributionGapReport,
+    JamiiInsightsReport,
+    SokoPulseReport,
+    TaxBaseEstimation,
+)
+from app.models.loan import (
+    Loan,
+    PurposeVerification,
+)
+from app.models.loan import (
+    LoanRepayment as LoanRepaymentV2,
+)
+from app.models.mindset import (
+    Affirmation,
+    RichHabitsScore,
+    UserLessonProgress,
+)
+from app.models.mindset import (
+    MindsetLesson as MindsetLessonV2,
+)
+from app.models.stickiness import (
+    Badge,
+    Streak,
+    UserBadge,
+    UserEngagement,
+    UserLevel,
+)
+from app.models.tithe import AbundancePattern, TitheRecord, TitheReport
+from app.models.transaction import Inventory, Transaction
+from app.models.user import User
 from app.models.worker_features import (
+    GoalContribution,
     # TitheRecord is re-exported from app.models.tithe
     GoalRecord,
-    GoalContribution,
     LoanRecord,
     LoanRepayment,
     LoanROICheckin,
@@ -24,88 +63,53 @@ from app.models.worker_features import (
     MindsetLessonProgress,
     RichHabitScore,
 )
-from app.models.loan import (
-    Loan,
-    LoanRepayment as LoanRepaymentV2,
-    PurposeVerification,
-)
-from app.models.goal import (
-    Goal,
-    GoalMilestone,
-    GoalProgressEntry,
-)
-from app.models.infrastructure import (
-    ServerMetric,
-    ModelVersion,
-    FederatedUpdate,
-    CostTracking,
-)
-from app.models.agent_models import (
-    WorkerType,
-    AgentConfig,
-    AgentInsight,
-    AgentRecommendation,
-)
-from app.models.stickiness import (
-    UserEngagement,
-    Badge,
-    UserBadge,
-    UserLevel,
-    Streak,
-)
-from app.models.mindset import (
-    MindsetLesson as MindsetLessonV2,
-    UserLessonProgress,
-    RichHabitsScore,
-    Affirmation,
-)
 
 __all__ = [
-    "User",
-    "Transaction",
-    "Inventory",
-    "IntelligenceProduct",
-    "DataAccessLog",
-    "Buyer",
-    "BuyerAPIKey",
-    "SokoPulseReport",
-    "BiasharaPulseReport",
-    "AlamaScore",
-    "JamiiInsightsReport",
-    "TaxBaseEstimation",
-    "DistributionGapReport",
-    "TitheRecord",
-    "TitheReport",
     "AbundancePattern",
-    "GoalRecord",
-    "GoalContribution",
-    "LoanRecord",
-    "LoanRepayment",
-    "LoanROICheckin",
-    "MindsetLesson",
-    "MindsetLessonProgress",
-    "RichHabitScore",
-    "Loan",
-    "LoanRepaymentV2",
-    "PurposeVerification",
-    "Goal",
-    "GoalMilestone",
-    "GoalProgressEntry",
-    "ServerMetric",
-    "ModelVersion",
-    "FederatedUpdate",
-    "CostTracking",
-    "WorkerType",
+    "Affirmation",
     "AgentConfig",
     "AgentInsight",
     "AgentRecommendation",
-    "UserEngagement",
+    "AlamaScore",
     "Badge",
-    "UserBadge",
-    "UserLevel",
-    "Streak",
+    "BiasharaPulseReport",
+    "Buyer",
+    "BuyerAPIKey",
+    "CostTracking",
+    "DataAccessLog",
+    "DistributionGapReport",
+    "FederatedUpdate",
+    "Goal",
+    "GoalContribution",
+    "GoalMilestone",
+    "GoalProgressEntry",
+    "GoalRecord",
+    "IntelligenceProduct",
+    "Inventory",
+    "JamiiInsightsReport",
+    "Loan",
+    "LoanROICheckin",
+    "LoanRecord",
+    "LoanRepayment",
+    "LoanRepaymentV2",
+    "MindsetLesson",
+    "MindsetLessonProgress",
     "MindsetLessonV2",
-    "UserLessonProgress",
+    "ModelVersion",
+    "PurposeVerification",
+    "RichHabitScore",
     "RichHabitsScore",
-    "Affirmation",
+    "ServerMetric",
+    "SokoPulseReport",
+    "Streak",
+    "TaxBaseEstimation",
+    "TitheRecord",
+    "TitheReport",
+    "Transaction",
+    "User",
+    "UserBadge",
+    "UserEngagement",
+    "UserLessonProgress",
+    "UserLevel",
+    "WorkerType",
 ]

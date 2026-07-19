@@ -15,10 +15,9 @@ Tier: 2 (Domain) — activated when worker type is FARMER
 
 from __future__ import annotations
 
-import statistics
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -26,7 +25,7 @@ logger = structlog.get_logger(__name__)
 
 # ── Crop Calendar (Kenya-specific) ──────────────────────────────────
 
-CROP_CALENDAR: Dict[str, Dict[str, Any]] = {
+CROP_CALENDAR: dict[str, dict[str, Any]] = {
     "maize": {
         "planting_months": [3, 4, 10],  # March-April (long rains), October (short rains)
         "harvest_months": [8, 9, 2],     # Aug-Sep, Feb
@@ -114,9 +113,9 @@ class AgricultureAgent:
 
     def analyze_farm(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         period_days: int = 365,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze farming transactions for agricultural insights.
 
@@ -173,10 +172,10 @@ class AgricultureAgent:
         }
 
     def _analyze_crops(
-        self, sales: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, sales: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Analyze performance per crop."""
-        crop_data: Dict[str, Dict[str, float]] = defaultdict(
+        crop_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "qty": 0, "count": 0}
         )
         for t in sales:
@@ -202,10 +201,10 @@ class AgricultureAgent:
         ]
 
     def _analyze_input_costs(
-        self, expenses: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, expenses: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze farming input costs."""
-        categories: Dict[str, float] = defaultdict(float)
+        categories: dict[str, float] = defaultdict(float)
         for t in expenses:
             item = (t.get("item") or "other").lower()
             # Categorize common farming inputs
@@ -233,14 +232,14 @@ class AgricultureAgent:
         }
 
     def _analyze_seasonal_patterns(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze sales patterns by month/season."""
         month_names = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December",
         ]
-        month_data: Dict[int, float] = defaultdict(float)
+        month_data: dict[int, float] = defaultdict(float)
         for t in sales:
             ts = t.get("timestamp")
             if ts:
@@ -270,8 +269,8 @@ class AgricultureAgent:
         self,
         revenue: float,
         expenses: float,
-        input_costs: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        input_costs: dict[str, Any],
+    ) -> dict[str, Any]:
         """Calculate return on investment for farming."""
         breakdown = input_costs.get("breakdown", {})
         seeds = breakdown.get("seeds", 0)
@@ -292,8 +291,8 @@ class AgricultureAgent:
     # ── Crop Calendar & Planning ────────────────────────────────────
 
     def get_crop_calendar(
-        self, current_month: Optional[int] = None
-    ) -> Dict[str, Any]:
+        self, current_month: int | None = None
+    ) -> dict[str, Any]:
         """
         Get planting/harvest calendar for the current month.
 
@@ -301,7 +300,7 @@ class AgricultureAgent:
         and price expectations.
         """
         if current_month is None:
-            current_month = datetime.now(timezone.utc).month
+            current_month = datetime.now(UTC).month
 
         planting_now = []
         harvesting_now = []
@@ -330,9 +329,9 @@ class AgricultureAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate agriculture-specific recommendations."""
         recs = []
 
@@ -424,7 +423,7 @@ class AgricultureAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

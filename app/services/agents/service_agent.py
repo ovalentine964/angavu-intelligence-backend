@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 
 import structlog
 
@@ -44,9 +44,9 @@ class ServiceAgent:
 
     def analyze_services(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze service transactions for service-specific insights.
 
@@ -105,10 +105,10 @@ class ServiceAgent:
         }
 
     def _analyze_services(
-        self, sales: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, sales: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Analyze performance per service type."""
-        service_data: Dict[str, Dict[str, float]] = defaultdict(
+        service_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "profit": 0, "count": 0}
         )
         for t in sales:
@@ -135,12 +135,12 @@ class ServiceAgent:
         ]
 
     def _analyze_clients(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze client patterns from transactions."""
         # Use customer_phone_hash or source_text to identify repeat clients
-        client_visits: Dict[str, int] = defaultdict(int)
-        client_spend: Dict[str, float] = defaultdict(float)
+        client_visits: dict[str, int] = defaultdict(int)
+        client_spend: dict[str, float] = defaultdict(float)
 
         for t in sales:
             # Use phone hash if available, else use source text fingerprint
@@ -171,9 +171,9 @@ class ServiceAgent:
 
     def _labour_vs_materials(
         self,
-        sales: List[Dict[str, Any]],
-        expenses: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        sales: list[dict[str, Any]],
+        expenses: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Break down revenue into labour vs material components."""
         total_revenue = sum(t.get("amount", 0) for t in sales)
         total_materials = sum(t.get("amount", 0) for t in expenses)
@@ -190,17 +190,17 @@ class ServiceAgent:
         }
 
     def _analyze_patterns(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze service demand patterns by day and hour."""
         day_names = [
             "Monday", "Tuesday", "Wednesday", "Thursday",
             "Friday", "Saturday", "Sunday",
         ]
-        day_data: Dict[int, Dict[str, float]] = defaultdict(
+        day_data: dict[int, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "count": 0}
         )
-        hour_data: Dict[int, float] = defaultdict(float)
+        hour_data: dict[int, float] = defaultdict(float)
 
         for t in sales:
             ts = t.get("timestamp")
@@ -234,10 +234,10 @@ class ServiceAgent:
         }
 
     def _analyze_pricing(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze pricing per service."""
-        service_prices: Dict[str, List[float]] = defaultdict(list)
+        service_prices: dict[str, list[float]] = defaultdict(list)
         for t in sales:
             service = t.get("item", "Unknown")
             service_prices[service].append(t.get("amount", 0))
@@ -259,9 +259,9 @@ class ServiceAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate service-specific recommendations."""
         recs = []
 
@@ -358,7 +358,7 @@ class ServiceAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

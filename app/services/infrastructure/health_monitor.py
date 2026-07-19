@@ -21,8 +21,8 @@ Usage:
 import statistics
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
@@ -59,19 +59,19 @@ class _HealthState:
 
     def reset(self):
         # Server configs: {server_id: config}
-        self.servers: Dict[str, Dict[str, Any]] = {}
+        self.servers: dict[str, dict[str, Any]] = {}
         # Latest metrics: {server_id: {metric: value, ...}}
-        self.latest_metrics: Dict[str, Dict[str, Any]] = {}
+        self.latest_metrics: dict[str, dict[str, Any]] = {}
         # Metric history (last 1000 per server): {server_id: [metrics_dict, ...]}
-        self.metric_history: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self.metric_history: dict[str, list[dict[str, Any]]] = defaultdict(list)
         # Inference metrics: {model_name: {latencies: [], count: int}}
-        self.inference_metrics: Dict[str, Dict[str, Any]] = defaultdict(
+        self.inference_metrics: dict[str, dict[str, Any]] = defaultdict(
             lambda: {"latencies": [], "count": 0, "errors": 0, "total_cost_usd": 0.0}
         )
         # Cost records
-        self.cost_records: List[Dict[str, Any]] = []
+        self.cost_records: list[dict[str, Any]] = []
         # Alerts
-        self.alerts: List[Dict[str, Any]] = []
+        self.alerts: list[dict[str, Any]] = []
 
 
 _state = _HealthState()
@@ -99,7 +99,7 @@ class HealthMonitor:
         disk_total_gb: float = 50.0,
         cost_per_hour_usd: float = 0.0,
         description: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Register a server for monitoring."""
         _state.servers[server_id] = {
             "server_id": server_id,
@@ -109,7 +109,7 @@ class HealthMonitor:
             "disk_total_gb": disk_total_gb,
             "cost_per_hour_usd": cost_per_hour_usd,
             "description": description,
-            "registered_at": datetime.now(timezone.utc).isoformat(),
+            "registered_at": datetime.now(UTC).isoformat(),
         }
 
         logger.info("server_registered", server_id=server_id, phase=phase)
@@ -123,15 +123,15 @@ class HealthMonitor:
         disk_usage_pct: float,
         network_in_mbps: float = 0.0,
         network_out_mbps: float = 0.0,
-        inference_latency_ms: Optional[float] = None,
+        inference_latency_ms: float | None = None,
         inference_count: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Record a health metric snapshot for a server.
 
         Returns alerts if any thresholds are breached.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Auto-register if not known
         if server_id not in _state.servers:
@@ -192,7 +192,7 @@ class HealthMonitor:
         latency_ms: float,
         cost_usd: float = 0.0,
         success: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Record an inference event for latency and cost tracking.
         """
@@ -214,14 +214,14 @@ class HealthMonitor:
         component: str,
         amount_usd: float,
         phase: str = "cloud",
-        model_name: Optional[str] = None,
-        inference_count: Optional[int] = None,
-        workers_served: Optional[int] = None,
+        model_name: str | None = None,
+        inference_count: int | None = None,
+        workers_served: int | None = None,
         period_hours: float = 1.0,
         notes: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Record an infrastructure cost entry."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record = {
             "id": str(uuid.uuid4()),
             "component": component,
@@ -245,7 +245,7 @@ class HealthMonitor:
 
         return {"status": "recorded", "cost_id": record["id"]}
 
-    def get_server_health(self, server_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_server_health(self, server_id: str | None = None) -> dict[str, Any]:
         """
         Get health status for a specific server or all servers.
         """
@@ -283,7 +283,7 @@ class HealthMonitor:
             "servers": servers,
         }
 
-    def get_inference_metrics(self, model_name: Optional[str] = None) -> Dict[str, Any]:
+    def get_inference_metrics(self, model_name: str | None = None) -> dict[str, Any]:
         """
         Get inference latency and cost metrics per model.
         """
@@ -320,9 +320,9 @@ class HealthMonitor:
 
     def get_cost_summary(
         self,
-        component: Optional[str] = None,
-        phase: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        component: str | None = None,
+        phase: str | None = None,
+    ) -> dict[str, Any]:
         """
         Get infrastructure cost summary.
         """
@@ -335,12 +335,12 @@ class HealthMonitor:
         total_usd = sum(r["amount_usd"] for r in records)
 
         # By component
-        by_component: Dict[str, float] = defaultdict(float)
+        by_component: dict[str, float] = defaultdict(float)
         for r in _state.cost_records:
             by_component[r["component"]] += r["amount_usd"]
 
         # By phase
-        by_phase: Dict[str, float] = defaultdict(float)
+        by_phase: dict[str, float] = defaultdict(float)
         for r in _state.cost_records:
             by_phase[r["phase"]] += r["amount_usd"]
 
@@ -374,14 +374,14 @@ class HealthMonitor:
             ) if total_workers > 0 else None,
         }
 
-    def get_alerts(self, unresolved_only: bool = True) -> List[Dict[str, Any]]:
+    def get_alerts(self, unresolved_only: bool = True) -> list[dict[str, Any]]:
         """Get recent alerts."""
         alerts = _state.alerts[-100:]  # Last 100
         if unresolved_only:
             alerts = [a for a in alerts if not a.get("resolved")]
         return alerts
 
-    def get_cluster_health(self) -> Dict[str, Any]:
+    def get_cluster_health(self) -> dict[str, Any]:
         """
         Get overall cluster health summary.
         """
@@ -408,14 +408,14 @@ class HealthMonitor:
             "active_alerts": len(alerts),
             "recent_alerts": alerts[:10],
             "thresholds": THRESHOLDS,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     # ── Internal helpers ──
 
     def _check_alerts(
-        self, server_id: str, metric: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, server_id: str, metric: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Check metric against thresholds and generate alerts."""
         alerts = []
 
@@ -433,7 +433,7 @@ class HealthMonitor:
                     "message": f"{resource.upper()} usage at {value:.1f}% (critical threshold: {critical_thresh}%)",
                     "value": value,
                     "threshold": critical_thresh,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "resolved": False,
                 })
             elif value >= warning_thresh:
@@ -445,7 +445,7 @@ class HealthMonitor:
                     "message": f"{resource.upper()} usage at {value:.1f}% (warning threshold: {warning_thresh}%)",
                     "value": value,
                     "threshold": warning_thresh,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "resolved": False,
                 })
 
@@ -461,7 +461,7 @@ class HealthMonitor:
                     "message": f"Inference latency at {latency:.0f}ms (critical: {THRESHOLDS['latency_critical_ms']}ms)",
                     "value": latency,
                     "threshold": THRESHOLDS["latency_critical_ms"],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "resolved": False,
                 })
             elif latency >= THRESHOLDS["latency_warning_ms"]:
@@ -473,14 +473,14 @@ class HealthMonitor:
                     "message": f"Inference latency at {latency:.0f}ms (warning: {THRESHOLDS['latency_warning_ms']}ms)",
                     "value": latency,
                     "threshold": THRESHOLDS["latency_warning_ms"],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "resolved": False,
                 })
 
         return alerts
 
     @staticmethod
-    def _compute_latency_stats(latencies: List[float]) -> Dict[str, float]:
+    def _compute_latency_stats(latencies: list[float]) -> dict[str, float]:
         """Compute latency percentiles from a list of latency values."""
         if not latencies:
             return {"p50": 0, "p95": 0, "p99": 0, "mean": 0, "min": 0, "max": 0}

@@ -20,7 +20,7 @@ from enum import Enum
 
 import oqs
 
-from .crypto_provider import CryptoProvider, CryptoKeyPair
+from .crypto_provider import CryptoKeyPair, CryptoProvider
 
 
 class MlDsaParameterSet(Enum):

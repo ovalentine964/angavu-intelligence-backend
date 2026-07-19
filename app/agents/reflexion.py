@@ -39,8 +39,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -53,12 +54,12 @@ class Critique:
 
     critique_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     score: float = 0.0           # 0.0 – 1.0 quality score
-    issues: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
     should_retry: bool = False
     revision_plan: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize critique to dictionary."""
         return {
             "critique_id": self.critique_id,
@@ -75,7 +76,7 @@ class ReflexionResult:
     """Result of a Reflexion-enhanced execution."""
 
     result: Any
-    critiques: List[Critique] = field(default_factory=list)
+    critiques: list[Critique] = field(default_factory=list)
     attempts: int = 0
     final_score: float = 0.0
     success: bool = False
@@ -111,7 +112,7 @@ class ReflexionLoop:
     """
 
     def __init__(self, max_critique_history: int = 100):
-        self._critique_history: List[Critique] = []
+        self._critique_history: list[Critique] = []
         self._max_critique_history = max_critique_history
 
     async def execute(
@@ -119,8 +120,8 @@ class ReflexionLoop:
         task: str,
         quality_threshold: float = 0.7,
         max_retries: int = 2,
-        critique_fn: Optional[Callable] = None,
-        execute_fn: Optional[Callable] = None,
+        critique_fn: Callable | None = None,
+        execute_fn: Callable | None = None,
     ) -> ReflexionResult:
         """
         Execute with Reflexion — self-critique and retry loop.
@@ -136,7 +137,7 @@ class ReflexionLoop:
             ReflexionResult with the final output and critique history
         """
         start_time = time.time()
-        critiques: List[Critique] = []
+        critiques: list[Critique] = []
         attempt = 0
         last_result = None
         last_critique = None
@@ -232,8 +233,8 @@ class ReflexionLoop:
         - Error indicators
         - Language consistency
         """
-        issues: List[str] = []
-        suggestions: List[str] = []
+        issues: list[str] = []
+        suggestions: list[str] = []
         score = 1.0
 
         # Check for errors
@@ -274,9 +275,9 @@ class ReflexionLoop:
 
     def critique_transaction(
         self,
-        item: Optional[str] = None,
-        amount: Optional[float] = None,
-        quantity: Optional[float] = None,
+        item: str | None = None,
+        amount: float | None = None,
+        quantity: float | None = None,
     ) -> Critique:
         """
         Critique a transaction recording for accuracy.
@@ -287,8 +288,8 @@ class ReflexionLoop:
         - Quantity is reasonable
         - No suspicious values
         """
-        issues: List[str] = []
-        suggestions: List[str] = []
+        issues: list[str] = []
+        suggestions: list[str] = []
         score = 1.0
 
         if not item or not item.strip():
@@ -323,13 +324,13 @@ class ReflexionLoop:
 
     def critique_credit_assessment(
         self,
-        assessment: Dict[str, Any],
+        assessment: dict[str, Any],
     ) -> Critique:
         """
         Critique a credit assessment for completeness and confidence.
         """
-        issues: List[str] = []
-        suggestions: List[str] = []
+        issues: list[str] = []
+        suggestions: list[str] = []
         score = 1.0
 
         if "credit_score" not in assessment and "score" not in assessment:
@@ -358,7 +359,7 @@ class ReflexionLoop:
             revision_plan="; ".join(suggestions) if suggestions else "Assessment acceptable",
         )
 
-    def get_critique_history(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_critique_history(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent critiques for analysis."""
         return [c.to_dict() for c in self._critique_history[-n:]]
 

@@ -18,11 +18,9 @@ All endpoints enforce:
 """
 
 import time
-from datetime import date, datetime
-from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_buyer_from_api_key
@@ -52,7 +50,6 @@ from app.services.intelligence.pricing import (
     DISTRIBUTION_GAP_ONE_TIME,
     DISTRIBUTION_MONITORING_MONTHLY_KES,
     DISTRIBUTION_MONITORING_MONTHLY_USD,
-    calculate_monthly_cost,
     get_product_pricing,
 )
 from app.services.intelligence.soko_pulse import SokoPulseService

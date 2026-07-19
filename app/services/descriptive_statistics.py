@@ -21,7 +21,7 @@ Academic Foundation:
 - STA 442: Multivariate Analysis → K-means clustering
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -44,9 +44,9 @@ class KernelDensityEstimator:
     @staticmethod
     def gaussian_kde(
         data: np.ndarray,
-        points: Optional[np.ndarray] = None,
-        bandwidth: Optional[float] = None,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        points: np.ndarray | None = None,
+        bandwidth: float | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Gaussian kernel density estimation."""
         n = len(data)
         if n < 2:
@@ -75,7 +75,7 @@ class KernelDensityEstimator:
     def detect_multimodality(
         data: np.ndarray,
         n_modes_max: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Test for multimodality in data distribution."""
         points, density = KernelDensityEstimator.gaussian_kde(data)
 
@@ -111,7 +111,7 @@ class BootstrapInference:
         n_bootstrap: int = 10000,
         confidence: float = 0.95,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Bootstrap percentile confidence interval."""
         rng = np.random.RandomState(seed)
         n = len(data)
@@ -165,7 +165,7 @@ class HypothesisTester:
         sample2: np.ndarray,
         test_type: str = "auto",
         alternative: str = "two-sided",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Two-sample hypothesis test with auto-selection."""
         n1, n2 = len(sample1), len(sample2)
 
@@ -232,8 +232,8 @@ class DistributionFitter:
 
     @classmethod
     def fit_best_distribution(
-        cls, data: np.ndarray, candidates: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        cls, data: np.ndarray, candidates: list[str] | None = None
+    ) -> dict[str, Any]:
         """Fit multiple distributions and select the best by AIC."""
         if candidates is None:
             candidates = list(cls.DISTRIBUTIONS.keys())
@@ -312,7 +312,7 @@ class ClusterAnalyzer:
     def kmeans(
         data: np.ndarray, k: int, max_iter: int = 300, tol: float = 1e-6,
         n_init: int = 10, seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """K-means clustering (Lloyd's algorithm with k-means++ init)."""
         data = np.asarray(data, dtype=float)
         n, d = data.shape
@@ -369,7 +369,7 @@ class ClusterAnalyzer:
         return best_result
 
     @staticmethod
-    def silhouette_score(data: np.ndarray, labels: np.ndarray) -> Dict[str, Any]:
+    def silhouette_score(data: np.ndarray, labels: np.ndarray) -> dict[str, Any]:
         """Silhouette score for cluster quality evaluation."""
         data = np.asarray(data, dtype=float)
         labels = np.asarray(labels)
@@ -419,9 +419,9 @@ class ClusterAnalyzer:
 
     @staticmethod
     def elbow_method(
-        data: np.ndarray, k_range: Optional[List[int]] = None,
+        data: np.ndarray, k_range: list[int] | None = None,
         max_k: int = 10, n_init: int = 10, seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Elbow method for selecting optimal number of clusters."""
         data = np.asarray(data, dtype=float)
         n = data.shape[0]
@@ -466,9 +466,9 @@ class ClusterAnalyzer:
 
     @staticmethod
     def segment_market(
-        data: np.ndarray, feature_names: Optional[List[str]] = None,
+        data: np.ndarray, feature_names: list[str] | None = None,
         max_k: int = 8, seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Market segmentation using K-means clustering."""
         data = np.asarray(data, dtype=float)
         n, d = data.shape

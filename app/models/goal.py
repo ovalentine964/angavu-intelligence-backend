@@ -10,7 +10,7 @@ Categories: business, personal, savings, debt
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -73,7 +73,7 @@ class Goal(Base):
     target_date = Column(Date, nullable=True, doc="Target completion date")
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -128,8 +128,8 @@ class Goal(Base):
 
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -174,7 +174,7 @@ class GoalMilestone(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -233,7 +233,7 @@ class GoalProgressEntry(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 

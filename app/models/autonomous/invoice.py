@@ -5,16 +5,16 @@ Maps to 'autonomous_invoices' and 'autonomous_invoice_items' tables.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
 )
@@ -42,7 +42,7 @@ class InvoiceDB(Base):
     issued_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     sent_at = Column(DateTime(timezone=True), nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)

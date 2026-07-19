@@ -47,12 +47,12 @@ Buyers: KNBS, CBK, Treasury, IMF, World Bank
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -66,8 +66,6 @@ from app.services.intelligence.biashara_pulse import (
     _hodrick_prescott_filter,
 )
 from app.services.intelligence.cache import intelligence_cache
-from app.services.intelligence.business_cycles import BusinessCycleAnalyzer
-from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -80,7 +78,7 @@ settings = get_settings()
 # how much value-added (GDP) is generated. Derived from
 # Leontief input-output inverse (ECO 210).
 # These are approximated from Kenya's 2019 I-O tables.
-SECTOR_GDP_MULTIPLIERS: Dict[str, float] = {
+SECTOR_GDP_MULTIPLIERS: dict[str, float] = {
     "food": 0.45,           # Retail food — high value-add (margins 30-60%)
     "household": 0.35,      # Household goods — moderate margins
     "transport": 0.55,      # Boda boda, matatu — high value-add
@@ -100,7 +98,7 @@ EMPLOYMENT_MULTIPLIER: float = 2.8
 
 # County GDP shares (approximate, from KNBS 2023 county GDP data)
 # Used for scaling national estimates from observed counties.
-COUNTY_ECONOMIC_WEIGHTS: Dict[str, float] = {
+COUNTY_ECONOMIC_WEIGHTS: dict[str, float] = {
     "047": 0.27,  # Nairobi
     "001": 0.08,  # Mombasa
     "022": 0.07,  # Kiambu
@@ -123,7 +121,7 @@ def _compute_gdp_deflator(
     current_prices: np.ndarray,
     base_quantities: np.ndarray,
     current_quantities: np.ndarray,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Compute real GDP using implicit GDP deflator.
 
@@ -144,7 +142,9 @@ def _compute_gdp_deflator(
         (real_gdp, deflator_index)
     """
     from app.services.intelligence.biashara_pulse import (
-        _laspeyres_index, _paasche_index, _fisher_index,
+        _fisher_index,
+        _laspeyres_index,
+        _paasche_index,
     )
 
     if len(base_period_prices) < 1 or len(current_prices) < 1:
@@ -175,9 +175,9 @@ def _compute_gdp_deflator(
 
 def _nowcast_gdp(
     daily_revenue_series: np.ndarray,
-    sector_values_added: Dict[str, float],
+    sector_values_added: dict[str, float],
     days_in_quarter: int = 90,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Nowcast current-quarter GDP from daily transaction data.
 
@@ -311,10 +311,10 @@ class GDPEstimatorService:
         self,
         county: str,
         period: str = "quarterly",
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        period_start: date | None = None,
+        period_end: date | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Estimate informal GDP for a county or nationally.
 
@@ -641,8 +641,8 @@ class GDPEstimatorService:
         response = {
             "product": "gdp_estimator",
             "version": "1.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, user_count / 100),
             "confidence_level": min(1.0, len(sales) / 500),

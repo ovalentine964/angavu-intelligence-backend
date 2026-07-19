@@ -14,7 +14,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -35,16 +35,16 @@ class DelegationTask:
     delegator: str = ""          # agent that delegated
     delegatee: str = ""          # agent that executes
     action: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     timeout_seconds: float = 30.0
     priority: int = 5
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    result: Optional[AgentResult] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    result: AgentResult | None = None
     status: str = "pending"      # pending | running | completed | failed | timeout
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "delegator": self.delegator,
@@ -74,10 +74,10 @@ class DelegationProtocol:
     - Delegation history for observability
     """
 
-    def __init__(self, event_bus: Optional[Any] = None):
+    def __init__(self, event_bus: Any | None = None):
         self._event_bus = event_bus
-        self._active_delegations: Dict[str, DelegationTask] = {}
-        self._history: List[DelegationTask] = []
+        self._active_delegations: dict[str, DelegationTask] = {}
+        self._history: list[DelegationTask] = []
         self._logger = logger.bind(component="delegation_protocol")
 
     async def delegate(
@@ -85,7 +85,7 @@ class DelegationProtocol:
         delegator: BiasharaAgent,
         delegatee: BiasharaAgent,
         action: str,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
         timeout_seconds: float = 30.0,
     ) -> AgentResult:
         """
@@ -147,7 +147,7 @@ class DelegationProtocol:
                 duration_ms=result.duration_ms,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             task.completed_at = time.time()
             task.status = "timeout"
             result = AgentResult(
@@ -192,9 +192,9 @@ class DelegationProtocol:
     async def delegate_parallel(
         self,
         delegator: BiasharaAgent,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
         timeout_seconds: float = 30.0,
-    ) -> List[AgentResult]:
+    ) -> list[AgentResult]:
         """
         Delegate multiple tasks in parallel.
 
@@ -235,9 +235,9 @@ class DelegationProtocol:
     async def delegate_to_best(
         self,
         delegator: BiasharaAgent,
-        candidates: List[BiasharaAgent],
+        candidates: list[BiasharaAgent],
         action: str,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
         timeout_seconds: float = 30.0,
     ) -> AgentResult:
         """
@@ -263,15 +263,15 @@ class DelegationProtocol:
             error=f"All {len(candidates)} candidates failed. Last error: {last_error}",
         )
 
-    def get_active(self) -> List[Dict[str, Any]]:
+    def get_active(self) -> list[dict[str, Any]]:
         """Return currently active delegations."""
         return [t.to_dict() for t in self._active_delegations.values()]
 
-    def get_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_history(self, limit: int = 20) -> list[dict[str, Any]]:
         """Return delegation history."""
         return [t.to_dict() for t in self._history[-limit:]]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return delegation protocol statistics."""
         total = len(self._history)
         successful = sum(1 for t in self._history if t.status == "completed" and t.result and t.result.success)

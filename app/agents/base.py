@@ -24,9 +24,10 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 import structlog
 
@@ -176,13 +177,13 @@ class AgentEvent:
     """
     event_type: EventType
     source: str                          # agent name that produced this
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     timestamp: float = field(default_factory=time.time)
-    correlation_id: Optional[str] = None  # links related events
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    correlation_id: str | None = None  # links related events
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize event to dictionary for storage/transmission."""
         return {
             "event_id": self.event_id,
@@ -195,7 +196,7 @@ class AgentEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> AgentEvent:
+    def from_dict(cls, data: dict[str, Any]) -> AgentEvent:
         """Deserialize event from dictionary."""
         return cls(
             event_type=EventType(data["event_type"]),
@@ -217,7 +218,7 @@ class AgentDecision:
     for observability / explainability.
     """
     action: str                          # what to do (e.g. "process_batch", "generate_report")
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0              # 0.0 – 1.0
     reasoning: str = ""                  # human-readable explanation
     decision_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -233,11 +234,11 @@ class AgentResult:
     """
     success: bool
     data: Any = None
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
-    events_to_publish: List[AgentEvent] = field(default_factory=list)
+    events_to_publish: list[AgentEvent] = field(default_factory=list)
     result_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -249,9 +250,9 @@ class AgentMessage:
     """
     sender: str
     recipient: str
-    content: Dict[str, Any]
+    content: dict[str, Any]
     message_type: str = "request"        # request | response | notification
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None
     message_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
 
@@ -274,19 +275,19 @@ class AgentMemory:
     """
 
     def __init__(self, max_short_term: int = 50):
-        self._short_term: List[Dict[str, Any]] = []
-        self._long_term: Dict[str, Any] = {}
+        self._short_term: list[dict[str, Any]] = []
+        self._long_term: dict[str, Any] = {}
         self._max_short_term = max_short_term
 
     # ── Short-term ──────────────────────────────────────────────────
 
-    def remember(self, item: Dict[str, Any]) -> None:
+    def remember(self, item: dict[str, Any]) -> None:
         """Add an item to short-term memory."""
         self._short_term.append({**item, "_ts": time.time()})
         if len(self._short_term) > self._max_short_term:
             self._short_term = self._short_term[-self._max_short_term:]
 
-    def recall_recent(self, n: int = 10) -> List[Dict[str, Any]]:
+    def recall_recent(self, n: int = 10) -> list[dict[str, Any]]:
         """Get the N most recent short-term memories."""
         return self._short_term[-n:]
 
@@ -304,7 +305,7 @@ class AgentMemory:
         """Retrieve knowledge from long-term memory."""
         return self._long_term.get(key, default)
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         """Full memory snapshot for debugging / observability."""
         return {
             "short_term_count": len(self._short_term),
@@ -323,8 +324,8 @@ class AgentTools:
     """
 
     def __init__(self):
-        self._tools: Dict[str, Any] = {}
-        self._descriptions: Dict[str, str] = {}
+        self._tools: dict[str, Any] = {}
+        self._descriptions: dict[str, str] = {}
 
     def register(self, name: str, fn: Any, description: str = "") -> None:
         """Register a tool for this agent."""
@@ -335,7 +336,7 @@ class AgentTools:
         """Retrieve a registered tool."""
         return self._tools.get(name)
 
-    def list_tools(self) -> List[Dict[str, str]]:
+    def list_tools(self) -> list[dict[str, str]]:
         """List all available tools with descriptions."""
         return [
             {"name": name, "description": self._descriptions.get(name, "")}
@@ -387,7 +388,7 @@ class BiasharaAgent:
         self._cost_tracker: Any = None     # AgentCostTracker | None
 
         # Background polling lifecycle
-        self._poll_task: Optional[asyncio.Task] = None
+        self._poll_task: asyncio.Task | None = None
         self._poll_interval: float = 1.0  # seconds between polls
         self._running: bool = False
 
@@ -529,7 +530,7 @@ class BiasharaAgent:
             # Check for strategy adjustments from consecutive failures
             strategy_adjustment = self.memory.retrieve("strategy_adjustment")
 
-            context: Dict[str, Any] = {
+            context: dict[str, Any] = {
                 "event": event.to_dict(),
                 "memory": self.memory.snapshot(),
                 "tools": self.tools.list_tools(),
@@ -619,7 +620,7 @@ class BiasharaAgent:
                 duration_ms=(time.time() - cycle_start) * 1000,
             )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Process context and make a decision.
 
@@ -711,9 +712,9 @@ class BiasharaAgent:
         task_type: str = "general",
         system_prompt: str = "",
         expect_json: bool = False,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        complexity: Optional[str] = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        complexity: str | None = None,
     ) -> Any:
         """
         Convenience method: run inference through the model harness.
@@ -737,7 +738,7 @@ class BiasharaAgent:
 
         # Fallback: use LLMService directly (no harness features)
         try:
-            from app.services.llm_service import get_llm_service, LLMMessage, LLMConfig
+            from app.services.llm_service import LLMConfig, LLMMessage, get_llm_service
             llm = get_llm_service()
             messages = []
             if system_prompt:
@@ -792,9 +793,9 @@ class BiasharaAgent:
 
     async def delegate_to(
         self,
-        target_agent: "BiasharaAgent",
+        target_agent: BiasharaAgent,
         action: str,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
         timeout_seconds: float = 60.0,
     ) -> AgentResult:
         """
@@ -835,7 +836,7 @@ class BiasharaAgent:
                 timeout=timeout_seconds,
             )
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._logger.warning(
                 "delegate_to_timeout",
                 target=target_agent.name,
@@ -857,7 +858,7 @@ class BiasharaAgent:
 
     # ── Health ──────────────────────────────────────────────────────
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return agent health status for monitoring.
 
         Includes real connectivity checks for database, Redis, and ClickHouse

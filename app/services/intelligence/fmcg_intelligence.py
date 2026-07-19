@@ -17,8 +17,8 @@ Buyers: FMCG manufacturers and distributors operating in East Africa
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -61,10 +61,10 @@ class FMCGIntelligenceService:
         self,
         company: str,
         region: str,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        product_category: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        period_start: date | None = None,
+        period_end: date | None = None,
+        product_category: str | None = None,
+    ) -> dict[str, Any]:
         """
         Track sales through informal channels (dukas, kiosks, markets).
 
@@ -204,7 +204,7 @@ class FMCGIntelligenceService:
             "company": company,
             "region": region,
             "period": f"{period_start} to {period_end}",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "summary": {
                 "total_revenue_kes": round(dp_revenue, 2),
                 "total_volume": round(total_volume, 2),
@@ -244,9 +244,9 @@ class FMCGIntelligenceService:
     async def get_route_to_market_analysis(
         self,
         company: str,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-    ) -> Dict[str, Any]:
+        period_start: date | None = None,
+        period_end: date | None = None,
+    ) -> dict[str, Any]:
         """
         Optimize distribution routes for informal markets.
 
@@ -341,7 +341,7 @@ class FMCGIntelligenceService:
             "version": "1.0",
             "company": company,
             "period": f"{period_start} to {period_end}",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "route_analysis": {
                 "total_active_routes": len(routes),
                 "high_efficiency_routes": len(high_potential),
@@ -372,10 +372,10 @@ class FMCGIntelligenceService:
         self,
         company: str,
         promotion_id: str,
-        promotion_start: Optional[date] = None,
-        promotion_end: Optional[date] = None,
+        promotion_start: date | None = None,
+        promotion_end: date | None = None,
         baseline_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Measure ROI of trade promotions in informal channels.
 
@@ -468,7 +468,7 @@ class FMCGIntelligenceService:
             "promotion_id": promotion_id,
             "promotion_period": f"{promotion_start} to {promotion_end}",
             "baseline_period": f"{baseline_start} to {promotion_start}",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "baseline_metrics": {
                 "total_revenue_kes": round(baseline_revenue, 2),
                 "total_volume": round(baseline_volume, 2),
@@ -515,8 +515,8 @@ class FMCGIntelligenceService:
         self,
         company: str,
         product: str,
-        region: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        region: str | None = None,
+    ) -> dict[str, Any]:
         """
         Identify where products aren't reaching in informal channels.
 
@@ -639,7 +639,7 @@ class FMCGIntelligenceService:
             "company": company,
             "product": product,
             "region": region or "national",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "coverage": {
                 "total_markets": total_markets,
                 "markets_with_product": covered,
@@ -679,9 +679,9 @@ class FMCGIntelligenceService:
         self,
         company: str,
         product_category: str,
-        region: Optional[str] = None,
+        region: str | None = None,
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Track competitor pricing across informal markets.
 
@@ -785,7 +785,7 @@ class FMCGIntelligenceService:
             "category": product_category,
             "region": region or "national",
             "period": f"{period_start} to {period_end}",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "price_analysis": price_analysis,
             "company_products": company_products,
             "competitor_products": competitor_products[:10],
@@ -808,7 +808,7 @@ class FMCGIntelligenceService:
         self,
         company: str,
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimize delivery fleet for informal distribution.
 
@@ -904,7 +904,7 @@ class FMCGIntelligenceService:
             "version": "1.0",
             "company": company,
             "period": f"{period_start} to {period_end}",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "demand_heatmap": routes[:30],
             "fleet_recommendations": {
                 "estimated_vehicles_needed": estimated_vehicles,
@@ -937,7 +937,7 @@ class FMCGIntelligenceService:
     # ─────────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _get_template(company: str) -> Optional[PwaniOilTemplate]:
+    def _get_template(company: str) -> PwaniOilTemplate | None:
         """Get client template by company identifier."""
         templates = {
             "pwani_oil": PwaniOilTemplate,
@@ -947,7 +947,7 @@ class FMCGIntelligenceService:
         return template_class() if template_class else None
 
     @staticmethod
-    def _region_to_geohash(region: str) -> Optional[str]:
+    def _region_to_geohash(region: str) -> str | None:
         """Convert region name to geohash prefix for filtering."""
         # Map region names to approximate geohash prefixes for Kenya
         region_map = {

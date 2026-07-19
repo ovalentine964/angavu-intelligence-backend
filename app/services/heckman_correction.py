@@ -32,14 +32,11 @@ influenced both the selection (approval) and the outcome (default/performance).
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import structlog
 from scipy import stats
-from scipy.optimize import minimize
 
 logger = structlog.get_logger(__name__)
 
@@ -91,13 +88,13 @@ class HeckmanResult:
     n_obs_selected: int
     n_obs_unselected: int
     mills_ratio_significant: bool
-    selection_variables: List[str]
-    outcome_variables: List[str]
-    corrected_predictions: Optional[np.ndarray] = None
-    diagnostics: Dict = field(default_factory=dict)
+    selection_variables: list[str]
+    outcome_variables: list[str]
+    corrected_predictions: np.ndarray | None = None
+    diagnostics: dict = field(default_factory=dict)
 
     @property
-    def selection_summary(self) -> Dict:
+    def selection_summary(self) -> dict:
         """Summary table for the selection equation (Step 1)."""
         return {
             "variables": self.selection_variables,
@@ -112,7 +109,7 @@ class HeckmanResult:
         }
 
     @property
-    def outcome_summary(self) -> Dict:
+    def outcome_summary(self) -> dict:
         """Summary table for the outcome equation (Step 2)."""
         return {
             "variables": self.outcome_variables,
@@ -129,7 +126,7 @@ class HeckmanResult:
             "n_obs": self.n_obs_selected,
         }
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Serialize result to dictionary for API responses."""
         return {
             "selection_equation": self.selection_summary,
@@ -206,7 +203,7 @@ class CorrectedCreditScore:
     raw_score: float
     corrected_score: float
     bias_adjustment: float
-    confidence_interval: Tuple[float, float]
+    confidence_interval: tuple[float, float]
     selection_probability: float
     mills_ratio_contribution: float
     risk_category: str
@@ -248,9 +245,9 @@ class HeckmanCorrector:
         self.max_iter = max_iter
         self.tol = tol
         self.confidence_level = confidence_level
-        self._result: Optional[HeckmanResult] = None
-        self._selection_params: Optional[np.ndarray] = None
-        self._outcome_params: Optional[np.ndarray] = None
+        self._result: HeckmanResult | None = None
+        self._selection_params: np.ndarray | None = None
+        self._outcome_params: np.ndarray | None = None
         self._fitted = False
 
     @property
@@ -259,7 +256,7 @@ class HeckmanCorrector:
         return self._fitted
 
     @property
-    def result(self) -> Optional[HeckmanResult]:
+    def result(self) -> HeckmanResult | None:
         """The HeckmanResult from the last fit."""
         return self._result
 
@@ -269,8 +266,8 @@ class HeckmanCorrector:
         selection_indicator: np.ndarray,
         X_outcome: np.ndarray,
         y_outcome: np.ndarray,
-        selection_variables: Optional[List[str]] = None,
-        outcome_variables: Optional[List[str]] = None,
+        selection_variables: list[str] | None = None,
+        outcome_variables: list[str] | None = None,
     ) -> HeckmanResult:
         """Fit the Heckman two-step model.
 
@@ -473,8 +470,8 @@ class HeckmanCorrector:
         self,
         X_selection_new: np.ndarray,
         X_outcome_new: np.ndarray,
-        business_ids: Optional[List[str]] = None,
-    ) -> List[CorrectedCreditScore]:
+        business_ids: list[str] | None = None,
+    ) -> list[CorrectedCreditScore]:
         """Generate bias-corrected credit scores for new observations.
 
         Must call fit() first.
@@ -550,7 +547,7 @@ class HeckmanCorrector:
 
     def _fit_probit(
         self, X: np.ndarray, y: np.ndarray
-    ) -> Tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, float]:
         """Fit probit model using maximum likelihood estimation.
 
         Uses Newton-Raphson with step halving for convergence.
@@ -680,8 +677,8 @@ class HeckmanCorrector:
 
     def get_confidence_intervals(
         self,
-        confidence_level: Optional[float] = None,
-    ) -> Dict:
+        confidence_level: float | None = None,
+    ) -> dict:
         """Get confidence intervals for all model parameters.
 
         Args:

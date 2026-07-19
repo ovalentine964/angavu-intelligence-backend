@@ -21,9 +21,10 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -61,12 +62,12 @@ class A2APartType(str, Enum):
 class A2APart:
     """A part of an A2A message (text, file, data, or artifact)."""
     type: A2APartType
-    text: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
-    mime_type: Optional[str] = None
+    text: str | None = None
+    data: dict[str, Any] | None = None
+    mime_type: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"type": self.type.value}
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"type": self.type.value}
         if self.text is not None:
             d["text"] = self.text
         if self.data is not None:
@@ -76,7 +77,7 @@ class A2APart:
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> A2APart:
+    def from_dict(cls, data: dict[str, Any]) -> A2APart:
         return cls(
             type=A2APartType(data.get("type", "text")),
             text=data.get("text"),
@@ -89,12 +90,12 @@ class A2APart:
 class A2AMessage:
     """A message in the A2A protocol."""
     role: A2AMessageRole
-    parts: List[A2APart]
+    parts: list[A2APart]
     message_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "role": self.role.value,
             "parts": [p.to_dict() for p in self.parts],
@@ -103,7 +104,7 @@ class A2AMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> A2AMessage:
+    def from_dict(cls, data: dict[str, Any]) -> A2AMessage:
         return cls(
             role=A2AMessageRole(data["role"]),
             parts=[A2APart.from_dict(p) for p in data.get("parts", [])],
@@ -118,9 +119,9 @@ class A2AArtifact:
     artifact_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str = ""
     description: str = ""
-    parts: List[A2APart] = field(default_factory=list)
+    parts: list[A2APart] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "artifactId": self.artifact_id,
             "name": self.name,
@@ -133,12 +134,12 @@ class A2AArtifact:
 class A2ATaskStatus:
     """Status of an A2A task."""
     state: A2ATaskState
-    message: Optional[A2AMessage] = None
-    progress: Optional[float] = None  # 0.0 - 1.0
+    message: A2AMessage | None = None
+    progress: float | None = None  # 0.0 - 1.0
     updated_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"state": self.state.value, "updatedAt": self.updated_at}
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"state": self.state.value, "updatedAt": self.updated_at}
         if self.message:
             d["message"] = self.message.to_dict()
         if self.progress is not None:
@@ -150,14 +151,14 @@ class A2ATaskStatus:
 class A2ATask:
     """A task in the A2A protocol."""
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
-    session_id: Optional[str] = None
+    session_id: str | None = None
     status: A2ATaskStatus = field(default_factory=lambda: A2ATaskStatus(state=A2ATaskState.SUBMITTED))
-    history: List[A2AMessage] = field(default_factory=list)
-    artifacts: List[A2AArtifact] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    history: list[A2AMessage] = field(default_factory=list)
+    artifacts: list[A2AArtifact] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.task_id,
             "sessionId": self.session_id,
@@ -178,11 +179,11 @@ class A2ACapability:
     """A capability that an A2A agent can perform."""
     name: str
     description: str
-    input_schema: Dict[str, Any] = field(default_factory=dict)
-    output_schema: Dict[str, Any] = field(default_factory=dict)
-    tags: List[str] = field(default_factory=list)
+    input_schema: dict[str, Any] = field(default_factory=dict)
+    output_schema: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -205,13 +206,13 @@ class A2AAgentCard:
     description: str
     url: str = ""                   # A2A endpoint URL
     version: str = "1.0.0"
-    capabilities: List[A2ACapability] = field(default_factory=list)
-    authentication: Optional[Dict[str, Any]] = None
-    default_input_modes: List[str] = field(default_factory=lambda: ["text"])
-    default_output_modes: List[str] = field(default_factory=lambda: ["text"])
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    capabilities: list[A2ACapability] = field(default_factory=list)
+    authentication: dict[str, Any] | None = None
+    default_input_modes: list[str] = field(default_factory=lambda: ["text"])
+    default_output_modes: list[str] = field(default_factory=lambda: ["text"])
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agentId": self.agent_id,
             "name": self.name,
@@ -227,7 +228,7 @@ class A2AAgentCard:
     def has_capability(self, name: str) -> bool:
         return any(c.name == name for c in self.capabilities)
 
-    def find_capability(self, name: str) -> Optional[A2ACapability]:
+    def find_capability(self, name: str) -> A2ACapability | None:
         for c in self.capabilities:
             if c.name == name:
                 return c
@@ -256,9 +257,9 @@ class A2AServer:
 
     def __init__(self, agent_card: A2AAgentCard):
         self.agent_card = agent_card
-        self._tasks: Dict[str, A2ATask] = {}
-        self._task_handlers: Dict[str, Callable[..., Coroutine]] = {}
-        self._auth_handler: Optional[Callable[..., Coroutine]] = None
+        self._tasks: dict[str, A2ATask] = {}
+        self._task_handlers: dict[str, Callable[..., Coroutine]] = {}
+        self._auth_handler: Callable[..., Coroutine] | None = None
 
         self._logger = logger.bind(component="a2a_server", agent=agent_card.name)
 
@@ -275,7 +276,7 @@ class A2AServer:
 
     # ── Request Handling ────────────────────────────────────────────
 
-    async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """
         Handle an incoming A2A request.
 
@@ -305,7 +306,7 @@ class A2AServer:
         else:
             return {"error": {"code": -32601, "message": f"Unknown method: {method}"}}
 
-    async def _handle_task_send(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_task_send(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tasks/send — submit a new task."""
         task_id = params.get("id", uuid.uuid4().hex[:16])
         message_data = params.get("message", {})
@@ -396,12 +397,12 @@ class A2AServer:
                 state=A2ATaskState.FAILED,
                 message=A2AMessage(
                     role=A2AMessageRole.AGENT,
-                    parts=[A2APart(type=A2APartType.TEXT, text=f"Task failed: {str(exc)}")],
+                    parts=[A2APart(type=A2APartType.TEXT, text=f"Task failed: {exc!s}")],
                 ),
             )
             self._logger.error("a2a_task_failed", task_id=task.task_id, error=str(exc))
 
-    def _handle_task_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_task_get(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tasks/get — get task status."""
         task_id = params.get("id", "")
         task = self._tasks.get(task_id)
@@ -409,7 +410,7 @@ class A2AServer:
             return {"error": {"code": -32001, "message": f"Task not found: {task_id}"}}
         return {"result": task.to_dict()}
 
-    async def _handle_task_cancel(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_task_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tasks/cancel — cancel a task."""
         task_id = params.get("id", "")
         task = self._tasks.get(task_id)
@@ -427,12 +428,12 @@ class A2AServer:
 
     # ── Status ──────────────────────────────────────────────────────
 
-    def get_tasks(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_tasks(self, limit: int = 20) -> list[dict[str, Any]]:
         """Get recent tasks."""
         tasks = sorted(self._tasks.values(), key=lambda t: t.created_at, reverse=True)
         return [t.to_dict() for t in tasks[:limit]]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         states = {}
         for task in self._tasks.values():
             state = task.status.state.value
@@ -469,14 +470,14 @@ class A2AClient:
         agent_name: str = "angavu-client",
         http_timeout: float = 30.0,
         http_max_retries: int = 3,
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
     ):
         self.agent_name = agent_name
         self._http_timeout = http_timeout
         self._http_max_retries = http_max_retries
         self._auth_token = auth_token
-        self._discovered_agents: Dict[str, A2AAgentCard] = {}
-        self._active_tasks: Dict[str, Dict[str, Any]] = {}
+        self._discovered_agents: dict[str, A2AAgentCard] = {}
+        self._active_tasks: dict[str, dict[str, Any]] = {}
 
         self._logger = logger.bind(component="a2a_client", agent=agent_name)
 
@@ -523,9 +524,9 @@ class A2AClient:
         self,
         target_agent_id: str,
         message: str,
-        capability: Optional[str] = None,
-        data: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        capability: str | None = None,
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> A2ATask:
         """
         Send a task to an external A2A agent.
@@ -618,8 +619,8 @@ class A2AClient:
         self,
         server: A2AServer,
         message: str,
-        capability: Optional[str] = None,
-        data: Optional[Dict[str, Any]] = None,
+        capability: str | None = None,
+        data: dict[str, Any] | None = None,
     ) -> A2ATask:
         """Send a task directly to a local A2AServer instance."""
         parts = [A2APart(type=A2APartType.TEXT, text=message)]
@@ -749,9 +750,9 @@ class A2AClient:
 
     async def delegate_parallel(
         self,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
         timeout_seconds: float = 30.0,
-    ) -> List[A2ATask]:
+    ) -> list[A2ATask]:
         """
         Delegate multiple tasks to different agents in parallel.
 
@@ -792,10 +793,10 @@ class A2AClient:
 
     # ── Status ──────────────────────────────────────────────────────
 
-    def get_discovered_agents(self) -> List[Dict[str, Any]]:
+    def get_discovered_agents(self) -> list[dict[str, Any]]:
         return [card.to_dict() for card in self._discovered_agents.values()]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "client": self.agent_name,
             "discovered_agents": len(self._discovered_agents),
@@ -863,7 +864,7 @@ def create_angavu_agent_card() -> A2AAgentCard:
     )
 
 
-def create_external_a2a_agents() -> List[A2AAgentCard]:
+def create_external_a2a_agents() -> list[A2AAgentCard]:
     """Define external A2A agents that Angavu should integrate with."""
     return [
         A2AAgentCard(

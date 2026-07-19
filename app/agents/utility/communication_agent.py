@@ -10,12 +10,14 @@ Tier: 3 (Utility) — stateless, on-demand invocation.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
-    AgentDecision, AgentEvent, AgentResult, BiasharaAgent,
+    AgentDecision,
+    AgentResult,
+    BiasharaAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -69,7 +71,7 @@ class CommunicationAgent(BiasharaAgent):
     def __init__(self):
         super().__init__(name=self.name, role=self.role, capabilities=self.capabilities)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         action = payload.get("action", "format_message")
@@ -106,7 +108,7 @@ class CommunicationAgent(BiasharaAgent):
         except Exception as exc:
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
-    def _format_message(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_message(self, params: dict[str, Any]) -> dict[str, Any]:
         """Format content into a channel-appropriate message."""
         content = params.get("content", {})
         channel = params.get("channel", "whatsapp")

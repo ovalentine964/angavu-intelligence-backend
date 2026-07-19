@@ -6,7 +6,6 @@ Reports are delivered via WhatsApp, Telegram, SMS, or the app.
 """
 
 from datetime import date, datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,7 +30,7 @@ class TopProduct(BaseModel):
     """A top-performing product."""
 
     item: str
-    category: Optional[str] = None
+    category: str | None = None
     quantity_sold: float = 0
     revenue: float = 0
     profit: float = 0
@@ -63,34 +62,34 @@ class DailyReport(BaseModel):
     summary: TransactionSummary
 
     # Top products
-    top_products: List[TopProduct] = Field(
+    top_products: list[TopProduct] = Field(
         default_factory=list,
         max_length=10,
         description="Top 5 products by revenue",
     )
 
     # Time breakdown
-    hourly_breakdown: List[HourlyBreakdown] = Field(
+    hourly_breakdown: list[HourlyBreakdown] = Field(
         default_factory=list,
         description="Sales by hour of day",
     )
 
     # Comparisons
-    vs_yesterday_pct: Optional[float] = Field(
+    vs_yesterday_pct: float | None = Field(
         None,
         description="Percentage change vs yesterday's sales",
     )
-    vs_last_week_avg_pct: Optional[float] = Field(
+    vs_last_week_avg_pct: float | None = Field(
         None,
         description="Percentage change vs last week's daily average",
     )
 
     # Insights
-    busiest_hour: Optional[int] = None
-    peak_sales_amount: Optional[float] = None
+    busiest_hour: int | None = None
+    peak_sales_amount: float | None = None
 
     # Inventory alerts
-    low_stock_items: List[str] = Field(
+    low_stock_items: list[str] = Field(
         default_factory=list,
         description="Items below restock threshold",
     )
@@ -134,26 +133,26 @@ class WeeklyReport(BaseModel):
     summary: TransactionSummary
 
     # Daily breakdown
-    daily_summaries: List[TransactionSummary] = Field(
+    daily_summaries: list[TransactionSummary] = Field(
         default_factory=list,
         description="One summary per day of the week",
     )
 
     # Trends
-    trends: List[WeeklyTrend] = Field(default_factory=list)
+    trends: list[WeeklyTrend] = Field(default_factory=list)
 
     # Top and bottom products
-    top_products: List[TopProduct] = Field(default_factory=list, max_length=10)
-    bottom_products: List[TopProduct] = Field(
+    top_products: list[TopProduct] = Field(default_factory=list, max_length=10)
+    bottom_products: list[TopProduct] = Field(
         default_factory=list,
         max_length=5,
         description="Worst performing products",
     )
 
     # Patterns
-    best_day: Optional[str] = None
-    worst_day: Optional[str] = None
-    busiest_hour: Optional[int] = None
+    best_day: str | None = None
+    worst_day: str | None = None
+    busiest_hour: int | None = None
 
     # Payment method mix
     mpesa_pct: float = 0
@@ -161,8 +160,8 @@ class WeeklyReport(BaseModel):
     credit_pct: float = 0
 
     # Week-over-week comparison
-    wow_sales_change_pct: Optional[float] = None
-    wow_profit_change_pct: Optional[float] = None
+    wow_sales_change_pct: float | None = None
+    wow_profit_change_pct: float | None = None
 
     language: str = "sw"
 
@@ -179,11 +178,11 @@ class AdviceItem(BaseModel):
         pattern=r"^(low|medium|high|critical)$",
     )
     title: str
-    title_sw: Optional[str] = Field(None, description="Swahili translation")
+    title_sw: str | None = Field(None, description="Swahili translation")
     detail: str
-    detail_sw: Optional[str] = None
-    expected_impact: Optional[str] = None
-    action_items: List[str] = Field(default_factory=list)
+    detail_sw: str | None = None
+    expected_impact: str | None = None
+    action_items: list[str] = Field(default_factory=list)
 
 
 class AdviceReport(BaseModel):
@@ -205,7 +204,7 @@ class AdviceReport(BaseModel):
     )
 
     # Specific advice items
-    advice: List[AdviceItem] = Field(
+    advice: list[AdviceItem] = Field(
         default_factory=list,
         max_length=5,
         description="Top 5 most impactful recommendations",
@@ -215,10 +214,10 @@ class AdviceReport(BaseModel):
     avg_daily_revenue_7d: float = 0
     avg_daily_profit_7d: float = 0
     revenue_trend: str = "stable"
-    top_growing_category: Optional[str] = None
-    top_declining_category: Optional[str] = None
+    top_growing_category: str | None = None
+    top_declining_category: str | None = None
 
     # Market context
-    market_prices_summary: Optional[str] = None
+    market_prices_summary: str | None = None
 
     language: str = "sw"

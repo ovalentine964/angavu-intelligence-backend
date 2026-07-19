@@ -6,15 +6,14 @@ data, scores, and lifecycle state.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     Float,
     Index,
-    Integer,
-    JSON,
     String,
     Text,
 )
@@ -55,13 +54,13 @@ class LeadDB(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     updated_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (

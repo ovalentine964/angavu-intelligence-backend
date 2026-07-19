@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Union
+from typing import Any, Union
 
 import structlog
 
@@ -32,10 +32,10 @@ logger = structlog.get_logger(__name__)
 
 # Type alias for sync or async callables
 ActionFn = Union[
-    Callable[[Dict[str, Any]], None],
-    Callable[[Dict[str, Any]], Coroutine[Any, Any, None]],
+    Callable[[dict[str, Any]], None],
+    Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
 ]
-GuardFn = Callable[[Dict[str, Any]], bool]
+GuardFn = Callable[[dict[str, Any]], bool]
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -49,11 +49,11 @@ class StateTransition:
     from_state: str
     to_state: str
     trigger: str
-    guard: Optional[GuardFn] = None
-    action: Optional[ActionFn] = None
+    guard: GuardFn | None = None
+    action: ActionFn | None = None
     priority: int = 0
 
-    def can_fire(self, context: Dict[str, Any]) -> bool:
+    def can_fire(self, context: dict[str, Any]) -> bool:
         """Check if this transition can fire."""
         if self.guard:
             try:
@@ -62,7 +62,7 @@ class StateTransition:
                 return False
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "from_state": self.from_state,
             "to_state": self.to_state,
@@ -81,9 +81,9 @@ class TransitionRecord:
     trigger: str
     timestamp: float
     transition_number: int
-    context_keys: List[str] = field(default_factory=list)
+    context_keys: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "from": self.from_state,
             "to": self.to_state,
@@ -96,12 +96,12 @@ class TransitionRecord:
 @dataclass
 class StateMachineConfig:
     """Configuration for an agent state machine."""
-    states: Set[str]
+    states: set[str]
     initial_state: str
-    transitions: List[StateTransition]
-    on_enter: Dict[str, List[ActionFn]] = field(default_factory=dict)
-    on_exit: Dict[str, List[ActionFn]] = field(default_factory=dict)
-    timeout_states: Dict[str, float] = field(default_factory=dict)
+    transitions: list[StateTransition]
+    on_enter: dict[str, list[ActionFn]] = field(default_factory=dict)
+    on_exit: dict[str, list[ActionFn]] = field(default_factory=dict)
+    timeout_states: dict[str, float] = field(default_factory=dict)
     # state -> max seconds before auto-transition
 
 
@@ -126,7 +126,7 @@ class AgentStateMachine:
         self._config = config
         self._agent_name = agent_name
         self._current_state = config.initial_state
-        self._history: List[TransitionRecord] = []
+        self._history: list[TransitionRecord] = []
         self._state_entry_time: float = time.time()
         self._transition_count: int = 0
         self._logger = logger.bind(agent=agent_name, component="state_machine")
@@ -154,8 +154,8 @@ class AgentStateMachine:
     async def trigger(
         self,
         trigger: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
+        context: dict[str, Any] | None = None,
+    ) -> str | None:
         """
         Fire a trigger, transitioning to the next state.
 
@@ -234,7 +234,7 @@ class AgentStateMachine:
         )
         return None
 
-    def check_timeouts(self) -> Optional[str]:
+    def check_timeouts(self) -> str | None:
         """
         Check if the current state has timed out.
 
@@ -251,29 +251,29 @@ class AgentStateMachine:
 
     # ── Query methods ──────────────────────────────────────────────
 
-    def get_valid_triggers(self) -> List[str]:
+    def get_valid_triggers(self) -> list[str]:
         """Get all triggers valid from the current state."""
         return list(set(
             t.trigger for t in self._config.transitions
             if t.from_state == self._current_state
         ))
 
-    def get_valid_transitions(self) -> List[Dict[str, Any]]:
+    def get_valid_transitions(self) -> list[dict[str, Any]]:
         """Get details of all valid transitions from current state."""
         return [
             t.to_dict() for t in self._config.transitions
             if t.from_state == self._current_state
         ]
 
-    def get_all_states(self) -> List[str]:
+    def get_all_states(self) -> list[str]:
         """Get all states in the machine."""
         return sorted(self._config.states)
 
-    def get_history(self, last_n: int = 20) -> List[Dict[str, Any]]:
+    def get_history(self, last_n: int = 20) -> list[dict[str, Any]]:
         """Get transition history."""
         return [r.to_dict() for r in self._history[-last_n:]]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get state machine statistics."""
         return {
             "agent_name": self._agent_name,
@@ -287,7 +287,7 @@ class AgentStateMachine:
 
     # ── Persistence ────────────────────────────────────────────────
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize state machine for persistence."""
         return {
             "agent_name": self._agent_name,
@@ -300,9 +300,9 @@ class AgentStateMachine:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         config: StateMachineConfig,
-    ) -> "AgentStateMachine":
+    ) -> AgentStateMachine:
         """Restore state machine from persisted data."""
         sm = cls(config, agent_name=data.get("agent_name", "unknown"))
         sm._current_state = data.get("current_state", config.initial_state)
@@ -314,8 +314,8 @@ class AgentStateMachine:
 
     async def _run_actions(
         self,
-        actions: List[ActionFn],
-        context: Dict[str, Any],
+        actions: list[ActionFn],
+        context: dict[str, Any],
         label: str,
     ) -> None:
         """Run a list of actions, catching exceptions."""

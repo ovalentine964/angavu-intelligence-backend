@@ -12,11 +12,11 @@ Pattern:
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentEvent, BiasharaAgent, EventType
+from app.agents.base import AgentEvent, EventType
 
 logger = structlog.get_logger(__name__)
 
@@ -32,16 +32,16 @@ class BroadcastProtocol:
     def __init__(self, event_bus: Any):
         self._event_bus = event_bus
         self._publish_count: int = 0
-        self._delivery_log: List[Dict[str, Any]] = []
+        self._delivery_log: list[dict[str, Any]] = []
         self._logger = logger.bind(component="broadcast_protocol")
 
     async def publish(
         self,
         source: str,
         event_type: EventType,
-        payload: Dict[str, Any],
-        correlation_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any],
+        correlation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Publish a broadcast event to the EventBus.
@@ -111,10 +111,10 @@ class BroadcastProtocol:
         self,
         source: str,
         event_type: EventType,
-        data: Dict[str, Any],
-        worker_id: Optional[str] = None,
-        worker_type: Optional[str] = None,
-        correlation_id: Optional[str] = None,
+        data: dict[str, Any],
+        worker_id: str | None = None,
+        worker_type: str | None = None,
+        correlation_id: str | None = None,
     ) -> str:
         """Convenience method for publishing pipeline events with worker context."""
         payload = {**data}
@@ -137,7 +137,7 @@ class BroadcastProtocol:
         alert_type: str,
         severity: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> str:
         """Broadcast a system alert to all listening agents."""
         return await self.publish(
@@ -155,7 +155,7 @@ class BroadcastProtocol:
         self,
         source: str,
         overall_status: str,
-        agent_statuses: Dict[str, str],
+        agent_statuses: dict[str, str],
     ) -> str:
         """Broadcast a system health report."""
         return await self.publish(
@@ -167,7 +167,7 @@ class BroadcastProtocol:
             },
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return broadcast protocol statistics."""
         return {
             "total_published": self._publish_count,

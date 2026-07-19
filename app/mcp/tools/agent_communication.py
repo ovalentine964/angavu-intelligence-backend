@@ -13,7 +13,7 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -24,7 +24,7 @@ logger = structlog.get_logger(__name__)
 
 # ── In-memory task store (replace with Redis in production) ─────────
 
-_task_store: Dict[str, Dict[str, Any]] = {}
+_task_store: dict[str, dict[str, Any]] = {}
 
 
 # ── Tool Definitions ────────────────────────────────────────────────
@@ -137,10 +137,10 @@ AGENT_TOOLS = [
 
 async def handle_agent_tool(
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     requester_id: str,
     app_state: Any = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Dispatch an agent communication tool call.
 
@@ -189,13 +189,13 @@ async def handle_agent_tool(
         logger.error("mcp_agent_tool_error", tool=tool_name, error=str(e), exc_info=True)
         return {
             "isError": True,
-            "content": [{"type": "text", "text": f"Tool execution error: {str(e)}"}],
+            "content": [{"type": "text", "text": f"Tool execution error: {e!s}"}],
         }
 
 
 async def _dispatch_task(
-    args: Dict[str, Any], requester_id: str, app_state: Any
-) -> Dict[str, Any]:
+    args: dict[str, Any], requester_id: str, app_state: Any
+) -> dict[str, Any]:
     """Dispatch a task to an agent via the EventBus."""
     agent_name = args["agent_name"]
     task_type = args["task_type"]
@@ -254,8 +254,8 @@ async def _dispatch_task(
 
 
 async def _get_agent_status(
-    args: Dict[str, Any], app_state: Any
-) -> Dict[str, Any]:
+    args: dict[str, Any], app_state: Any
+) -> dict[str, Any]:
     """Get status of one or all agents."""
     agent_name = args.get("agent_name", "all")
 
@@ -299,7 +299,7 @@ async def _get_agent_status(
     }
 
 
-async def _get_agent_results(args: Dict[str, Any]) -> Dict[str, Any]:
+async def _get_agent_results(args: dict[str, Any]) -> dict[str, Any]:
     """Retrieve results for a dispatched task."""
     task_id = args["task_id"]
 

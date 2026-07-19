@@ -25,8 +25,8 @@ Buyers: Churches, mosques, religious organizations, NGOs
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -35,15 +35,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.transaction import Transaction
-from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import BootstrapCI
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
     BootstrapInference,
-    bootstrap,
-    kde_estimator,
 )
 
 logger = structlog.get_logger(__name__)
@@ -103,7 +100,7 @@ class GivingInsightsService:
     # ─────────────────────────────────────────────────────────────────────
 
     @intelligence_cache(ttl=300)
-    async def analyze_giving_pattern(self, worker_id: str) -> Dict[str, Any]:
+    async def analyze_giving_pattern(self, worker_id: str) -> dict[str, Any]:
         """
         Analyze a worker's giving pattern over time.
 
@@ -148,7 +145,7 @@ class GivingInsightsService:
             if record.get("recipient"):
                 by_recipient[record["recipient"]] += record["amount"]
 
-            dt = datetime.fromtimestamp(record["date"] / 1000, tz=timezone.utc)
+            dt = datetime.fromtimestamp(record["date"] / 1000, tz=UTC)
             month_key = dt.strftime("%Y-%m")
             week_key = dt.strftime("%Y-W%W")
             monthly_totals[month_key] += record["amount"]
@@ -192,7 +189,7 @@ class GivingInsightsService:
         }
 
     @intelligence_cache(ttl=300)
-    async def get_giving_recommendation(self, worker_id: str) -> Dict[str, Any]:
+    async def get_giving_recommendation(self, worker_id: str) -> dict[str, Any]:
         """
         Generate giving recommendations based on worker's financial situation.
 
@@ -226,7 +223,7 @@ class GivingInsightsService:
         # Calculate average monthly income
         total_income = sum(r["amount"] for r in income_records)
         months = max(1, len(set(
-            datetime.fromtimestamp(r["date"] / 1000, tz=timezone.utc).strftime("%Y-%m")
+            datetime.fromtimestamp(r["date"] / 1000, tz=UTC).strftime("%Y-%m")
             for r in income_records
         )))
         avg_monthly_income = total_income / months
@@ -287,7 +284,7 @@ class GivingInsightsService:
         }
 
     @intelligence_cache(ttl=300)
-    async def get_abundance_insight(self, worker_id: str) -> Dict[str, Any]:
+    async def get_abundance_insight(self, worker_id: str) -> dict[str, Any]:
         """
         Analyze the correlation between giving and income changes.
 
@@ -333,12 +330,12 @@ class GivingInsightsService:
         weekly_giving = defaultdict(float)
 
         for record in income_records:
-            dt = datetime.fromtimestamp(record["date"] / 1000, tz=timezone.utc)
+            dt = datetime.fromtimestamp(record["date"] / 1000, tz=UTC)
             week_key = dt.strftime("%Y-W%W")
             weekly_income[week_key] += record["amount"]
 
         for record in giving_records:
-            dt = datetime.fromtimestamp(record["date"] / 1000, tz=timezone.utc)
+            dt = datetime.fromtimestamp(record["date"] / 1000, tz=UTC)
             week_key = dt.strftime("%Y-W%W")
             weekly_giving[week_key] += record["amount"]
 
@@ -451,7 +448,7 @@ class GivingInsightsService:
     # GIVING FORECAST (STA 244 — Time Series)
     # ─────────────────────────────────────────────────────────────────────
 
-    async def forecast_giving(self, worker_id: str, periods: int = 4) -> Dict[str, Any]:
+    async def forecast_giving(self, worker_id: str, periods: int = 4) -> dict[str, Any]:
         """
         Forecast future giving based on historical patterns.
 
@@ -478,7 +475,7 @@ class GivingInsightsService:
         # Build weekly giving series
         weekly_totals = defaultdict(float)
         for record in giving_records:
-            dt = datetime.fromtimestamp(record["date"] / 1000, tz=timezone.utc)
+            dt = datetime.fromtimestamp(record["date"] / 1000, tz=UTC)
             week_key = dt.strftime("%Y-W%W")
             weekly_totals[week_key] += record["amount"]
 
@@ -521,7 +518,7 @@ class GivingInsightsService:
     # PRIVATE HELPERS
     # ─────────────────────────────────────────────────────────────────────
 
-    async def _get_giving_records(self, worker_id: str) -> List[Dict[str, Any]]:
+    async def _get_giving_records(self, worker_id: str) -> list[dict[str, Any]]:
         """
         Fetch giving records from the database.
 
@@ -560,7 +557,7 @@ class GivingInsightsService:
             logger.error("failed_to_fetch_giving_records", error=str(e))
             return []
 
-    async def _get_income_records(self, worker_id: str) -> List[Dict[str, Any]]:
+    async def _get_income_records(self, worker_id: str) -> list[dict[str, Any]]:
         """Fetch income (SALE) transactions."""
         try:
             result = await self.db.execute(
@@ -600,7 +597,7 @@ class GivingInsightsService:
         return "OTHER"
 
     def _calculate_consistency(
-        self, records: List[Dict[str, Any]], period: str = "month"
+        self, records: list[dict[str, Any]], period: str = "month"
     ) -> int:
         """
         Calculate giving consistency score (0-100).
@@ -646,10 +643,10 @@ class GivingInsightsService:
 
         # Streak score
         streak = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         current_week = now.strftime("%Y-W%W")
         giving_weeks = set(
-            datetime.fromtimestamp(r["date"] / 1000, tz=timezone.utc).strftime("%Y-W%W")
+            datetime.fromtimestamp(r["date"] / 1000, tz=UTC).strftime("%Y-W%W")
             for r in sorted_records
         )
 
@@ -663,7 +660,7 @@ class GivingInsightsService:
         # Weighted average
         return int(regularity * 0.4 + coverage * 0.4 + streak_score * 0.2)
 
-    def _calculate_frequency(self, records: List[Dict[str, Any]]) -> str:
+    def _calculate_frequency(self, records: list[dict[str, Any]]) -> str:
         """Determine giving frequency from records."""
         if not records:
             return "Hakuna"
@@ -688,7 +685,7 @@ class GivingInsightsService:
         else:
             return f"Kila mwezi {int(np.ceil(avg_days_between / 30))}"
 
-    def _calculate_trend(self, monthly_totals: Dict[str, float]) -> str:
+    def _calculate_trend(self, monthly_totals: dict[str, float]) -> str:
         """
         Calculate giving trend direction.
 

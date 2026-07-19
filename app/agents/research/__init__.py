@@ -7,12 +7,12 @@ Agents:
     InnovationAgent      — Feature ideation based on user needs
 """
 
+from app.agents.research.innovation import InnovationAgent
 from app.agents.research.market_research import MarketResearchAgent
 from app.agents.research.user_insight import UserInsightAgent
-from app.agents.research.innovation import InnovationAgent
 
 __all__ = [
+    "InnovationAgent",
     "MarketResearchAgent",
     "UserInsightAgent",
-    "InnovationAgent",
 ]

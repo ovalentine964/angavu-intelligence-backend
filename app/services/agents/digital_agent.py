@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any
 
 import structlog
 
@@ -45,9 +45,9 @@ class DigitalAgent:
 
     def analyze_income(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze digital/gig income patterns.
 
@@ -107,11 +107,11 @@ class DigitalAgent:
         }
 
     def _analyze_commissions(
-        self, income: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, income: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze commission-based income."""
         # Group by service type (M-Pesa commission, ad sales, etc.)
-        service_data: Dict[str, Dict[str, float]] = defaultdict(
+        service_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"total": 0, "count": 0, "profit": 0}
         )
         for t in income:
@@ -139,10 +139,10 @@ class DigitalAgent:
         }
 
     def _analyze_platforms(
-        self, income: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, income: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze income by platform/channel."""
-        channel_data: Dict[str, float] = defaultdict(float)
+        channel_data: dict[str, float] = defaultdict(float)
         for t in income:
             channel = t.get("recorded_via", "unknown")
             channel_data[channel] += t.get("amount", 0)
@@ -161,10 +161,10 @@ class DigitalAgent:
         }
 
     def _analyze_income_stability(
-        self, income: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, income: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze income stability (important for gig workers)."""
-        daily_totals: Dict[str, float] = defaultdict(float)
+        daily_totals: dict[str, float] = defaultdict(float)
         for t in income:
             ts = t.get("timestamp")
             if ts:
@@ -205,10 +205,10 @@ class DigitalAgent:
         }
 
     def _analyze_fees(
-        self, expenses: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, expenses: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze platform/transaction fees."""
-        fee_categories: Dict[str, float] = defaultdict(float)
+        fee_categories: dict[str, float] = defaultdict(float)
         for t in expenses:
             item = (t.get("item") or "").lower()
             if any(kw in item for kw in ["fee", "charge", "commission", "transaction cost"]):
@@ -223,10 +223,10 @@ class DigitalAgent:
         }
 
     def _analyze_clients(
-        self, income: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, income: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze client patterns."""
-        client_data: Dict[str, Dict[str, float]] = defaultdict(
+        client_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"transactions": 0, "total": 0}
         )
         for t in income:
@@ -249,9 +249,9 @@ class DigitalAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate digital/gig-specific recommendations."""
         recs = []
 
@@ -345,7 +345,7 @@ class DigitalAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

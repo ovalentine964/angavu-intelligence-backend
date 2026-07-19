@@ -21,8 +21,8 @@ Key References:
 """
 
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import numpy as np
 import structlog
@@ -64,10 +64,10 @@ class HealthEconomicsEngine:
     @classmethod
     def detect_health_shocks(
         cls,
-        transactions: List[Any],
+        transactions: list[Any],
         lookback_days: int = 180,
         poverty_line_monthly: float = 8800,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect health shocks from transaction revenue patterns.
 
@@ -168,7 +168,7 @@ class HealthEconomicsEngine:
         depreciation_rate: float = 0.05,
         interest_rate: float = 0.12,
         medical_cost_index: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Grossman health capital model — optimal health investment.
 
@@ -231,7 +231,7 @@ class HealthEconomicsEngine:
         user_count: int,
         avg_monthly_income: float,
         region: str = "Kenya",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Health insurance coverage and gap analysis.
 
@@ -284,12 +284,12 @@ class HealthEconomicsEngine:
     @classmethod
     def full_health_economic_report(
         cls,
-        transactions: List[Any],
+        transactions: list[Any],
         region: str,
         user_count: int,
         avg_monthly_income: float,
         poverty_line_monthly: float = 8800,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Comprehensive health-economic intelligence report.
 
@@ -298,7 +298,7 @@ class HealthEconomicsEngine:
         report = {
             "product": "health_economics",
             "region": region,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         # 1. Health shock detection

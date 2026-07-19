@@ -16,7 +16,6 @@ All endpoints are privacy-preserving:
 
 import gzip
 import json
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,19 +23,15 @@ from fastapi.responses import Response
 
 from app.api.auth import get_current_user
 from app.models.user import User
-
 from app.schemas.dialect_dictionary import (
-    AggregationStatusResponse,
     DialectLookupResponse,
-    DialectModelVersion,
     DialectSubmitRequest,
     DialectSubmitResponse,
     ModelDistributionResponse,
 )
 from app.services.dialect_dictionary import get_dialect_dictionary
-from app.services.language_aggregator import get_language_aggregator
+from app.services.language_aggregator import DIALECT_REGIONS, get_language_aggregator
 from app.services.model_distribution import get_model_distribution
-from app.services.language_aggregator import DIALECT_REGIONS
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["Dialect Dictionary"])
@@ -101,7 +96,7 @@ async def submit_words(request: DialectSubmitRequest, user: User = Depends(get_c
 )
 async def lookup_word(
     q: str = Query(..., min_length=1, max_length=200, description="Search query (prefix match)"),
-    dialect: Optional[str] = Query(None, description="Filter by dialect code"),
+    dialect: str | None = Query(None, description="Filter by dialect code"),
     min_confidence: float = Query(0.0, ge=0.0, le=1.0, description="Minimum confidence threshold"),
     limit: int = Query(50, ge=1, le=500, description="Maximum results"),
 ):
@@ -139,7 +134,7 @@ async def lookup_word(
 )
 async def get_dialect_model(
     dialect: str,
-    client_version: Optional[str] = Query(None, description="Client's current version (e.g. '1.0.0')"),
+    client_version: str | None = Query(None, description="Client's current version (e.g. '1.0.0')"),
     compress: bool = Query(True, description="Return gzip-compressed payload"),
 ):
     """

@@ -12,11 +12,10 @@ Privacy model:
   to ensure the composed privacy budget is ε_total ≤ 0.2
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Client → Server (upload)
@@ -63,19 +62,19 @@ class FLUpdate(BaseModel):
     device_id: str = Field(..., description="SHA-256 hashed device ID (anonymized)")
     language: str = Field(..., description="Language code (e.g. 'sw', 'en', 'luo')")
     timestamp: int = Field(..., description="Device-side epoch milliseconds")
-    correction_patterns: List[AnonymizedPattern] = Field(
+    correction_patterns: list[AnonymizedPattern] = Field(
         default_factory=list,
         description="Anonymized correction patterns with differential privacy applied",
     )
-    adapter_deltas: Optional[str] = Field(
+    adapter_deltas: str | None = Field(
         None,
         description="Base64-encoded encrypted LoRA adapter weight deltas",
     )
-    calibration_params: Optional[CalibrationParams] = Field(
+    calibration_params: CalibrationParams | None = Field(
         None,
         description="Calibration parameters to merge into global model",
     )
-    metadata: Optional[UploadMetadata] = Field(
+    metadata: UploadMetadata | None = Field(
         None,
         description="Device training metadata",
     )
@@ -103,20 +102,20 @@ class GlobalModelResponse(BaseModel):
 
     version: str = Field(..., description="Model version (e.g. 'v3.2.1')")
     language: str = Field(..., description="Language/dialect code")
-    adapter_deltas: Optional[str] = Field(
+    adapter_deltas: str | None = Field(
         None,
         description="Base64-encoded aggregated LoRA adapter deltas",
     )
-    calibration_params: Optional[CalibrationParams] = Field(
+    calibration_params: CalibrationParams | None = Field(
         None,
         description="Global calibration parameters",
     )
-    vocabulary_updates: Optional[List[VocabularyUpdate]] = Field(
+    vocabulary_updates: list[VocabularyUpdate] | None = Field(
         None,
         description="Aggregated vocabulary updates",
     )
     timestamp: int = Field(
-        default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000),
+        default_factory=lambda: int(datetime.now(UTC).timestamp() * 1000),
         description="Server timestamp (epoch ms)",
     )
 
@@ -127,14 +126,14 @@ class FLStatusResponse(BaseModel):
     status: str = Field("ok", description="System status")
     total_updates_received: int = Field(0)
     active_devices: int = Field(0)
-    languages_supported: List[str] = Field(default_factory=list)
-    current_global_versions: Dict[str, str] = Field(
+    languages_supported: list[str] = Field(default_factory=list)
+    current_global_versions: dict[str, str] = Field(
         default_factory=dict,
         description="Current model version per language",
     )
-    last_aggregation_at: Optional[str] = Field(None)
+    last_aggregation_at: str | None = Field(None)
     aggregation_round: int = Field(0)
-    differential_privacy: Dict[str, Any] = Field(
+    differential_privacy: dict[str, Any] = Field(
         default_factory=lambda: {
             "epsilon": 0.1,
             "delta": 1e-5,
@@ -154,7 +153,7 @@ class UploadResponse(BaseModel):
     device_id: str = Field(..., description="Echoed device ID")
     language: str = Field(..., description="Echoed language")
     aggregated: bool = Field(False, description="Whether this update triggered aggregation")
-    next_download_version: Optional[str] = Field(
+    next_download_version: str | None = Field(
         None,
         description="New model version available for download, if any",
     )

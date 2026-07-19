@@ -29,8 +29,7 @@ Architecture:
 from __future__ import annotations
 
 import json
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -117,7 +116,7 @@ class LLMReActReasoner:
         )
     """
 
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: LLMService | None = None):
         self._llm = llm_service
         self._logger = logger.bind(component="llm_react_reasoner")
 
@@ -130,11 +129,11 @@ class LLMReActReasoner:
         self,
         agent_name: str,
         agent_role: str,
-        capabilities: List[str],
-        context: Dict[str, Any],
-        previous_steps: Optional[List[str]] = None,
-        config: Optional[LLMConfig] = None,
-    ) -> Dict[str, Any]:
+        capabilities: list[str],
+        context: dict[str, Any],
+        previous_steps: list[str] | None = None,
+        config: LLMConfig | None = None,
+    ) -> dict[str, Any]:
         """
         Generate LLM-powered reasoning for the ReAct think phase.
 
@@ -189,8 +188,8 @@ class LLMReActReasoner:
             return self._fallback_reasoning(agent_name, context)
 
     def _fallback_reasoning(
-        self, agent_name: str, context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, agent_name: str, context: dict[str, Any]
+    ) -> dict[str, Any]:
         """Heuristic fallback when LLM is unavailable."""
         return {
             "reasoning": f"Heuristic reasoning for {agent_name} (LLM unavailable)",
@@ -224,7 +223,7 @@ class LLMReflexionCritic:
         )
     """
 
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: LLMService | None = None):
         self._llm = llm_service
         self._logger = logger.bind(component="llm_reflexion_critic")
 
@@ -236,11 +235,11 @@ class LLMReflexionCritic:
     async def critique(
         self,
         task: str,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         language: str = "sw",
         attempt_number: int = 1,
-        config: Optional[LLMConfig] = None,
-    ) -> Dict[str, Any]:
+        config: LLMConfig | None = None,
+    ) -> dict[str, Any]:
         """
         Generate LLM-powered critique for the Reflexion loop.
 
@@ -295,8 +294,8 @@ class LLMReflexionCritic:
             return self._fallback_critique(result, attempt_number)
 
     def _fallback_critique(
-        self, result: Dict[str, Any], attempt_number: int
-    ) -> Dict[str, Any]:
+        self, result: dict[str, Any], attempt_number: int
+    ) -> dict[str, Any]:
         """Heuristic fallback critique."""
         score = 1.0
         issues = []
@@ -346,7 +345,7 @@ class LLMContentQualityAssessor:
         )
     """
 
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: LLMService | None = None):
         self._llm = llm_service
         self._logger = logger.bind(component="llm_content_quality")
 
@@ -360,8 +359,8 @@ class LLMContentQualityAssessor:
         content: str,
         content_type: str = "general",
         language: str = "sw",
-        config: Optional[LLMConfig] = None,
-    ) -> Dict[str, Any]:
+        config: LLMConfig | None = None,
+    ) -> dict[str, Any]:
         """
         Assess content quality using LLM.
 
@@ -411,7 +410,7 @@ class LLMContentQualityAssessor:
 
     def _fallback_assessment(
         self, content: str, content_type: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Heuristic fallback quality assessment."""
         score = 0.7  # Default decent score
         weaknesses = []
@@ -457,20 +456,20 @@ class LLMLoopIntegrator:
         quality = await integrator.quality_assessor.assess(...)
     """
 
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: LLMService | None = None):
         self.llm_service = llm_service
         self.reasoner = LLMReActReasoner(llm_service)
         self.critic = LLMReflexionCritic(llm_service)
         self.quality_assessor = LLMContentQualityAssessor(llm_service)
         self._logger = logger.bind(component="llm_loop_integrator")
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check LLM health for all integration points."""
         if self.llm_service:
             return await self.llm_service.health_check()
         return {"status": "no_llm_service"}
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get stats from the LLM service."""
         if self.llm_service:
             return self.llm_service.get_stats()

@@ -27,13 +27,11 @@ Academic references:
     - STA 346: Statistical quality control for outlier detection
 """
 
-import hashlib
 import math
 import re
-import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -42,7 +40,6 @@ from app.schemas.dialect_dictionary import (
     DialectSubmitRequest,
     DialectSubmitResponse,
     WordEntry,
-    WordSubmission,
 )
 
 logger = structlog.get_logger(__name__)
@@ -99,9 +96,18 @@ class _WordState:
     """Tracks a single word across all workers."""
 
     __slots__ = (
-        "word", "dialect", "alpha", "beta", "total_frequency",
-        "contexts", "pronunciation_ipa", "regions", "workers",
-        "first_seen", "last_seen", "frequency_history",
+        "alpha",
+        "beta",
+        "contexts",
+        "dialect",
+        "first_seen",
+        "frequency_history",
+        "last_seen",
+        "pronunciation_ipa",
+        "regions",
+        "total_frequency",
+        "word",
+        "workers",
     )
 
     def __init__(self, word: str, dialect: str):
@@ -111,14 +117,14 @@ class _WordState:
         self.alpha: float = BAYESIAN_ALPHA_PRIOR
         self.beta: float = BAYESIAN_BETA_PRIOR
         self.total_frequency: int = 0
-        self.contexts: List[str] = []
-        self.pronunciation_ipa: Optional[str] = None
+        self.contexts: list[str] = []
+        self.pronunciation_ipa: str | None = None
         self.regions: set = set()
         self.workers: set = set()  # hashed worker IDs
-        self.first_seen: str = datetime.now(timezone.utc).isoformat()
+        self.first_seen: str = datetime.now(UTC).isoformat()
         self.last_seen: str = self.first_seen
         # Track per-worker frequency for outlier detection
-        self.frequency_history: List[int] = []
+        self.frequency_history: list[int] = []
 
     @property
     def confidence(self) -> float:
@@ -152,19 +158,19 @@ class _DictionaryState:
 
     def reset(self):
         # {(word, dialect): _WordState}
-        self.entries: Dict[Tuple[str, str], _WordState] = {}
+        self.entries: dict[tuple[str, str], _WordState] = {}
         # {dialect: set of (word, dialect) keys}
-        self.by_dialect: Dict[str, set] = defaultdict(set)
+        self.by_dialect: dict[str, set] = defaultdict(set)
         # {region: set of (word, dialect) keys}
-        self.by_region: Dict[str, set] = defaultdict(set)
+        self.by_region: dict[str, set] = defaultdict(set)
         # {worker_id: set of (word, dialect) keys submitted}
-        self.worker_submissions: Dict[str, set] = defaultdict(set)
+        self.worker_submissions: dict[str, set] = defaultdict(set)
         # Submission counters
         self.total_submissions: int = 0
         self.total_accepted: int = 0
         self.total_rejected: int = 0
         # Rejection reason counts
-        self.rejection_reasons: Dict[str, int] = defaultdict(int)
+        self.rejection_reasons: dict[str, int] = defaultdict(int)
 
 
 _state = _DictionaryState()
@@ -220,7 +226,7 @@ def _is_gibberish(word: str) -> bool:
     return False
 
 
-def _is_frequency_outlier(frequency: int, history: List[int]) -> bool:
+def _is_frequency_outlier(frequency: int, history: list[int]) -> bool:
     """
     Detect if a frequency submission is a statistical outlier using IQR method.
 
@@ -243,7 +249,7 @@ def _is_frequency_outlier(frequency: int, history: List[int]) -> bool:
     return frequency > upper_fence
 
 
-def _validate_word(word: str, dialect: str) -> Tuple[bool, Optional[str]]:
+def _validate_word(word: str, dialect: str) -> tuple[bool, str | None]:
     """
     Validate a single word submission.
 
@@ -342,12 +348,12 @@ class DialectDictionaryService:
         """
         worker_id = request.worker_id
         region = request.region or "unknown"
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         words_received = 0
         words_accepted = 0
         words_rejected = 0
-        rejection_reasons: Dict[str, int] = defaultdict(int)
+        rejection_reasons: dict[str, int] = defaultdict(int)
 
         for ws in request.words:
             words_received += 1
@@ -436,7 +442,7 @@ class DialectDictionaryService:
     async def lookup(
         self,
         query: str,
-        dialect: Optional[str] = None,
+        dialect: str | None = None,
         min_confidence: float = 0.0,
         limit: int = 50,
     ) -> DialectLookupResponse:
@@ -456,7 +462,7 @@ class DialectDictionaryService:
             DialectLookupResponse with matching entries
         """
         query_lower = query.strip().lower()
-        results: List[WordEntry] = []
+        results: list[WordEntry] = []
 
         for key, ws in self._state.entries.items():
             word, entry_dialect = key
@@ -495,7 +501,7 @@ class DialectDictionaryService:
         dialect: str,
         min_confidence: float = 0.3,
         limit: int = 1000,
-    ) -> List[WordEntry]:
+    ) -> list[WordEntry]:
         """Get all words for a dialect that meet k-anonymity and confidence thresholds."""
         dialect = dialect.lower().strip()
         results = []
@@ -513,7 +519,7 @@ class DialectDictionaryService:
         results.sort(key=lambda e: (-e.confidence, -e.frequency))
         return results[:limit]
 
-    async def get_all_dialects(self) -> Dict[str, Dict[str, Any]]:
+    async def get_all_dialects(self) -> dict[str, dict[str, Any]]:
         """Get summary statistics for all dialects."""
         summary = {}
         for dialect, keys in self._state.by_dialect.items():
@@ -531,7 +537,7 @@ class DialectDictionaryService:
             }
         return summary
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get overall dictionary statistics."""
         total_workers = len(self._state.worker_submissions)
         total_shared = sum(
@@ -552,7 +558,7 @@ class DialectDictionaryService:
 
 
 # Module-level singleton
-_dictionary_service: Optional[DialectDictionaryService] = None
+_dictionary_service: DialectDictionaryService | None = None
 
 
 def get_dialect_dictionary() -> DialectDictionaryService:

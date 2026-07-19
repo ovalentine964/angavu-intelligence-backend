@@ -62,8 +62,8 @@ Buyers: Government (KNBS, CBK, county governments)
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -76,18 +76,9 @@ from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.game_theory import NashEquilibriumSolver
 from app.services.intelligence.cache import intelligence_cache
-from app.services.intelligence.markov_chains import MarkovChainAnalyzer, markov_analyzer
-from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BayesianUpdater,
-    BootstrapInference,
-    ClusterAnalyzer,
-    DEAAnalyzer,
-    KernelDensityEstimator,
-    MonteCarloEngine,
-    PCAAnalyzer,
-    SFAAnalyzer,
     bayesian_updater,
     bootstrap,
     kde_estimator,
@@ -211,7 +202,7 @@ def _tornqvist_index(
 
 def _hodrick_prescott_filter(
     series: np.ndarray, lambd: float = 1600
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Hodrick-Prescott filter: separates trend from cycle.
 
@@ -292,7 +283,7 @@ def _bootstrap_ci(
     n_bootstrap: int = 1000,
     confidence: float = 0.95,
     seed: int = 42,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Bootstrap confidence interval for any statistic.
 
@@ -402,10 +393,10 @@ class BiasharaPulseService:
     async def generate_activity_index(
         self,
         region: str,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        period_start: date | None = None,
+        period_end: date | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Generate MSME activity index for a region.
 
@@ -688,8 +679,8 @@ class BiasharaPulseService:
         response = {
             "product": "biashara_pulse",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, user_count / 100),
             "confidence_level": min(1.0, len(sales) / 100),
@@ -774,7 +765,7 @@ class BiasharaPulseService:
         sector_breakdown: list,
         user_count: int,
         region: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -786,7 +777,7 @@ class BiasharaPulseService:
         if len(sales) < 20:
             return None
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for revenue distribution ──────────────────────────
         try:
@@ -812,7 +803,7 @@ class BiasharaPulseService:
         # ── STA 444: Kruskal-Wallis — compare revenue across sectors ───────
         if len(sector_breakdown) >= 3:
             try:
-                sector_revenues: Dict[str, list] = defaultdict(list)
+                sector_revenues: dict[str, list] = defaultdict(list)
                 for t in sales:
                     cat = t.item_category or "other"
                     sector_revenues[cat].append(float(t.amount))
@@ -887,7 +878,7 @@ class BiasharaPulseService:
         sales: list,
         sector_breakdown: list,
         user_count: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Markov chain analysis of business state transitions (STA 347).
 
@@ -901,9 +892,8 @@ class BiasharaPulseService:
         try:
             # Group transactions by user and week to build state sequences
             from collections import defaultdict
-            import math
 
-            user_weekly: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+            user_weekly: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
             for t in sales:
                 week_key = t.timestamp.strftime("%Y-W%W")
                 user_weekly[str(t.user_id)][week_key] += t.amount
@@ -989,7 +979,7 @@ class BiasharaPulseService:
         user_count: int,
         total_revenue: float,
         days_in_period: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Bayesian estimation of business health metrics (STA 341).
 
@@ -1002,7 +992,7 @@ class BiasharaPulseService:
 
         try:
             # Compute per-user revenue
-            user_rev: Dict[str, float] = defaultdict(float)
+            user_rev: dict[str, float] = defaultdict(float)
             for t in sales:
                 user_rev[str(t.user_id)] += t.amount
 
@@ -1059,7 +1049,7 @@ class BiasharaPulseService:
         sales: list,
         sector_breakdown: list,
         user_count: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         DEA & SFA production frontier analysis (ECO 311, ECO 422).
 
@@ -1076,7 +1066,7 @@ class BiasharaPulseService:
             # Build DMU data: each user is a DMU
             # Inputs: number of transactions (labor proxy)
             # Outputs: total revenue
-            user_metrics: Dict[str, Dict[str, float]] = defaultdict(lambda: {"txn_count": 0, "revenue": 0.0})
+            user_metrics: dict[str, dict[str, float]] = defaultdict(lambda: {"txn_count": 0, "revenue": 0.0})
             for t in sales:
                 uid = str(t.user_id)
                 user_metrics[uid]["txn_count"] += 1

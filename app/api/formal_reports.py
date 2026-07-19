@@ -9,10 +9,9 @@ and get a loan approved.
 """
 
 from datetime import date
-from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 

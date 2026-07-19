@@ -18,25 +18,23 @@ NOT via WhatsApp — deep analysis is too detailed for chat delivery.
 Workers see results in the Msaidizi app with rich visualizations.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.user import User
-from app.services.intelligence_delivery import IntelligenceDelivery
-from app.services.pipeline import DataPipeline
-from app.services.health_score import BusinessHealthScorer
+from app.services.causal_inference import CausalInferenceEngine
 from app.services.comparison_engine import ComparisonEngine
 from app.services.econometric_engine import EconometricEngine
-from app.services.causal_inference import CausalInferenceEngine
+from app.services.health_score import BusinessHealthScorer
+from app.services.pipeline import DataPipeline
 from app.services.seasonal_analyzer import SeasonalAnalyzer
-from app.services.drift_detector import ModelDriftMonitor
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/analysis", tags=["Deep Analysis"])
@@ -90,7 +88,7 @@ class DeepAnalysisRequest(BaseModel):
         True,
         description="Include growth forecast",
     )
-    context: Optional[Dict[str, Any]] = Field(
+    context: dict[str, Any] | None = Field(
         None,
         description="Additional context from the app (e.g., specific product, time range)",
     )
@@ -102,8 +100,8 @@ class AnalysisInsight(BaseModel):
     title: str
     detail: str
     priority: str = Field("medium", pattern=r"^(low|medium|high|critical)$")
-    action_items: List[str] = Field(default_factory=list)
-    expected_impact: Optional[str] = None
+    action_items: list[str] = Field(default_factory=list)
+    expected_impact: str | None = None
 
 
 class DeepAnalysisResponse(BaseModel):
@@ -124,19 +122,19 @@ class DeepAnalysisResponse(BaseModel):
     summary_detailed: str
 
     # Insights
-    insights: List[AnalysisInsight] = Field(default_factory=list)
+    insights: list[AnalysisInsight] = Field(default_factory=list)
 
     # Metrics
-    metrics: Dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
 
     # Peer comparison (if requested)
-    peer_comparison: Optional[Dict[str, Any]] = None
+    peer_comparison: dict[str, Any] | None = None
 
     # Forecast (if requested)
-    forecast: Optional[Dict[str, Any]] = None
+    forecast: dict[str, Any] | None = None
 
     # Recommendations
-    recommendations: List[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
 
     # Meta
     period_start: date
@@ -383,7 +381,7 @@ async def deep_analysis(
         response = DeepAnalysisResponse(
             worker_id=request.worker_id,
             analysis_type=request.analysis_type,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             language=request.language,
             business_health_score=health_score,
             health_label=_t(health_label, lang),
@@ -442,8 +440,8 @@ async def deep_analysis(
 
 
 async def _analyze_business_health(
-    metrics: Dict, health_result: Dict, language: str
-) -> List[AnalysisInsight]:
+    metrics: dict, health_result: dict, language: str
+) -> list[AnalysisInsight]:
     """Generate business health insights."""
     insights = []
 
@@ -494,13 +492,11 @@ async def _analyze_profit_optimization(
     period_start: date,
     period_end: date,
     language: str,
-) -> List[AnalysisInsight]:
+) -> list[AnalysisInsight]:
     """Generate profit optimization insights."""
     insights = []
 
     # Get top products
-    from sqlalchemy import and_, func, select
-    from app.models.transaction import Transaction
 
     # This would be more sophisticated in production
     insights.append(AnalysisInsight(
@@ -524,9 +520,9 @@ async def _analyze_profit_optimization(
 async def _analyze_peer_comparison(
     comparison_engine: ComparisonEngine,
     user: User,
-    metrics: Dict,
+    metrics: dict,
     language: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate peer comparison data."""
     try:
         # In production, this would use real peer data
@@ -554,7 +550,7 @@ async def _generate_forecast(
     period_start: date,
     period_end: date,
     language: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate growth forecast."""
     return {
         "available": True,
@@ -573,9 +569,9 @@ async def _generate_forecast(
 
 async def _analyze_credit_readiness(
     health_score: int,
-    metrics: Dict,
+    metrics: dict,
     language: str,
-) -> List[AnalysisInsight]:
+) -> list[AnalysisInsight]:
     """Generate credit readiness insights."""
     insights = []
 
@@ -615,7 +611,7 @@ async def _analyze_seasonal(
     seasonal_analyzer: SeasonalAnalyzer,
     user_id,
     language: str,
-) -> List[AnalysisInsight]:
+) -> list[AnalysisInsight]:
     """Generate seasonal insights."""
     insights = []
     month = date.today().month
@@ -648,10 +644,8 @@ async def _analyze_inventory(
     pipeline: DataPipeline,
     user_id,
     language: str,
-) -> List[AnalysisInsight]:
+) -> list[AnalysisInsight]:
     """Generate inventory optimization insights."""
-    from sqlalchemy import and_, select
-    from app.models.transaction import Inventory
 
     insights = []
 
@@ -678,7 +672,7 @@ async def _analyze_inventory(
 def _build_summary(
     health_score: int,
     health_label: str,
-    metrics: Dict,
+    metrics: dict,
     language: str,
 ) -> str:
     """Build a one-line summary."""
@@ -701,8 +695,8 @@ def _build_detailed_summary(
     health_score: int,
     health_label: str,
     health_trend: str,
-    metrics: Dict,
-    insights: List[AnalysisInsight],
+    metrics: dict,
+    insights: list[AnalysisInsight],
     language: str,
 ) -> str:
     """Build a detailed summary paragraph."""

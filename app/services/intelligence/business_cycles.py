@@ -19,9 +19,7 @@ Key Applications:
 This module is wired into GDPEstimatorService for cycle analysis.
 """
 
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -70,7 +68,7 @@ class BusinessCycleAnalyzer:
         cls,
         revenue_series: np.ndarray,
         window: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect current business cycle phase from revenue data.
 
@@ -144,9 +142,9 @@ class BusinessCycleAnalyzer:
     @classmethod
     def composite_economic_index(
         cls,
-        indicators: Dict[str, np.ndarray],
-        weights: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
+        indicators: dict[str, np.ndarray],
+        weights: dict[str, float] | None = None,
+    ) -> dict[str, Any]:
         """
         Construct Composite Economic Index from multiple indicators.
 
@@ -236,7 +234,7 @@ class BusinessCycleAnalyzer:
         revenue_series: np.ndarray,
         transaction_series: np.ndarray,
         lookback_months: int = 6,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate recession probability from transaction data.
 
@@ -311,7 +309,7 @@ class BusinessCycleAnalyzer:
         cls,
         inflation_series: np.ndarray,
         unemployment_proxy: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Phillips Curve trade-off analysis.
 
@@ -367,8 +365,8 @@ class BusinessCycleAnalyzer:
     @classmethod
     def leading_indicator_report(
         cls,
-        indicators: Dict[str, np.ndarray],
-    ) -> Dict[str, Any]:
+        indicators: dict[str, np.ndarray],
+    ) -> dict[str, Any]:
         """
         Construct and interpret leading economic indicators.
 

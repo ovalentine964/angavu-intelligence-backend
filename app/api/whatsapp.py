@@ -16,11 +16,10 @@ WhatsApp is NOT for:
 
 import hashlib
 import hmac
-from typing import Optional
 
 import httpx
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,15 +36,15 @@ class WhatsAppMessage(BaseModel):
     """Incoming WhatsApp message from OpenWA."""
 
     from_number: str = Field(..., alias="from")
-    message_id: Optional[str] = None
-    timestamp: Optional[str] = None
+    message_id: str | None = None
+    timestamp: str | None = None
     type: str = Field("text", description="text, voice, image, document")
-    body: Optional[str] = None
-    media_url: Optional[str] = None
-    caption: Optional[str] = None
+    body: str | None = None
+    media_url: str | None = None
+    caption: str | None = None
     is_group: bool = False
-    group_id: Optional[str] = None
-    push_name: Optional[str] = None
+    group_id: str | None = None
+    push_name: str | None = None
 
 
 class WebhookPayload(BaseModel):
@@ -117,7 +116,7 @@ async def whatsapp_webhook(
         logger.error("whatsapp_webhook_parse_error", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid payload: {str(e)}",
+            detail=f"Invalid payload: {e!s}",
         )
 
     # Only process text and voice messages

@@ -10,11 +10,9 @@ with appropriate tools, memory configuration, and MCP tool definitions.
 
 from __future__ import annotations
 
-import asyncio
 import time
-import uuid
-from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import structlog
 
@@ -24,7 +22,6 @@ from app.agents.base import (
     AgentResult,
     AgentStatus,
     BiasharaAgent,
-    EventType,
 )
 from app.agents.memory.tiered import (
     MemoryImportance,
@@ -63,8 +60,8 @@ class FinancialAgent(BiasharaAgent):
             agent_name=name,
             working_max_tokens=working_max_tokens,
         )
-        self._requires_human_approval: List[str] = []  # actions that need approval
-        self._pending_approvals: Dict[str, AgentDecision] = {}
+        self._requires_human_approval: list[str] = []  # actions that need approval
+        self._pending_approvals: dict[str, AgentDecision] = {}
 
     def set_tracer(self, tracer: Any) -> None:
         super().set_tracer(tracer)
@@ -173,7 +170,7 @@ class FinancialAgent(BiasharaAgent):
                 duration_ms=(time.time() - cycle_start) * 1000,
             )
 
-    async def approve_decision(self, decision_id: str) -> Optional[AgentResult]:
+    async def approve_decision(self, decision_id: str) -> AgentResult | None:
         """Process a human-approved decision."""
         decision = self._pending_approvals.pop(decision_id, None)
         if not decision:
@@ -216,7 +213,7 @@ class CreditScoringAgent(FinancialAgent):
         )
         self._requires_human_approval = ["deny_credit", "approve_high_risk_loan"]
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         user_id = payload.get("user_id", "")
@@ -276,7 +273,7 @@ class CashFlowForecastAgent(FinancialAgent):
             capabilities=["cash_flow_forecasting", "trend_analysis", "seasonal_modeling"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         user_id = payload.get("user_id", "")
@@ -317,7 +314,7 @@ class MarketAnalysisAgent(FinancialAgent):
             capabilities=["market_analysis", "price_monitoring", "arbitrage_detection"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="analyze_market",
             parameters=context.get("event", {}).get("payload", {}),
@@ -358,7 +355,7 @@ class TaxComplianceAgent(FinancialAgent):
         )
         self._requires_human_approval = ["file_tax_return"]
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="calculate_tax",
             parameters=context.get("event", {}).get("payload", {}),
@@ -401,7 +398,7 @@ class FormalizationAgent(FinancialAgent):
         )
         self._requires_human_approval = ["recommend_formalization"]
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="assess_formalization_readiness",
             parameters=context.get("event", {}).get("payload", {}),
@@ -447,7 +444,7 @@ class AnomalyDetectionAgent(FinancialAgent):
             capabilities=["anomaly_detection", "fraud_detection", "error_detection"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="detect_anomalies",
             parameters=context.get("event", {}).get("payload", {}),
@@ -493,7 +490,7 @@ class SupplierMatchingAgent(FinancialAgent):
             capabilities=["supplier_matching", "buyer_matching", "marketplace"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="match_suppliers",
             parameters=context.get("event", {}).get("payload", {}),
@@ -534,7 +531,7 @@ class InventoryOptimizationAgent(FinancialAgent):
             capabilities=["demand_forecasting", "reorder_optimization", "waste_reduction"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="optimize_inventory",
             parameters=context.get("event", {}).get("payload", {}),
@@ -576,7 +573,7 @@ class FinancialHealthAgent(FinancialAgent):
             capabilities=["financial_analysis", "health_scoring", "recommendations"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="generate_health_report",
             parameters=context.get("event", {}).get("payload", {}),
@@ -626,7 +623,7 @@ class RegulatoryIntelligenceAgent(FinancialAgent):
             capabilities=["regulatory_monitoring", "compliance_alerting", "impact_analysis"],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         return AgentDecision(
             action="check_regulations",
             parameters=context.get("event", {}).get("payload", {}),
@@ -659,7 +656,7 @@ class RegulatoryIntelligenceAgent(FinancialAgent):
 # ════════════════════════════════════════════════════════════════════
 
 
-def create_all_financial_agents() -> List[FinancialAgent]:
+def create_all_financial_agents() -> list[FinancialAgent]:
     """Create all 10 financial agent templates."""
     return [
         CreditScoringAgent(),
@@ -675,7 +672,7 @@ def create_all_financial_agents() -> List[FinancialAgent]:
     ]
 
 
-def get_financial_agent_mcp_tools() -> List[MCPTool]:
+def get_financial_agent_mcp_tools() -> list[MCPTool]:
     """Get MCP tool definitions for all financial agents."""
     return [
         MCPTool(

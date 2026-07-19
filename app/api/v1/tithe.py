@@ -11,7 +11,6 @@ All responses include Swahili and English messages.
 """
 
 from datetime import date
-from typing import Optional
 from uuid import UUID
 
 import structlog
@@ -45,7 +44,7 @@ class TitheRecordRequest(BaseModel):
         description="Input method: 'manual', 'voice', or 'mpesa_parse'",
         pattern="^(manual|voice|mpesa_parse)$",
     )
-    recipient: Optional[str] = Field(
+    recipient: str | None = Field(
         default=None, max_length=200,
         description="Church, mosque, person, or community name",
     )
@@ -57,19 +56,19 @@ class TitheRecordRequest(BaseModel):
         ),
         pattern="^(tithe|offering|zakat|harambee|charity|building_fund|missions|custom)$",
     )
-    giving_date: Optional[date] = Field(
+    giving_date: date | None = Field(
         default=None,
         description="Date of giving (YYYY-MM-DD). Defaults to today.",
     )
-    custom_category_name: Optional[str] = Field(
+    custom_category_name: str | None = Field(
         default=None, max_length=100,
         description="Custom category label when purpose='custom'",
     )
-    voice_transcript: Optional[str] = Field(
+    voice_transcript: str | None = Field(
         default=None,
         description="Raw voice input transcription, if applicable",
     )
-    notes: Optional[str] = Field(default=None, description="Optional notes")
+    notes: str | None = Field(default=None, description="Optional notes")
 
 
 class TitheRecordResponse(BaseModel):
@@ -79,11 +78,11 @@ class TitheRecordResponse(BaseModel):
     amount: float
     currency: str
     category: str
-    recipient: Optional[str]
+    recipient: str | None
     giving_date: str
     month_total: float
     consistency: dict
-    encouragement: Optional[dict]
+    encouragement: dict | None
 
 
 class TitheReportResponse(BaseModel):
@@ -97,10 +96,10 @@ class TitheReportResponse(BaseModel):
     by_recipient: dict
     record_count: int
     consistency: dict
-    best_month: Optional[dict]
+    best_month: dict | None
     previous_period_total: float
     change_from_previous: float
-    change_pct: Optional[float]
+    change_pct: float | None
     message_sw: str
     message_en: str
 
@@ -109,14 +108,14 @@ class AbundanceResponse(BaseModel):
     """Response for abundance pattern analysis."""
 
     status: str
-    months_analyzed: Optional[int]
-    income_trend: Optional[str]
-    giving_trend: Optional[str]
-    avg_giving_pct: Optional[float]
-    abundance_score: Optional[float]
-    pattern: Optional[str]
-    creditworthiness_signal: Optional[str]
-    monthly_data: Optional[list]
+    months_analyzed: int | None
+    income_trend: str | None
+    giving_trend: str | None
+    avg_giving_pct: float | None
+    abundance_score: float | None
+    pattern: str | None
+    creditworthiness_signal: str | None
+    monthly_data: list | None
     insight: dict
 
 
@@ -193,8 +192,8 @@ async def giving_report(
         pattern="^(weekly|monthly|yearly)$",
         description="Report period: 'weekly', 'monthly', or 'yearly'",
     ),
-    year: Optional[int] = Query(None, description="Year for the report"),
-    month: Optional[int] = Query(None, ge=1, le=12, description="Month (1-12) for monthly reports"),
+    year: int | None = Query(None, description="Year for the report"),
+    month: int | None = Query(None, ge=1, le=12, description="Month (1-12) for monthly reports"),
     db: AsyncSession = Depends(get_db),
 ):
     """

@@ -23,11 +23,11 @@ Content pillars:
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
+from app.agents.base import AgentDecision, AgentResult, EventType
 from app.autonomous.agents.base import AutonomousAgent
 from app.autonomous.config import AgentConfig
 
@@ -37,7 +37,7 @@ logger = structlog.get_logger(__name__)
 # ── Content templates and configuration ────────────────────────────
 
 # Industry-relevant topics for Angavu Intelligence
-TOPIC_LIBRARY: Dict[str, List[str]] = {
+TOPIC_LIBRARY: dict[str, list[str]] = {
     "blog_post": [
         "How AI-Powered Market Intelligence Transforms African SMEs",
         "5 Ways Real-Time Price Forecasting Reduces Stock Losses",
@@ -62,7 +62,7 @@ TOPIC_LIBRARY: Dict[str, List[str]] = {
 }
 
 # SEO keyword clusters for Angavu's domain
-KEYWORD_CLUSTERS: Dict[str, List[str]] = {
+KEYWORD_CLUSTERS: dict[str, list[str]] = {
     "primary": [
         "African market intelligence",
         "SME business analytics",
@@ -99,7 +99,7 @@ class ContentAgent(AutonomousAgent):
         EventType.FEEDBACK_RECEIVED,
     ]
 
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         super().__init__(
             name="ContentAgent",
             role="Autonomous Content — creation, distribution, SEO",
@@ -115,9 +115,9 @@ class ContentAgent(AutonomousAgent):
         )
 
         # Content pipeline state
-        self._content_calendar: List[Dict[str, Any]] = []
-        self._published_content: List[Dict[str, Any]] = []
-        self._topic_queue: List[Dict[str, Any]] = []
+        self._content_calendar: list[dict[str, Any]] = []
+        self._published_content: list[dict[str, Any]] = []
+        self._topic_queue: list[dict[str, Any]] = []
 
         # SEO keywords (financial inclusion domain)
         self._target_keywords = [
@@ -155,7 +155,7 @@ class ContentAgent(AutonomousAgent):
         self.tools.register("create_content", self._create_content, "Draft content piece")
         self.tools.register("optimize_seo", self._optimize_seo, "SEO optimization pass")
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Analyze context and decide what content action to take.
 
@@ -276,7 +276,7 @@ class ContentAgent(AutonomousAgent):
 
     # ── Content Operations ──────────────────────────────────────────
 
-    async def _create_content(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _create_content(self, params: dict[str, Any]) -> dict[str, Any]:
         """Create a content piece."""
         topic = params.get("topic", "Untitled")
         pillar = params.get("pillar", "thought_leadership")
@@ -319,7 +319,7 @@ class ContentAgent(AutonomousAgent):
 
         return content
 
-    async def _research_topics(self) -> Dict[str, Any]:
+    async def _research_topics(self) -> dict[str, Any]:
         """Research trending topics for content creation."""
         # Analyze recent intelligence for content signals
         topics = []
@@ -338,7 +338,7 @@ class ContentAgent(AutonomousAgent):
         self._logger.info("topics_researched", count=len(topics))
         return {"topics_found": len(topics), "topics": topics}
 
-    async def _adjust_strategy(self, feedback: Dict[str, Any]) -> Dict[str, Any]:
+    async def _adjust_strategy(self, feedback: dict[str, Any]) -> dict[str, Any]:
         """Adjust content strategy based on performance feedback."""
         engagement = feedback.get("engagement_rate", 0)
         if engagement < 0.02:  # Less than 2% engagement
@@ -349,7 +349,7 @@ class ContentAgent(AutonomousAgent):
             }
         return {"adjustment": "maintain", "engagement_rate": engagement}
 
-    def _select_keywords(self, topic: str) -> List[str]:
+    def _select_keywords(self, topic: str) -> list[str]:
         """Select relevant SEO keywords for a topic."""
         topic_lower = topic.lower()
         relevant = [kw for kw in self._target_keywords if any(
@@ -360,7 +360,7 @@ class ContentAgent(AutonomousAgent):
             relevant.extend(self._target_keywords[:2])
         return relevant[:5]
 
-    def _extract_topic_from_intelligence(self, payload: Dict[str, Any]) -> str:
+    def _extract_topic_from_intelligence(self, payload: dict[str, Any]) -> str:
         """Extract a content topic from intelligence data."""
         if payload.get("market_insight"):
             return f"Market Analysis: {payload['market_insight'][:50]}"
@@ -368,7 +368,7 @@ class ContentAgent(AutonomousAgent):
             return f"Trend Alert: {payload['trend'][:50]}"
         return "Industry Intelligence Update"
 
-    def _get_due_content(self) -> List[Dict[str, Any]]:
+    def _get_due_content(self) -> list[dict[str, Any]]:
         """Get content items due for creation."""
         now = time.time()
         due = [item for item in self._content_calendar if item.get("due_at", 0) <= now]

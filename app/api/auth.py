@@ -9,12 +9,11 @@ Handles:
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
+import jwt as pyjwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import jwt as pyjwt
 from jwt.exceptions import PyJWTError as JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
@@ -41,14 +40,14 @@ class DeviceRegisterRequest(BaseModel):
 
     phone: str = Field(..., min_length=10, max_length=15)
     device_id: str = Field(..., max_length=100)
-    name: Optional[str] = Field(None, max_length=200)
+    name: str | None = Field(None, max_length=200)
     business_type: str = Field(
         "dukawallah",
         pattern=r"^(dukawallah|mama_mboga|boda_boda|vendor|tailor|restaurant|other)$",
     )
     language: str = Field("sw", pattern=r"^(sw|en|sh)$")
-    location_geohash: Optional[str] = Field(None, max_length=12)
-    location_name: Optional[str] = Field(None, max_length=200)
+    location_geohash: str | None = Field(None, max_length=12)
+    location_name: str | None = Field(None, max_length=200)
 
 
 class TokenResponse(BaseModel):
@@ -95,7 +94,7 @@ def _get_verification_key() -> str:
 
 def create_access_token(
     data: dict,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """
     Create a JWT access token.
@@ -112,7 +111,7 @@ def create_access_token(
     Returns:
         Encoded JWT string
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     to_encode = data.copy()
     expire = now + (
         expires_delta
@@ -137,9 +136,9 @@ def create_access_token(
     )
 
 
-def create_refresh_token(data: dict, family: Optional[str] = None) -> str:
+def create_refresh_token(data: dict, family: str | None = None) -> str:
     """Create a JWT refresh token with longer expiry and token family tracking."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     to_encode = data.copy()
     expire = now + timedelta(
         days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
@@ -192,7 +191,7 @@ def decode_token(token: str) -> dict:
             },
         )
         return payload
-    except JWTError as e:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",  # Don't leak specific error details
@@ -320,7 +319,7 @@ async def get_buyer_from_api_key(
         )
 
     # Update last used timestamp
-    api_key_obj.last_used_at = datetime.now(timezone.utc)
+    api_key_obj.last_used_at = datetime.now(UTC)
 
     # Get the buyer
     result = await db.execute(
@@ -369,7 +368,7 @@ async def register_device(
     if user:
         # Existing user — update device info
         user.device_id = request.device_id
-        user.last_sync_at = datetime.now(timezone.utc)
+        user.last_sync_at = datetime.now(UTC)
     else:
         # New user — encrypt phone and create
         from app.utils.crypto import encrypt_value
@@ -490,7 +489,7 @@ async def refresh_token(
 
     # Mark current token as used
     rt_record.used = True
-    rt_record.used_at = datetime.now(timezone.utc)
+    rt_record.used_at = datetime.now(UTC)
 
     # Verify user still exists and is active
     result = await db.execute(

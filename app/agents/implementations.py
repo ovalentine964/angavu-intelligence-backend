@@ -17,15 +17,14 @@ The agents add event-driven coordination, memory, and observability.
 from __future__ import annotations
 
 import time
-from datetime import date, datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
     AgentDecision,
     AgentEvent,
-    AgentMessage,
     AgentResult,
     BiasharaAgent,
     EventType,
@@ -91,7 +90,7 @@ class TransactionProcessorAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide how to process the incoming transaction data.
 
@@ -192,7 +191,7 @@ class TransactionProcessorAgent(BiasharaAgent):
                 payload={
                     "user_id": user_id,
                     "is_batch": is_batch,
-                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "processed_at": datetime.now(UTC).isoformat(),
                     "status": "cleaned_and_validated",
                     "records_cleaned": len(cleaned_records),
                 },
@@ -291,7 +290,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide which intelligence products to generate.
 
@@ -466,7 +465,7 @@ class IntelligenceGeneratorAgent(BiasharaAgent):
                     "products_generated": products,
                     "has_forecast": forecast_result is not None,
                     "has_credit_score": score_result is not None,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 },
             ))
 
@@ -581,7 +580,7 @@ class ReportGeneratorAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide which report type to generate.
 
@@ -690,7 +689,7 @@ class ReportGeneratorAgent(BiasharaAgent):
                     "report_type": report_type,
                     "language": language,
                     "service_called": self._report_generator is not None,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -702,7 +701,7 @@ class ReportGeneratorAgent(BiasharaAgent):
                     "user_id": user_id,
                     "report_type": report_type,
                     "channel": "whatsapp",
-                    "delivered_at": datetime.now(timezone.utc).isoformat(),
+                    "delivered_at": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -792,7 +791,7 @@ class SelfEvolutionAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide how to process feedback.
 
@@ -898,7 +897,7 @@ class SelfEvolutionAgent(BiasharaAgent):
                         "feedback_type": feedback_type,
                         "cluster_size": decision.parameters.get("feedback_count", 0),
                         "service_called": self._evolution_service is not None,
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "generated_at": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -945,7 +944,7 @@ def create_all_agents(
     alama_score: Any = None,
     report_generator: Any = None,
     evolution_service: Any = None,
-) -> List[BiasharaAgent]:
+) -> list[BiasharaAgent]:
     """
     Create all four agents for the standard pipeline.
 

@@ -40,11 +40,11 @@ import math
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 import structlog
 
@@ -82,14 +82,14 @@ class LearningSignal:
     signal_type: SignalType = SignalType.SUCCESS
     source_event_id: str = ""
     timestamp: float = field(default_factory=time.time)
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     outcome_value: float = 0.0       # Normalized outcome (-1 to 1)
     expected_value: float = 0.0      # What we predicted
     surprise: float = 0.0            # |outcome - expected|
     weight: float = 1.0              # Importance weight (decays with time)
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "signal_id": self.signal_id,
             "signal_type": self.signal_type.value,
@@ -114,7 +114,7 @@ class Pattern:
     context_signature: str = ""      # Hash of common context keys
     recommendation: str = ""         # What to do about it
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pattern_id": self.pattern_id,
             "description": self.description,
@@ -136,7 +136,7 @@ class StrategyParameter:
     max_value: float = 1.0
     update_count: int = 0
     last_updated: float = field(default_factory=time.time)
-    performance_history: List[Tuple[float, float]] = field(default_factory=list)
+    performance_history: list[tuple[float, float]] = field(default_factory=list)
     # (value, outcome_score) pairs
 
     def update(self, new_value: float, outcome_score: float) -> None:
@@ -154,7 +154,7 @@ class StrategyParameter:
             return self.current_value
         return max(self.performance_history, key=lambda x: x[1])[0]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "current_value": round(self.current_value, 4),
@@ -180,9 +180,9 @@ class ABTestResult:
     significant: bool = False
     winner: str = ""  # "control" | "treatment" | "inconclusive"
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "test_id": self.test_id,
             "parameter_name": self.parameter_name,
@@ -200,7 +200,7 @@ class ABTestResult:
 class FeedbackMetrics:
     """Aggregated feedback loop performance metrics."""
     total_signals: int = 0
-    signals_by_type: Dict[str, int] = field(default_factory=dict)
+    signals_by_type: dict[str, int] = field(default_factory=dict)
     patterns_detected: int = 0
     strategies_updated: int = 0
     rollbacks: int = 0
@@ -208,7 +208,7 @@ class FeedbackMetrics:
     avg_surprise: float = 0.0
     improvement_rate: float = 0.0  # % of updates that improved outcomes
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_signals": self.total_signals,
             "signals_by_type": self.signals_by_type,
@@ -265,38 +265,38 @@ class FeedbackAgent(BiasharaAgent):
         name: str,
         role: str,
         capabilities: Sequence[str],
-        parameters: Optional[Dict[str, StrategyParameter]] = None,
+        parameters: dict[str, StrategyParameter] | None = None,
         decay_half_life_hours: float = 168.0,  # 1 week
         min_signals_for_pattern: int = 5,
         min_signals_for_update: int = 10,
         ab_test_min_samples: int = 20,
     ):
         super().__init__(name, role, capabilities)
-        self._parameters: Dict[str, StrategyParameter] = parameters or {}
-        self._signals: List[LearningSignal] = []
+        self._parameters: dict[str, StrategyParameter] = parameters or {}
+        self._signals: list[LearningSignal] = []
         self._max_signals = 5000
-        self._patterns: List[Pattern] = []
-        self._ab_tests: List[ABTestResult] = []
+        self._patterns: list[Pattern] = []
+        self._ab_tests: list[ABTestResult] = []
         self._metrics = FeedbackMetrics()
         self._decay_half_life = decay_half_life_hours * 3600  # convert to seconds
         self._min_signals_for_pattern = min_signals_for_pattern
         self._min_signals_for_update = min_signals_for_update
         self._ab_test_min_samples = ab_test_min_samples
-        self._pending_rollback: Optional[Dict[str, float]] = None
+        self._pending_rollback: dict[str, float] | None = None
 
     @property
-    def parameters(self) -> Dict[str, StrategyParameter]:
+    def parameters(self) -> dict[str, StrategyParameter]:
         """Access current strategy parameters."""
         return self._parameters
 
-    def get_parameter(self, name: str) -> Optional[float]:
+    def get_parameter(self, name: str) -> float | None:
         """Get current value of a strategy parameter."""
         p = self._parameters.get(name)
         return p.current_value if p else None
 
     # ── Core loop ──────────────────────────────────────────────────
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Process context through feedback learning pipeline."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -452,7 +452,7 @@ class FeedbackAgent(BiasharaAgent):
             tags=self._extract_tags(payload),
         )
 
-    async def _compute_outcome_value(self, payload: Dict[str, Any]) -> float:
+    async def _compute_outcome_value(self, payload: dict[str, Any]) -> float:
         """
         Compute normalized outcome value from payload.
 
@@ -463,7 +463,7 @@ class FeedbackAgent(BiasharaAgent):
             return 1.0
         return 0.0
 
-    async def _compute_expected_value(self, payload: Dict[str, Any]) -> float:
+    async def _compute_expected_value(self, payload: dict[str, Any]) -> float:
         """
         Compute expected outcome value.
 
@@ -477,7 +477,7 @@ class FeedbackAgent(BiasharaAgent):
         age = time.time() - timestamp
         return math.exp(-0.693 * age / self._decay_half_life)  # ln(2) ≈ 0.693
 
-    def _extract_tags(self, payload: Dict[str, Any]) -> List[str]:
+    def _extract_tags(self, payload: dict[str, Any]) -> list[str]:
         """Extract tags from payload for pattern grouping."""
         tags = []
         if "product_type" in payload:
@@ -506,7 +506,7 @@ class FeedbackAgent(BiasharaAgent):
         recent = self._signals[-self._min_signals_for_pattern * 3:]
 
         # Group by tags
-        tag_groups: Dict[str, List[LearningSignal]] = defaultdict(list)
+        tag_groups: dict[str, list[LearningSignal]] = defaultdict(list)
         for signal in recent:
             for tag in signal.tags:
                 tag_groups[tag].append(signal)
@@ -627,7 +627,7 @@ class FeedbackAgent(BiasharaAgent):
                             gradient=round(gradient, 4),
                         )
 
-    def _weighted_performance(self, signals: List[LearningSignal]) -> float:
+    def _weighted_performance(self, signals: list[LearningSignal]) -> float:
         """Compute weighted average performance from signals."""
         if not signals:
             return 0.5
@@ -720,7 +720,7 @@ class FeedbackAgent(BiasharaAgent):
         event_bus: Any,
         worker_id: str = "anonymous",
         language: str = "sw",
-    ) -> Optional[AgentEvent]:
+    ) -> AgentEvent | None:
         """
         Emit the current learning state as an adaptive learning signal
         to the event bus, bridging the FeedbackAgent to the FL pipeline.
@@ -806,7 +806,7 @@ class FeedbackAgent(BiasharaAgent):
     def get_fl_compatible_signals(
         self,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get recent signals in a format compatible with the FL pipeline.
 
@@ -828,26 +828,26 @@ class FeedbackAgent(BiasharaAgent):
 
     # ── Query methods ──────────────────────────────────────────────
 
-    def get_recent_signals(self, n: int = 20) -> List[Dict[str, Any]]:
+    def get_recent_signals(self, n: int = 20) -> list[dict[str, Any]]:
         """Get recent learning signals."""
         return [s.to_dict() for s in self._signals[-n:]]
 
-    def get_patterns(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_patterns(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Get detected patterns."""
         patterns = [p.to_dict() for p in self._patterns]
         if limit is not None:
             return patterns[-limit:]
         return patterns
 
-    def get_strategy_parameters(self) -> Dict[str, Any]:
+    def get_strategy_parameters(self) -> dict[str, Any]:
         """Get current strategy parameter values."""
         return {name: p.to_dict() for name, p in self._parameters.items()}
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get feedback loop metrics."""
         return self._metrics.to_dict()
 
-    def get_improvement_trajectory(self, parameter_name: str) -> List[Dict[str, Any]]:
+    def get_improvement_trajectory(self, parameter_name: str) -> list[dict[str, Any]]:
         """Get performance trajectory for a parameter over time."""
         param = self._parameters.get(parameter_name)
         if not param:
@@ -857,10 +857,10 @@ class FeedbackAgent(BiasharaAgent):
             for v, o in param.performance_history
         ]
 
-    def get_signals_summary(self) -> Dict[str, Any]:
+    def get_signals_summary(self) -> dict[str, Any]:
         """Get a summary of recent learning signals."""
         recent = self._signals[-50:] if self._signals else []
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
         for s in recent:
             st = s.signal_type.value
             type_counts[st] = type_counts.get(st, 0) + 1
@@ -871,7 +871,7 @@ class FeedbackAgent(BiasharaAgent):
             "avg_surprise": round(self._metrics.avg_surprise, 3),
         }
 
-    def get_strategy_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_strategy_history(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get strategy parameter update history."""
         history = []
         for name, param in self._parameters.items():

@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -46,9 +45,9 @@ class ManufacturingAgent:
 
     def analyze_production(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze manufacturing transactions for production insights.
 
@@ -108,10 +107,10 @@ class ManufacturingAgent:
         }
 
     def _analyze_products(
-        self, sales: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, sales: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Analyze performance per product."""
-        product_data: Dict[str, Dict[str, float]] = defaultdict(
+        product_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"revenue": 0, "profit": 0, "qty": 0, "count": 0}
         )
         for t in sales:
@@ -142,11 +141,11 @@ class ManufacturingAgent:
         ]
 
     def _analyze_materials(
-        self, materials: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, materials: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze raw material costs and usage."""
-        material_costs: Dict[str, float] = defaultdict(float)
-        material_qty: Dict[str, float] = defaultdict(float)
+        material_costs: dict[str, float] = defaultdict(float)
+        material_qty: dict[str, float] = defaultdict(float)
 
         for t in materials:
             item = t.get("item", "Unknown Material")
@@ -171,9 +170,9 @@ class ManufacturingAgent:
 
     def _analyze_production_costs(
         self,
-        sales: List[Dict[str, Any]],
-        materials: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        sales: list[dict[str, Any]],
+        materials: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Calculate production cost per product."""
         total_materials = sum(t.get("amount", 0) for t in materials)
         total_revenue = sum(t.get("amount", 0) for t in sales)
@@ -196,8 +195,8 @@ class ManufacturingAgent:
         }
 
     def _analyze_orders(
-        self, sales: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, sales: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Analyze order patterns."""
         # Order value distribution
         values = [t.get("amount", 0) for t in sales if t.get("amount", 0) > 0]
@@ -218,9 +217,9 @@ class ManufacturingAgent:
 
     def _analyze_waste(
         self,
-        sales: List[Dict[str, Any]],
-        materials: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        sales: list[dict[str, Any]],
+        materials: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Estimate material waste rate."""
         total_materials = sum(t.get("amount", 0) for t in materials)
         total_revenue = sum(t.get("amount", 0) for t in sales)
@@ -241,9 +240,9 @@ class ManufacturingAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate manufacturing-specific recommendations."""
         recs = []
 
@@ -341,7 +340,7 @@ class ManufacturingAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

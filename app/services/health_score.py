@@ -18,10 +18,7 @@ Scoring is calibrated against real data from Kenya's informal economy:
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 
 from .whatsapp_charts import (
     BLOCK_FULL,
@@ -29,13 +26,8 @@ from .whatsapp_charts import (
     BLOCK_SOLID,
     CHECK,
     CROSS_MARK,
-    WARNING,
     format_currency,
-    format_percentage,
-    health_display,
-    star_rating,
 )
-
 
 # ---------------------------------------------------------------------------
 # Data Classes
@@ -63,7 +55,7 @@ class BusinessMetrics:
     revenue_growth_pct: float = 0.0     # Month-over-month growth
 
     # Consistency
-    daily_revenues: List[float] = field(default_factory=list)  # Revenue per day
+    daily_revenues: list[float] = field(default_factory=list)  # Revenue per day
     coefficient_of_variation: float = 0.0  # StdDev / Mean of daily revenue
 
     # Product Diversity
@@ -77,7 +69,7 @@ class BusinessMetrics:
     months_of_data: int = 0             # How many months of transaction history
 
     # Expenses
-    expense_categories: Dict[str, float] = field(default_factory=dict)
+    expense_categories: dict[str, float] = field(default_factory=dict)
 
     # Inventory
     stockout_days: int = 0              # Days where key items were out of stock
@@ -93,10 +85,10 @@ class BusinessMetrics:
 class HealthScoreResult:
     """Result of business health score calculation."""
     overall_score: float                # 0-100
-    components: Dict[str, float]        # Component scores
-    strengths: List[str]                # What's going well
-    weaknesses: List[str]               # What needs improvement
-    recommendations: List[str]          # Actionable advice
+    components: dict[str, float]        # Component scores
+    strengths: list[str]                # What's going well
+    weaknesses: list[str]               # What needs improvement
+    recommendations: list[str]          # Actionable advice
     grade: str                          # A/B/C/D/F
     emoji: str                          # Visual indicator
     summary_sw: str                     # Swahili summary
@@ -108,9 +100,9 @@ class CreditReadinessResult:
     """Result of credit readiness assessment."""
     score: float                        # 0-100
     ready: bool                         # True if ready for credit
-    estimated_loan_range: Tuple[float, float]  # Min/max recommended loan
-    requirements_met: Dict[str, bool]   # Checklist of requirements
-    missing_requirements: List[str]     # What's still needed
+    estimated_loan_range: tuple[float, float]  # Min/max recommended loan
+    requirements_met: dict[str, bool]   # Checklist of requirements
+    missing_requirements: list[str]     # What's still needed
     recommendation_sw: str              # Swahili recommendation
     recommendation_en: str              # English recommendation
 
@@ -120,7 +112,7 @@ class InvestmentReadinessResult:
     """Result of investment readiness assessment."""
     score: float                        # 0-100
     ready: bool                         # True if ready to invest
-    recommended_investment_types: List[str]  # What kind of investment
+    recommended_investment_types: list[str]  # What kind of investment
     risk_level: str                     # Low/Medium/High
     recommendation_sw: str
     recommendation_en: str
@@ -631,7 +623,7 @@ class BusinessHealthScorer:
     # Helper Methods
     # -------------------------------------------------------------------
 
-    def _grade(self, score: float) -> Tuple[str, str]:
+    def _grade(self, score: float) -> tuple[str, str]:
         """Convert score to letter grade and emoji.
 
         Args:
@@ -658,8 +650,8 @@ class BusinessHealthScorer:
             return "F", "🔴"
 
     def _analyze_components(
-        self, components: Dict[str, float]
-    ) -> Tuple[List[str], List[str]]:
+        self, components: dict[str, float]
+    ) -> tuple[list[str], list[str]]:
         """Identify strengths and weaknesses from component scores.
 
         Args:
@@ -689,8 +681,8 @@ class BusinessHealthScorer:
         return strengths, weaknesses
 
     def _generate_recommendations(
-        self, m: BusinessMetrics, components: Dict[str, float]
-    ) -> List[str]:
+        self, m: BusinessMetrics, components: dict[str, float]
+    ) -> list[str]:
         """Generate actionable recommendations based on scores.
 
         Args:
@@ -745,7 +737,7 @@ class BusinessHealthScorer:
         return recs[:5]  # Max 5 recommendations
 
     def _summary_sw(
-        self, score: float, grade: str, strengths: List[str], weaknesses: List[str]
+        self, score: float, grade: str, strengths: list[str], weaknesses: list[str]
     ) -> str:
         """Generate Swahili summary.
 
@@ -780,7 +772,7 @@ class BusinessHealthScorer:
             )
 
     def _summary_en(
-        self, score: float, grade: str, strengths: List[str], weaknesses: List[str]
+        self, score: float, grade: str, strengths: list[str], weaknesses: list[str]
     ) -> str:
         """Generate English summary.
 

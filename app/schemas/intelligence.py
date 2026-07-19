@@ -6,7 +6,7 @@ All data is anonymized and aggregated with k-anonymity (k≥10) enforced.
 """
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,8 +16,8 @@ class AnonymizedMetric(BaseModel):
 
     metric_name: str
     value: float
-    lower_bound: Optional[float] = None
-    upper_bound: Optional[float] = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
     sample_size: int = Field(
         ...,
         description="Number of users contributing to this metric",
@@ -46,7 +46,7 @@ class MarketIntelligence(BaseModel):
     market_id: str = Field(..., description="Geohash-5 or ward code")
     market_name: str
     region: str
-    county: Optional[str] = None
+    county: str | None = None
 
     # Time period
     period_start: date
@@ -67,14 +67,14 @@ class MarketIntelligence(BaseModel):
     avg_operating_hours: AnonymizedMetric
 
     # Product mix
-    top_categories: List[Dict[str, Any]] = Field(
+    top_categories: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Top product categories by volume",
     )
 
     # Trends
-    revenue_trend_pct: Optional[float] = None
-    transaction_volume_trend_pct: Optional[float] = None
+    revenue_trend_pct: float | None = None
+    transaction_volume_trend_pct: float | None = None
 
     # Payment methods
     mpesa_share_pct: float = 0
@@ -102,11 +102,11 @@ class DemandPattern(BaseModel):
     """
 
     product: str
-    product_category: Optional[str] = None
+    product_category: str | None = None
 
     # Geographic scope
     region: str
-    market_ids: List[str] = Field(default_factory=list)
+    market_ids: list[str] = Field(default_factory=list)
 
     # Time period
     period_start: date
@@ -115,30 +115,30 @@ class DemandPattern(BaseModel):
     # Demand metrics
     total_volume: AnonymizedMetric
     avg_daily_volume: AnonymizedMetric
-    price_range: Dict[str, float] = Field(
+    price_range: dict[str, float] = Field(
         default_factory=dict,
         description="{'min': 80, 'max': 120, 'median': 95, 'unit': 'KES/kg'}",
     )
 
     # Temporal patterns
-    day_of_week_pattern: Dict[str, float] = Field(
+    day_of_week_pattern: dict[str, float] = Field(
         default_factory=dict,
         description="{'mon': 0.85, 'tue': 0.92, ...} relative to average",
     )
-    monthly_trend: List[Dict[str, Any]] = Field(
+    monthly_trend: list[dict[str, Any]] = Field(
         default_factory=list,
         description="[{'month': '2026-06', 'volume': 15000, 'change_pct': 5.2}]",
     )
 
     # Seasonality
-    seasonal_factors: Dict[str, float] = Field(
+    seasonal_factors: dict[str, float] = Field(
         default_factory=dict,
         description="{'ramadan': 1.3, 'school_term': 1.1, 'harvest': 0.8}",
     )
 
     # Supply signals
     vendor_count: AnonymizedMetric
-    avg_stock_days: Optional[AnonymizedMetric] = None
+    avg_stock_days: AnonymizedMetric | None = None
 
     # Metadata
     data_freshness: datetime
@@ -158,7 +158,7 @@ class EconomicActivity(BaseModel):
         ...,
         description="ward, sub_county, county, national",
     )
-    county: Optional[str] = None
+    county: str | None = None
 
     # Time period
     period_start: date
@@ -188,7 +188,7 @@ class EconomicActivity(BaseModel):
     avg_transaction_value: AnonymizedMetric
 
     # Sector breakdown
-    sector_breakdown: List[Dict[str, Any]] = Field(
+    sector_breakdown: list[dict[str, Any]] = Field(
         default_factory=list,
         description="[{'sector': 'food', 'share_pct': 45, 'trend': 'up'}]",
     )
@@ -201,8 +201,8 @@ class EconomicActivity(BaseModel):
     avg_operating_hours: float = 0
 
     # Comparison
-    vs_previous_period_pct: Optional[float] = None
-    vs_national_avg_pct: Optional[float] = None
+    vs_previous_period_pct: float | None = None
+    vs_national_avg_pct: float | None = None
 
     # Metadata
     data_freshness: datetime
@@ -268,7 +268,7 @@ class CreditSignal(BaseModel):
     )
 
     # Peer comparison
-    vs_market_avg: Dict[str, float] = Field(
+    vs_market_avg: dict[str, float] = Field(
         default_factory=dict,
         description="How this business compares to market averages",
     )
@@ -285,12 +285,12 @@ class CreditSignal(BaseModel):
 class BuyerQueryParams(BaseModel):
     """Common query parameters for intelligence endpoints."""
 
-    market_id: Optional[str] = None
-    region: Optional[str] = None
-    product: Optional[str] = None
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
-    granularity: Optional[str] = Field(
+    market_id: str | None = None
+    region: str | None = None
+    product: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    granularity: str | None = Field(
         None,
         pattern=r"^(daily|weekly|monthly|quarterly)$",
     )
@@ -305,7 +305,7 @@ class BuyerQueryParams(BaseModel):
 class HeckmanCorrectionRequest(BaseModel):
     """Request for Heckman-corrected credit scores."""
 
-    market_id: Optional[str] = Field(
+    market_id: str | None = Field(
         None, description="Geographic market filter"
     )
     lookback_days: int = Field(
@@ -337,7 +337,7 @@ class CorrectedScoreResponse(BaseModel):
     bias_adjustment: float = Field(
         ..., description="Difference: corrected - raw (positive = underestimated)"
     )
-    confidence_interval: Dict[str, float] = Field(
+    confidence_interval: dict[str, float] = Field(
         ..., description="{lower, upper} 95% CI for corrected score"
     )
     selection_probability: float = Field(
@@ -357,19 +357,19 @@ class CorrectedScoreResponse(BaseModel):
 class HeckmanDiagnosticsResponse(BaseModel):
     """Diagnostics for the Heckman selection model."""
 
-    selection_equation: Dict[str, Any] = Field(
+    selection_equation: dict[str, Any] = Field(
         ..., description="Probit selection equation parameters"
     )
-    outcome_equation: Dict[str, Any] = Field(
+    outcome_equation: dict[str, Any] = Field(
         ..., description="Corrected outcome equation parameters"
     )
-    correction_summary: Dict[str, Any] = Field(
+    correction_summary: dict[str, Any] = Field(
         ..., description="Selection bias correction diagnostics"
     )
-    sample_info: Dict[str, Any] = Field(
+    sample_info: dict[str, Any] = Field(
         ..., description="Sample composition details"
     )
-    confidence_intervals: Optional[Dict[str, Any]] = Field(
+    confidence_intervals: dict[str, Any] | None = Field(
         None, description="Parameter confidence intervals"
     )
 
@@ -377,8 +377,8 @@ class HeckmanDiagnosticsResponse(BaseModel):
 class HeckmanCorrectionResponse(BaseModel):
     """Response containing Heckman-corrected credit scores."""
 
-    scores: List[CorrectedScoreResponse]
-    diagnostics: Optional[HeckmanDiagnosticsResponse] = None
+    scores: list[CorrectedScoreResponse]
+    diagnostics: HeckmanDiagnosticsResponse | None = None
     processing_time_ms: float
     correction_method: str = "heckman_two_step"
 
@@ -422,10 +422,10 @@ class MetricStatusResponse(BaseModel):
     cusum_upper: float
     cusum_lower: float
     threshold: float
-    baseline: Dict[str, Any]
-    recent_performance: Dict[str, Any]
+    baseline: dict[str, Any]
+    recent_performance: dict[str, Any]
     drift_detected: bool
-    last_alert: Optional[DriftAlertResponse] = None
+    last_alert: DriftAlertResponse | None = None
 
 
 class DriftStatusResponse(BaseModel):
@@ -436,14 +436,14 @@ class DriftStatusResponse(BaseModel):
     )
     metrics_monitored: int
     drift_detected_in_any: bool
-    metrics: Dict[str, MetricStatusResponse]
+    metrics: dict[str, MetricStatusResponse]
     timestamp: str
 
 
 class DriftAlertsResponse(BaseModel):
     """List of drift alerts."""
 
-    alerts: List[DriftAlertResponse]
+    alerts: list[DriftAlertResponse]
     total: int
     limit: int
 
@@ -453,13 +453,13 @@ class PerformanceTrendResponse(BaseModel):
 
     status: str
     window: int
-    current_value: Optional[float] = None
-    mean: Optional[float] = None
-    std: Optional[float] = None
-    min_val: Optional[float] = Field(None, alias="min")
-    max_val: Optional[float] = Field(None, alias="max")
-    trend: Optional[str] = None
-    trend_slope: Optional[float] = None
-    mean_z_score: Optional[float] = None
-    latest_z_score: Optional[float] = None
-    observations_outside_2sigma: Optional[int] = None
+    current_value: float | None = None
+    mean: float | None = None
+    std: float | None = None
+    min_val: float | None = Field(None, alias="min")
+    max_val: float | None = Field(None, alias="max")
+    trend: str | None = None
+    trend_slope: float | None = None
+    mean_z_score: float | None = None
+    latest_z_score: float | None = None
+    observations_outside_2sigma: int | None = None

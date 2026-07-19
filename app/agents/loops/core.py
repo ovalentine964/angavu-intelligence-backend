@@ -19,9 +19,10 @@ from __future__ import annotations
 import time
 import uuid
 from abc import abstractmethod
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Sequence, Type
+from typing import Any
 
 import structlog
 
@@ -29,7 +30,6 @@ from app.agents.base import (
     AgentDecision,
     AgentEvent,
     AgentResult,
-    AgentStatus,
     BiasharaAgent,
     EventType,
 )
@@ -114,7 +114,7 @@ class BudgetGuard:
         self._cycle_cost_usd = 0.0
         self._exhausted_reason = ""
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current budget status."""
         return {
             "iterations": f"{self._iterations}/{self.max_iterations}",
@@ -141,9 +141,9 @@ class ReasoningStep:
     action: str = ""         # What action was taken
     observation: str = ""    # What was observed
     confidence: float = 1.0  # Confidence in this step
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "step_id": self.step_id,
             "timestamp": self.timestamp,
@@ -162,21 +162,21 @@ class ReActTrace:
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     agent_name: str = ""
     task: str = ""
-    steps: List[ReasoningStep] = field(default_factory=list)
+    steps: list[ReasoningStep] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
-    final_result: Optional[Dict[str, Any]] = None
+    ended_at: float | None = None
+    final_result: dict[str, Any] | None = None
     success: bool = False
     total_reasoning_tokens: int = 0
 
     def add_step(self, step: ReasoningStep) -> None:
         self.steps.append(step)
 
-    def get_reasoning_chain(self) -> List[str]:
+    def get_reasoning_chain(self) -> list[str]:
         """Extract the reasoning chain as a list of strings."""
         return [s.reasoning for s in self.steps if s.reasoning]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "trace_id": self.trace_id,
             "agent_name": self.agent_name,
@@ -207,8 +207,8 @@ class ReActAgent(BiasharaAgent):
 
     def __init__(self, name: str, role: str, capabilities: Sequence[str]):
         super().__init__(name, role, capabilities)
-        self._current_trace: Optional[ReActTrace] = None
-        self._trace_history: List[ReActTrace] = []
+        self._current_trace: ReActTrace | None = None
+        self._trace_history: list[ReActTrace] = []
         self._max_trace_history = 100
 
     async def handle_event(self, event: AgentEvent) -> AgentResult:
@@ -239,7 +239,7 @@ class ReActAgent(BiasharaAgent):
         self._current_trace = None
         return result
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Generate reasoning about what to do.
 
@@ -262,7 +262,7 @@ class ReActAgent(BiasharaAgent):
         return decision
 
     @abstractmethod
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """
         Subclasses implement this instead of think().
 
@@ -320,11 +320,11 @@ class ReActAgent(BiasharaAgent):
             )
             self._current_trace.add_step(step)
 
-    def get_recent_traces(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_traces(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent ReAct traces for inspection."""
         return [t.to_dict() for t in self._trace_history[-n:]]
 
-    def get_reasoning_examples(self, n: int = 5) -> List[Dict[str, Any]]:
+    def get_reasoning_examples(self, n: int = 5) -> list[dict[str, Any]]:
         """
         Get successful reasoning chains for few-shot learning.
 
@@ -351,12 +351,12 @@ class ReActAgent(BiasharaAgent):
 class Critique:
     """Result of a self-critique evaluation."""
     score: float = 0.0           # 0.0 – 1.0 quality score
-    issues: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
     should_retry: bool = False   # Whether a retry is warranted
     revision_plan: str = ""      # How to improve on retry
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "score": self.score,
             "issues": self.issues,
@@ -392,12 +392,12 @@ class ReflexionAgent(ReActAgent):
         capabilities: Sequence[str],
         quality_threshold: float = 0.7,
         max_retries: int = 3,
-        budget_guard: Optional[BudgetGuard] = None,
+        budget_guard: BudgetGuard | None = None,
     ):
         super().__init__(name, role, capabilities)
         self._quality_threshold = quality_threshold
         self._max_retries = max_retries
-        self._critique_history: List[Critique] = []
+        self._critique_history: list[Critique] = []
         self._budget_guard = budget_guard  # Feature flag: None means disabled
 
     async def handle_event(self, event: AgentEvent) -> AgentResult:
@@ -409,7 +409,7 @@ class ReflexionAgent(ReActAgent):
         cycle_start = time.time()
         attempt = 0
         last_result = None
-        critiques: List[Critique] = []
+        critiques: list[Critique] = []
 
         while attempt <= self._max_retries:
             attempt += 1
@@ -528,7 +528,7 @@ class ReflexionAgent(ReActAgent):
         )
 
     def _inject_critique_context(
-        self, event: AgentEvent, critiques: List[Critique]
+        self, event: AgentEvent, critiques: list[Critique]
     ) -> AgentEvent:
         """
         Inject critique feedback into the event for the next attempt.
@@ -557,7 +557,7 @@ class ReflexionAgent(ReActAgent):
             metadata=enriched_metadata,
         )
 
-    def get_critique_history(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_critique_history(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent critiques for analysis."""
         return [c.to_dict() for c in self._critique_history[-n:]]
 
@@ -573,13 +573,13 @@ class PlanStep:
     step_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     description: str = ""
     action: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    dependencies: List[str] = field(default_factory=list)  # step_ids this depends on
+    parameters: dict[str, Any] = field(default_factory=dict)
+    dependencies: list[str] = field(default_factory=list)  # step_ids this depends on
     status: str = "pending"  # pending | running | completed | failed | skipped
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "step_id": self.step_id,
             "description": self.description,
@@ -597,13 +597,13 @@ class ExecutionPlan:
     """A plan for executing a complex multi-step task."""
     plan_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     goal: str = ""
-    steps: List[PlanStep] = field(default_factory=list)
+    steps: list[PlanStep] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
-    completed_at: Optional[float] = None
+    completed_at: float | None = None
     status: str = "active"  # active | completed | failed | replanned
     replan_count: int = 0
 
-    def get_next_step(self) -> Optional[PlanStep]:
+    def get_next_step(self) -> PlanStep | None:
         """Get the next pending step that has all dependencies met."""
         for step in self.steps:
             if step.status != "pending":
@@ -617,7 +617,7 @@ class ExecutionPlan:
                 return step
         return None
 
-    def _get_step(self, step_id: str) -> Optional[PlanStep]:
+    def _get_step(self, step_id: str) -> PlanStep | None:
         for s in self.steps:
             if s.step_id == step_id:
                 return s
@@ -636,7 +636,7 @@ class ExecutionPlan:
     def has_failures(self) -> bool:
         return any(s.status == "failed" for s in self.steps)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plan_id": self.plan_id,
             "goal": self.goal,
@@ -676,10 +676,10 @@ class PlanExecuteAgent(ReflexionAgent):
     ):
         super().__init__(name, role, capabilities, **kwargs)
         self._max_replans = max_replans
-        self._current_plan: Optional[ExecutionPlan] = None
-        self._plan_history: List[ExecutionPlan] = []
+        self._current_plan: ExecutionPlan | None = None
+        self._plan_history: list[ExecutionPlan] = []
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """
         Think phase: Create or retrieve an execution plan.
 
@@ -812,8 +812,8 @@ class PlanExecuteAgent(ReflexionAgent):
     async def _create_plan(
         self,
         goal: str,
-        context: Dict[str, Any],
-        reflexion_feedback: Optional[Dict] = None,
+        context: dict[str, Any],
+        reflexion_feedback: dict | None = None,
     ) -> ExecutionPlan:
         """
         Create an execution plan for the given goal.
@@ -833,8 +833,8 @@ class PlanExecuteAgent(ReflexionAgent):
         )
 
     async def _execute_plan_step(
-        self, action: str, parameters: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Execute a single plan step.
 
@@ -842,13 +842,13 @@ class PlanExecuteAgent(ReflexionAgent):
         """
         raise NotImplementedError(f"{self.name} must implement _execute_plan_step()")
 
-    def _extract_goal(self, event_data: Dict[str, Any]) -> str:
+    def _extract_goal(self, event_data: dict[str, Any]) -> str:
         """Extract the goal from the event data."""
         event_type = event_data.get("event_type", "unknown")
         payload = event_data.get("payload", {})
         return payload.get("goal", f"Process {event_type}")
 
-    def _aggregate_results(self) -> Dict[str, Any]:
+    def _aggregate_results(self) -> dict[str, Any]:
         """Aggregate results from all completed plan steps."""
         if not self._current_plan:
             return {}
@@ -867,7 +867,7 @@ class PlanExecuteAgent(ReflexionAgent):
             "failed_steps": sum(1 for s in self._current_plan.steps if s.status == "failed"),
         }
 
-    def get_plan_history(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_plan_history(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent execution plans."""
         return [p.to_dict() for p in self._plan_history[-n:]]
 
@@ -883,17 +883,17 @@ class StoredEvent:
     sequence: int = 0                # Global sequence number
     event_type: str = ""
     source: str = ""
-    payload: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     stored_at: float = field(default_factory=time.time)
     event_id: str = ""
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None
     # For state reconstruction
-    aggregate_id: Optional[str] = None  # Which entity this belongs to
-    aggregate_type: Optional[str] = None  # "agent" | "plan" | "pipeline"
+    aggregate_id: str | None = None  # Which entity this belongs to
+    aggregate_type: str | None = None  # "agent" | "plan" | "pipeline"
     version: int = 0  # Aggregate version after this event
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "sequence": self.sequence,
             "event_type": self.event_type,
@@ -923,19 +923,19 @@ class EventStore:
     In production, this would backed by PostgreSQL or EventStoreDB.
     """
 
-    def __init__(self, max_events: int = 50_000, persist_path: Optional[str] = None):
-        self._events: List[StoredEvent] = []
+    def __init__(self, max_events: int = 50_000, persist_path: str | None = None):
+        self._events: list[StoredEvent] = []
         self._sequence: int = 0
         self._max_events = max_events
         self._persist_path = persist_path
-        self._aggregate_versions: Dict[str, int] = {}  # aggregate_id → version
+        self._aggregate_versions: dict[str, int] = {}  # aggregate_id → version
         self._logger = logger.bind(component="event_store")
 
     async def append(
         self,
         event: AgentEvent,
-        aggregate_id: Optional[str] = None,
-        aggregate_type: Optional[str] = None,
+        aggregate_id: str | None = None,
+        aggregate_type: str | None = None,
     ) -> int:
         """
         Append an event to the store.
@@ -983,12 +983,12 @@ class EventStore:
 
     def get_events(
         self,
-        event_type: Optional[str] = None,
-        source: Optional[str] = None,
-        aggregate_id: Optional[str] = None,
+        event_type: str | None = None,
+        source: str | None = None,
+        aggregate_id: str | None = None,
         since_sequence: int = 0,
         limit: int = 100,
-    ) -> List[StoredEvent]:
+    ) -> list[StoredEvent]:
         """
         Query stored events with filters.
 
@@ -1009,14 +1009,14 @@ class EventStore:
 
     def get_aggregate_events(
         self, aggregate_id: str, since_version: int = 0
-    ) -> List[StoredEvent]:
+    ) -> list[StoredEvent]:
         """Get all events for a specific aggregate (for state reconstruction)."""
         return [
             e for e in self._events
             if e.aggregate_id == aggregate_id and e.version > since_version
         ]
 
-    def get_correlated_events(self, correlation_id: str) -> List[StoredEvent]:
+    def get_correlated_events(self, correlation_id: str) -> list[StoredEvent]:
         """Get all events sharing a correlation ID (for request tracing)."""
         return [
             e for e in self._events
@@ -1026,8 +1026,8 @@ class EventStore:
     def replay(
         self,
         from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
-    ) -> List[StoredEvent]:
+        to_sequence: int | None = None,
+    ) -> list[StoredEvent]:
         """
         Replay events from a sequence range.
 
@@ -1041,10 +1041,10 @@ class EventStore:
             events = [e for e in events if e.sequence <= to_sequence]
         return events
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get event store statistics."""
-        type_counts: Dict[str, int] = {}
-        source_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
+        source_counts: dict[str, int] = {}
         for e in self._events:
             type_counts[e.event_type] = type_counts.get(e.event_type, 0) + 1
             source_counts[e.source] = source_counts.get(e.source, 0) + 1
@@ -1075,7 +1075,7 @@ class EventSourcedAgent(PlanExecuteAgent):
         name: str,
         role: str,
         capabilities: Sequence[str],
-        event_store: Optional[EventStore] = None,
+        event_store: EventStore | None = None,
         **kwargs,
     ):
         super().__init__(name, role, capabilities, **kwargs)
@@ -1130,7 +1130,7 @@ class EventSourcedAgent(PlanExecuteAgent):
 
     def get_audit_trail(
         self, since_sequence: int = 0, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get the audit trail for this agent."""
         if not self._event_store:
             return []
@@ -1157,11 +1157,11 @@ class SupervisionPolicy(str, Enum):
 class SupervisionDecision:
     """A supervisor's decision about how to handle an agent result."""
     policy: SupervisionPolicy = SupervisionPolicy.RETRY
-    target_agent: Optional[str] = None  # For FALLBACK: which agent to try
+    target_agent: str | None = None  # For FALLBACK: which agent to try
     reason: str = ""
     max_retries: int = 3
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "policy": self.policy.value,
             "target_agent": self.target_agent,
@@ -1177,13 +1177,13 @@ class SupervisedExecution:
     original_agent: str = ""
     actual_agent: str = ""  # May differ if fallback was used
     attempts: int = 0
-    result: Optional[Dict[str, Any]] = None
-    supervision_decisions: List[SupervisionDecision] = field(default_factory=list)
+    result: dict[str, Any] | None = None
+    supervision_decisions: list[SupervisionDecision] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
     success: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "original_agent": self.original_agent,
@@ -1216,7 +1216,7 @@ class SupervisorAgent(EventSourcedAgent):
         self,
         name: str = "Supervisor",
         role: str = "Multi-agent coordinator",
-        event_store: Optional[EventStore] = None,
+        event_store: EventStore | None = None,
     ):
         super().__init__(
             name=name,
@@ -1230,15 +1230,15 @@ class SupervisorAgent(EventSourcedAgent):
             ],
             event_store=event_store,
         )
-        self._managed_agents: Dict[str, BiasharaAgent] = {}
-        self._fallback_map: Dict[str, List[str]] = {}  # agent → [fallback agents]
-        self._execution_history: List[SupervisedExecution] = []
-        self._agent_metrics: Dict[str, Dict[str, Any]] = {}
+        self._managed_agents: dict[str, BiasharaAgent] = {}
+        self._fallback_map: dict[str, list[str]] = {}  # agent → [fallback agents]
+        self._execution_history: list[SupervisedExecution] = []
+        self._agent_metrics: dict[str, dict[str, Any]] = {}
 
     def register_agent(
         self,
         agent: BiasharaAgent,
-        fallbacks: Optional[List[str]] = None,
+        fallbacks: list[str] | None = None,
     ) -> None:
         """Register an agent under supervision."""
         self._managed_agents[agent.name] = agent
@@ -1261,7 +1261,7 @@ class SupervisorAgent(EventSourcedAgent):
         self,
         agent_name: str,
         event: AgentEvent,
-        validation_fn: Optional[Callable[[AgentResult], bool]] = None,
+        validation_fn: Callable[[AgentResult], bool] | None = None,
     ) -> AgentResult:
         """
         Supervise the execution of a task by an agent.
@@ -1443,7 +1443,7 @@ class SupervisorAgent(EventSourcedAgent):
             reason="Max attempts exhausted",
         )
 
-    def _select_fallback(self, agent_name: str) -> Optional[str]:
+    def _select_fallback(self, agent_name: str) -> str | None:
         """Select a fallback agent."""
         fallbacks = self._fallback_map.get(agent_name, [])
         for fb in fallbacks:
@@ -1469,7 +1469,7 @@ class SupervisorAgent(EventSourcedAgent):
         metrics["avg_duration_ms"] = old_avg + (result.duration_ms - old_avg) / n
         metrics["last_execution"] = time.time()
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """The supervisor's own think phase — decides which agent to route to."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -1504,7 +1504,7 @@ class SupervisorAgent(EventSourcedAgent):
 
         return await self.supervise(target, event)
 
-    def _select_agent_for_event(self, event_data: Dict[str, Any]) -> str:
+    def _select_agent_for_event(self, event_data: dict[str, Any]) -> str:
         """Select the best agent for the given event."""
         event_type = event_data.get("event_type", "")
 
@@ -1524,15 +1524,15 @@ class SupervisorAgent(EventSourcedAgent):
         # Default to first available agent
         return next(iter(self._managed_agents), "unknown")
 
-    def get_agent_metrics(self) -> Dict[str, Any]:
+    def get_agent_metrics(self) -> dict[str, Any]:
         """Get performance metrics for all managed agents."""
         return dict(self._agent_metrics)
 
-    def get_execution_history(self, n: int = 20) -> List[Dict[str, Any]]:
+    def get_execution_history(self, n: int = 20) -> list[dict[str, Any]]:
         """Get recent supervised executions."""
         return [e.to_dict() for e in self._execution_history[-n:]]
 
-    def get_supervision_stats(self) -> Dict[str, Any]:
+    def get_supervision_stats(self) -> dict[str, Any]:
         """Get overall supervision statistics."""
         total = len(self._execution_history)
         successes = sum(1 for e in self._execution_history if e.success)

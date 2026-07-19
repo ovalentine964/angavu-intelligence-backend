@@ -12,17 +12,16 @@ Supports both stdio (for local MCP clients) and HTTP/SSE (for remote).
 
 from __future__ import annotations
 
-import json
 import time
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.config import MCPServerConfig, MCPToolDefinition, get_mcp_config
+from app.mcp.tools.agent_communication import AGENT_TOOLS, handle_agent_tool
 from app.mcp.tools.intelligence import INTELLIGENCE_TOOLS, handle_intelligence_tool
 from app.mcp.tools.worker_data import WORKER_DATA_TOOLS, handle_worker_data_tool
-from app.mcp.tools.agent_communication import AGENT_TOOLS, handle_agent_tool
 
 logger = structlog.get_logger(__name__)
 
@@ -35,9 +34,9 @@ class MCPServer:
     tool calls to the appropriate service layers.
     """
 
-    def __init__(self, config: Optional[MCPServerConfig] = None):
+    def __init__(self, config: MCPServerConfig | None = None):
         self.config = config or get_mcp_config()
-        self._tools: Dict[str, MCPToolDefinition] = {}
+        self._tools: dict[str, MCPToolDefinition] = {}
         self._initialized = False
         self._request_count = 0
         self._error_count = 0
@@ -60,11 +59,11 @@ class MCPServer:
 
     async def handle_request(
         self,
-        request: Dict[str, Any],
+        request: dict[str, Any],
         buyer_id: str,
         db: AsyncSession,
         app_state: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Handle an MCP JSON-RPC request.
 
@@ -102,9 +101,9 @@ class MCPServer:
         except Exception as e:
             self._error_count += 1
             logger.error("mcp_request_error", method=method, error=str(e), exc_info=True)
-            return self._error_response(req_id, -32603, f"Internal error: {str(e)}")
+            return self._error_response(req_id, -32603, f"Internal error: {e!s}")
 
-    def _handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle MCP initialize handshake."""
         self._initialized = True
         return {
@@ -115,18 +114,18 @@ class MCPServer:
             "serverInfo": self.config.server_info,
         }
 
-    async def _handle_tools_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_tools_list(self, params: dict[str, Any]) -> dict[str, Any]:
         """List all available tools."""
         tools = [tool.to_schema() for tool in self._tools.values()]
         return {"tools": tools}
 
     async def _handle_tools_call(
         self,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         buyer_id: str,
         db: AsyncSession,
         app_state: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a tool call."""
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
@@ -154,10 +153,10 @@ class MCPServer:
 
     # ── Response Helpers ────────────────────────────────────────────
 
-    def _success_response(self, req_id: Any, result: Any) -> Dict[str, Any]:
+    def _success_response(self, req_id: Any, result: Any) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
-    def _error_response(self, req_id: Any, code: int, message: str) -> Dict[str, Any]:
+    def _error_response(self, req_id: Any, code: int, message: str) -> dict[str, Any]:
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -166,7 +165,7 @@ class MCPServer:
 
     # ── Health / Stats ──────────────────────────────────────────────
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> dict[str, Any]:
         """Return server health status."""
         uptime = time.time() - self._start_time
         return {
@@ -180,7 +179,7 @@ class MCPServer:
             "categories": list(set(t.category for t in self._tools.values())),
         }
 
-    def get_tools_summary(self) -> List[Dict[str, str]]:
+    def get_tools_summary(self) -> list[dict[str, str]]:
         """Return a summary of all tools (name + description)."""
         return [
             {"name": t.name, "description": t.description, "category": t.category}
@@ -190,7 +189,7 @@ class MCPServer:
 
 # ── Singleton ───────────────────────────────────────────────────────
 
-_mcp_server: Optional[MCPServer] = None
+_mcp_server: MCPServer | None = None
 
 
 def get_mcp_server() -> MCPServer:

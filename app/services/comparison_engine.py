@@ -24,26 +24,17 @@ Comparison dimensions:
 from __future__ import annotations
 
 import statistics
-from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
 
 from .whatsapp_charts import (
     ARROW_DOWN,
-    ARROW_UP,
     ARROW_RIGHT,
+    ARROW_UP,
     BLOCK_FULL,
     BLOCK_LIGHT,
     BLOCK_SOLID,
-    CHECK,
-    CROSS_MARK,
-    WARNING,
-    format_currency,
-    format_percentage,
-    star_rating,
 )
-
 
 # ---------------------------------------------------------------------------
 # Data Classes
@@ -108,10 +99,10 @@ class ComparisonResult:
     comparison_group: str               # Description of comparison group
 
     # Insights
-    strengths_vs_peers: List[str]       # Where the business beats peers
-    weaknesses_vs_peers: List[str]      # Where the business lags
-    insights_sw: List[str]              # Swahili insights
-    insights_en: List[str]              # English insights
+    strengths_vs_peers: list[str]       # Where the business beats peers
+    weaknesses_vs_peers: list[str]      # Where the business lags
+    insights_sw: list[str]              # Swahili insights
+    insights_en: list[str]              # English insights
 
     # Privacy
     k_anonymity_met: bool               # Whether k-anonymity threshold was met
@@ -124,12 +115,12 @@ class BenchmarkData:
     market: str
     region: str
     sample_size: int                    # Number of businesses
-    revenue_stats: Dict[str, float]     # mean, median, p25, p75, p90
-    margin_stats: Dict[str, float]
-    growth_stats: Dict[str, float]
-    transaction_stats: Dict[str, float]
-    diversity_stats: Dict[str, float]
-    savings_stats: Dict[str, float]
+    revenue_stats: dict[str, float]     # mean, median, p25, p75, p90
+    margin_stats: dict[str, float]
+    growth_stats: dict[str, float]
+    transaction_stats: dict[str, float]
+    diversity_stats: dict[str, float]
+    savings_stats: dict[str, float]
     last_updated: datetime
 
 
@@ -183,7 +174,7 @@ class ComparisonEngine:
         user_transactions: int,
         user_diversity: int,
         user_savings_rate: float,
-        peer_data: List[PeerBusiness],
+        peer_data: list[PeerBusiness],
         business_type: str = "",
         market: str = "",
         region: str = "",
@@ -319,11 +310,11 @@ class ComparisonEngine:
 
     def _find_comparison_group(
         self,
-        peer_data: List[PeerBusiness],
+        peer_data: list[PeerBusiness],
         business_type: str,
         market: str,
         region: str,
-    ) -> Tuple[List[PeerBusiness], str, int]:
+    ) -> tuple[list[PeerBusiness], str, int]:
         """Find the best comparison group meeting k-anonymity.
 
         Tries progressively broader groups until k-anonymity is met.
@@ -349,12 +340,12 @@ class ComparisonEngine:
 
     def _filter_peers(
         self,
-        peer_data: List[PeerBusiness],
+        peer_data: list[PeerBusiness],
         business_type: str,
         market: str,
         region: str,
-        fields: Tuple[str, ...],
-    ) -> List[PeerBusiness]:
+        fields: tuple[str, ...],
+    ) -> list[PeerBusiness]:
         """Filter peers by specified fields.
 
         Args:
@@ -371,13 +362,7 @@ class ComparisonEngine:
         for p in peer_data:
             match = True
             for field_name in fields:
-                if field_name == "business_type" and p.business_type != business_type:
-                    match = False
-                    break
-                elif field_name == "market" and p.market != market:
-                    match = False
-                    break
-                elif field_name == "region" and p.region != region:
+                if (field_name == "business_type" and p.business_type != business_type) or (field_name == "market" and p.market != market) or (field_name == "region" and p.region != region):
                     match = False
                     break
             if match:
@@ -389,7 +374,7 @@ class ComparisonEngine:
         business_type: str,
         market: str,
         region: str,
-        fields: Tuple[str, ...],
+        fields: tuple[str, ...],
     ) -> str:
         """Generate a human-readable description of the comparison group.
 
@@ -428,7 +413,7 @@ class ComparisonEngine:
     # Percentile Ranking
     # -------------------------------------------------------------------
 
-    def _percentile_rank(self, value: float, peer_values: List[float]) -> float:
+    def _percentile_rank(self, value: float, peer_values: list[float]) -> float:
         """Calculate percentile rank of a value among peers.
 
         Args:
@@ -461,7 +446,7 @@ class ComparisonEngine:
         div_pct: float,
         sav_pct: float,
         locale: str,
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """Identify where the business beats or lags peers.
 
         Args:
@@ -549,7 +534,7 @@ class ComparisonEngine:
         margin_pct: float,
         growth_pct: float,
         group_desc: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate Swahili comparison insights.
 
         Args:
@@ -617,7 +602,7 @@ class ComparisonEngine:
         margin_pct: float,
         growth_pct: float,
         group_desc: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate English comparison insights.
 
         Args:
@@ -748,11 +733,11 @@ class ComparisonEngine:
 
         # Header
         if locale == "sw":
-            lines.append(f"👥 *Ulinganisho na biashara zingine:*")
+            lines.append("👥 *Ulinganisho na biashara zingine:*")
             lines.append(f"   Kundi: {result.comparison_group}")
             lines.append(f"   Biashara: {result.peer_count}+")
         else:
-            lines.append(f"👥 *Peer Comparison:*")
+            lines.append("👥 *Peer Comparison:*")
             lines.append(f"   Group: {result.comparison_group}")
             lines.append(f"   Businesses: {result.peer_count}+")
 

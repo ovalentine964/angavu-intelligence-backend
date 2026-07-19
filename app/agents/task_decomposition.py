@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import structlog
 
@@ -44,7 +45,6 @@ from app.agents.subagent import (
     SubAgentPriority,
     SubAgentResult,
     SubAgentStatus,
-    SubAgentTask,
 )
 
 logger = structlog.get_logger(__name__)
@@ -85,16 +85,16 @@ class SubTaskDefinition:
     name: str = ""
     description: str = ""
     handler_name: str = ""       # Name of handler to use
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    depends_on: List[str] = field(default_factory=list)  # subtask_ids
+    parameters: dict[str, Any] = field(default_factory=dict)
+    depends_on: list[str] = field(default_factory=list)  # subtask_ids
     complexity: TaskComplexity = TaskComplexity.MODERATE
     priority: SubAgentPriority = SubAgentPriority.NORMAL
     timeout_seconds: float = 60.0
     can_parallelize: bool = True
     estimated_duration_ms: float = 0.0
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize sub-task definition to dictionary."""
         return {
             "subtask_id": self.subtask_id,
@@ -120,8 +120,8 @@ class DecompositionPlan:
     plan_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     task_name: str = ""
     strategy: DecompositionStrategy = DecompositionStrategy.DAG
-    subtasks: List[SubTaskDefinition] = field(default_factory=list)
-    execution_batches: List[List[str]] = field(default_factory=list)  # Ordered batches of subtask_ids
+    subtasks: list[SubTaskDefinition] = field(default_factory=list)
+    execution_batches: list[list[str]] = field(default_factory=list)  # Ordered batches of subtask_ids
     created_at: float = field(default_factory=time.time)
 
     @property
@@ -136,14 +136,14 @@ class DecompositionPlan:
             return 1.0
         return len(self.subtasks) / len(self.execution_batches)
 
-    def get_subtask(self, subtask_id: str) -> Optional[SubTaskDefinition]:
+    def get_subtask(self, subtask_id: str) -> SubTaskDefinition | None:
         """Find a sub-task definition by its ID."""
         for st in self.subtasks:
             if st.subtask_id == subtask_id:
                 return st
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plan_id": self.plan_id,
             "task_name": self.task_name,
@@ -160,10 +160,10 @@ class DecompositionPlan:
 class DecompositionResult:
     """Result of executing a decomposition plan."""
     plan: DecompositionPlan
-    results: Dict[str, SubAgentResult] = field(default_factory=dict)
+    results: dict[str, SubAgentResult] = field(default_factory=dict)
     total_duration_ms: float = 0.0
     success: bool = False
-    failed_subtasks: List[str] = field(default_factory=list)
+    failed_subtasks: list[str] = field(default_factory=list)
 
     @property
     def success_rate(self) -> float:
@@ -172,7 +172,7 @@ class DecompositionResult:
         successes = sum(1 for r in self.results.values() if r.success)
         return successes / len(self.results)
 
-    def get_aggregated_data(self) -> Dict[str, Any]:
+    def get_aggregated_data(self) -> dict[str, Any]:
         """Aggregate data from all successful sub-task results."""
         aggregated = {}
         for subtask_id, result in self.results.items():
@@ -180,7 +180,7 @@ class DecompositionResult:
                 aggregated[subtask_id] = result.data
         return aggregated
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plan_id": self.plan.plan_id,
             "total_subtasks": self.plan.total_subtasks,
@@ -228,9 +228,9 @@ class TaskDecomposer:
     """
 
     def __init__(self):
-        self._handlers: Dict[str, Callable[..., Coroutine]] = {}
-        self._handler_metadata: Dict[str, Dict[str, Any]] = {}
-        self._custom_decomposers: Dict[str, Callable] = {}
+        self._handlers: dict[str, Callable[..., Coroutine]] = {}
+        self._handler_metadata: dict[str, dict[str, Any]] = {}
+        self._custom_decomposers: dict[str, Callable] = {}
 
         self._logger = logger.bind(component="task_decomposer")
 
@@ -240,7 +240,7 @@ class TaskDecomposer:
         self,
         name: str,
         handler: Callable[..., Coroutine],
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Register a handler for sub-task execution."""
         self._handlers[name] = handler
@@ -250,7 +250,7 @@ class TaskDecomposer:
     def register_decomposer(
         self,
         task_type: str,
-        decomposer_fn: Callable[..., List[SubTaskDefinition]],
+        decomposer_fn: Callable[..., list[SubTaskDefinition]],
     ) -> None:
         """Register a custom decomposition function for a task type."""
         self._custom_decomposers[task_type] = decomposer_fn
@@ -262,7 +262,7 @@ class TaskDecomposer:
         task_name: str,
         description: str = "",
         strategy: DecompositionStrategy = DecompositionStrategy.DAG,
-        parameters: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any] | None = None,
     ) -> DecompositionPlan:
         """
         Decompose a complex task into sub-tasks.
@@ -310,8 +310,8 @@ class TaskDecomposer:
         self,
         task_name: str,
         description: str,
-        parameters: Dict[str, Any],
-    ) -> List[SubTaskDefinition]:
+        parameters: dict[str, Any],
+    ) -> list[SubTaskDefinition]:
         """
         Default decomposition heuristic.
 
@@ -347,9 +347,9 @@ class TaskDecomposer:
 
     def _build_execution_schedule(
         self,
-        subtasks: List[SubTaskDefinition],
+        subtasks: list[SubTaskDefinition],
         strategy: DecompositionStrategy,
-    ) -> List[List[str]]:
+    ) -> list[list[str]]:
         """
         Build an execution schedule from sub-tasks.
 
@@ -380,8 +380,8 @@ class TaskDecomposer:
 
     def _topological_batches(
         self,
-        subtasks: List[SubTaskDefinition],
-    ) -> List[List[str]]:
+        subtasks: list[SubTaskDefinition],
+    ) -> list[list[str]]:
         """
         Topological sort into parallel execution batches.
 
@@ -392,8 +392,8 @@ class TaskDecomposer:
         # Build adjacency
         id_to_task = {st.subtask_id: st for st in subtasks}
         remaining = set(st.subtask_id for st in subtasks)
-        completed: Set[str] = set()
-        batches: List[List[str]] = []
+        completed: set[str] = set()
+        batches: list[list[str]] = []
 
         while remaining:
             # Find tasks whose dependencies are all completed
@@ -439,8 +439,8 @@ class TaskDecomposer:
             DecompositionResult with all sub-task results
         """
         start_time = time.time()
-        all_results: Dict[str, SubAgentResult] = {}
-        failed: List[str] = []
+        all_results: dict[str, SubAgentResult] = {}
+        failed: list[str] = []
 
         self._logger.info(
             "executing_plan",
@@ -533,8 +533,8 @@ class TaskDecomposer:
     def replan_on_failure(
         self,
         original_plan: DecompositionPlan,
-        failed_subtasks: List[str],
-        results: Dict[str, SubAgentResult],
+        failed_subtasks: list[str],
+        results: dict[str, SubAgentResult],
     ) -> DecompositionPlan:
         """
         Re-plan after sub-task failures.
@@ -570,11 +570,11 @@ class TaskDecomposer:
 
     # ── Query ───────────────────────────────────────────────────────
 
-    def get_registered_handlers(self) -> List[str]:
+    def get_registered_handlers(self) -> list[str]:
         """List registered handler names."""
         return list(self._handlers.keys())
 
-    def get_handler_metadata(self, name: str) -> Dict[str, Any]:
+    def get_handler_metadata(self, name: str) -> dict[str, Any]:
         """Get metadata for a handler."""
         return self._handler_metadata.get(name, {})
 
@@ -640,12 +640,12 @@ def create_financial_task_decomposer() -> TaskDecomposer:
     return decomposer
 
 
-async def _mock_handler(domain: str, **kwargs: Any) -> Dict[str, Any]:
+async def _mock_handler(domain: str, **kwargs: Any) -> dict[str, Any]:
     """Mock handler for testing. In production, replaced with real handlers."""
     return {"domain": domain, "status": "completed", "data": kwargs}
 
 
-def _decompose_order_fulfillment(**params: Any) -> List[SubTaskDefinition]:
+def _decompose_order_fulfillment(**params: Any) -> list[SubTaskDefinition]:
     """Decompose an order fulfillment task."""
     market = SubTaskDefinition(
         name="analyze_market",
@@ -676,7 +676,7 @@ def _decompose_order_fulfillment(**params: Any) -> List[SubTaskDefinition]:
     return [market, inventory, report]
 
 
-def _decompose_credit_assessment(**params: Any) -> List[SubTaskDefinition]:
+def _decompose_credit_assessment(**params: Any) -> list[SubTaskDefinition]:
     """Decompose a credit assessment task."""
     anomalies = SubTaskDefinition(
         name="detect_anomalies",
@@ -705,7 +705,7 @@ def _decompose_credit_assessment(**params: Any) -> List[SubTaskDefinition]:
     return [anomalies, credit, report]
 
 
-def _decompose_market_analysis(**params: Any) -> List[SubTaskDefinition]:
+def _decompose_market_analysis(**params: Any) -> list[SubTaskDefinition]:
     """Decompose a market analysis task."""
     market = SubTaskDefinition(
         name="analyze_market",

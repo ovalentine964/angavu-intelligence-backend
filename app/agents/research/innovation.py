@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -106,7 +106,7 @@ class InnovationAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine innovation action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -243,7 +243,7 @@ class InnovationAgent(BiasharaAgent):
                     payload={
                         "action": action,
                         "ideas_count": len(result.get("ideas", [])) if isinstance(result, dict) else 0,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -260,7 +260,7 @@ class InnovationAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _generate_brief(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_brief(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate an innovation brief with prioritized ideas."""
         category = params.get("category", "all")
         segment = params.get("user_segment", "all")
@@ -283,7 +283,7 @@ class InnovationAgent(BiasharaAgent):
                 "priority_score": 0.65,
                 "user_segment": segment,
                 "source": "innovation_brief",
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
             })
 
         return {
@@ -295,7 +295,7 @@ class InnovationAgent(BiasharaAgent):
             "total_proposed": self._features_proposed,
         }
 
-    def _ideate_from_insight(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _ideate_from_insight(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate feature ideas from user insights."""
         insight_type = params.get("insight_type", "general")
 
@@ -329,7 +329,7 @@ class InnovationAgent(BiasharaAgent):
             "ideas": ideas,
         }
 
-    def _ideate_from_trend(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _ideate_from_trend(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate feature ideas from market trends."""
         commodity = params.get("commodity", "")
         trend = params.get("trend", "")
@@ -353,7 +353,7 @@ class InnovationAgent(BiasharaAgent):
             "ideas": ideas,
         }
 
-    def _process_feedback(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_feedback(self, params: dict[str, Any]) -> dict[str, Any]:
         """Process feature request feedback into pipeline item."""
         text = params.get("text", "")
         feedback_type = params.get("feedback_type", "")
@@ -378,7 +378,7 @@ class InnovationAgent(BiasharaAgent):
             "pipeline_size": len(self._innovation_pipeline),
         }
 
-    def _analyze_competitor_gap(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_competitor_gap(self, params: dict[str, Any]) -> dict[str, Any]:
         """Analyze competitor move for innovation opportunity."""
         competitor = params.get("competitor", "")
 
@@ -398,7 +398,7 @@ class InnovationAgent(BiasharaAgent):
             "ideas": ideas,
         }
 
-    def _review_evolution(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _review_evolution(self, params: dict[str, Any]) -> dict[str, Any]:
         """Review evolution cycle for innovation signals."""
         return {
             "cycle_type": params.get("cycle_type"),
@@ -406,7 +406,7 @@ class InnovationAgent(BiasharaAgent):
             "innovation_signals": "extracted_from_evolution",
         }
 
-    def get_innovation_stats(self) -> Dict[str, Any]:
+    def get_innovation_stats(self) -> dict[str, Any]:
         """Return innovation agent statistics."""
         return {
             "ideas_generated": self._ideas_generated,

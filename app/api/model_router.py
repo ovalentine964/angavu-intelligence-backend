@@ -11,8 +11,6 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -33,14 +31,14 @@ class Message(BaseModel):
 
 
 class InferenceRequest(BaseModel):
-    messages: List[Message] = Field(..., description="Conversation messages")
-    model: Optional[str] = Field(None, description="Preferred model name")
+    messages: list[Message] = Field(..., description="Conversation messages")
+    model: str | None = Field(None, description="Preferred model name")
     max_tokens: int = Field(1024, ge=1, le=32768, description="Max output tokens")
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
     task_complexity: str = Field("medium", description="Task complexity: low, medium, high")
-    preferred_providers: Optional[List[str]] = Field(None, description="Ordered list of preferred provider IDs")
-    enable_compression: Optional[bool] = Field(None, description="Override compression setting")
-    user_id: Optional[str] = Field(None, description="User ID for tracking")
+    preferred_providers: list[str] | None = Field(None, description="Ordered list of preferred provider IDs")
+    enable_compression: bool | None = Field(None, description="Override compression setting")
+    user_id: str | None = Field(None, description="User ID for tracking")
 
 
 class InferenceResponse(BaseModel):
@@ -61,8 +59,8 @@ class ProviderInfo(BaseModel):
     type: str
     display_name: str
     status: str
-    models: List[str]
-    capabilities: List[str]
+    models: list[str]
+    capabilities: list[str]
     cost_per_1k_input: float
     cost_per_1k_output: float
     max_context_tokens: int
@@ -72,12 +70,12 @@ class ProviderInfo(BaseModel):
     total_failures: int
     consecutive_failures: int
     error_rate: float
-    avg_latency_ms: Optional[float]
-    p95_latency_ms: Optional[float]
+    avg_latency_ms: float | None
+    p95_latency_ms: float | None
     is_available: bool
     registered_at: str
-    last_success_at: Optional[str]
-    last_failure_at: Optional[str]
+    last_success_at: str | None
+    last_failure_at: str | None
 
 
 class HealthResponse(BaseModel):
@@ -87,7 +85,7 @@ class HealthResponse(BaseModel):
     unhealthy: int
     offline: int
     available: int
-    providers: List[ProviderInfo]
+    providers: list[ProviderInfo]
 
 
 class StatsResponse(BaseModel):
@@ -146,12 +144,12 @@ async def route_inference(req: InferenceRequest):
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error("inference_error", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e!s}")
 
 
-@router.get("/providers", response_model=List[ProviderInfo], summary="List providers")
+@router.get("/providers", response_model=list[ProviderInfo], summary="List providers")
 async def list_providers(
-    provider_type: Optional[str] = Query(None, description="Filter by type: on_device, cloud_api, self_hosted, edge"),
+    provider_type: str | None = Query(None, description="Filter by type: on_device, cloud_api, self_hosted, edge"),
     available_only: bool = Query(False, description="Only show available providers"),
 ):
     """List all registered AI inference providers with their status and metrics."""
@@ -184,7 +182,7 @@ async def get_usage_stats():
 
 @router.get("/failures", summary="Failure history")
 async def get_failure_history(
-    provider_id: Optional[str] = Query(None, description="Filter by provider"),
+    provider_id: str | None = Query(None, description="Filter by provider"),
     limit: int = Query(50, ge=1, le=200),
 ):
     """Get recent inference failure history for debugging."""

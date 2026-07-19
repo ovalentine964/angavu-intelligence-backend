@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, BiasharaAgent
+from app.agents.base import AgentDecision, AgentResult, BiasharaAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -41,7 +41,7 @@ class AnomalyDetectorAgent(BiasharaAgent):
             ],
         )
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
 
@@ -90,7 +90,7 @@ class AnomalyDetectorAgent(BiasharaAgent):
             duration_ms=(time.time() - start) * 1000,
         )
 
-    def _zscore_detect(self, values: List[float], threshold: float = 2.5) -> List[Dict[str, Any]]:
+    def _zscore_detect(self, values: list[float], threshold: float = 2.5) -> list[dict[str, Any]]:
         """Detect anomalies using z-score."""
         if len(values) < 3:
             return []
@@ -110,7 +110,7 @@ class AnomalyDetectorAgent(BiasharaAgent):
 
         return anomalies
 
-    def _iqr_detect(self, values: List[float]) -> List[Dict[str, Any]]:
+    def _iqr_detect(self, values: list[float]) -> list[dict[str, Any]]:
         """Detect anomalies using IQR method."""
         if len(values) < 4:
             return []

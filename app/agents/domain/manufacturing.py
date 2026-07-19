@@ -6,7 +6,9 @@ Swahili keywords reflect East African manufacturing:
 """
 
 from __future__ import annotations
-from typing import Any, Dict, Optional
+
+from typing import Any
+
 from app.agents.domain.base import DomainAgent
 
 
@@ -51,7 +53,7 @@ class ManufacturingDomainAgent(DomainAgent):
             ],
         )
 
-    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _query_service_data(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Query ManufacturingAgent service for real production analysis."""
         if not self._transaction_service:
             return None
@@ -69,7 +71,7 @@ class ManufacturingDomainAgent(DomainAgent):
             self._domain_logger.warning("service_query_failed", error=str(exc))
             return None
 
-    def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Manufacturing analysis with SPC quality control grounding."""
         base = super()._analyze(payload)
 
@@ -128,7 +130,7 @@ class ManufacturingDomainAgent(DomainAgent):
         })
         return base
 
-    def _process_transaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Process manufacturing transaction with quality checks."""
         base = super()._process_transaction(payload)
 

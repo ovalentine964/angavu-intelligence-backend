@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 from collections import Counter, deque
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -100,7 +100,7 @@ class UserInsightAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine user insight action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -199,7 +199,7 @@ class UserInsightAgent(BiasharaAgent):
                         "insight_type": decision.parameters.get("insight_type", "general"),
                         "segment": decision.parameters.get("segment", "all"),
                         "insights": result,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
                 events.append(AgentEvent(
@@ -207,7 +207,7 @@ class UserInsightAgent(BiasharaAgent):
                     source=self.name,
                     payload={
                         "research_type": "user_insight",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -228,7 +228,7 @@ class UserInsightAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _generate_insights(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_insights(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate user behavior insights."""
         insight_type = params.get("insight_type", "general")
         segment = params.get("segment", "all")
@@ -253,10 +253,10 @@ class UserInsightAgent(BiasharaAgent):
             "unique_users_observed": unique_users,
             "engagement_distribution": self._compute_engagement_distribution(),
             "top_commodities": self._top_commodities(),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
-    def _retention_analysis(self) -> Dict[str, Any]:
+    def _retention_analysis(self) -> dict[str, Any]:
         """Compute retention metrics from user signals."""
         return {
             "insight_type": "retention",
@@ -270,7 +270,7 @@ class UserInsightAgent(BiasharaAgent):
             "reference": "STA_343_survival_analysis",
         }
 
-    def _churn_analysis(self) -> Dict[str, Any]:
+    def _churn_analysis(self) -> dict[str, Any]:
         """Identify churn risk segments."""
         return {
             "insight_type": "churn",
@@ -287,7 +287,7 @@ class UserInsightAgent(BiasharaAgent):
             "alerts_generated": self._churn_alerts,
         }
 
-    def _cohort_analysis(self) -> Dict[str, Any]:
+    def _cohort_analysis(self) -> dict[str, Any]:
         """Perform cohort-based analysis."""
         return {
             "insight_type": "cohort",
@@ -300,7 +300,7 @@ class UserInsightAgent(BiasharaAgent):
             "reference": "STA_245_cohort_analysis",
         }
 
-    def _track_engagement(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _track_engagement(self, params: dict[str, Any]) -> dict[str, Any]:
         """Track user engagement signal."""
         user_id = params.get("user_id")
         self._user_signals.append({
@@ -308,7 +308,7 @@ class UserInsightAgent(BiasharaAgent):
             "type": "transaction",
             "amount": params.get("amount", 0),
             "commodity": params.get("commodity", ""),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         return {
@@ -317,7 +317,7 @@ class UserInsightAgent(BiasharaAgent):
             "total_signals": len(self._user_signals),
         }
 
-    def _analyze_feedback(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_feedback(self, params: dict[str, Any]) -> dict[str, Any]:
         """Analyze feedback as a churn/engagement signal."""
         user_id = params.get("user_id")
         sentiment = params.get("sentiment", "neutral")
@@ -327,7 +327,7 @@ class UserInsightAgent(BiasharaAgent):
             "type": "feedback",
             "feedback_type": params.get("feedback_type"),
             "sentiment": sentiment,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         churn_risk = sentiment in ("negative", "very_negative")
@@ -339,14 +339,14 @@ class UserInsightAgent(BiasharaAgent):
             "churn_risk": churn_risk,
         }
 
-    def _track_onboarding(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _track_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
         """Track onboarding completion for cohort analysis."""
         user_id = params.get("user_id")
         self._user_signals.append({
             "user_id": user_id,
             "type": "onboarding",
             "completion_time": params.get("completion_time", 0),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         return {
@@ -355,14 +355,14 @@ class UserInsightAgent(BiasharaAgent):
             "onboarding_tracked": True,
         }
 
-    def _compute_engagement_distribution(self) -> Dict[str, int]:
+    def _compute_engagement_distribution(self) -> dict[str, int]:
         """Compute engagement tier distribution."""
         distribution = Counter()
         for signal in self._user_signals:
             distribution[signal.get("type", "unknown")] += 1
         return dict(distribution)
 
-    def _top_commodities(self, n: int = 5) -> List[str]:
+    def _top_commodities(self, n: int = 5) -> list[str]:
         """Get top N commodities from signals."""
         commodity_counts = Counter()
         for signal in self._user_signals:
@@ -371,7 +371,7 @@ class UserInsightAgent(BiasharaAgent):
                 commodity_counts[commodity] += 1
         return [c for c, _ in commodity_counts.most_common(n)]
 
-    def get_insight_stats(self) -> Dict[str, Any]:
+    def get_insight_stats(self) -> dict[str, Any]:
         """Return user insight agent statistics."""
         return {
             "insights_generated": self._insights_generated,

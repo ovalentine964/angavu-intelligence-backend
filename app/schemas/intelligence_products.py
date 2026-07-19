@@ -6,10 +6,9 @@ All schemas enforce k-anonymity constraints in documentation.
 """
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # =========================================================================
 # Common / Shared Schemas
@@ -22,10 +21,10 @@ class ProductTierConfig(BaseModel):
     tier: str
     price_monthly_kes: float
     price_monthly_usd: float
-    features: List[str]
+    features: list[str]
     refresh_frequency: str
-    markets_included: Optional[int] = None
-    api_queries_per_month: Optional[int] = None
+    markets_included: int | None = None
+    api_queries_per_month: int | None = None
 
 
 class PaginationParams(BaseModel):
@@ -62,12 +61,12 @@ class SokoPulseRequest(BaseModel):
     product_category: str = Field(
         ..., description="Product category (food, household, beverages, etc.)",
     )
-    product_name: Optional[str] = Field(
+    product_name: str | None = Field(
         None, description="Specific product or omit for category-level",
     )
-    region: Optional[str] = Field(None, description="Geographic region")
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    region: str | None = Field(None, description="Geographic region")
+    period_start: date | None = None
+    period_end: date | None = None
     tier: str = Field("standard", pattern=r"^(standard|premium|enterprise)$")
     include_forecast: bool = Field(True, description="Include demand forecast")
     include_seasonality: bool = Field(True, description="Include seasonal analysis")
@@ -80,7 +79,7 @@ class DemandForecast(BaseModel):
     confidence_interval_low: float
     confidence_interval_high: float
     forecast_method: str = "exponential_smoothing"
-    mape: Optional[float] = Field(None, description="Mean Absolute Percentage Error")
+    mape: float | None = Field(None, description="Mean Absolute Percentage Error")
 
 
 class PriceIntelligence(BaseModel):
@@ -91,7 +90,7 @@ class PriceIntelligence(BaseModel):
     max_price: float
     median_price: float
     price_trend: str = Field(..., pattern=r"^(rising|stable|declining)$")
-    price_change_pct: Optional[float] = None
+    price_change_pct: float | None = None
     unit: str = "KES"
 
 
@@ -108,23 +107,23 @@ class SokoPulseResponse(IntelligenceResponse):
     total_volume: float
     avg_daily_volume: float
     demand_trend: str = Field(..., pattern=r"^(rising|stable|declining)$")
-    forecast: Optional[DemandForecast] = None
+    forecast: DemandForecast | None = None
 
     # Price
     price_intelligence: PriceIntelligence
 
     # Temporal patterns
-    day_of_week_pattern: Dict[str, float] = {}
-    monthly_trend: List[Dict[str, Any]] = []
-    peak_demand_days: List[str] = []
+    day_of_week_pattern: dict[str, float] = {}
+    monthly_trend: list[dict[str, Any]] = []
+    peak_demand_days: list[str] = []
 
     # Supply
     vendor_count: int
-    stockout_frequency: Optional[float] = None
+    stockout_frequency: float | None = None
 
     # Seasonality
-    seasonal_factor: Optional[float] = None
-    seasonal_events: List[Dict[str, Any]] = []
+    seasonal_factor: float | None = None
+    seasonal_events: list[dict[str, Any]] = []
 
     # Data quality
     users_included: int
@@ -141,8 +140,8 @@ class BiasharaPulseRequest(BaseModel):
     """Request for Angavu Pulse MSME Activity Index."""
 
     region: str = Field(..., description="County code, sub-county, or 'national'")
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    period_start: date | None = None
+    period_end: date | None = None
     include_sector_breakdown: bool = True
     include_comparisons: bool = True
     include_employment: bool = True
@@ -156,7 +155,7 @@ class SectorActivity(BaseModel):
     revenue_share_pct: float
     business_count: int
     trend: str = Field(..., pattern=r"^(growing|stable|declining)$")
-    growth_pct: Optional[float] = None
+    growth_pct: float | None = None
 
 
 class BusinessFormation(BaseModel):
@@ -166,7 +165,7 @@ class BusinessFormation(BaseModel):
     closed_businesses_est: int
     net_change: int
     formation_rate: float = Field(..., description="New businesses per 1000 existing")
-    survival_rate: Optional[float] = Field(None, description="% surviving after 1 year")
+    survival_rate: float | None = Field(None, description="% surviving after 1 year")
 
 
 class BiasharaPulseResponse(IntelligenceResponse):
@@ -180,12 +179,12 @@ class BiasharaPulseResponse(IntelligenceResponse):
     # Indices
     activity_index: float = Field(..., ge=0, le=100)
     growth_index: float = Field(..., ge=0, le=100)
-    formalization_index: Optional[float] = Field(None, ge=0, le=100)
+    formalization_index: float | None = Field(None, ge=0, le=100)
 
     # Business counts
     estimated_businesses: int
     active_businesses: int
-    business_formation: Optional[BusinessFormation] = None
+    business_formation: BusinessFormation | None = None
 
     # Economic metrics
     total_transactions: int
@@ -194,23 +193,23 @@ class BiasharaPulseResponse(IntelligenceResponse):
     avg_daily_revenue_per_business: float
 
     # Sectors
-    sector_breakdown: List[SectorActivity] = []
-    top_sectors: List[str] = []
+    sector_breakdown: list[SectorActivity] = []
+    top_sectors: list[str] = []
 
     # Infrastructure
     mpesa_penetration_pct: float
-    digital_payment_adoption: Optional[float] = None
+    digital_payment_adoption: float | None = None
     avg_operating_hours: float
     avg_operating_days_per_week: float
 
     # Employment
-    estimated_employment: Optional[int] = None
-    employment_per_business: Optional[float] = None
+    estimated_employment: int | None = None
+    employment_per_business: float | None = None
 
     # Comparisons
-    vs_previous_period_pct: Optional[float] = None
-    vs_national_avg_pct: Optional[float] = None
-    county_rank: Optional[int] = None
+    vs_previous_period_pct: float | None = None
+    vs_national_avg_pct: float | None = None
+    county_rank: int | None = None
 
     # Data quality
     users_included: int
@@ -250,9 +249,9 @@ class RiskIndicators(BaseModel):
     """Risk assessment indicators."""
 
     category_risk: str = Field(..., pattern=r"^(low|medium|high)$")
-    default_probability: Optional[float] = Field(None, ge=0, le=1)
-    recommended_credit_limit_kes: Optional[float] = None
-    risk_factors: List[str] = []
+    default_probability: float | None = Field(None, ge=0, le=1)
+    recommended_credit_limit_kes: float | None = None
+    risk_factors: list[str] = []
 
 
 class AlamaScoreResponse(IntelligenceResponse):
@@ -261,8 +260,8 @@ class AlamaScoreResponse(IntelligenceResponse):
     product = "alama_score"
     business_hash: str
     business_type: str
-    market_id: Optional[str] = None
-    region: Optional[str] = None
+    market_id: str | None = None
+    region: str | None = None
 
     # Score
     alama_score: int = Field(..., ge=300, le=850)
@@ -283,14 +282,14 @@ class AlamaScoreResponse(IntelligenceResponse):
 
     # Heckman correction
     heckman_corrected: bool = False
-    heckman_lambda: Optional[float] = None
+    heckman_lambda: float | None = None
 
     # Risk
     risk_indicators: RiskIndicators
 
     # Peer comparison
-    vs_market_avg: Dict[str, float] = {}
-    peer_rank_pct: Optional[float] = None
+    vs_market_avg: dict[str, float] = {}
+    peer_rank_pct: float | None = None
 
     # Data quality
     data_points: int
@@ -308,13 +307,13 @@ class JamiiInsightsRequest(BaseModel):
     """Request for Jamii Insights financial inclusion data."""
 
     region: str = Field(..., description="Region or 'national'")
-    demographic_segment: Optional[str] = Field(
+    demographic_segment: str | None = Field(
         None,
         description="youth, women, rural, urban, etc.",
     )
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
-    program_name: Optional[str] = Field(
+    period_start: date | None = None
+    period_end: date | None = None
+    program_name: str | None = Field(
         None,
         description="Specific program for impact evaluation",
     )
@@ -340,8 +339,8 @@ class ProgramImpact(BaseModel):
     pre_program_index: float
     post_program_index: float
     impact_delta: float
-    cost_per_beneficiary_kes: Optional[float] = None
-    statistical_significance: Optional[float] = None
+    cost_per_beneficiary_kes: float | None = None
+    statistical_significance: float | None = None
 
 
 class Barrier(BaseModel):
@@ -350,7 +349,7 @@ class Barrier(BaseModel):
     barrier: str
     severity: float = Field(..., ge=0, le=100)
     affected_pct: float = Field(..., ge=0, le=100)
-    recommended_intervention: Optional[str] = None
+    recommended_intervention: str | None = None
 
 
 class JamiiInsightsResponse(IntelligenceResponse):
@@ -358,7 +357,7 @@ class JamiiInsightsResponse(IntelligenceResponse):
 
     product = "jamii_insights"
     region: str
-    demographic_segment: Optional[str] = None
+    demographic_segment: str | None = None
     time_period: str
 
     # Inclusion metrics
@@ -370,21 +369,21 @@ class JamiiInsightsResponse(IntelligenceResponse):
     formal_banking_pct: float
 
     # Demographics
-    youth_owned_pct: Optional[float] = None
-    women_owned_pct: Optional[float] = None
-    avg_owner_age: Optional[float] = None
+    youth_owned_pct: float | None = None
+    women_owned_pct: float | None = None
+    avg_owner_age: float | None = None
 
     # Economic impact
-    avg_monthly_income_kes: Optional[float] = None
-    income_growth_pct: Optional[float] = None
-    employment_created: Optional[int] = None
-    livelihoods_supported: Optional[int] = None
+    avg_monthly_income_kes: float | None = None
+    income_growth_pct: float | None = None
+    employment_created: int | None = None
+    livelihoods_supported: int | None = None
 
     # Program impact
-    program_impact: Optional[ProgramImpact] = None
+    program_impact: ProgramImpact | None = None
 
     # Barriers
-    barriers: List[Barrier] = []
+    barriers: list[Barrier] = []
 
     # Data quality
     sample_size: int
@@ -399,9 +398,9 @@ class TaxBaseRequest(BaseModel):
     """Request for Tax Base Estimation."""
 
     region: str = Field(..., description="County code or 'national'")
-    sector: Optional[str] = Field(None, description="Specific sector or all")
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    sector: str | None = Field(None, description="Specific sector or all")
+    period_start: date | None = None
+    period_end: date | None = None
     include_sector_breakdown: bool = True
     include_projections: bool = True
 
@@ -435,7 +434,7 @@ class TaxBaseResponse(IntelligenceResponse):
     product = "tax_base_estimation"
     region: str
     region_type: str
-    sector: Optional[str] = None
+    sector: str | None = None
     time_period: str
 
     # Business estimates
@@ -448,21 +447,21 @@ class TaxBaseResponse(IntelligenceResponse):
     tax_estimates: TaxEstimates
 
     # Sector breakdown
-    sector_breakdown: List[SectorTaxBreakdown] = []
-    top_tax_contributors: List[Dict[str, Any]] = []
+    sector_breakdown: list[SectorTaxBreakdown] = []
+    top_tax_contributors: list[dict[str, Any]] = []
 
     # Growth
-    revenue_growth_pct: Optional[float] = None
-    tax_base_growth_pct: Optional[float] = None
-    new_registrations_est: Optional[int] = None
+    revenue_growth_pct: float | None = None
+    tax_base_growth_pct: float | None = None
+    new_registrations_est: int | None = None
 
     # Comparisons
-    vs_previous_period_pct: Optional[float] = None
-    county_rank: Optional[int] = None
+    vs_previous_period_pct: float | None = None
+    county_rank: int | None = None
 
     # Data quality
     users_included: int
-    confidence_interval: Optional[Dict[str, float]] = None
+    confidence_interval: dict[str, float] | None = None
 
 
 # =========================================================================
@@ -474,10 +473,10 @@ class DistributionGapRequest(BaseModel):
     """Request for Distribution Gap Analysis."""
 
     product_category: str = Field(..., description="Product category to analyze")
-    product_name: Optional[str] = Field(None, description="Specific product")
-    region: Optional[str] = Field(None, description="Geographic region")
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    product_name: str | None = Field(None, description="Specific product")
+    region: str | None = Field(None, description="Geographic region")
+    period_start: date | None = None
+    period_end: date | None = None
     include_competitors: bool = True
     include_recommendations: bool = True
 
@@ -488,12 +487,12 @@ class GapMarket(BaseModel):
     market_id: str
     market_name: str
     region: str
-    population_estimate: Optional[int] = None
+    population_estimate: int | None = None
     demand_index: float = Field(..., ge=0, le=100)
     revenue_potential_kes: float
-    competitor_presence: Optional[str] = None
+    competitor_presence: str | None = None
     priority_rank: int
-    recommended_action: Optional[str] = None
+    recommended_action: str | None = None
 
 
 class DistributionCoverage(BaseModel):
@@ -519,28 +518,28 @@ class DistributionGapResponse(IntelligenceResponse):
     coverage: DistributionCoverage
 
     # Gaps
-    gap_markets: List[GapMarket] = []
+    gap_markets: list[GapMarket] = []
     gap_market_population: int
     gap_revenue_potential_kes: float
-    demand_without_supply: Optional[float] = None
+    demand_without_supply: float | None = None
 
     # Underserved
-    underserved_regions: List[Dict[str, Any]] = []
-    underserved_demographics: List[Dict[str, Any]] = []
+    underserved_regions: list[dict[str, Any]] = []
+    underserved_demographics: list[dict[str, Any]] = []
 
     # Competitive
-    competitor_presence: Dict[str, Any] = {}
-    competitive_gap_pct: Optional[float] = None
-    market_share_estimate: Optional[float] = None
+    competitor_presence: dict[str, Any] = {}
+    competitive_gap_pct: float | None = None
+    market_share_estimate: float | None = None
 
     # Distribution efficiency
-    avg_distribution_cost_per_unit: Optional[float] = None
-    distribution_density: Optional[float] = None
+    avg_distribution_cost_per_unit: float | None = None
+    distribution_density: float | None = None
 
     # Recommendations
-    recommended_expansion_markets: List[Dict[str, Any]] = []
-    estimated_roi_pct: Optional[float] = None
-    investment_required_kes: Optional[float] = None
+    recommended_expansion_markets: list[dict[str, Any]] = []
+    estimated_roi_pct: float | None = None
+    investment_required_kes: float | None = None
 
     # Data quality
     users_included: int

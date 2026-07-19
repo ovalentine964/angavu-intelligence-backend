@@ -12,7 +12,7 @@ Tables:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -25,7 +25,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.db.database import Base
 
@@ -87,7 +87,7 @@ class ServerMetric(Base):
 
     recorded_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
         index=True,
     )
@@ -192,7 +192,7 @@ class ModelVersion(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     deployed_at = Column(DateTime(timezone=True), nullable=True)
@@ -277,7 +277,7 @@ class FederatedUpdate(Base):
 
     submitted_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
         index=True,
     )
@@ -340,7 +340,7 @@ class CostTracking(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 

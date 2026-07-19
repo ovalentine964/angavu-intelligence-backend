@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence
+from typing import Any
 
 import structlog
 
@@ -39,7 +39,6 @@ from app.agents.base import (
     AgentEvent,
     AgentResult,
     BiasharaAgent,
-    EventType,
 )
 
 logger = structlog.get_logger(__name__)
@@ -146,7 +145,7 @@ class TrustScore:
         hours_since = (time.time() - self.last_interaction) / 3600
         self.recency = max(0.1, 1.0 - hours_since / 168)  # decay over 1 week
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "worker_id": self.worker_id,
             "overall": round(self.overall, 3),
@@ -169,15 +168,15 @@ class EscalationRecord:
     agent_name: str = ""
     action_proposed: str = ""
     confidence: float = 0.0
-    financial_amount: Optional[float] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    financial_amount: float | None = None
+    context: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     resolved: bool = False
     resolution: str = ""        # "accepted" | "rejected" | "modified" | "timeout"
     resolution_time_ms: float = 0.0
-    human_response: Optional[Dict[str, Any]] = None
+    human_response: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "escalation_id": self.escalation_id,
             "worker_id": self.worker_id,
@@ -203,9 +202,9 @@ class HITLMetrics:
     rejected_escalations: int = 0
     modified_escalations: int = 0
     avg_resolution_time_ms: float = 0.0
-    autonomy_distribution: Dict[str, int] = field(default_factory=dict)
+    autonomy_distribution: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_decisions": self.total_decisions,
             "autonomous_rate": round(
@@ -286,7 +285,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
 
         # Tracking
         self._consecutive_failures = 0
-        self._escalations: List[EscalationRecord] = []
+        self._escalations: list[EscalationRecord] = []
         self._max_escalation_history = 500
         self._metrics = HITLMetrics()
         self._novel_contexts: set = set()
@@ -299,7 +298,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
     def trust_score(self) -> TrustScore:
         return self._trust_score
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Delegate thinking to wrapped agent."""
         return await self._wrapped.think(context)
 
@@ -368,7 +367,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
 
     async def _check_escalation(
         self, event: AgentEvent, result: AgentResult
-    ) -> tuple[bool, Optional[EscalationReason]]:
+    ) -> tuple[bool, EscalationReason | None]:
         """
         Check if this decision should be escalated to human.
 
@@ -403,7 +402,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
 
         return False, None
 
-    def _extract_context_key(self, event: AgentEvent) -> Optional[str]:
+    def _extract_context_key(self, event: AgentEvent) -> str | None:
         """Extract a context key for novelty detection."""
         payload = event.payload or {}
         parts = []
@@ -421,8 +420,8 @@ class HumanInTheLoopAgent(BiasharaAgent):
         reason: EscalationReason,
         proposed_action: str,
         confidence: float,
-        result: Optional[AgentResult] = None,
-        financial_amount: Optional[float] = None,
+        result: AgentResult | None = None,
+        financial_amount: float | None = None,
     ) -> AgentResult:
         """
         Escalate a decision to the human worker.
@@ -483,7 +482,7 @@ class HumanInTheLoopAgent(BiasharaAgent):
         self,
         escalation_id: str,
         resolution: str,
-        human_response: Optional[Dict[str, Any]] = None,
+        human_response: dict[str, Any] | None = None,
     ) -> AgentResult:
         """
         Resolve a pending escalation with human input.
@@ -587,19 +586,19 @@ class HumanInTheLoopAgent(BiasharaAgent):
 
     # ── Query methods ──────────────────────────────────────────────
 
-    def get_pending_escalations(self) -> List[Dict[str, Any]]:
+    def get_pending_escalations(self) -> list[dict[str, Any]]:
         """Get unresolved escalations."""
         return [e.to_dict() for e in self._escalations if not e.resolved]
 
-    def get_escalation_history(self, n: int = 20) -> List[Dict[str, Any]]:
+    def get_escalation_history(self, n: int = 20) -> list[dict[str, Any]]:
         """Get recent escalation history."""
         return [e.to_dict() for e in self._escalations[-n:]]
 
-    def get_trust_score(self, worker_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_trust_score(self, worker_id: str | None = None) -> dict[str, Any]:
         """Get current trust score."""
         return self._trust_score.to_dict()
 
-    def get_autonomy_status(self) -> Dict[str, Any]:
+    def get_autonomy_status(self) -> dict[str, Any]:
         """Get current autonomy status."""
         return {
             "worker_id": self._worker_id,
@@ -611,15 +610,15 @@ class HumanInTheLoopAgent(BiasharaAgent):
             "novel_contexts_seen": len(self._novel_contexts),
         }
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get HITL metrics."""
         return self._metrics.to_dict()
 
-    def get_all_trust_scores(self) -> List[Dict[str, Any]]:
+    def get_all_trust_scores(self) -> list[dict[str, Any]]:
         """Get trust scores for all tracked workers."""
         return [self._trust_score.to_dict()]
 
-    def get_hitl_stats(self) -> Dict[str, Any]:
+    def get_hitl_stats(self) -> dict[str, Any]:
         """Get overall HITL statistics."""
         metrics = self._metrics.to_dict()
         metrics["total_escalations"] = len(self._escalations)

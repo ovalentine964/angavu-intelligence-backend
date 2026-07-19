@@ -19,10 +19,9 @@ import ipaddress
 import logging
 import os
 import time
-from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -43,7 +42,7 @@ class RateLimitRule:
 @dataclass
 class SlidingWindowCounter:
     """Sliding window rate limit counter."""
-    timestamps: List[float] = field(default_factory=list)
+    timestamps: list[float] = field(default_factory=list)
     blocked_until: float = 0.0
 
     def cleanup(self, window_seconds: int):
@@ -73,7 +72,7 @@ class RateLimitStore:
     """In-memory rate limit store with automatic cleanup."""
 
     def __init__(self):
-        self._counters: Dict[str, SlidingWindowCounter] = {}
+        self._counters: dict[str, SlidingWindowCounter] = {}
         self._lock = asyncio.Lock()
         self._cleanup_interval = 60  # Cleanup every 60 seconds
         self._last_cleanup = time.time()
@@ -82,7 +81,7 @@ class RateLimitStore:
         self,
         key: str,
         rule: RateLimitRule,
-    ) -> Tuple[bool, int, int]:
+    ) -> tuple[bool, int, int]:
         """
         Check rate limit and record the request.
 
@@ -212,7 +211,7 @@ _DEFAULT_TRUSTED_PROXIES = [
 ]
 
 
-def _load_trusted_proxies() -> Set[ipaddress.IPv4Network]:
+def _load_trusted_proxies() -> set[ipaddress.IPv4Network]:
     """Load trusted proxy CIDRs from environment or use defaults."""
     env_val = os.getenv("ANGAVU_TRUSTED_PROXIES", "")
     if env_val:
@@ -229,7 +228,7 @@ def _load_trusted_proxies() -> Set[ipaddress.IPv4Network]:
     return networks
 
 
-_TRUSTED_PROXY_NETS: Set[ipaddress.IPv4Network] = _load_trusted_proxies()
+_TRUSTED_PROXY_NETS: set[ipaddress.IPv4Network] = _load_trusted_proxies()
 
 
 def _is_trusted_proxy(ip_str: str) -> bool:
@@ -302,7 +301,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Returns standard 429 Too Many Requests with Retry-After header.
     """
 
-    def __init__(self, app, store: Optional[RateLimitStore] = None):
+    def __init__(self, app, store: RateLimitStore | None = None):
         super().__init__(app)
         self.store = store or RateLimitStore()
 
@@ -384,7 +383,7 @@ def rate_limit(
     window_seconds: int,
     burst_allowance: int = 0,
     block_duration_seconds: int = 0,
-    key_func: Optional[Callable] = None,
+    key_func: Callable | None = None,
 ):
     """
     Decorator for per-endpoint rate limiting.

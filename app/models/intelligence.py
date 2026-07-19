@@ -6,7 +6,7 @@ DataAccessLog tracks every query a buyer makes for audit compliance.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Column,
@@ -148,7 +148,7 @@ class IntelligenceProduct(Base):
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     expires_at = Column(
         DateTime(timezone=True),
@@ -173,7 +173,7 @@ class IntelligenceProduct(Base):
         """Check if this product has expired."""
         if self.expires_at is None:
             return False
-        return datetime.now(timezone.utc) > self.expires_at
+        return datetime.now(UTC) > self.expires_at
 
 
 class DataAccessLog(Base):
@@ -259,7 +259,7 @@ class DataAccessLog(Base):
     )
     accessed_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
     )
 

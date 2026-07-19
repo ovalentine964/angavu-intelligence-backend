@@ -23,8 +23,8 @@ SEO strategy:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -52,7 +52,7 @@ _DASHBOARD_URL = get_settings().ANGAVU_DASHBOARD_URL
 # ── Content templates and configuration ────────────────────────────
 
 # Industry-relevant topics for Angavu Intelligence
-TOPIC_LIBRARY: Dict[str, List[str]] = {
+TOPIC_LIBRARY: dict[str, list[str]] = {
     "blog_post": [
         "How AI-Powered Market Intelligence Transforms African SMEs",
         "5 Ways Real-Time Price Forecasting Reduces Stock Losses",
@@ -84,7 +84,7 @@ TOPIC_LIBRARY: Dict[str, List[str]] = {
 }
 
 # SEO keyword clusters for Angavu's domain
-KEYWORD_CLUSTERS: Dict[str, List[str]] = {
+KEYWORD_CLUSTERS: dict[str, list[str]] = {
     "primary": [
         "African market intelligence",
         "SME business analytics",
@@ -102,7 +102,7 @@ KEYWORD_CLUSTERS: Dict[str, List[str]] = {
 }
 
 # Channel configuration
-CHANNEL_CONFIG: Dict[str, Dict[str, Any]] = {
+CHANNEL_CONFIG: dict[str, dict[str, Any]] = {
     "blog": {"max_length": 5000, "tone": "professional", "format": "markdown"},
     "twitter": {"max_length": 280, "tone": "conversational", "format": "text"},
     "linkedin": {"max_length": 3000, "tone": "professional", "format": "text"},
@@ -135,11 +135,11 @@ class ContentCreatorAgent(BiasharaAgent):
             ],
         )
         # Content calendar state
-        self._calendar: Optional[ContentCalendar] = None
+        self._calendar: ContentCalendar | None = None
         # Generated content history
-        self._content_history: List[Dict[str, Any]] = []
+        self._content_history: list[dict[str, Any]] = []
         # Topic rotation index
-        self._topic_indices: Dict[str, int] = {}
+        self._topic_indices: dict[str, int] = {}
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ class ContentCreatorAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """
         Decide what content to generate.
 
@@ -258,7 +258,7 @@ class ContentCreatorAgent(BiasharaAgent):
             # Content published event (auto-publish for social, schedule for blog)
             if content_type in (ContentType.SOCIAL_TWITTER, ContentType.SOCIAL_LINKEDIN):
                 content_piece.status = ContentStatus.PUBLISHED
-                content_piece.published_at = datetime.now(timezone.utc)
+                content_piece.published_at = datetime.now(UTC)
                 events_to_publish.append(AgentEvent(
                     event_type=EventType.CONTENT_PUBLISHED,
                     source=self.name,
@@ -321,7 +321,7 @@ class ContentCreatorAgent(BiasharaAgent):
         content_type: ContentType,
         topic: str,
         seo: SEOMetadata,
-        channels: List[str],
+        channels: list[str],
     ) -> ContentPiece:
         """Generate content based on type and topic."""
 
@@ -350,7 +350,7 @@ class ContentCreatorAgent(BiasharaAgent):
         self,
         topic: str,
         seo: SEOMetadata,
-        channels: List[str],
+        channels: list[str],
     ) -> ContentPiece:
         """Generate a blog post with SEO optimization."""
         keyword = seo.target_keyword or topic
@@ -415,7 +415,7 @@ The future of African business intelligence is autonomous, AI-powered, and acces
             tags=["blog", "market-intelligence", "africa", "sme"],
         )
 
-    def _generate_twitter_post(self, topic: str, channels: List[str]) -> ContentPiece:
+    def _generate_twitter_post(self, topic: str, channels: list[str]) -> ContentPiece:
         """Generate a Twitter thread."""
         body = f"""🧵 {topic}
 
@@ -444,7 +444,7 @@ The future of African business intelligence is autonomous, AI-powered, and acces
             tags=["twitter", "thread", "africa", "fintech"],
         )
 
-    def _generate_linkedin_post(self, topic: str, channels: List[str]) -> ContentPiece:
+    def _generate_linkedin_post(self, topic: str, channels: list[str]) -> ContentPiece:
         """Generate a LinkedIn post."""
         body = f"""{topic}
 
@@ -480,7 +480,7 @@ The next billion-dollar market isn't in Silicon Valley. It's in Gikomba, Korogoc
         self,
         topic: str,
         seo: SEOMetadata,
-        channels: List[str],
+        channels: list[str],
     ) -> ContentPiece:
         """Generate an email newsletter."""
         body = f"""<h1>{topic}</h1>
@@ -524,7 +524,7 @@ The next billion-dollar market isn't in Silicon Valley. It's in Gikomba, Korogoc
         self,
         topic: str,
         seo: SEOMetadata,
-        channels: List[str],
+        channels: list[str],
     ) -> ContentPiece:
         """Generate a client case study."""
         body = f"""# {topic}
@@ -570,7 +570,7 @@ Using Angavu Intelligence's WhatsApp-based platform, Wanjiku:
 
     # ── Helper methods ──────────────────────────────────────────────
 
-    def _select_topic(self, content_type: ContentType, payload: Dict[str, Any]) -> str:
+    def _select_topic(self, content_type: ContentType, payload: dict[str, Any]) -> str:
         """Select topic from library using rotation."""
         # Check for explicit topic in request
         if payload.get("topic"):
@@ -585,7 +585,7 @@ Using Angavu Intelligence's WhatsApp-based platform, Wanjiku:
 
         return topics[idx]
 
-    def _default_channels(self, content_type: ContentType) -> List[str]:
+    def _default_channels(self, content_type: ContentType) -> list[str]:
         """Get default distribution channels for a content type."""
         channel_map = {
             ContentType.BLOG_POST: ["blog", "linkedin", "twitter"],

@@ -16,7 +16,6 @@ import logging
 import re
 import time
 import uuid
-from typing import Callable, List, Optional, Set
 
 from fastapi import HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,11 +25,9 @@ from starlette.responses import Response
 # Capability token integration (feature-flagged)
 from app.security.capability_tokens import (
     CAPABILITY_TOKENS_ENABLED,
-    is_swarm_capability_enabled,
-    get_capability_issuer,
-    create_default_token,
     AgentCapabilityToken,
-    Action,
+    get_capability_issuer,
+    is_swarm_capability_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +37,7 @@ logger = logging.getLogger(__name__)
 # CORS Configuration — Strict Origin Validation
 # ══════════════════════════════════════════════════════════════
 
-def get_cors_origins() -> List[str]:
+def get_cors_origins() -> list[str]:
     """
     Get allowed CORS origins.
 

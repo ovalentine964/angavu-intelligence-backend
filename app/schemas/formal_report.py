@@ -12,10 +12,8 @@ Msaidizi report and get a loan approved.
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
-
 
 # ============================================================================
 # Enums
@@ -183,13 +181,13 @@ class BusinessPerformanceMetrics(BaseModel):
     """Key business performance metrics for institutional review."""
 
     # Growth
-    revenue_growth_mom_pct: Optional[float] = Field(None, description="Month-over-month revenue growth %")
-    revenue_growth_yoy_pct: Optional[float] = Field(None, description="Year-over-year revenue growth %")
+    revenue_growth_mom_pct: float | None = Field(None, description="Month-over-month revenue growth %")
+    revenue_growth_yoy_pct: float | None = Field(None, description="Year-over-year revenue growth %")
 
     # Profitability
     avg_monthly_revenue: float = Field(0, description="Average monthly revenue in KES")
     avg_monthly_profit: float = Field(0, description="Average monthly profit in KES")
-    profit_margin_trend: List[Dict[str, float]] = Field(
+    profit_margin_trend: list[dict[str, float]] = Field(
         default_factory=list,
         description="Monthly profit margin trend [{month, margin_pct}]",
     )
@@ -250,7 +248,7 @@ class CreditAssessment(BaseModel):
     debt_service_coverage_ratio: float = Field(0, description="Cash flow / Debt payment")
 
     # Risk
-    risk_factors: List[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
     risk_category: RiskCategory = RiskCategory.MEDIUM
     default_probability_pct: float = Field(0, description="Estimated default probability %")
 
@@ -282,7 +280,7 @@ class ReportVerification(BaseModel):
     # Authenticity
     report_id: str = Field("", description="Unique report identifier")
     generated_at: datetime = Field(default_factory=datetime.utcnow)
-    valid_until: Optional[datetime] = Field(None, description="Report expiry date")
+    valid_until: datetime | None = Field(None, description="Report expiry date")
     verification_url: str = Field("", description="URL for bank to verify authenticity")
     qr_code_data: str = Field("", description="QR code payload for verification")
 
@@ -312,7 +310,7 @@ class BankReportData(BaseModel):
     owner_name: str = Field("", description="Owner's name")
     business_type: str = Field("", description="Type of business")
     location: str = Field("", description="Business location")
-    registration_number: Optional[str] = Field(None, description="Business registration number if registered")
+    registration_number: str | None = Field(None, description="Business registration number if registered")
 
     # Period
     period_start: date
@@ -327,18 +325,18 @@ class BankReportData(BaseModel):
     health_grade: str = Field("", description="Health grade A+/A/B+/B/C/D/F")
 
     # Financial Statements
-    income_statement: Optional[IncomeStatement] = None
-    cash_flow: Optional[CashFlowStatement] = None
-    balance_sheet: Optional[BalanceSheetApproximation] = None
+    income_statement: IncomeStatement | None = None
+    cash_flow: CashFlowStatement | None = None
+    balance_sheet: BalanceSheetApproximation | None = None
 
     # Business Metrics
-    metrics: Optional[BusinessPerformanceMetrics] = None
+    metrics: BusinessPerformanceMetrics | None = None
 
     # Credit Assessment
-    credit_assessment: Optional[CreditAssessment] = None
+    credit_assessment: CreditAssessment | None = None
 
     # Verification
-    verification: Optional[ReportVerification] = None
+    verification: ReportVerification | None = None
 
     # Display
     language: str = Field("en", description="Report language (en/sw)")
@@ -352,7 +350,7 @@ class TaxSummary(BaseModel):
     """Tax-related summary for KRA."""
 
     # Monthly revenue breakdown
-    monthly_revenue: List[Dict[str, float]] = Field(
+    monthly_revenue: list[dict[str, float]] = Field(
         default_factory=list,
         description="Monthly revenue [{month, revenue}]",
     )
@@ -372,7 +370,7 @@ class TaxSummary(BaseModel):
     turnover_tax_eligible: bool = Field(False, description="Eligible for simplified turnover tax")
 
     # Missing items for compliance
-    missing_items: List[str] = Field(default_factory=list)
+    missing_items: list[str] = Field(default_factory=list)
 
 
 class FormalizationReadinessData(BaseModel):
@@ -383,12 +381,12 @@ class FormalizationReadinessData(BaseModel):
     recommended_structure: BusinessStructure = BusinessStructure.SOLE_PROPRIETORSHIP
 
     # Required documents
-    required_documents: List[str] = Field(default_factory=list)
-    documents_ready: List[str] = Field(default_factory=list)
-    documents_missing: List[str] = Field(default_factory=list)
+    required_documents: list[str] = Field(default_factory=list)
+    documents_ready: list[str] = Field(default_factory=list)
+    documents_missing: list[str] = Field(default_factory=list)
 
     # Next steps
-    next_steps: List[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
     estimated_cost_kes: float = Field(0, description="Estimated registration cost")
 
 
@@ -408,7 +406,7 @@ class GovernmentReportData(BaseModel):
     owner_name: str = Field("")
     business_type: str = Field("")
     location: str = Field("")
-    id_number: Optional[str] = Field(None, description="Owner's national ID number")
+    id_number: str | None = Field(None, description="Owner's national ID number")
 
     # Period
     period_start: date
@@ -420,10 +418,10 @@ class GovernmentReportData(BaseModel):
     net_profit: float = Field(0)
 
     # Tax
-    tax_summary: Optional[TaxSummary] = None
+    tax_summary: TaxSummary | None = None
 
     # Formalization
-    formalization: Optional[FormalizationReadinessData] = None
+    formalization: FormalizationReadinessData | None = None
 
     # Transaction evidence
     total_transactions: int = Field(0)
@@ -431,7 +429,7 @@ class GovernmentReportData(BaseModel):
     data_quality_score: float = Field(0)
 
     # Verification
-    verification: Optional[ReportVerification] = None
+    verification: ReportVerification | None = None
 
     language: str = Field("en")
 
@@ -456,7 +454,7 @@ class RiskProfile(BaseModel):
 
     # Location risk
     location: str = Field("")
-    location_risk_factors: List[str] = Field(default_factory=list)
+    location_risk_factors: list[str] = Field(default_factory=list)
 
     # Claims history
     has_claims_history: bool = Field(False)
@@ -464,11 +462,11 @@ class RiskProfile(BaseModel):
 
     # Coverage recommendation
     recommended_coverage_amount: float = Field(0, description="Recommended coverage in KES")
-    recommended_premium_range: Tuple[float, float] = Field(
+    recommended_premium_range: tuple[float, float] = Field(
         default=(0, 0),
         description="Estimated premium range (min, max)",
     )
-    coverage_types: List[str] = Field(
+    coverage_types: list[str] = Field(
         default_factory=list,
         description="Recommended coverage types",
     )
@@ -508,7 +506,7 @@ class InsuranceReportData(BaseModel):
     avg_monthly_revenue: float = Field(0)
 
     # Risk Profile
-    risk_profile: Optional[RiskProfile] = None
+    risk_profile: RiskProfile | None = None
 
     # Business metrics
     total_transactions: int = Field(0)
@@ -517,6 +515,6 @@ class InsuranceReportData(BaseModel):
     data_quality_score: float = Field(0)
 
     # Verification
-    verification: Optional[ReportVerification] = None
+    verification: ReportVerification | None = None
 
     language: str = Field("en")

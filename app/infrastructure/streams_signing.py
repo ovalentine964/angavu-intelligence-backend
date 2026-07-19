@@ -1,3 +1,4 @@
+
 """
 Message signing middleware for Redis Streams.
 
@@ -35,18 +36,20 @@ Integration:
 from __future__ import annotations
 
 import base64
-import fnmatch
+import collections
 import hashlib
 import json
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from app.security.pqc.ml_dsa import MlDsaProvider, MlDsaParameterSet
-from app.security.pqc.crypto_provider import CryptoKeyPair
+from app.security.pqc.ml_dsa import MlDsaParameterSet, MlDsaProvider
+
+if TYPE_CHECKING:
+    from app.security.pqc.crypto_provider import CryptoKeyPair
 
 logger = structlog.get_logger(__name__)
 
@@ -82,8 +85,8 @@ class AgentKeyRegistry:
     """
 
     def __init__(self):
-        self._keys: Dict[str, bytes] = {}  # agent_name → public_key_bytes
-        self._key_created: Dict[str, float] = {}  # agent_name → creation timestamp
+        self._keys: dict[str, bytes] = {}  # agent_name → public_key_bytes
+        self._key_created: dict[str, float] = {}  # agent_name → creation timestamp
         self._rotation_days: int = 90
         self._logger = logger.bind(component="agent_key_registry")
 
@@ -93,7 +96,7 @@ class AgentKeyRegistry:
         self._key_created[agent_name] = time.time()
         self._logger.info("agent_key_registered", agent=agent_name)
 
-    def get_public_key(self, agent_name: str) -> Optional[bytes]:
+    def get_public_key(self, agent_name: str) -> bytes | None:
         """Get an agent's public key. Returns None if not registered."""
         return self._keys.get(agent_name)
 
@@ -156,7 +159,7 @@ class MessageSigner:
     def __init__(
         self,
         agent_name: str,
-        key_pair: Optional[CryptoKeyPair] = None,
+        key_pair: CryptoKeyPair | None = None,
     ):
         self._agent_name = agent_name
         self._provider = MlDsaProvider(MlDsaParameterSet.ML_DSA_65)
@@ -171,7 +174,7 @@ class MessageSigner:
         registry.register(agent_name, self._key_pair.public_key)
 
         # Nonce tracking (for replay detection on consumer side)
-        self._seen_nonces: Dict[str, "collections.OrderedDict[str, bool]"] = {}  # agent → ordered nonce cache
+        self._seen_nonces: dict[str, collections.OrderedDict[str, bool]] = {}  # agent → ordered nonce cache
 
         self._logger = logger.bind(
             component="message_signer",
@@ -186,7 +189,7 @@ class MessageSigner:
     def agent_name(self) -> str:
         return self._agent_name
 
-    def sign_message(self, data: Dict[str, Any]) -> Dict[str, str]:
+    def sign_message(self, data: dict[str, Any]) -> dict[str, str]:
         """
         Sign a message for publishing to Redis Streams.
 
@@ -233,7 +236,7 @@ class MessageSigner:
 
         return result
 
-    def verify_message(self, fields: Dict[str, str]) -> Tuple[bool, str]:
+    def verify_message(self, fields: dict[str, str]) -> tuple[bool, str]:
         """
         Verify a received message's signature and freshness.
 
@@ -308,7 +311,7 @@ class MessageSigner:
 
     def _build_canonical(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         nonce: str,
         signed_at: str,
     ) -> str:
@@ -358,7 +361,7 @@ class SignedProducer:
         await producer.publish("transaction.processed", {"amount": 500})
     """
 
-    def __init__(self, agent_name: str, key_pair: Optional[CryptoKeyPair] = None):
+    def __init__(self, agent_name: str, key_pair: CryptoKeyPair | None = None):
         from app.infrastructure.redis_streams import RedisStreamsProducer
         self._inner = RedisStreamsProducer()
         self._signer = MessageSigner(agent_name, key_pair)
@@ -373,9 +376,9 @@ class SignedProducer:
     async def publish(
         self,
         stream: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         max_length: int = 50_000,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Publish a signed message to a Redis Stream."""
         signed_data = self._signer.sign_message(data)
         return await self._inner.publish(stream, signed_data, max_length)
@@ -402,7 +405,7 @@ class SignedConsumer:
         self,
         group: str,
         agent_name: str,
-        key_pair: Optional[CryptoKeyPair] = None,
+        key_pair: CryptoKeyPair | None = None,
         reject_unsigned: bool = False,  # False during transition period
         **kwargs,
     ):
@@ -475,7 +478,7 @@ class SignedConsumer:
     async def stop(self):
         await self._inner.stop()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         stats = self._inner.get_stats()
         stats["rejected_messages"] = self._rejected_count
         stats["reject_unsigned"] = self._reject_unsigned

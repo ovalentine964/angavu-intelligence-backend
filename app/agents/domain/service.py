@@ -6,7 +6,9 @@ Swahili keywords reflect East African service sector:
 """
 
 from __future__ import annotations
-from typing import Any, Dict, Optional
+
+from typing import Any
+
 from app.agents.domain.base import DomainAgent
 
 
@@ -50,7 +52,7 @@ class ServiceDomainAgent(DomainAgent):
             ],
         )
 
-    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _query_service_data(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Query ServiceAgent service for real service analysis."""
         if not self._transaction_service:
             return None
@@ -68,7 +70,7 @@ class ServiceDomainAgent(DomainAgent):
             self._domain_logger.warning("service_query_failed", error=str(exc))
             return None
 
-    def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Service sector analysis with customer experience focus."""
         base = super()._analyze(payload)
 
@@ -124,7 +126,7 @@ class ServiceDomainAgent(DomainAgent):
         })
         return base
 
-    def _process_transaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Process service transaction with satisfaction signal."""
         base = super()._process_transaction(payload)
 

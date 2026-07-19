@@ -9,7 +9,8 @@ Runs daily at 3 AM EAT (via APScheduler or cron).
 
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import delete, text
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ async def enforce_retention(db: AsyncSession, retention_days: int = DEFAULT_RETE
     """
     cutoff = datetime.utcnow() - timedelta(days=retention_days)
     total_deleted = 0
-    
+
     for table, timestamp_col in RETENTION_TABLES:
         try:
             # Use raw SQL for efficiency on large tables
@@ -51,12 +52,12 @@ async def enforce_retention(db: AsyncSession, retention_days: int = DEFAULT_RETE
         except Exception as e:
             # Table may not exist yet — that's OK
             logger.debug("retention_skip", table=table, error=str(e))
-    
+
     await db.commit()
-    
+
     if total_deleted > 0:
         logger.info("retention_complete", total_deleted=total_deleted, retention_days=retention_days)
-    
+
     return total_deleted
 
 
@@ -70,9 +71,9 @@ def schedule_retention(app):
     """
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
-    
+
     scheduler = AsyncIOScheduler()
-    
+
     # 3 AM EAT = 0 AM UTC
     scheduler.add_job(
         enforce_retention,
@@ -81,7 +82,7 @@ def schedule_retention(app):
         name="Data Retention Cleanup",
         replace_existing=True,
     )
-    
+
     scheduler.start()
     logger.info("retention_scheduled", time="00:00 UTC (03:00 EAT)")
     return scheduler

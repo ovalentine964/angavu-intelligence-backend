@@ -18,8 +18,8 @@ Academic grounding:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -98,7 +98,7 @@ class EthicsAgent(BiasharaAgent):
         )
         self._reviews_performed = 0
         self._violations_detected = 0
-        self._bias_finds: List[Dict[str, Any]] = []
+        self._bias_finds: list[dict[str, Any]] = []
 
     async def observe(self, event: AgentEvent) -> None:
         """Monitor events for ethical concerns."""
@@ -112,7 +112,7 @@ class EthicsAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine ethics review scope."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -216,7 +216,7 @@ class EthicsAgent(BiasharaAgent):
                         "violations": result["violations"],
                         "severity": result.get("severity", "medium"),
                         "action": action,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -228,7 +228,7 @@ class EthicsAgent(BiasharaAgent):
                     "action": action,
                     "compliant": not bool(result.get("violations")),
                     "checks_performed": result.get("checks", []),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
             ))
 
@@ -245,7 +245,7 @@ class EthicsAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _bias_check_credit(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _bias_check_credit(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run bias checks on credit scoring."""
         violations = []
         checks = params.get("checks", [])
@@ -289,7 +289,7 @@ class EthicsAgent(BiasharaAgent):
             "bias_framework": "EEOC_4_5ths_rule",
         }
 
-    def _fairness_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _fairness_check(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run fairness check on intelligence products."""
         products = params.get("products", [])
         violations = []
@@ -313,7 +313,7 @@ class EthicsAgent(BiasharaAgent):
             "products_reviewed": products,
         }
 
-    def _content_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _content_check(self, params: dict[str, Any]) -> dict[str, Any]:
         """Check report content for ethical concerns."""
         violations = []
         checks = params.get("checks", [])
@@ -343,7 +343,7 @@ class EthicsAgent(BiasharaAgent):
             "content_ethics": "anti_shame_design_applied",
         }
 
-    def _full_review(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_review(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run full ethics review."""
         return {
             "compliant": True,
@@ -362,7 +362,7 @@ class EthicsAgent(BiasharaAgent):
             "status": "all_checks_passed",
         }
 
-    def get_ethics_stats(self) -> Dict[str, Any]:
+    def get_ethics_stats(self) -> dict[str, Any]:
         """Return ethics agent statistics."""
         return {
             "reviews_performed": self._reviews_performed,

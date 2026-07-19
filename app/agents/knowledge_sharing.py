@@ -30,7 +30,7 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import structlog
 
@@ -63,16 +63,16 @@ class KnowledgeItem:
     title: str = ""
     description: str = ""
     domain: str = ""               # "agriculture", "retail", "transport", etc.
-    tags: List[str] = field(default_factory=list)
-    data: Dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+    data: dict[str, Any] = field(default_factory=dict)
     confidence: KnowledgeConfidence = KnowledgeConfidence.EXPERIMENTAL
     verification_count: int = 0    # How many agents verified this
-    verified_by: List[str] = field(default_factory=list)
+    verified_by: list[str] = field(default_factory=list)
     success_count: int = 0         # Times this knowledge led to success
     failure_count: int = 0         # Times this knowledge led to failure
     created_at: float = field(default_factory=time.time)
     last_used: float = field(default_factory=time.time)
-    expires_at: Optional[float] = None
+    expires_at: float | None = None
 
     @property
     def effectiveness(self) -> float:
@@ -109,7 +109,7 @@ class KnowledgeItem:
             elif self.verification_count >= 1:
                 self.confidence = KnowledgeConfidence.TESTED
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize knowledge item to dictionary."""
         return {
             "knowledge_id": self.knowledge_id,
@@ -136,9 +136,9 @@ class KnowledgeRequest:
     requesting_agent: str = ""
     domain: str = ""
     query: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
-    responses: List[KnowledgeItem] = field(default_factory=list)
+    responses: list[KnowledgeItem] = field(default_factory=list)
 
 
 class KnowledgeSharingHub:
@@ -174,23 +174,23 @@ class KnowledgeSharingHub:
         max_knowledge_items: int = 5000,
         default_ttl_days: float = 90.0,
     ):
-        self._knowledge: Dict[str, KnowledgeItem] = {}
+        self._knowledge: dict[str, KnowledgeItem] = {}
         self._max_items = max_knowledge_items
         self._default_ttl = default_ttl_days * 86400  # Convert to seconds
 
         # Indexes for fast retrieval
-        self._by_domain: Dict[str, Set[str]] = defaultdict(set)
-        self._by_tag: Dict[str, Set[str]] = defaultdict(set)
-        self._by_type: Dict[str, Set[str]] = defaultdict(set)
-        self._by_agent: Dict[str, Set[str]] = defaultdict(set)
+        self._by_domain: dict[str, set[str]] = defaultdict(set)
+        self._by_tag: dict[str, set[str]] = defaultdict(set)
+        self._by_type: dict[str, set[str]] = defaultdict(set)
+        self._by_agent: dict[str, set[str]] = defaultdict(set)
 
         # Subscription: agents register interest in domains/tags
-        self._subscriptions: Dict[str, Dict[str, Set[str]]] = defaultdict(
+        self._subscriptions: dict[str, dict[str, set[str]]] = defaultdict(
             lambda: {"domains": set(), "tags": set()}
         )
 
         # Request tracking
-        self._requests: List[KnowledgeRequest] = []
+        self._requests: list[KnowledgeRequest] = []
 
         self._logger = logger.bind(component="knowledge_sharing_hub")
 
@@ -245,20 +245,20 @@ class KnowledgeSharingHub:
     def query(
         self,
         requesting_agent: str,
-        domain: Optional[str] = None,
-        knowledge_type: Optional[KnowledgeType] = None,
-        tags: Optional[List[str]] = None,
-        min_confidence: Optional[KnowledgeConfidence] = None,
+        domain: str | None = None,
+        knowledge_type: KnowledgeType | None = None,
+        tags: list[str] | None = None,
+        min_confidence: KnowledgeConfidence | None = None,
         min_effectiveness: float = 0.0,
         limit: int = 10,
-    ) -> List[KnowledgeItem]:
+    ) -> list[KnowledgeItem]:
         """
         Query the knowledge base for relevant items.
 
         Returns items sorted by relevance (effectiveness × confidence × recency).
         """
         # Start with all knowledge
-        candidate_ids: Optional[Set[str]] = None
+        candidate_ids: set[str] | None = None
 
         # Filter by domain
         if domain:
@@ -272,7 +272,7 @@ class KnowledgeSharingHub:
 
         # Filter by tags (union — any matching tag)
         if tags:
-            tag_ids: Set[str] = set()
+            tag_ids: set[str] = set()
             for tag in tags:
                 tag_ids |= self._by_tag.get(tag, set())
             candidate_ids = tag_ids.copy() if candidate_ids is None else candidate_ids & tag_ids
@@ -321,7 +321,7 @@ class KnowledgeSharingHub:
         requesting_agent: str,
         domain: str,
         query: str,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> KnowledgeRequest:
         """
         Explicitly request knowledge from peers.
@@ -399,8 +399,8 @@ class KnowledgeSharingHub:
     def subscribe(
         self,
         agent_name: str,
-        domains: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
+        domains: list[str] | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         """Subscribe an agent to knowledge updates in specific domains/tags."""
         if domains:
@@ -415,9 +415,9 @@ class KnowledgeSharingHub:
             tags=list(self._subscriptions[agent_name]["tags"]),
         )
 
-    def _get_subscribers(self, domain: str, tags: List[str]) -> List[str]:
+    def _get_subscribers(self, domain: str, tags: list[str]) -> list[str]:
         """Get agents subscribed to a domain or set of tags."""
-        subscribers: Set[str] = set()
+        subscribers: set[str] = set()
         for agent_name, subs in self._subscriptions.items():
             if domain in subs["domains"]:
                 subscribers.add(agent_name)
@@ -461,7 +461,7 @@ class KnowledgeSharingHub:
 
     # ── Queries ────────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get hub statistics."""
         return {
             "total_knowledge": len(self._knowledge),
@@ -477,7 +477,7 @@ class KnowledgeSharingHub:
             "domains": list(self._by_domain.keys()),
         }
 
-    def get_agent_contributions(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_contributions(self, agent_name: str) -> dict[str, Any]:
         """Get knowledge contribution stats for an agent."""
         items = [
             self._knowledge[kid]
@@ -502,9 +502,9 @@ class KnowledgeSharingHub:
 
     def get_top_knowledge(
         self,
-        domain: Optional[str] = None,
+        domain: str | None = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get the most effective knowledge items."""
         items = list(self._knowledge.values())
         if domain:

@@ -12,18 +12,22 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
 
 import structlog
 
+from app.services.cloud_reasoning import (
+    CloudReasoningService,
+    CloudResponse,
+    QueryComplexity,
+    classify_complexity,
+)
 from app.services.gemini_config import get_gemini_config
-from app.services.cloud_reasoning import CloudReasoningService, CloudResponse, QueryComplexity, classify_complexity
 
 logger = structlog.get_logger(__name__)
 
 
-class RoutingDecision(str, Enum):
+class RoutingDecision(StrEnum):
     """Where the query was routed."""
     ON_DEVICE = "on_device"
     CLOUD = "cloud"
@@ -37,7 +41,7 @@ class HybridResponse:
     text: str
     decision: RoutingDecision
     complexity: QueryComplexity
-    cloud_response: Optional[CloudResponse] = None
+    cloud_response: CloudResponse | None = None
     latency_ms: float = 0.0
     cost_usd: float = 0.0
 
@@ -45,7 +49,7 @@ class HybridResponse:
 class HybridLLMRouter:
     """
     Routes queries between on-device (Qwen) and cloud (Gemini) reasoning.
-    
+
     Design principles:
     - Simple queries → on-device (fast, free, works offline)
     - Complex queries → cloud (better reasoning, worth the cost)
@@ -73,7 +77,7 @@ class HybridLLMRouter:
     ) -> HybridResponse:
         """
         Route a query to the best available backend.
-        
+
         Args:
             query: User's natural language query
             user_id: User identifier for budget tracking

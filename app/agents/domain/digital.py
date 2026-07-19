@@ -6,7 +6,9 @@ Swahili keywords reflect East African digital economy:
 """
 
 from __future__ import annotations
-from typing import Any, Dict, Optional
+
+from typing import Any
+
 from app.agents.domain.base import DomainAgent
 
 
@@ -50,7 +52,7 @@ class DigitalDomainAgent(DomainAgent):
             ],
         )
 
-    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _query_service_data(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Query DigitalAgent service for real income analysis."""
         if not self._transaction_service:
             return None
@@ -68,7 +70,7 @@ class DigitalDomainAgent(DomainAgent):
             self._domain_logger.warning("service_query_failed", error=str(exc))
             return None
 
-    def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Digital economy analysis with East African fintech context."""
         base = super()._analyze(payload)
 
@@ -121,7 +123,7 @@ class DigitalDomainAgent(DomainAgent):
         })
         return base
 
-    def _process_transaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Process digital transaction with fraud signal detection."""
         base = super()._process_transaction(payload)
 

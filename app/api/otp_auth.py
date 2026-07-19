@@ -16,13 +16,12 @@ Development: Log OTP to console (DEBUG mode).
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import create_access_token, create_refresh_token, decode_token
@@ -56,7 +55,7 @@ class OTPVerifyRequest(BaseModel):
     """Request to verify OTP."""
     phone: str = Field(..., min_length=10, max_length=15)
     code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code", alias="otp")
-    device_id: Optional[str] = Field(None, max_length=100, description="Unique device identifier")
+    device_id: str | None = Field(None, max_length=100, description="Unique device identifier")
 
     model_config = {"populate_by_name": True}
 
@@ -65,17 +64,17 @@ class OTPRegisterRequest(BaseModel):
     """Request to register a new user with phone + OTP."""
     phone: str = Field(..., min_length=10, max_length=15)
     code: str = Field(..., min_length=6, max_length=6, alias="otp")
-    device_id: Optional[str] = Field(None, max_length=100)
+    device_id: str | None = Field(None, max_length=100)
 
     model_config = {"populate_by_name": True}
-    name: Optional[str] = Field(None, max_length=200)
+    name: str | None = Field(None, max_length=200)
     business_type: str = Field(
         "dukawallah",
         pattern=r"^(dukawallah|mama_mboga|boda_boda|vendor|tailor|restaurant|other)$",
     )
     language: str = Field("sw", pattern=r"^(sw|en|sh)$")
-    location_geohash: Optional[str] = Field(None, max_length=12)
-    location_name: Optional[str] = Field(None, max_length=200)
+    location_geohash: str | None = Field(None, max_length=12)
+    location_name: str | None = Field(None, max_length=200)
 
 
 class OTPResponse(BaseModel):
@@ -155,7 +154,7 @@ async def request_otp(request: OTPRequest):
     if existing:
         recent_count = sum(
             1 for otp in existing
-            if otp["created_at"] > datetime.now(timezone.utc) - timedelta(minutes=10)
+            if otp["created_at"] > datetime.now(UTC) - timedelta(minutes=10)
         )
         if recent_count >= 3:
             raise HTTPException(
@@ -164,7 +163,7 @@ async def request_otp(request: OTPRequest):
             )
 
     code = _generate_otp()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
 
     # Prevent memory exhaustion: evict oldest entries if store is full
     if phone not in _otps and len(_otps) >= _MAX_OTP_ENTRIES:
@@ -177,7 +176,7 @@ async def request_otp(request: OTPRequest):
         _otps[phone] = []
     _otps[phone].append({
         "code_hash": _hash_otp(code),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "expires_at": expires_at,
         "verified": False,
         "attempts": 0,
@@ -186,7 +185,7 @@ async def request_otp(request: OTPRequest):
     # Clean old OTPs
     _otps[phone] = [
         otp for otp in _otps[phone]
-        if otp["expires_at"] > datetime.now(timezone.utc)
+        if otp["expires_at"] > datetime.now(UTC)
     ]
 
     # Send OTP
@@ -225,7 +224,7 @@ async def verify_otp(
     valid_otp = None
     input_hash = _hash_otp(request.code)
     for otp in reversed(otps):
-        if otp["expires_at"] > datetime.now(timezone.utc) and not otp["verified"]:
+        if otp["expires_at"] > datetime.now(UTC) and not otp["verified"]:
             # Rate limit: max 5 verification attempts per OTP
             otp["attempts"] = otp.get("attempts", 0) + 1
             if otp["attempts"] > 5:
@@ -277,7 +276,7 @@ async def verify_otp(
     # Update device info
     if request.device_id:
         user.device_id = request.device_id
-    user.last_sync_at = datetime.now(timezone.utc)
+    user.last_sync_at = datetime.now(UTC)
     await db.flush()
 
     logger.info("otp_verified_login", user_id=str(user.id))
@@ -309,7 +308,7 @@ async def register_with_otp(
     valid_otp = None
     input_hash = _hash_otp(request.code)
     for otp in reversed(otps):
-        if otp["expires_at"] > datetime.now(timezone.utc) and not otp["verified"]:
+        if otp["expires_at"] > datetime.now(UTC) and not otp["verified"]:
             otp["attempts"] = otp.get("attempts", 0) + 1
             if otp["attempts"] > 5:
                 raise HTTPException(

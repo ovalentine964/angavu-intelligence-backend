@@ -22,7 +22,7 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -49,14 +49,14 @@ class AgentTrace:
     agent_name: str
     status: TraceStatus = TraceStatus.STARTED
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
-    context: Dict[str, Any] = field(default_factory=dict)
-    decision: Optional[Dict[str, Any]] = None
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    duration_ms: Optional[float] = None
+    ended_at: float | None = None
+    context: dict[str, Any] = field(default_factory=dict)
+    decision: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    duration_ms: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize trace to dictionary for API introspection."""
         return {
             "trace_id": self.trace_id,
@@ -91,18 +91,18 @@ class AgentTracer:
     """
 
     def __init__(self, max_traces: int = 1000):
-        self._traces: Dict[str, AgentTrace] = {}         # trace_id → trace
-        self._completed: List[AgentTrace] = []            # ring buffer
+        self._traces: dict[str, AgentTrace] = {}         # trace_id → trace
+        self._completed: list[AgentTrace] = []            # ring buffer
         self._max_traces = max_traces
 
         # Per-agent metrics
-        self._agent_counts: Dict[str, int] = defaultdict(int)
-        self._agent_durations: Dict[str, List[float]] = defaultdict(list)
-        self._agent_errors: Dict[str, int] = defaultdict(int)
+        self._agent_counts: dict[str, int] = defaultdict(int)
+        self._agent_durations: dict[str, list[float]] = defaultdict(list)
+        self._agent_errors: dict[str, int] = defaultdict(int)
 
         self._logger = logger.bind(component="agent_tracer")
 
-    def start_trace(self, agent_name: str, context: Dict[str, Any]) -> str:
+    def start_trace(self, agent_name: str, context: dict[str, Any]) -> str:
         """Begin a new trace for an agent lifecycle."""
         trace_id = uuid.uuid4().hex[:16]
         trace = AgentTrace(
@@ -176,7 +176,7 @@ class AgentTracer:
         self,
         trace_id: str,
         success: bool = True,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Finalize a trace."""
         trace = self._traces.pop(trace_id, None)
@@ -217,20 +217,20 @@ class AgentTracer:
 
     def get_traces(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get completed traces, optionally filtered by agent."""
         traces = self._completed
         if agent_name:
             traces = [t for t in traces if t.agent_name == agent_name]
         return [t.to_dict() for t in traces[-limit:]]
 
-    def get_active_traces(self) -> List[Dict[str, Any]]:
+    def get_active_traces(self) -> list[dict[str, Any]]:
         """Get traces currently in progress."""
         return [t.to_dict() for t in self._traces.values()]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get aggregate stats for all agents."""
         stats = {}
         for agent, count in self._agent_counts.items():
@@ -257,7 +257,7 @@ class AgentTracer:
     # ── Helpers ─────────────────────────────────────────────────────
 
     @staticmethod
-    def _sanitize_context(context: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_context(context: dict[str, Any]) -> dict[str, Any]:
         """Sanitize context for storage — truncate large values."""
         sanitized = {}
         for k, v in context.items():

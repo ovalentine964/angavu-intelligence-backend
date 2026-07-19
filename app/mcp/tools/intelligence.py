@@ -13,14 +13,13 @@ Exposes the 6 intelligence products as MCP-compatible tools:
 from __future__ import annotations
 
 import time
-from datetime import date, datetime
-from typing import Any, Dict, Optional
+from datetime import date
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.config import MCPToolDefinition, MCPToolParameter
-from app.db.database import get_db
 
 logger = structlog.get_logger(__name__)
 
@@ -289,7 +288,7 @@ INTELLIGENCE_TOOLS = [
 # ── Tool Handlers ───────────────────────────────────────────────────
 
 
-def _parse_date(val: Optional[str]) -> Optional[date]:
+def _parse_date(val: str | None) -> date | None:
     """Parse ISO date string."""
     if not val:
         return None
@@ -298,10 +297,10 @@ def _parse_date(val: Optional[str]) -> Optional[date]:
 
 async def handle_intelligence_tool(
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     buyer_id: str,
     db: AsyncSession,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Dispatch an intelligence tool call to the appropriate service.
 
@@ -442,7 +441,7 @@ async def handle_intelligence_tool(
         logger.error("mcp_intelligence_tool_error", tool=tool_name, error=str(e), exc_info=True)
         return {
             "isError": True,
-            "content": [{"type": "text", "text": f"Tool execution error: {str(e)}"}],
+            "content": [{"type": "text", "text": f"Tool execution error: {e!s}"}],
         }
 
 

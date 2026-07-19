@@ -12,15 +12,14 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
-    AgentDecision,
     AgentEvent,
     AgentResult,
-    AgentStatus,
     BiasharaAgent,
     EventType,
 )
@@ -44,19 +43,19 @@ class AutonomousAgent(BiasharaAgent):
 
     # Subclasses must define these
     CONFIG_NAME: str = "base"
-    SUBSCRIBED_EVENTS: List[EventType] = []
+    SUBSCRIBED_EVENTS: list[EventType] = []
 
     def __init__(
         self,
         name: str,
         role: str,
         capabilities: Sequence[str],
-        config: Optional[AgentConfig] = None,
+        config: AgentConfig | None = None,
     ):
         super().__init__(name, role, capabilities)
         self._config = config
-        self._monitor: Optional[AgentMonitor] = None
-        self._escalation: Optional[EscalationManager] = None
+        self._monitor: AgentMonitor | None = None
+        self._escalation: EscalationManager | None = None
         self._consecutive_errors: int = 0
         self._tasks_today: int = 0
         self._cost_today: float = 0.0
@@ -171,7 +170,7 @@ class AutonomousAgent(BiasharaAgent):
         # This would be replaced with actual token counting
         return round(duration_ms / 1000 * 0.001, 6)
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Extended health check with autonomous-specific metrics."""
         base = super().health_check()
         base.update({

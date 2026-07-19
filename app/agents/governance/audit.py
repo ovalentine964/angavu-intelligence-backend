@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -76,7 +76,7 @@ class AuditAgent(BiasharaAgent):
         )
         # In-memory audit trail (production would use append-only store)
         self._audit_trail: deque = deque(maxlen=max_trail_size)
-        self._findings: List[Dict[str, Any]] = []
+        self._findings: list[dict[str, Any]] = []
         self._audits_performed = 0
         self._explainability_violations = 0
 
@@ -92,7 +92,7 @@ class AuditAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine audit action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -171,7 +171,7 @@ class AuditAgent(BiasharaAgent):
                             "source_agent": decision.parameters.get("source_agent"),
                             "score": score,
                             "severity": "warning",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         },
                     ))
 
@@ -181,7 +181,7 @@ class AuditAgent(BiasharaAgent):
                     source=self.name,
                     payload={
                         "report": result,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -198,10 +198,10 @@ class AuditAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _record_decision(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _record_decision(self, params: dict[str, Any]) -> dict[str, Any]:
         """Record a decision in the audit trail."""
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "source_agent": params.get("source_agent", "unknown"),
             "event_type": params.get("event_type", ""),
             "explainability_score": params.get("explainability_score", 0),
@@ -218,7 +218,7 @@ class AuditAgent(BiasharaAgent):
             "anomalies_detected": anomalies,
         }
 
-    def _generate_audit_report(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_audit_report(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate an audit report from the trail."""
         scope = params.get("scope", "full")
         period = params.get("period", "last_24h")
@@ -232,7 +232,7 @@ class AuditAgent(BiasharaAgent):
         )
 
         # Count by source agent
-        agent_counts: Dict[str, int] = {}
+        agent_counts: dict[str, int] = {}
         for entry in trail_list:
             agent = entry.get("source_agent", "unknown")
             agent_counts[agent] = agent_counts.get(agent, 0) + 1
@@ -247,10 +247,10 @@ class AuditAgent(BiasharaAgent):
             "decisions_by_agent": agent_counts,
             "findings_count": len(self._findings),
             "compliance_status": "compliant" if self._explainability_violations == 0 else "violations_found",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
-    def _compute_explainability(self, payload: Dict[str, Any]) -> float:
+    def _compute_explainability(self, payload: dict[str, Any]) -> float:
         """
         Compute an explainability score for a decision.
 
@@ -278,7 +278,7 @@ class AuditAgent(BiasharaAgent):
 
         return min(1.0, score)
 
-    def _detect_anomalies(self, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _detect_anomalies(self, entry: dict[str, Any]) -> list[dict[str, Any]]:
         """Detect anomalies in the decision trail."""
         anomalies = []
 
@@ -302,7 +302,7 @@ class AuditAgent(BiasharaAgent):
 
         return anomalies
 
-    def get_audit_stats(self) -> Dict[str, Any]:
+    def get_audit_stats(self) -> dict[str, Any]:
         """Return audit agent statistics."""
         return {
             "trail_size": len(self._audit_trail),

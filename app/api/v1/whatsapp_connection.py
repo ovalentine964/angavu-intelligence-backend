@@ -14,19 +14,16 @@ This is SEPARATE from the webhook endpoint (/webhooks/whatsapp) which
 handles incoming messages from OpenWA.
 """
 
-import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
 from app.db.database import get_db
 from app.models.user import User
 from app.services.whatsapp_bot import WhatsAppBot
@@ -36,6 +33,7 @@ router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Connection"])
 
 # Verification store — uses Redis if available, falls back to in-memory
 import json
+
 _verifications: dict = {}  # Fallback when Redis unavailable
 _redis_client = None
 
@@ -45,6 +43,7 @@ async def _get_redis():
     if _redis_client is None:
         try:
             import redis.asyncio as aioredis
+
             from app.config import get_settings
             settings = get_settings()
             _redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -96,22 +95,22 @@ class WhatsAppConnectRequest(BaseModel):
 class WhatsAppConnectResponse(BaseModel):
     """Response from WhatsApp connect request."""
     status: str
-    verification_id: Optional[str] = None
-    message: Optional[str] = None
-    error_code: Optional[str] = None
+    verification_id: str | None = None
+    message: str | None = None
+    error_code: str | None = None
 
 
 class WhatsAppVerifyRequest(BaseModel):
     """Request to verify WhatsApp connection with code."""
     verification_id: str
-    code: Optional[str] = None
+    code: str | None = None
 
 
 class WhatsAppVerifyResponse(BaseModel):
     """Response from WhatsApp verification."""
     status: str
-    whatsapp_id: Optional[str] = None
-    message: Optional[str] = None
+    whatsapp_id: str | None = None
+    message: str | None = None
 
 
 class WhatsAppConnection(BaseModel):
@@ -119,25 +118,25 @@ class WhatsAppConnection(BaseModel):
     user_id: str
     phone: str
     connected: bool
-    connected_at: Optional[str] = None
-    assistant_name: Optional[str] = None
+    connected_at: str | None = None
+    assistant_name: str | None = None
     language: str
     report_time: str
-    last_report_sent: Optional[str] = None
+    last_report_sent: str | None = None
 
 
 class SendReportRequest(BaseModel):
     """Request to send a report via WhatsApp."""
     user_id: str
     report_type: str = Field(..., description="daily, weekly, monthly")
-    date: Optional[str] = None
+    date: str | None = None
 
 
 class SendReportResponse(BaseModel):
     """Response from send report request."""
     status: str
-    message_id: Optional[str] = None
-    message: Optional[str] = None
+    message_id: str | None = None
+    message: str | None = None
 
 
 # =========================================================================
@@ -191,8 +190,8 @@ async def connect_whatsapp(
         "assistant_name": request.assistant_name,
         "language": request.language,
         "report_time": request.report_time,
-        "created_at": datetime.now(timezone.utc),
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "created_at": datetime.now(UTC),
+        "expires_at": datetime.now(UTC) + timedelta(minutes=10),
         "verified": False,
         "attempts": 0,
     })
@@ -251,7 +250,7 @@ async def verify_whatsapp(
         )
 
     # Check expiry
-    if datetime.now(timezone.utc) > verification["expires_at"]:
+    if datetime.now(UTC) > verification["expires_at"]:
         await _delete_verification(request.verification_id)
         return WhatsAppVerifyResponse(
             status="expired",
@@ -322,7 +321,7 @@ async def check_verification_status(
             message="Verification not found or expired.",
         )
 
-    if datetime.now(timezone.utc) > verification["expires_at"]:
+    if datetime.now(UTC) > verification["expires_at"]:
         await _delete_verification(verification_id)
         return WhatsAppVerifyResponse(
             status="expired",

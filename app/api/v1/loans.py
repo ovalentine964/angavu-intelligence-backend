@@ -19,12 +19,11 @@ Design principles:
 - Purpose verification (research: <8% default with verification)
 """
 
-from datetime import date, datetime
-from typing import Optional
+from datetime import date
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,11 +61,11 @@ class LoanRecordRequest(BaseModel):
     )
     start_date: date = Field(..., description="Loan disbursement date")
     end_date: date = Field(..., description="Expected full repayment date")
-    purpose_subcategory: Optional[str] = Field(
+    purpose_subcategory: str | None = Field(
         None,
         description="Subcategory: stock, equipment, medical, school_fees, etc.",
     )
-    purpose_description: Optional[str] = Field(
+    purpose_description: str | None = Field(
         None,
         description="Free-text description of intended use",
     )
@@ -75,12 +74,12 @@ class LoanRecordRequest(BaseModel):
         description="daily, weekly, biweekly, monthly",
         examples=["weekly"],
     )
-    commitment_text: Optional[str] = Field(
+    commitment_text: str | None = Field(
         None,
         description="Written commitment pledge (behavioral nudge)",
         examples=["Nitalipa KSh 500 kila Jumatatu"],
     )
-    accountability_partner_id: Optional[UUID] = Field(
+    accountability_partner_id: UUID | None = Field(
         None,
         description="Optional accountability partner UUID",
     )
@@ -96,8 +95,8 @@ class RepaymentRequest(BaseModel):
         "manual",
         description="Payment method: manual, mpesa, cash, auto_set_aside, chama",
     )
-    notes: Optional[str] = Field(None, description="Optional notes")
-    nudge_type: Optional[str] = Field(
+    notes: str | None = Field(None, description="Optional notes")
+    nudge_type: str | None = Field(
         None,
         description="Nudge that prompted this repayment",
     )
@@ -241,6 +240,7 @@ async def get_default_risk(
     try:
         # Get the loan to find user_id
         from sqlalchemy import select
+
         from app.models.loan import Loan
 
         result = await db.execute(select(Loan).where(Loan.id == loan_id))

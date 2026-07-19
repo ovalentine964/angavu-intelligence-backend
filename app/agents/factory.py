@@ -19,21 +19,21 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
 from app.agents.base import BiasharaAgent, EventType
 from app.agents.event_bus import EventBus
-from app.agents.observability import AgentTracer
+from app.agents.governance import AuditAgent, EthicsAgent, PrivacyAgent
 from app.agents.implementations import (
     IntelligenceGeneratorAgent,
     ReportGeneratorAgent,
     SelfEvolutionAgent,
     TransactionProcessorAgent,
 )
-from app.agents.governance import AuditAgent, EthicsAgent, PrivacyAgent
-from app.agents.research import MarketResearchAgent, UserInsightAgent, InnovationAgent
+from app.agents.observability import AgentTracer
+from app.agents.research import InnovationAgent, MarketResearchAgent, UserInsightAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -51,17 +51,17 @@ class AgentInfrastructure:
 
     event_bus: EventBus
     tracer: AgentTracer
-    agents: List[BiasharaAgent]
-    agent_map: Dict[str, BiasharaAgent] = field(default_factory=dict)
+    agents: list[BiasharaAgent]
+    agent_map: dict[str, BiasharaAgent] = field(default_factory=dict)
 
     # Tier 1: MetaAgent
     meta_agent: Any = None  # MetaAgent | None
 
     # Tier 2: Domain agents
-    domain_agents: List[BiasharaAgent] = field(default_factory=list)
+    domain_agents: list[BiasharaAgent] = field(default_factory=list)
 
     # Tier 3: Utility agents
-    utility_agents: List[BiasharaAgent] = field(default_factory=list)
+    utility_agents: list[BiasharaAgent] = field(default_factory=list)
 
     # Communication protocols
     broadcast_protocol: Any = None
@@ -71,10 +71,10 @@ class AgentInfrastructure:
     # Optional loop-enhanced infrastructure
     loop_supervisor: Any = None
     loop_event_store: Any = None
-    loop_agents: List[BiasharaAgent] = field(default_factory=list)
+    loop_agents: list[BiasharaAgent] = field(default_factory=list)
 
     # Optional long-horizon orchestration
-    intelligence_flows: Dict[str, Any] = field(default_factory=dict)
+    intelligence_flows: dict[str, Any] = field(default_factory=dict)
     research_orchestrator: Any = None
 
     # DeerFlow integration (deerflow-harness)
@@ -88,7 +88,7 @@ class AgentInfrastructure:
     a2a_client: Any = None          # A2AClient
 
     # V3: Financial agent templates
-    financial_agents: List[BiasharaAgent] = field(default_factory=list)
+    financial_agents: list[BiasharaAgent] = field(default_factory=list)
 
     # V3: Sub-agent orchestration
     subagent_decomposer: Any = None  # TaskDecomposer
@@ -104,8 +104,8 @@ class AgentInfrastructure:
     hermes_service: Any = None       # HermesService
 
     # V6: Governance & Research swarms
-    governance_agents: List[BiasharaAgent] = field(default_factory=list)
-    research_agents: List[BiasharaAgent] = field(default_factory=list)
+    governance_agents: list[BiasharaAgent] = field(default_factory=list)
+    research_agents: list[BiasharaAgent] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.agent_map:
@@ -137,7 +137,7 @@ class AgentFactory:
     """
 
     def __init__(self):
-        self._infrastructure: Optional[AgentInfrastructure] = None
+        self._infrastructure: AgentInfrastructure | None = None
         self._logger = logger.bind(component="agent_factory")
 
     async def create_all(
@@ -175,8 +175,8 @@ class AgentFactory:
 
         # 3. Communication protocols
         from app.agents.communication.broadcast import BroadcastProtocol
-        from app.agents.communication.point_to_point import PointToPointProtocol
         from app.agents.communication.delegation import DelegationProtocol
+        from app.agents.communication.point_to_point import PointToPointProtocol
 
         broadcast_protocol = BroadcastProtocol(event_bus)
         p2p_protocol = PointToPointProtocol(event_bus)
@@ -527,15 +527,15 @@ class AgentFactory:
         from app.agents.meta_agent import MetaAgent
         return MetaAgent()
 
-    def _create_domain_agents(self) -> List[BiasharaAgent]:
+    def _create_domain_agents(self) -> list[BiasharaAgent]:
         """Create Tier 2 domain agents with real service injection."""
         from app.agents.domain import (
             AgricultureDomainAgent,
-            RetailDomainAgent,
-            TransportDomainAgent,
             DigitalDomainAgent,
             ManufacturingDomainAgent,
+            RetailDomainAgent,
             ServiceDomainAgent,
+            TransportDomainAgent,
         )
 
         agri = AgricultureDomainAgent()
@@ -549,11 +549,11 @@ class AgentFactory:
         try:
             from app.services.agents import (
                 AgricultureAgent,
-                RetailAgent,
-                TransportAgent,
                 DigitalAgent,
                 ManufacturingAgent,
+                RetailAgent,
                 ServiceAgent,
+                TransportAgent,
             )
             agri.set_transaction_service(AgricultureAgent())
             retail.set_transaction_service(RetailAgent())
@@ -567,14 +567,14 @@ class AgentFactory:
 
         return [agri, retail, transport, digital, manufacturing, service]
 
-    def _create_utility_agents(self) -> List[BiasharaAgent]:
+    def _create_utility_agents(self) -> list[BiasharaAgent]:
         """Create Tier 3 utility agents."""
         from app.agents.utility import (
-            DataQualityAgent,
             AnomalyDetectorAgent,
-            PredictionAgent,
             CommunicationAgent,
+            DataQualityAgent,
             LearningAgent,
+            PredictionAgent,
             SyncAgent,
         )
 
@@ -587,13 +587,13 @@ class AgentFactory:
             SyncAgent(),
         ]
 
-    def _create_new_agents(self) -> List[BiasharaAgent]:
+    def _create_new_agents(self) -> list[BiasharaAgent]:
         """Create newly identified agents: Voice, Compliance, Security, Onboarding."""
         from app.agents.implementations_extra import (
-            VoicePipelineAgent,
             ComplianceAgent,
-            SecurityAgent,
             OnboardingAgent,
+            SecurityAgent,
+            VoicePipelineAgent,
         )
 
         return [
@@ -627,7 +627,7 @@ class AgentFactory:
 
         return social_handler
 
-    def _create_governance_agents(self) -> List[BiasharaAgent]:
+    def _create_governance_agents(self) -> list[BiasharaAgent]:
         """Create Swarm 5: Governance agents for oversight and compliance."""
         return [
             AuditAgent(),
@@ -635,7 +635,7 @@ class AgentFactory:
             PrivacyAgent(),
         ]
 
-    def _create_research_agents(self) -> List[BiasharaAgent]:
+    def _create_research_agents(self) -> list[BiasharaAgent]:
         """Create Swarm 6: Research agents for market intelligence."""
         return [
             MarketResearchAgent(),
@@ -648,11 +648,11 @@ class AgentFactory:
     async def _subscribe_agents(
         self,
         event_bus: EventBus,
-        core_agents: List[BiasharaAgent],
-        domain_agents: List[BiasharaAgent],
+        core_agents: list[BiasharaAgent],
+        domain_agents: list[BiasharaAgent],
         meta_agent: BiasharaAgent,
-        governance_agents: List[BiasharaAgent] = None,
-        research_agents: List[BiasharaAgent] = None,
+        governance_agents: list[BiasharaAgent] = None,
+        research_agents: list[BiasharaAgent] = None,
     ) -> None:
         """Subscribe each agent to its relevant event types."""
         # Core agent subscriptions
@@ -826,7 +826,7 @@ class AgentFactory:
                 if event_types:
                     await event_bus.subscribe(agent, event_types)
 
-    def _wire_reflect_loops(self, agents: List[BiasharaAgent]) -> None:
+    def _wire_reflect_loops(self, agents: list[BiasharaAgent]) -> None:
         """
         Wire reflect→behavior feedback loops on agents.
 
@@ -883,8 +883,8 @@ class AgentFactory:
     ) -> AgentInfrastructure:
         """Create and attach loop-enhanced agents."""
         try:
-            from app.agents.loops import EventStore
             from app.agents.loop_implementations import create_loop_enhanced_agents
+            from app.agents.loops import EventStore
 
             loop_event_store = EventStore()
             loop_infra = create_loop_enhanced_agents(event_store=loop_event_store)
@@ -988,15 +988,15 @@ class AgentFactory:
     ) -> AgentInfrastructure:
         """Create and attach MCP and A2A protocol servers/clients."""
         try:
-            from app.agents.protocols.mcp import (
-                MCPServer,
-                MCPClient,
-                create_angavu_mcp_tools,
-            )
             from app.agents.protocols.a2a import (
-                A2AServer,
                 A2AClient,
+                A2AServer,
                 create_angavu_agent_card,
+            )
+            from app.agents.protocols.mcp import (
+                MCPClient,
+                MCPServer,
+                create_angavu_mcp_tools,
             )
 
             # MCP Server — expose Angavu tools
@@ -1081,9 +1081,9 @@ class AgentFactory:
     ) -> AgentInfrastructure:
         """Create and attach sub-agent orchestration and skill generation."""
         try:
+            from app.agents.skill_generator import SkillGenerator
             from app.agents.subagent import SubAgentOrchestrator
             from app.agents.task_decomposition import create_financial_task_decomposer
-            from app.agents.skill_generator import SkillGenerator
 
             # Create task decomposer with financial handlers
             task_decomposer = create_financial_task_decomposer()

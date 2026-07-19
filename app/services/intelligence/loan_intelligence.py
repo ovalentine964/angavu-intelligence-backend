@@ -29,18 +29,16 @@ Buyers: Microfinance banks, M-Shwari, Fuliza, Tala, Branch
 
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, select, func
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.transaction import Transaction
-from app.models.user import User
-from app.services.intelligence.cache import intelligence_cache
 
 logger = structlog.get_logger(__name__)
 
@@ -71,7 +69,7 @@ class LoanIntelligenceService:
 
     async def predict_repayment_capacity(
         self, worker_id: str, loan_amount: float
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Predict whether a worker can repay a loan of given amount.
 
@@ -170,7 +168,7 @@ class LoanIntelligenceService:
 
     async def check_loan_purpose(
         self, worker_id: str, loan_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Check if loan money is being used for its stated business purpose.
 
@@ -269,8 +267,8 @@ class LoanIntelligenceService:
     # ═══════════════════════════════════════════════════════════════
 
     async def recommend_repayment_schedule(
-        self, worker_id: str, loan: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, worker_id: str, loan: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Recommend optimal repayment schedule based on cash flow patterns.
 
@@ -332,7 +330,7 @@ class LoanIntelligenceService:
     # DEFAULT RISK ASSESSMENT
     # ═══════════════════════════════════════════════════════════════
 
-    async def get_default_risk(self, worker_id: str) -> Dict[str, Any]:
+    async def get_default_risk(self, worker_id: str) -> dict[str, Any]:
         """
         Estimate probability of loan default based on transaction patterns.
 
@@ -441,10 +439,10 @@ class LoanIntelligenceService:
 
     async def _get_worker_transactions(
         self, worker_id: str, days: int = 90
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Fetch worker's recent transactions from database."""
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
             result = await self.db.execute(
                 select(Transaction).where(
                     and_(
@@ -472,7 +470,7 @@ class LoanIntelligenceService:
 
     async def _get_transactions_since(
         self, worker_id: str, since_date: datetime
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Get transactions since a specific date."""
         try:
             result = await self.db.execute(
@@ -502,7 +500,7 @@ class LoanIntelligenceService:
 
     async def _get_loan_details(
         self, worker_id: str, loan_id: str
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """
         Get loan details from loan service.
 
@@ -517,13 +515,13 @@ class LoanIntelligenceService:
             "purpose": "Buy inventory",
             "interest_rate": 0.15,
             "term_months": 6,
-            "disbursement_date": datetime.now(timezone.utc) - timedelta(days=30),
+            "disbursement_date": datetime.now(UTC) - timedelta(days=30),
             "lender": "M-Shwari",
         }
 
     def _calculate_monthly_stats(
-        self, txns: List[Dict]
-    ) -> Dict[str, float]:
+        self, txns: list[dict]
+    ) -> dict[str, float]:
         """Calculate monthly income and expense statistics."""
         monthly_income = defaultdict(float)
         monthly_expenses = defaultdict(float)
@@ -552,7 +550,7 @@ class LoanIntelligenceService:
 
     def _estimate_repayment_schedule(
         self, loan_amount: float, annual_rate: float = 0.15, term_months: int = 6
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate repayment schedule with amortization.
 
@@ -592,8 +590,8 @@ class LoanIntelligenceService:
 
     def _calculate_capacity_confidence(
         self,
-        txns: List[Dict],
-        monthly_stats: Dict,
+        txns: list[dict],
+        monthly_stats: dict,
         volatility: float,
     ) -> float:
         """Calculate confidence in repayment capacity prediction."""
@@ -609,8 +607,8 @@ class LoanIntelligenceService:
         return data_score + consistency_score + months_score
 
     def _classify_transactions(
-        self, txns: List[Dict], loan_purpose: str
-    ) -> Dict[str, Any]:
+        self, txns: list[dict], loan_purpose: str
+    ) -> dict[str, Any]:
         """Classify transactions as business or personal spending."""
         business_categories = {
             "food", "agriculture", "inventory", "stock", "supplies",
@@ -692,7 +690,7 @@ class LoanIntelligenceService:
         is_compliant: bool,
         business_pct: float,
         personal_pct: float,
-        loan: Dict,
+        loan: dict,
     ) -> str:
         """Generate Swahili message about loan purpose compliance."""
         if is_compliant and personal_pct < 10:
@@ -719,7 +717,7 @@ class LoanIntelligenceService:
         is_compliant: bool,
         business_pct: float,
         personal_pct: float,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate intervention recommendations."""
         interventions = []
 
@@ -738,7 +736,7 @@ class LoanIntelligenceService:
 
         return interventions
 
-    def _calculate_consistency_score(self, txns: List[Dict]) -> float:
+    def _calculate_consistency_score(self, txns: list[dict]) -> float:
         """Calculate income consistency score (0-1)."""
         daily_sales = defaultdict(float)
         for txn in txns:
@@ -760,8 +758,8 @@ class LoanIntelligenceService:
         return float(max(0, 1 - cv))
 
     def _analyze_savings_behavior(
-        self, txns: List[Dict]
-    ) -> Dict[str, float]:
+        self, txns: list[dict]
+    ) -> dict[str, float]:
         """Analyze savings patterns from transactions."""
         deposits = sum(
             t["amount"] for t in txns if t["type"] == "DEPOSIT"
@@ -785,11 +783,11 @@ class LoanIntelligenceService:
 
     def _extract_risk_features(
         self,
-        txns: List[Dict],
-        monthly_stats: Dict,
+        txns: list[dict],
+        monthly_stats: dict,
         consistency: float,
-        savings: Dict,
-    ) -> Dict[str, float]:
+        savings: dict,
+    ) -> dict[str, float]:
         """Extract features for default risk model."""
         active_days = len(
             set(t["timestamp"].strftime("%Y-%m-%d") for t in txns)
@@ -806,7 +804,7 @@ class LoanIntelligenceService:
             "confidence": min(len(txns) / 50, 1.0),
         }
 
-    def _estimate_default_probability(self, features: Dict) -> float:
+    def _estimate_default_probability(self, features: dict) -> float:
         """
         Estimate default probability using logistic model.
 
@@ -851,8 +849,8 @@ class LoanIntelligenceService:
             return "critical"
 
     def _identify_risk_factors(
-        self, features: Dict, monthly_stats: Dict
-    ) -> List[str]:
+        self, features: dict, monthly_stats: dict
+    ) -> list[str]:
         """Identify specific risk factors."""
         factors = []
 
@@ -872,9 +870,9 @@ class LoanIntelligenceService:
     def _get_mitigation_strategies(
         self,
         risk_level: str,
-        risk_factors: List[str],
-        features: Dict,
-    ) -> List[str]:
+        risk_factors: list[str],
+        features: dict,
+    ) -> list[str]:
         """Generate mitigation strategies based on risk profile."""
         strategies = []
 
@@ -894,8 +892,8 @@ class LoanIntelligenceService:
         return strategies
 
     def _analyze_cash_flow_pattern(
-        self, txns: List[Dict]
-    ) -> Dict[str, Any]:
+        self, txns: list[dict]
+    ) -> dict[str, Any]:
         """Analyze daily cash flow patterns to find surplus days."""
         daily_net = defaultdict(float)
         for txn in txns:
@@ -926,8 +924,8 @@ class LoanIntelligenceService:
         }
 
     def _find_best_payment_days(
-        self, pattern: Dict[str, Any]
-    ) -> List[int]:
+        self, pattern: dict[str, Any]
+    ) -> list[int]:
         """Find best days of week for loan payments."""
         avg_by_dow = pattern.get("avg_by_day_of_week", {})
         if not avg_by_dow:
@@ -942,9 +940,9 @@ class LoanIntelligenceService:
         loan_amount: float,
         interest_rate: float,
         term_months: int,
-        best_payment_days: List[int],
-        cash_flow_pattern: Dict,
-    ) -> List[Dict]:
+        best_payment_days: list[int],
+        cash_flow_pattern: dict,
+    ) -> list[dict]:
         """Generate optimized repayment schedule."""
         schedule = self._estimate_repayment_schedule(
             loan_amount, interest_rate, term_months
@@ -966,8 +964,8 @@ class LoanIntelligenceService:
         ]
 
     def _calculate_cash_flow_impact(
-        self, schedule: List[Dict], pattern: Dict
-    ) -> Dict[str, Any]:
+        self, schedule: list[dict], pattern: dict
+    ) -> dict[str, Any]:
         """Calculate impact of repayment on cash flow."""
         monthly_payment = schedule[0]["amount"] if schedule else 0
         avg_monthly_surplus = pattern.get("avg_daily_surplus", 0) * 30
@@ -982,7 +980,7 @@ class LoanIntelligenceService:
             "is_sustainable": monthly_payment < avg_monthly_surplus * 0.7,
         }
 
-    def _default_schedule(self, loan: Dict) -> Dict[str, Any]:
+    def _default_schedule(self, loan: dict) -> dict[str, Any]:
         """Default schedule when no transaction data is available."""
         schedule = self._estimate_repayment_schedule(
             loan["amount"],
@@ -1029,7 +1027,7 @@ class LoanIntelligenceService:
         )
 
     def _generate_schedule_recommendation(
-        self, schedule: List, best_days: List[int], impact: Dict
+        self, schedule: list, best_days: list[int], impact: dict
     ) -> str:
         """Generate schedule recommendation in Swahili."""
         day_names = {
@@ -1054,7 +1052,7 @@ class LoanIntelligenceService:
         self,
         risk_level: str,
         prob: float,
-        factors: List[str],
+        factors: list[str],
     ) -> str:
         """Generate risk recommendation in Swahili."""
         if risk_level == "low":

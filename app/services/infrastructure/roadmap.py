@@ -20,11 +20,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import IntEnum
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +165,7 @@ class DataCenterRoadmap:
         contribution = roadmap.get_worker_contribution("worker_123")
     """
 
-    def __init__(self, state_path: Optional[str] = None):
+    def __init__(self, state_path: str | None = None):
         self._state_path = Path(state_path) if state_path else None
         self._state = self._load_state()
 
@@ -191,8 +190,8 @@ class DataCenterRoadmap:
                 pass
         return RoadmapState(
             current_phase=Phase.CLOUD,
-            phase_started_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
+            phase_started_at=datetime.now(UTC).isoformat(),
+            updated_at=datetime.now(UTC).isoformat(),
         )
 
     def _save_state(self) -> None:
@@ -220,7 +219,7 @@ class DataCenterRoadmap:
         allocation_pct = INFRA_ALLOCATION_PCT.get(self._state.current_phase, 0.10)
         self._state.monthly_infra_allocation_usd = monthly_revenue_usd * allocation_pct
         self._state.total_infra_fund_usd += self._state.monthly_infra_allocation_usd
-        self._state.updated_at = datetime.now(timezone.utc).isoformat()
+        self._state.updated_at = datetime.now(UTC).isoformat()
 
         # Check for phase transition
         transition = self._maybe_advance_phase()
@@ -431,7 +430,7 @@ class DataCenterRoadmap:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _maybe_advance_phase(self) -> Optional[dict]:
+    def _maybe_advance_phase(self) -> dict | None:
         """Check if we've met the criteria for the next phase."""
         current = self._state.current_phase
         if current >= Phase.PAN_AFRICAN_NETWORK:
@@ -447,7 +446,7 @@ class DataCenterRoadmap:
         if workers_met and revenue_met and fund_met:
             old_phase = self._state.current_phase
             self._state.current_phase = next_phase
-            self._state.phase_started_at = datetime.now(timezone.utc).isoformat()
+            self._state.phase_started_at = datetime.now(UTC).isoformat()
             return {
                 "transitioned": True,
                 "from_phase": old_phase,

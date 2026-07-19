@@ -34,7 +34,7 @@ monitoring, and observability:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/loops", tags=["Agent Loops"])
 
 # Global references — set during app startup
 _supervisor = None
-_event_store: Optional[EventStore] = None
+_event_store: EventStore | None = None
 _agents = {}
 _ooda_agents = {}  # name -> OODAAgent
 _feedback_agents = {}  # name -> FeedbackAgent
@@ -63,9 +63,9 @@ def set_loop_infrastructure(supervisor, event_store, agents):
     _agents = {a.name: a for a in agents}
 
     # Index new loop agents by type
-    from app.agents.loops.ooda_loop import OODAAgent
     from app.agents.loops.feedback_loop import FeedbackAgent
     from app.agents.loops.human_in_the_loop import HumanInTheLoopAgent
+    from app.agents.loops.ooda_loop import OODAAgent
 
     for a in agents:
         if isinstance(a, OODAAgent):
@@ -81,7 +81,7 @@ def set_loop_infrastructure(supervisor, event_store, agents):
 
 @router.get("/traces")
 async def get_react_traces(
-    agent_name: Optional[str] = Query(None, description="Filter by agent name"),
+    agent_name: str | None = Query(None, description="Filter by agent name"),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
@@ -107,7 +107,7 @@ async def get_react_traces(
 
 @router.get("/traces/examples")
 async def get_reasoning_examples(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(5, ge=1, le=20),
 ):
     """
@@ -135,7 +135,7 @@ async def get_reasoning_examples(
 
 @router.get("/critiques")
 async def get_critiques(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
@@ -163,7 +163,7 @@ async def get_critiques(
 
 @router.get("/plans")
 async def get_plans(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
@@ -191,9 +191,9 @@ async def get_plans(
 
 @router.get("/events")
 async def get_events(
-    event_type: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    aggregate_id: Optional[str] = Query(None),
+    event_type: str | None = Query(None),
+    source: str | None = Query(None),
+    aggregate_id: str | None = Query(None),
     since_sequence: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
 ):
@@ -224,7 +224,7 @@ async def get_events(
 @router.get("/events/replay")
 async def replay_events(
     from_sequence: int = Query(0, ge=0),
-    to_sequence: Optional[int] = Query(None, ge=0),
+    to_sequence: int | None = Query(None, ge=0),
 ):
     """
     Replay events from a sequence range.
@@ -325,7 +325,7 @@ async def get_agent_metrics():
 
 @router.get("/ooda/cycles")
 async def get_ooda_cycles(
-    agent_name: Optional[str] = Query(None, description="Filter by agent name"),
+    agent_name: str | None = Query(None, description="Filter by agent name"),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
@@ -350,7 +350,7 @@ async def get_ooda_cycles(
 
 @router.get("/ooda/velocity")
 async def get_decision_velocity(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Get decision velocity metrics.
@@ -371,7 +371,7 @@ async def get_decision_velocity(
 
 @router.get("/ooda/orientation")
 async def get_orientation_state(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Get current OODA orientation state.
@@ -391,7 +391,7 @@ async def get_orientation_state(
 
 @router.get("/ooda/stats")
 async def get_ooda_stats(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """Get overall OODA loop statistics."""
     stats = {}
@@ -409,7 +409,7 @@ async def get_ooda_stats(
 
 @router.get("/feedback/signals")
 async def get_feedback_signals(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Get learning signals summary.
@@ -431,7 +431,7 @@ async def get_feedback_signals(
 
 @router.get("/feedback/patterns")
 async def get_feedback_patterns(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
@@ -456,7 +456,7 @@ async def get_feedback_patterns(
 
 @router.get("/feedback/strategy")
 async def get_current_strategy(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Get current active strategy from the feedback loop.
@@ -478,7 +478,7 @@ async def get_current_strategy(
 
 @router.get("/feedback/history")
 async def get_strategy_history(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
 ):
     """Get strategy version history."""
@@ -495,7 +495,7 @@ async def get_strategy_history(
 
 @router.get("/feedback/stats")
 async def get_feedback_stats(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """Get overall feedback loop statistics."""
     stats = {}
@@ -515,12 +515,12 @@ class ResolveEscalationRequest(BaseModel):
     """Request to resolve a pending escalation."""
     escalation_id: str
     decision: str  # accepted | rejected | modified
-    human_response: Optional[Dict[str, Any]] = None
+    human_response: dict[str, Any] | None = None
 
 
 @router.get("/hitl/escalations")
 async def get_escalation_history(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ):
     """Get escalation history."""
@@ -540,8 +540,8 @@ async def get_escalation_history(
 
 @router.get("/hitl/trust-scores")
 async def get_trust_scores(
-    agent_name: Optional[str] = Query(None),
-    worker_id: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
+    worker_id: str | None = Query(None),
 ):
     """
     Get trust scores for workers.
@@ -572,7 +572,7 @@ async def get_trust_scores(
 
 @router.get("/hitl/autonomy")
 async def get_autonomy_levels(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Get autonomy level distribution across workers.
@@ -595,7 +595,7 @@ async def get_autonomy_levels(
 
 @router.get("/hitl/pending")
 async def get_pending_escalations(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """Get pending escalation requests awaiting human response."""
     pending = []
@@ -615,7 +615,7 @@ async def get_pending_escalations(
 @router.post("/hitl/resolve")
 async def resolve_escalation(
     request: ResolveEscalationRequest,
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """
     Resolve a pending escalation with a human decision.
@@ -650,7 +650,7 @@ async def resolve_escalation(
 
 @router.get("/hitl/stats")
 async def get_hitl_stats(
-    agent_name: Optional[str] = Query(None),
+    agent_name: str | None = Query(None),
 ):
     """Get overall Human-in-the-Loop statistics."""
     stats = {}

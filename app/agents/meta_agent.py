@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
     AgentDecision,
-    AgentEvent,
     AgentResult,
     BiasharaAgent,
     EventType,
@@ -56,7 +55,7 @@ class AgentMetrics:
             return 0.0
         return self.successful_requests / self.total_requests
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize metrics to dictionary for API response."""
         return {
             "agent_name": self.agent_name,
@@ -72,14 +71,14 @@ class AgentMetrics:
 class ConflictRecord:
     """Record of a conflict detected between agents."""
     conflict_id: str
-    agents_involved: List[str]
+    agents_involved: list[str]
     conflict_type: str
     description: str
     resolution: str = ""
     resolved: bool = False
     created_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize conflict record to dictionary."""
         return {
             "conflict_id": self.conflict_id,
@@ -96,12 +95,12 @@ class ConflictRecord:
 class LearningShare:
     """A learning shared between agents."""
     source_agent: str
-    target_agents: List[str]
+    target_agents: list[str]
     insight: str
     confidence: float
     shared_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "source_agent": self.source_agent,
             "target_agents": self.target_agents,
@@ -123,15 +122,15 @@ class CapabilityRouter:
     """
 
     def __init__(self):
-        self._agent_capabilities: Dict[str, List[str]] = {}
-        self._agent_metrics: Dict[str, AgentMetrics] = {}
+        self._agent_capabilities: dict[str, list[str]] = {}
+        self._agent_metrics: dict[str, AgentMetrics] = {}
 
-    def register(self, agent_name: str, capabilities: List[str]) -> None:
+    def register(self, agent_name: str, capabilities: list[str]) -> None:
         self._agent_capabilities[agent_name] = capabilities
         if agent_name not in self._agent_metrics:
             self._agent_metrics[agent_name] = AgentMetrics(agent_name=agent_name)
 
-    def route(self, required_capability: str) -> Optional[str]:
+    def route(self, required_capability: str) -> str | None:
         """Find the best agent for a given capability."""
         candidates = [
             name for name, caps in self._agent_capabilities.items()
@@ -168,7 +167,7 @@ class CapabilityRouter:
         m.avg_duration_ms = ((m.avg_duration_ms * (n - 1)) + duration_ms) / n
         m.last_active = time.time()
 
-    def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_metrics(self) -> dict[str, dict[str, Any]]:
         return {name: m.to_dict() for name, m in self._agent_metrics.items()}
 
 
@@ -181,12 +180,12 @@ class ConflictResolver:
     """Detects and resolves conflicts between agents."""
 
     def __init__(self):
-        self._conflicts: Dict[str, ConflictRecord] = {}
+        self._conflicts: dict[str, ConflictRecord] = {}
         self._counter = 0
 
     def detect(
         self,
-        agents_involved: List[str],
+        agents_involved: list[str],
         conflict_type: str,
         description: str,
     ) -> ConflictRecord:
@@ -208,12 +207,12 @@ class ConflictResolver:
         c.resolved = True
         return True
 
-    def get_unresolved(self) -> List[Dict[str, Any]]:
+    def get_unresolved(self) -> list[dict[str, Any]]:
         return [
             c.to_dict() for c in self._conflicts.values() if not c.resolved
         ]
 
-    def get_all(self) -> List[Dict[str, Any]]:
+    def get_all(self) -> list[dict[str, Any]]:
         return [c.to_dict() for c in self._conflicts.values()]
 
 
@@ -226,12 +225,12 @@ class CrossAgentLearningManager:
     """Shares learnings across agents to improve system-wide performance."""
 
     def __init__(self):
-        self._shared_learnings: List[LearningShare] = []
+        self._shared_learnings: list[LearningShare] = []
 
     def share(
         self,
         source_agent: str,
-        target_agents: List[str],
+        target_agents: list[str],
         insight: str,
         confidence: float,
     ) -> LearningShare:
@@ -244,10 +243,10 @@ class CrossAgentLearningManager:
         self._shared_learnings.append(learning)
         return learning
 
-    def get_recent(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_recent(self, limit: int = 20) -> list[dict[str, Any]]:
         return [l.to_dict() for l in self._shared_learnings[-limit:]]
 
-    def get_for_agent(self, agent_name: str) -> List[Dict[str, Any]]:
+    def get_for_agent(self, agent_name: str) -> list[dict[str, Any]]:
         return [
             l.to_dict()
             for l in self._shared_learnings
@@ -283,7 +282,7 @@ class MetaAgent(BiasharaAgent):
                 "health_checking",
             ],
         )
-        self._registered_agents: Dict[str, BiasharaAgent] = {}
+        self._registered_agents: dict[str, BiasharaAgent] = {}
         self._capability_router = CapabilityRouter()
         self._conflict_resolver = ConflictResolver()
         self._learning_manager = CrossAgentLearningManager()
@@ -295,7 +294,7 @@ class MetaAgent(BiasharaAgent):
         self._capability_router.register(agent.name, list(agent.capabilities))
         self._logger.info("agent_registered", agent=agent.name, capabilities=agent.capabilities)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Analyze the event and decide on a meta-action."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -400,7 +399,7 @@ class MetaAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    async def _resolve_conflict(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _resolve_conflict(self, params: dict[str, Any]) -> dict[str, Any]:
         """Resolve an agent conflict."""
         agents = params.get("agents_involved", [])
         conflict_type = params.get("conflict_type", "unknown")
@@ -425,7 +424,7 @@ class MetaAgent(BiasharaAgent):
 
         return {"conflict_id": conflict.conflict_id, "resolved": False}
 
-    def _check_all_health(self) -> Dict[str, Any]:
+    def _check_all_health(self) -> dict[str, Any]:
         """Check health of all registered agents."""
         health = {}
         for name, agent in self._registered_agents.items():
@@ -435,21 +434,21 @@ class MetaAgent(BiasharaAgent):
                 health[name] = {"status": "error", "error": str(exc)}
         return {"agents": health, "total": len(health)}
 
-    def _handle_error(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_error(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle a pipeline error."""
         source = params.get("source", "unknown")
         error = params.get("error", "unknown")
         self._logger.warning("pipeline_error_handled", source=source, error=error)
         return {"action": "logged", "source": source}
 
-    async def _route_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _route_request(self, params: dict[str, Any]) -> dict[str, Any]:
         """Route a request to the best agent."""
         target = params.get("target_agent")
         if target and target in self._registered_agents:
             return {"routed_to": target, "status": "routed"}
         return {"routed_to": None, "status": "no_suitable_agent"}
 
-    def _system_status(self) -> Dict[str, Any]:
+    def _system_status(self) -> dict[str, Any]:
         """Get system-wide status."""
         return {
             "registered_agents": len(self._registered_agents),
@@ -460,11 +459,11 @@ class MetaAgent(BiasharaAgent):
 
     # ── Query API ───────────────────────────────────────────────────
 
-    def get_routing_metrics(self) -> Dict[str, Any]:
+    def get_routing_metrics(self) -> dict[str, Any]:
         return self._capability_router.get_all_metrics()
 
-    def get_conflicts(self) -> List[Dict[str, Any]]:
+    def get_conflicts(self) -> list[dict[str, Any]]:
         return self._conflict_resolver.get_all()
 
-    def get_learnings(self) -> List[Dict[str, Any]]:
+    def get_learnings(self) -> list[dict[str, Any]]:
         return self._learning_manager.get_recent()

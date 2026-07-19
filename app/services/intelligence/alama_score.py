@@ -21,10 +21,9 @@ Academic Foundation (Valentine's BSc Economics & Statistics):
 Buyers: Banks, microfinance, fintech
 """
 
-import hashlib
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -43,20 +42,18 @@ from app.services.causal_inference import (
 )
 from app.services.heckman_correction import HeckmanCorrector
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
+from app.services.intelligence.markov_chains import markov_analyzer
+from app.services.intelligence.measure_theory import MartingaleAnalyzer
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BootstrapInference,
     DiscriminantAnalyzer,
     FactorAnalyzer,
-    KernelDensityEstimator,
     MonteCarloEngine,
     PCAAnalyzer,
     bootstrap,
     kde_estimator,
 )
-from app.services.intelligence.markov_chains import MarkovChainAnalyzer, markov_analyzer
-from app.services.intelligence.measure_theory import MartingaleAnalyzer, ConditionalExpectation
 
 # ── ML Layer: XGBoost credit scoring (complements classical Alama Score) ──
 try:
@@ -93,7 +90,7 @@ CATEGORY_RISK = {
 
 def _mle_logistic_regression(
     X: np.ndarray, y: np.ndarray, max_iter: int = 100, tol: float = 1e-6
-) -> Tuple[np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, float]:
     """
     MLE for logistic regression via iteratively reweighted least squares (IRLS).
 
@@ -165,7 +162,7 @@ def _bayesian_credit_update(
     prior_failures: float,
     observed_successes: int,
     observed_failures: int,
-) -> Tuple[float, Tuple[float, float]]:
+) -> tuple[float, tuple[float, float]]:
     """
     Bayesian updating of repayment probability using Beta-Binomial conjugacy.
 
@@ -209,7 +206,7 @@ def _bayesian_credit_update(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _kde_estimate(
-    data: np.ndarray, x_grid: np.ndarray, bandwidth: Optional[float] = None
+    data: np.ndarray, x_grid: np.ndarray, bandwidth: float | None = None
 ) -> np.ndarray:
     """
     Gaussian Kernel Density Estimation.
@@ -331,8 +328,8 @@ class AlamaScoreService:
         lookback_days: int = 90,
         query_tier: str = "basic",
         include_heckman: bool = True,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Compute Alama credit score for a business.
 
@@ -750,8 +747,8 @@ class AlamaScoreService:
         response = {
             "product": "alama_score",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, cohort_size / 50),
             "confidence_level": min(1.0, len(transactions) / 100),
@@ -902,7 +899,7 @@ class AlamaScoreService:
         growth_score: float,
         consistency_score: float,
         sales: list,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -910,7 +907,7 @@ class AlamaScoreService:
         Wilcoxon signed-rank for before/after changes, and permutation
         tests for score improvement significance.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for revenue distribution (ensure called) ──────────
         if daily_revenues and len(daily_revenues) >= 20:
@@ -1099,9 +1096,9 @@ class AlamaScoreService:
         self,
         business_id: str,
         outcome: str,
-        amount: Optional[float] = None,
+        amount: float | None = None,
         lookback_days: int = 90,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Record a credit outcome (repayment or default) for calibration.
 
@@ -1132,8 +1129,7 @@ class AlamaScoreService:
         Returns:
             Dict with calibration update details
         """
-        from app.models.intelligence_products import AlamaScoreOutcome
-        from sqlalchemy import select, and_
+        from sqlalchemy import select
 
         # Validate outcome
         if outcome not in ("repayment", "default"):
@@ -1152,7 +1148,7 @@ class AlamaScoreService:
             business_hash=business_id,
             outcome_type=outcome,
             amount=amount,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=datetime.now(UTC),
         )
         self.db.add(outcome_record)
         await self.db.flush()
@@ -1180,7 +1176,7 @@ class AlamaScoreService:
         ).join(
             User, User.id == AlamaScoreOutcome.business_hash  # approximate join
         ).where(
-            AlamaScoreOutcome.recorded_at >= datetime.now(timezone.utc) - timedelta(days=365)
+            AlamaScoreOutcome.recorded_at >= datetime.now(UTC) - timedelta(days=365)
         ).group_by(AlamaScoreOutcome.outcome_type)
 
         # Simplified: count all outcomes
@@ -1275,7 +1271,7 @@ class AlamaScoreService:
         query_tier: str,
         activity_score: float,
         stability_score: float,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run causal inference validation using IV/2SLS, DiD, and RDD.
 
@@ -1361,7 +1357,7 @@ class AlamaScoreService:
         avg_daily_rev: float,
         revenue_vol: float,
         query_tier: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run Monte Carlo revenue distribution simulation.
 

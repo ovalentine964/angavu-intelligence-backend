@@ -15,11 +15,9 @@ import base64
 import gzip
 import hashlib
 import json
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
 
 from app.api.auth import get_current_user
 from app.schemas.federated_learning import (
@@ -29,21 +27,18 @@ from app.schemas.federated_learning import (
     UploadResponse,
 )
 
+# Post-Quantum Cryptography — ML-KEM-768 + ML-DSA-65
+from app.security.pqc import (
+    CryptoAuditLogger,
+    EncryptedGradientPayload,
+    FlPqcDecryptor,
+    MlKemParameterSet,
+    MlKemProvider,
+)
+
 # Security exception for PQC encryption
 from app.security.pqc.fl_encryption import SecurityException
 from app.services.federated_learning import FederatedLearningService
-
-# Post-Quantum Cryptography — ML-KEM-768 + ML-DSA-65
-from app.security.pqc import (
-    MlKemProvider,
-    MlKemParameterSet,
-    MlDsaProvider,
-    MlDsaParameterSet,
-    FlPqcDecryptor,
-    EncryptedGradientPayload,
-    CryptoAuditLogger,
-    AuditEventType,
-)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["Federated Learning"])

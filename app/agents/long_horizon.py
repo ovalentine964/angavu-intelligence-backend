@@ -35,18 +35,13 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import structlog
 
 from app.agents.base import AgentEvent, AgentResult, BiasharaAgent, EventType
 from app.agents.loops import (
     EventStore,
-    ExecutionPlan,
-    PlanStep,
-    PlanExecuteAgent,
-    SupervisedExecution,
-    SupervisorAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -87,20 +82,20 @@ class SubTask:
     name: str = ""
     description: str = ""
     action: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    dependencies: List[str] = field(default_factory=list)  # subtask_ids
-    assigned_agent: Optional[str] = None
+    parameters: dict[str, Any] = field(default_factory=dict)
+    dependencies: list[str] = field(default_factory=list)  # subtask_ids
+    assigned_agent: str | None = None
     status: SubTaskStatus = SubTaskStatus.PENDING
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
     attempts: int = 0
     max_retries: int = 3
     timeout_seconds: float = 300.0  # 5 min default
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    checkpoint_data: Dict[str, Any] = field(default_factory=dict)
+    started_at: float | None = None
+    completed_at: float | None = None
+    checkpoint_data: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize sub-task to dictionary."""
         return {
             "subtask_id": self.subtask_id,
@@ -131,12 +126,12 @@ class TaskCheckpoint:
     checkpoint_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     task_id: str = ""
     task_status: TaskStatus = TaskStatus.EXECUTING
-    subtask_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    aggregated_results: Dict[str, Any] = field(default_factory=dict)
+    subtask_states: dict[str, dict[str, Any]] = field(default_factory=dict)
+    aggregated_results: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     step_index: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize checkpoint to dictionary."""
         return {
             "checkpoint_id": self.checkpoint_id,
@@ -155,26 +150,26 @@ class LongHorizonTask:
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     goal: str = ""
     description: str = ""
-    subtasks: List[SubTask] = field(default_factory=list)
+    subtasks: list[SubTask] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
     progress_pct: float = 0.0
-    checkpoints: List[TaskCheckpoint] = field(default_factory=list)
-    aggregated_result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    checkpoints: list[TaskCheckpoint] = field(default_factory=list)
+    aggregated_result: dict[str, Any] | None = None
+    error: str | None = None
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
+    started_at: float | None = None
+    completed_at: float | None = None
     timeout_seconds: float = 3600.0  # 1 hour default
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def get_subtask(self, subtask_id: str) -> Optional[SubTask]:
+    def get_subtask(self, subtask_id: str) -> SubTask | None:
         """Find a sub-task by its ID."""
         for st in self.subtasks:
             if st.subtask_id == subtask_id:
                 return st
         return None
 
-    def get_ready_subtasks(self) -> List[SubTask]:
+    def get_ready_subtasks(self) -> list[SubTask]:
         """Get sub-tasks whose dependencies are all completed."""
         ready = []
         for st in self.subtasks:
@@ -209,7 +204,7 @@ class LongHorizonTask:
     def has_failures(self) -> bool:
         return any(st.status == SubTaskStatus.FAILED for st in self.subtasks)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "goal": self.goal,
@@ -258,9 +253,9 @@ class TaskPlanner:
     async def plan(
         self,
         goal: str,
-        context: Dict[str, Any],
-        available_agents: List[str],
-    ) -> List[SubTask]:
+        context: dict[str, Any],
+        available_agents: list[str],
+    ) -> list[SubTask]:
         """
         Create a sub-task DAG for the given goal.
 
@@ -280,8 +275,8 @@ class TaskPlanner:
         self,
         task: LongHorizonTask,
         failed_subtask: SubTask,
-        context: Dict[str, Any],
-    ) -> List[SubTask]:
+        context: dict[str, Any],
+    ) -> list[SubTask]:
         """
         Re-plan after a sub-task failure.
 
@@ -309,9 +304,9 @@ class TaskPlanner:
     async def _decompose(
         self,
         goal: str,
-        context: Dict[str, Any],
-        available_agents: List[str],
-    ) -> List[SubTask]:
+        context: dict[str, Any],
+        available_agents: list[str],
+    ) -> list[SubTask]:
         """
         Decompose a goal into sub-tasks.
 
@@ -344,8 +339,8 @@ class SubAgentDelegator:
 
     def __init__(self, name: str = "SubAgentDelegator"):
         self.name = name
-        self._agent_capabilities: Dict[str, List[str]] = {}
-        self._agents: Dict[str, BiasharaAgent] = {}
+        self._agent_capabilities: dict[str, list[str]] = {}
+        self._agents: dict[str, BiasharaAgent] = {}
         self._logger = logger.bind(component="sub_agent_delegator")
 
     def register_agent(self, agent: BiasharaAgent) -> None:
@@ -358,7 +353,7 @@ class SubAgentDelegator:
             capabilities=agent.capabilities,
         )
 
-    def select_agent(self, subtask: SubTask) -> Optional[BiasharaAgent]:
+    def select_agent(self, subtask: SubTask) -> BiasharaAgent | None:
         """
         Select the best agent for a sub-task.
 
@@ -441,7 +436,7 @@ class SubAgentDelegator:
             subtask.completed_at = time.time()
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             subtask.status = SubTaskStatus.FAILED
             subtask.error = f"Timed out after {subtask.timeout_seconds}s"
             subtask.completed_at = time.time()
@@ -460,7 +455,7 @@ class SubAgentDelegator:
                 error=str(exc),
             )
 
-    def get_registered_agents(self) -> List[Dict[str, Any]]:
+    def get_registered_agents(self) -> list[dict[str, Any]]:
         """List all registered agents and their capabilities."""
         return [
             {
@@ -488,7 +483,7 @@ class ProgressTracker:
 
     def __init__(self, name: str = "ProgressTracker"):
         self.name = name
-        self._tasks: Dict[str, LongHorizonTask] = {}
+        self._tasks: dict[str, LongHorizonTask] = {}
         self._logger = logger.bind(component="progress_tracker")
 
     def register_task(self, task: LongHorizonTask) -> None:
@@ -496,15 +491,15 @@ class ProgressTracker:
         self._tasks[task.task_id] = task
         self._logger.info("task_registered", task_id=task.task_id, goal=task.goal)
 
-    def get_task(self, task_id: str) -> Optional[LongHorizonTask]:
+    def get_task(self, task_id: str) -> LongHorizonTask | None:
         """Get a tracked task by ID."""
         return self._tasks.get(task_id)
 
     def list_tasks(
         self,
-        status: Optional[TaskStatus] = None,
+        status: TaskStatus | None = None,
         limit: int = 50,
-    ) -> List[LongHorizonTask]:
+    ) -> list[LongHorizonTask]:
         """List tracked tasks, optionally filtered by status."""
         tasks = list(self._tasks.values())
         if status:
@@ -533,7 +528,7 @@ class ProgressTracker:
     def restore_checkpoint(
         self,
         task: LongHorizonTask,
-        checkpoint_id: Optional[str] = None,
+        checkpoint_id: str | None = None,
     ) -> bool:
         """
         Restore task state from a checkpoint.
@@ -574,7 +569,7 @@ class ProgressTracker:
         )
         return True
 
-    def get_progress_report(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_progress_report(self, task_id: str) -> dict[str, Any] | None:
         """Get a detailed progress report for a task."""
         task = self._tasks.get(task_id)
         if not task:
@@ -636,7 +631,7 @@ class ResultAggregator:
         self.name = name
         self._logger = logger.bind(component="result_aggregator")
 
-    def aggregate(self, task: LongHorizonTask) -> Dict[str, Any]:
+    def aggregate(self, task: LongHorizonTask) -> dict[str, Any]:
         """
         Aggregate all completed sub-task results.
 
@@ -677,9 +672,9 @@ class ResultAggregator:
 
     def _merge(
         self,
-        results: Dict[str, Dict[str, Any]],
-        errors: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        results: dict[str, dict[str, Any]],
+        errors: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
         """
         Merge results from all sub-tasks.
 
@@ -725,13 +720,13 @@ class LongHorizonOrchestrator:
     def __init__(
         self,
         name: str = "LongHorizonOrchestrator",
-        planner: Optional[TaskPlanner] = None,
-        delegator: Optional[SubAgentDelegator] = None,
-        tracker: Optional[ProgressTracker] = None,
-        aggregator: Optional[ResultAggregator] = None,
+        planner: TaskPlanner | None = None,
+        delegator: SubAgentDelegator | None = None,
+        tracker: ProgressTracker | None = None,
+        aggregator: ResultAggregator | None = None,
         max_parallel: int = 5,
         checkpoint_interval: float = 60.0,  # seconds between auto-checkpoints
-        event_store: Optional[EventStore] = None,
+        event_store: EventStore | None = None,
     ):
         self.name = name
         self.planner = planner or TaskPlanner()
@@ -741,15 +736,15 @@ class LongHorizonOrchestrator:
         self._max_parallel = max_parallel
         self._checkpoint_interval = checkpoint_interval
         self._event_store = event_store
-        self._active_tasks: Dict[str, asyncio.Task] = {}
+        self._active_tasks: dict[str, asyncio.Task] = {}
         self._logger = logger.bind(component="long_horizon_orchestrator")
 
     async def execute(
         self,
         goal: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         timeout_seconds: float = 3600.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> LongHorizonTask:
         """
         Execute a long-horizon task.
@@ -829,7 +824,7 @@ class LongHorizonOrchestrator:
                 elapsed=(task.completed_at - task.started_at),
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             task.status = TaskStatus.TIMED_OUT
             task.error = f"Task timed out after {timeout_seconds}s"
             task.completed_at = time.time()
@@ -856,7 +851,7 @@ class LongHorizonOrchestrator:
             # Check overall timeout
             elapsed = time.time() - task.started_at
             if elapsed > task.timeout_seconds:
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
 
             # Get ready sub-tasks
             ready = task.get_ready_subtasks()
@@ -962,7 +957,7 @@ class LongHorizonOrchestrator:
         self._logger.info("task_cancelled", task_id=task_id)
         return True
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get orchestrator status."""
         all_tasks = self.tracker.list_tasks(limit=100)
         return {

@@ -8,7 +8,7 @@ Each buyer gets scoped API keys and pays for intelligence products.
 
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -20,7 +20,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
 )
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import relationship
@@ -140,12 +139,12 @@ class Buyer(Base):
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # Relationships
@@ -174,7 +173,7 @@ class Buyer(Base):
         """Check if the buyer's contract is currently active."""
         if not self.is_active:
             return False
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if self.contract_start and now < self.contract_start:
             return False
         if self.contract_end and now > self.contract_end:
@@ -260,7 +259,7 @@ class BuyerAPIKey(Base):
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
     # Relationships
@@ -274,7 +273,7 @@ class BuyerAPIKey(Base):
         """Check if this key has expired."""
         if self.expires_at is None:
             return False
-        return datetime.now(timezone.utc) > self.expires_at
+        return datetime.now(UTC) > self.expires_at
 
     @staticmethod
     def generate_key() -> tuple[str, str, str]:

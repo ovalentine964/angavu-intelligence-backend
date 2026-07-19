@@ -34,14 +34,10 @@ Reference:
 
 import logging
 import ssl
-import os
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import List, Optional, Tuple
 
-from .ml_kem import MlKemProvider, MlKemParameterSet
-from .ml_dsa import MlDsaProvider, MlDsaParameterSet
+from .ml_dsa import MlDsaParameterSet, MlDsaProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +67,9 @@ class PqcCertificate:
     # Classical private key (PEM-encoded)
     classical_key_pem: bytes
     # PQC signature of the certificate (ML-DSA-65)
-    pqc_signature: Optional[bytes] = None
+    pqc_signature: bytes | None = None
     # PQC public key (for pinning)
-    pqc_public_key: Optional[bytes] = None
+    pqc_public_key: bytes | None = None
     # PQC algorithm identifier
     pqc_algorithm: str = "ML-DSA-65"
 
@@ -85,18 +81,18 @@ class TlsPqcConfig:
     # Minimum TLS version
     min_tls_version: int = ssl.TLSVersion.TLSv1_3
     # Preferred cipher suites (TLS 1.3 AEAD ciphers are all quantum-safe for data)
-    cipher_suites: Optional[List[str]] = None
+    cipher_suites: list[str] | None = None
     # PQC key exchange algorithm
     pqc_kem_algorithm: str = "ML-KEM-768"
     # PQC signature algorithm for certificates
     pqc_sig_algorithm: str = "ML-DSA-65"
     # Certificate pinning with PQC public keys
-    pinned_pqc_keys: Optional[List[bytes]] = None
+    pinned_pqc_keys: list[bytes] | None = None
     # Certificate and key paths
-    cert_path: Optional[str] = None
-    key_path: Optional[str] = None
+    cert_path: str | None = None
+    key_path: str | None = None
     # CA bundle path
-    ca_path: Optional[str] = None
+    ca_path: str | None = None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -195,7 +191,7 @@ def create_pqc_ssl_context(
 def create_server_ssl_context(
     cert_path: str,
     key_path: str,
-    ca_path: Optional[str] = None,
+    ca_path: str | None = None,
     mode: TlsMode = TlsMode.HYBRID,
 ) -> ssl.SSLContext:
     """
@@ -243,8 +239,8 @@ class PqcCertificatePinner:
 
     def __init__(
         self,
-        pinned_classical_hashes: Optional[List[str]] = None,
-        pinned_pqc_hashes: Optional[List[str]] = None,
+        pinned_classical_hashes: list[str] | None = None,
+        pinned_pqc_hashes: list[str] | None = None,
         mode: TlsMode = TlsMode.HYBRID,
     ):
         self._classical_hashes = set(pinned_classical_hashes or [])
@@ -267,8 +263,8 @@ class PqcCertificatePinner:
 
     def verify_pin(
         self,
-        classical_cert_der: Optional[bytes] = None,
-        pqc_public_key: Optional[bytes] = None,
+        classical_cert_der: bytes | None = None,
+        pqc_public_key: bytes | None = None,
     ) -> bool:
         """
         Verify certificate pin.
@@ -352,11 +348,12 @@ def generate_pqc_signed_certificate(
     Returns:
         PqcCertificate with classical cert and PQC signature
     """
+    import datetime
+
     from cryptography import x509
-    from cryptography.x509.oid import NameOID
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
-    import datetime
+    from cryptography.x509.oid import NameOID
 
     # Generate classical ECDSA key pair
     classical_key = ec.generate_private_key(ec.SECP256R1())
@@ -367,7 +364,7 @@ def generate_pqc_signed_certificate(
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Angavu Intelligence"),
     ])
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)

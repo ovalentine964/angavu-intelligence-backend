@@ -14,17 +14,12 @@ This is a REAL implementation using:
 """
 
 import hashlib
-import hmac
-import os
-from typing import Optional, Tuple
 
-from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from .crypto_provider import CryptoKeyPair
-from .ml_kem import MlKemProvider, MlKemParameterSet
-
+from .ml_kem import MlKemParameterSet, MlKemProvider
 
 HKDF_ALGORITHM = "sha256"
 HYBRID_ALGORITHM_ID = "X25519+ML-KEM-768"
@@ -70,7 +65,7 @@ class HybridKeyExchange:
 
     is_stub: bool = False  # REAL implementation
 
-    def __init__(self, ml_kem_provider: Optional[MlKemProvider] = None):
+    def __init__(self, ml_kem_provider: MlKemProvider | None = None):
         self._ml_kem = ml_kem_provider or MlKemProvider(MlKemParameterSet.ML_KEM_768)
 
     def get_real_provider(self):
@@ -80,7 +75,7 @@ class HybridKeyExchange:
     def initiate(
         self,
         peer_ml_kem_public_key: bytes,
-        peer_x25519_public_key: Optional[bytes] = None,
+        peer_x25519_public_key: bytes | None = None,
     ) -> HybridKeyExchangeResult:
         """
         Initiate a hybrid key exchange (client side).
@@ -185,7 +180,7 @@ class HybridKeyExchange:
         # Step 3: Combine using HKDF
         return self._combine_secrets(x25519_secret, ml_kem_secret)
 
-    def generate_server_x25519_keypair(self) -> Tuple[bytes, bytes]:
+    def generate_server_x25519_keypair(self) -> tuple[bytes, bytes]:
         """
         Generate a server-side X25519 key pair for the hybrid exchange.
 

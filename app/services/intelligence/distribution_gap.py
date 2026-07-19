@@ -21,8 +21,8 @@ Buyers: FMCG distribution companies
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -34,11 +34,8 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import BootstrapCI
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BootstrapInference,
-    KernelDensityEstimator,
     bootstrap,
     kde_estimator,
 )
@@ -97,7 +94,7 @@ def _identify_barriers_to_entry(
     avg_startup_cost: float,
     network_effect_strength: float,
     regulatory_complexity: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Identify and classify barriers to entry.
 
@@ -160,7 +157,7 @@ def _identify_barriers_to_entry(
 
 def _control_chart_limits(
     data: np.ndarray, sigma: float = 3.0
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Shewhart control chart: compute UCL, CL, LCL.
 
@@ -204,7 +201,7 @@ def _control_chart_limits(
 
 def _cusum_detect_shift(
     data: np.ndarray, target: float, threshold: float = 5.0, drift: float = 0.5
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     CUSUM (Cumulative Sum) control chart for detecting sustained shifts.
 
@@ -252,7 +249,7 @@ def _cusum_detect_shift(
 
 def _process_capability_index(
     data: np.ndarray, lsl: float, usl: float
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Process capability indices Cp and Cpk.
 
@@ -303,7 +300,7 @@ def _optimise_expansion_allocation(
     market_potentials: np.ndarray,
     budget: float,
     cost_per_market: float,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Optimally allocate expansion budget across gap markets.
 
@@ -373,12 +370,12 @@ class DistributionGapService:
     async def analyze_gaps(
         self,
         product_category: str,
-        product_name: Optional[str] = None,
-        region: Optional[str] = None,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        product_name: str | None = None,
+        region: str | None = None,
+        period_start: date | None = None,
+        period_end: date | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Analyze distribution gaps for a product category.
 
@@ -634,8 +631,8 @@ class DistributionGapService:
         response = {
             "product": "distribution_gap",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, total_vendors / 50),
             "confidence_level": min(1.0, len(product_txns) / 100),
@@ -706,7 +703,7 @@ class DistributionGapService:
         valid_gap_markets: list,
         product_txns: list,
         gap_revenue_potential: float,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -718,7 +715,7 @@ class DistributionGapService:
         if not market_data or len(market_data) < 5:
             return None
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for market coverage distribution ──────────────────
         try:

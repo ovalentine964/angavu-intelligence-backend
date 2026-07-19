@@ -15,8 +15,6 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -112,7 +110,7 @@ async def user_cost_breakdown(user_id: str):
 
 
 @router.get("/canary")
-async def canary_weights(agent_name: Optional[str] = None):
+async def canary_weights(agent_name: str | None = None):
     """Get canary routing weights."""
     # Canary router is a separate component — check if it exists
     try:

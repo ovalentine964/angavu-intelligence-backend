@@ -6,14 +6,14 @@ revenue metrics for dashboard and forecasting.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     Float,
     Index,
-    JSON,
     String,
 )
 
@@ -33,7 +33,7 @@ class RevenueMetricDB(Base):
     recorded_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
     )
     metadata = Column(JSON, nullable=True, default=dict)

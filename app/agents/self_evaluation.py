@@ -29,19 +29,19 @@ Feature flag: Set agent's _self_evaluation to None to disable (default).
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, TYPE_CHECKING
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from app.agents.base import AgentEvent
+
 if TYPE_CHECKING:
-    from app.agents.base import AgentEvent, AgentResult, BiasharaAgent
-    from app.services.ml.inference_harness import InferenceHarness
+    from app.agents.base import AgentResult, BiasharaAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -51,7 +51,7 @@ logger = structlog.get_logger(__name__)
 # ════════════════════════════════════════════════════════════════════
 
 
-class EvaluationVerdict(str, Enum):
+class EvaluationVerdict(StrEnum):
     """Verdict of the evaluation."""
     PASS = "pass"                      # Quality acceptable, publish downstream
     REFINE = "refine"                  # Quality below threshold, re-process with feedback
@@ -64,9 +64,9 @@ class EvaluationResult:
     """Result of evaluating an agent's output."""
     evaluation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     verdict: EvaluationVerdict = EvaluationVerdict.PASS
-    score: float = 1.0                  # 0.0 – 1.0
-    issues: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    score: float = 1.0                  # 0.0 - 1.0
+    issues: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
     refined_prompt_hint: str = ""       # Feedback for re-processing
     evaluation_mode: str = "rule"       # "rule" | "llm" | "hybrid"
     tokens_used: int = 0                # Tokens consumed by evaluation
@@ -74,7 +74,7 @@ class EvaluationResult:
     latency_ms: float = 0.0
     iteration: int = 1                  # Which iteration this is
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "evaluation_id": self.evaluation_id,
             "verdict": self.verdict.value,
@@ -115,7 +115,7 @@ class EvaluationRule:
         self.name = name
         self.severity = severity
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         """Evaluate the output against this rule. Override in subclasses."""
         raise NotImplementedError
 
@@ -126,7 +126,7 @@ class NonEmptyOutputRule(EvaluationRule):
     def __init__(self):
         super().__init__("non_empty_output", severity="error")
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         data = output.get("data")
         if data is None or (isinstance(data, str) and len(data.strip()) == 0):
             return RuleResult(False, self.name, "Output data is empty", self.severity)
@@ -138,11 +138,11 @@ class NonEmptyOutputRule(EvaluationRule):
 class SchemaValidationRule(EvaluationRule):
     """Output must conform to expected schema fields."""
 
-    def __init__(self, required_fields: List[str]):
+    def __init__(self, required_fields: list[str]):
         super().__init__("schema_validation", severity="error")
         self._required_fields = required_fields
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         data = output.get("data", {})
         if not isinstance(data, dict):
             return RuleResult(True, self.name)  # Skip if not dict
@@ -166,7 +166,7 @@ class RangeCheckRule(EvaluationRule):
         self._min = min_val
         self._max = max_val
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         data = output.get("data", {})
         if not isinstance(data, dict):
             return RuleResult(True, self.name)
@@ -190,7 +190,7 @@ class OutputLengthRule(EvaluationRule):
         self._min_length = min_length
         self._content_field = content_field
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         data = output.get("data", {})
         if not isinstance(data, dict):
             return RuleResult(True, self.name)
@@ -212,7 +212,7 @@ class ConfidenceThresholdRule(EvaluationRule):
         super().__init__("confidence_threshold", severity="warning")
         self._min_confidence = min_confidence
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         confidence = output.get("confidence") or context.get("confidence", 1.0)
         if confidence < self._min_confidence:
             return RuleResult(
@@ -229,7 +229,7 @@ class NoErrorRule(EvaluationRule):
     def __init__(self):
         super().__init__("no_error", severity="error")
 
-    def evaluate(self, output: Dict[str, Any], context: Dict[str, Any]) -> RuleResult:
+    def evaluate(self, output: dict[str, Any], context: dict[str, Any]) -> RuleResult:
         if output.get("error"):
             return RuleResult(False, self.name, f"Error present: {output['error']}", self.severity)
         data = output.get("data", {})
@@ -275,16 +275,16 @@ EVALUATE FOR:
 Respond in JSON:
 {{"score": 0.0-1.0, "issues": ["..."], "suggestions": ["..."]}}"""
 
-    def __init__(self, inference_harness: Optional[Any] = None):
+    def __init__(self, inference_harness: Any | None = None):
         self._harness = inference_harness
         self._logger = logger.bind(component="llm_evaluator")
 
     async def evaluate(
         self,
         agent_name: str,
-        output: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> Tuple[float, List[str], List[str], int]:
+        output: dict[str, Any],
+        context: dict[str, Any],
+    ) -> tuple[float, list[str], list[str], int]:
         """
         Evaluate output quality using LLM.
 
@@ -349,9 +349,9 @@ class AgentEvaluationConfig:
     max_cost_per_loop_usd: float = 0.01     # USD budget per evaluation loop
     enable_llm_evaluation: bool = False     # Use LLM for quality check
     llm_evaluation_threshold: float = 0.5   # Score below this triggers LLM eval
-    rules: List[EvaluationRule] = field(default_factory=list)
+    rules: list[EvaluationRule] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "quality_threshold": self.quality_threshold,
@@ -385,10 +385,10 @@ class SelfEvaluationMiddleware:
     Feature flag: Agents not registered (no config) pass through unchanged.
     """
 
-    def __init__(self, inference_harness: Optional[Any] = None):
-        self._configs: Dict[str, AgentEvaluationConfig] = {}
+    def __init__(self, inference_harness: Any | None = None):
+        self._configs: dict[str, AgentEvaluationConfig] = {}
         self._llm_evaluator = LLMEvaluator(inference_harness)
-        self._evaluation_history: List[Dict[str, Any]] = []
+        self._evaluation_history: list[dict[str, Any]] = []
         self._max_history = 5000
         self._logger = logger.bind(component="self_evaluation")
 
@@ -407,7 +407,7 @@ class SelfEvaluationMiddleware:
         max_tokens_per_loop: int = 2000,
         max_cost_per_loop_usd: float = 0.01,
         enable_llm_evaluation: bool = False,
-        rules: Optional[List[EvaluationRule]] = None,
+        rules: list[EvaluationRule] | None = None,
     ) -> None:
         """Register an agent for self-evaluation with custom config."""
         config = AgentEvaluationConfig(
@@ -582,8 +582,8 @@ class SelfEvaluationMiddleware:
     ) -> EvaluationResult:
         """Run evaluation pipeline: rules → (optional) LLM."""
         start_time = time.time()
-        issues: List[str] = []
-        suggestions: List[str] = []
+        issues: list[str] = []
+        suggestions: list[str] = []
         total_tokens = 0
 
         # Stage 1: Rule-based evaluation
@@ -725,6 +725,7 @@ class SelfEvaluationMiddleware:
                 return
 
             from prometheus_client import Counter, Histogram
+
             from app.infrastructure.metrics import _registry
 
             # Lazy-init metrics (avoid circular import at module level)
@@ -763,7 +764,7 @@ class SelfEvaluationMiddleware:
 
     # ── Monitoring ──────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get evaluation statistics."""
         return {
             "total_evaluations": self._total_evaluations,
@@ -774,7 +775,7 @@ class SelfEvaluationMiddleware:
             "recent_evaluations": self._evaluation_history[-10:],
         }
 
-    def get_agent_stats(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_stats(self, agent_name: str) -> dict[str, Any]:
         """Get evaluation stats for a specific agent."""
         agent_evals = [
             e for e in self._evaluation_history
@@ -799,7 +800,7 @@ class SelfEvaluationMiddleware:
 # Singleton
 # ════════════════════════════════════════════════════════════════════
 
-_self_evaluation: Optional[SelfEvaluationMiddleware] = None
+_self_evaluation: SelfEvaluationMiddleware | None = None
 
 
 def get_self_evaluation() -> SelfEvaluationMiddleware:
@@ -811,7 +812,7 @@ def get_self_evaluation() -> SelfEvaluationMiddleware:
 
 
 def create_self_evaluation(
-    inference_harness: Optional[Any] = None,
+    inference_harness: Any | None = None,
 ) -> SelfEvaluationMiddleware:
     """Create a SelfEvaluationMiddleware with optional LLM support."""
     return SelfEvaluationMiddleware(inference_harness)

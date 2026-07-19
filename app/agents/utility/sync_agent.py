@@ -11,12 +11,14 @@ Tier: 3 (Utility) — stateless, on-demand invocation.
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
-    AgentDecision, AgentEvent, AgentResult, BiasharaAgent,
+    AgentDecision,
+    AgentResult,
+    BiasharaAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -51,7 +53,7 @@ class SyncAgent(BiasharaAgent):
     def __init__(self):
         super().__init__(name=self.name, role=self.role, capabilities=self.capabilities)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event = context.get("event", {})
         payload = event.get("payload", {})
         action = payload.get("action", "sync")
@@ -93,7 +95,7 @@ class SyncAgent(BiasharaAgent):
         except Exception as exc:
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
-    def _full_sync(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_sync(self, params: dict[str, Any]) -> dict[str, Any]:
         """Full bidirectional sync between local and cloud data."""
         local = params.get("local_data", [])
         cloud = params.get("cloud_data", [])
@@ -149,7 +151,7 @@ class SyncAgent(BiasharaAgent):
             "merged_sample": merged[:5],
         }
 
-    def _delta_sync(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _delta_sync(self, params: dict[str, Any]) -> dict[str, Any]:
         """Sync only changed records since last sync."""
         local = params.get("local_data", [])
         cloud = params.get("cloud_data", [])
@@ -197,7 +199,7 @@ class SyncAgent(BiasharaAgent):
             "download_records": to_download[:50],
         }
 
-    def _resolve_conflicts(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_conflicts(self, params: dict[str, Any]) -> dict[str, Any]:
         """Resolve sync conflicts using the specified strategy."""
         local = params.get("local_data", [])
         cloud = params.get("cloud_data", [])
@@ -215,7 +217,7 @@ class SyncAgent(BiasharaAgent):
             "resolved": resolved[:20],
         }
 
-    def _records_differ(self, a: Dict, b: Dict) -> bool:
+    def _records_differ(self, a: dict, b: dict) -> bool:
         """Check if two records have meaningful differences."""
         # Compare key fields (excluding metadata)
         skip_keys = {"updated_at", "synced_at", "_version", "_sync_status"}
@@ -226,7 +228,7 @@ class SyncAgent(BiasharaAgent):
                 return True
         return False
 
-    def _resolve_record_conflict(self, local: Dict, cloud: Dict, strategy: str) -> Dict:
+    def _resolve_record_conflict(self, local: dict, cloud: dict, strategy: str) -> dict:
         """Resolve a single record conflict."""
         if strategy == "last_write_wins":
             local_ts = self._get_timestamp(local)
@@ -239,7 +241,7 @@ class SyncAgent(BiasharaAgent):
         else:
             return cloud  # default: cloud wins
 
-    def _get_timestamp(self, record: Dict) -> float:
+    def _get_timestamp(self, record: dict) -> float:
         """Extract timestamp from a record."""
         ts = record.get("updated_at", record.get("timestamp", 0))
         if isinstance(ts, str):

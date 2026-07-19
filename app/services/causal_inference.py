@@ -20,13 +20,12 @@ throughout Angavu Intelligence to make credible causal claims:
 3. **Regression Discontinuity** — For threshold-based treatment effects
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import structlog
 from scipy import stats
-from scipy.optimize import minimize_scalar
 
 logger = structlog.get_logger(__name__)
 
@@ -39,8 +38,8 @@ def _ols(
     X: np.ndarray,
     y: np.ndarray,
     robust: bool = True,
-    cluster: Optional[np.ndarray] = None,
-) -> Dict[str, Any]:
+    cluster: np.ndarray | None = None,
+) -> dict[str, Any]:
     """
     OLS regression returning coefficients, SEs, residuals, fitted values.
 
@@ -126,15 +125,15 @@ class TwoSLSResult:
     second_stage_p_values: np.ndarray
     second_stage_confidence_intervals: np.ndarray
     second_stage_r_squared: float
-    hausman_statistic: Optional[float] = None
-    hausman_p_value: Optional[float] = None
-    endogeneity_detected: Optional[bool] = None
+    hausman_statistic: float | None = None
+    hausman_p_value: float | None = None
+    endogeneity_detected: bool | None = None
     weak_instrument: bool = True
     n_observations: int = 0
     n_instruments: int = 0
     n_endogenous: int = 0
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "first_stage": {
                 "f_statistic": round(self.first_stage_f_statistic, 4),
@@ -202,7 +201,7 @@ class InstrumentalVariables2SLS:
         Y: np.ndarray,
         X_endogenous: np.ndarray,
         Z_instruments: np.ndarray,
-        X_exogenous: Optional[np.ndarray] = None,
+        X_exogenous: np.ndarray | None = None,
         robust: bool = True,
     ) -> TwoSLSResult:
         """
@@ -345,15 +344,15 @@ class DiDResult:
     r_squared: float
     ate: float  # Average Treatment Effect (β₃)
     ate_se: float
-    ate_ci: Tuple[float, float]
-    parallel_trends_f_stat: Optional[float] = None
-    parallel_trends_p_value: Optional[float] = None
-    parallel_trends_satisfied: Optional[bool] = None
+    ate_ci: tuple[float, float]
+    parallel_trends_f_stat: float | None = None
+    parallel_trends_p_value: float | None = None
+    parallel_trends_satisfied: bool | None = None
     n_treated: int = 0
     n_control: int = 0
     n_periods: int = 0
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "treatment_effect": {
                 "ate": round(self.ate, 6),
@@ -421,10 +420,10 @@ class DifferenceInDifferences:
         Y: np.ndarray,
         treat: np.ndarray,
         post: np.ndarray,
-        cluster: Optional[np.ndarray] = None,
-        controls: Optional[np.ndarray] = None,
+        cluster: np.ndarray | None = None,
+        controls: np.ndarray | None = None,
         check_parallel_trends: bool = True,
-        pre_treat_interaction: Optional[np.ndarray] = None,
+        pre_treat_interaction: np.ndarray | None = None,
     ) -> DiDResult:
         """
         Estimate DiD model.
@@ -520,8 +519,8 @@ class DifferenceInDifferences:
         treat: np.ndarray,
         time_period: np.ndarray,
         treatment_time: int,
-        cluster: Optional[np.ndarray] = None,
-    ) -> Dict[str, Any]:
+        cluster: np.ndarray | None = None,
+    ) -> dict[str, Any]:
         """
         Event study design — dynamic treatment effects over time.
 
@@ -615,7 +614,7 @@ class RDDResult:
     """Container for RDD estimation results."""
     treatment_effect: float
     treatment_effect_se: float
-    treatment_effect_ci: Tuple[float, float]
+    treatment_effect_ci: tuple[float, float]
     t_statistic: float
     p_value: float
     bandwidth: float
@@ -625,11 +624,11 @@ class RDDResult:
     r_squared: float
     coefficients: np.ndarray
     standard_errors: np.ndarray
-    mccrary_p_value: Optional[float] = None
-    mccrary_manipulation_detected: Optional[bool] = None
-    optimal_bandwidth: Optional[float] = None
+    mccrary_p_value: float | None = None
+    mccrary_manipulation_detected: bool | None = None
+    optimal_bandwidth: float | None = None
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "treatment_effect": {
                 "estimate": round(self.treatment_effect, 6),
@@ -746,7 +745,7 @@ class RegressionDiscontinuity:
         return float(h_opt)
 
     @staticmethod
-    def _mccrary_test(X: np.ndarray, cutoff: float, bin_width: Optional[float] = None) -> Tuple[float, bool]:
+    def _mccrary_test(X: np.ndarray, cutoff: float, bin_width: float | None = None) -> tuple[float, bool]:
         """
         McCrary (2008) density test for manipulation at the cutoff.
 
@@ -849,7 +848,7 @@ class RegressionDiscontinuity:
         Y: np.ndarray,
         X: np.ndarray,
         cutoff: float,
-        bandwidth: Optional[float] = None,
+        bandwidth: float | None = None,
         kernel: str = "triangular",
         optimal_bw: bool = True,
         run_mccrary: bool = True,
@@ -876,7 +875,7 @@ class RegressionDiscontinuity:
         """
         n = len(Y)
         X_centered = X - cutoff
-        D = (X >= cutoff).astype(float)
+        D = (cutoff <= X).astype(float)
 
         # Optimal bandwidth
         opt_bw = cls._ik_bandwidth(X, cutoff) if optimal_bw else None
@@ -946,8 +945,8 @@ class RegressionDiscontinuity:
         ss_res = np.sum(w * resid ** 2)
         r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
-        n_left = int(np.sum((X < cutoff) & in_bw))
-        n_right = int(np.sum((X >= cutoff) & in_bw))
+        n_left = int(np.sum((cutoff > X) & in_bw))
+        n_right = int(np.sum((cutoff <= X) & in_bw))
 
         # McCrary test
         mc_p, mc_manip = (None, None)

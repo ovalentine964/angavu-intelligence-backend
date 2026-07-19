@@ -27,21 +27,17 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional
+from collections.abc import AsyncIterator, Callable, Coroutine
+from typing import Any
 
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.agents.protocols.mcp import (
-    MCPClient,
-    MCPPrompt,
-    MCPResource,
     MCPServer,
-    MCPTool,
-    MCPToolPermission,
 )
 
 logger = structlog.get_logger(__name__)
@@ -80,23 +76,23 @@ class MCPHttpClient:
         timeout: float = 30.0,
         max_retries: int = 3,
         cache_ttl_seconds: float = 300.0,
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
     ):
         self._timeout = timeout
         self._max_retries = max_retries
         self._cache_ttl = cache_ttl_seconds
         self._auth_token = auth_token
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
         # Session management: server_url → session_id
-        self._sessions: Dict[str, str] = {}
+        self._sessions: dict[str, str] = {}
 
         # Connected server manifests
-        self._connected_servers: Dict[str, Dict[str, Any]] = {}
+        self._connected_servers: dict[str, dict[str, Any]] = {}
 
         # Tool result cache
-        self._tool_cache: Dict[str, Any] = {}
-        self._tool_cache_times: Dict[str, float] = {}
+        self._tool_cache: dict[str, Any] = {}
+        self._tool_cache_times: dict[str, float] = {}
 
         self._logger = logger.bind(component="mcp_http_client")
 
@@ -124,7 +120,7 @@ class MCPHttpClient:
 
     # ── Connection ──────────────────────────────────────────────────
 
-    async def connect(self, server_url: str) -> Dict[str, Any]:
+    async def connect(self, server_url: str) -> dict[str, Any]:
         """
         Connect to an MCP server via Streamable HTTP.
 
@@ -166,7 +162,7 @@ class MCPHttpClient:
 
     # ── Tool Operations ─────────────────────────────────────────────
 
-    async def list_tools(self, server_url: str) -> List[Dict[str, Any]]:
+    async def list_tools(self, server_url: str) -> list[dict[str, Any]]:
         """
         Discover tools from a connected MCP server.
 
@@ -185,7 +181,7 @@ class MCPHttpClient:
         self,
         server_url: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         use_cache: bool = True,
     ) -> Any:
         """
@@ -256,7 +252,7 @@ class MCPHttpClient:
 
     # ── Resource Operations ─────────────────────────────────────────
 
-    async def list_resources(self, server_url: str) -> List[Dict[str, Any]]:
+    async def list_resources(self, server_url: str) -> list[dict[str, Any]]:
         """List available resources from an MCP server."""
         result = await self._send_request(server_url, "resources/list", {})
         return result.get("resources", [])
@@ -275,7 +271,7 @@ class MCPHttpClient:
 
     # ── Prompt Operations ───────────────────────────────────────────
 
-    async def list_prompts(self, server_url: str) -> List[Dict[str, Any]]:
+    async def list_prompts(self, server_url: str) -> list[dict[str, Any]]:
         """List available prompts from an MCP server."""
         result = await self._send_request(server_url, "prompts/list", {})
         return result.get("prompts", [])
@@ -284,8 +280,8 @@ class MCPHttpClient:
         self,
         server_url: str,
         name: str,
-        arguments: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Render a prompt template from an MCP server."""
         return await self._send_request(server_url, "prompts/get", {
             "name": name,
@@ -298,8 +294,8 @@ class MCPHttpClient:
         self,
         server_url: str,
         method: str,
-        params: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Send a JSON-RPC request to an MCP server via Streamable HTTP.
 
@@ -363,7 +359,7 @@ class MCPHttpClient:
         self,
         server_url: str,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
     ) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         request_body = {
@@ -388,7 +384,7 @@ class MCPHttpClient:
         except Exception as exc:
             self._logger.warning("mcp_notification_failed", method=method, error=str(exc))
 
-    async def _parse_sse_response(self, response: httpx.Response) -> Dict[str, Any]:
+    async def _parse_sse_response(self, response: httpx.Response) -> dict[str, Any]:
         """Parse an SSE response, extracting the final JSON-RPC result."""
         result_data = None
         event_type = None
@@ -427,7 +423,7 @@ class MCPHttpClient:
         self,
         response: httpx.Response,
         request_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Parse a JSON JSON-RPC response."""
         try:
             data = response.json()
@@ -446,8 +442,8 @@ class MCPHttpClient:
         self,
         client: httpx.AsyncClient,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
     ) -> httpx.Response:
         """Execute an HTTP POST with exponential backoff retry."""
         last_error = None
@@ -502,7 +498,7 @@ class MCPHttpClient:
         self._tool_cache.clear()
         self._tool_cache_times.clear()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get client statistics."""
         return {
             "connected_servers": len(self._connected_servers),
@@ -523,9 +519,9 @@ class MCPHttpClient:
 class MCPJsonRpcRequest(BaseModel):
     """MCP JSON-RPC request envelope."""
     jsonrpc: str = "2.0"
-    id: Optional[str | int] = None
+    id: str | int | None = None
     method: str
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
 # ── Session Manager ─────────────────────────────────────────────────
@@ -540,11 +536,11 @@ class MCPSessionManager:
     """
 
     def __init__(self, session_ttl_seconds: float = 3600.0):
-        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._sessions: dict[str, dict[str, Any]] = {}
         self._session_ttl = session_ttl_seconds
         self._logger = logger.bind(component="mcp_session_manager")
 
-    def create_session(self, client_info: Optional[Dict[str, Any]] = None) -> str:
+    def create_session(self, client_info: dict[str, Any] | None = None) -> str:
         """Create a new session and return its ID."""
         session_id = uuid.uuid4().hex
         self._sessions[session_id] = {
@@ -558,7 +554,7 @@ class MCPSessionManager:
         self._logger.info("mcp_session_created", session=session_id)
         return session_id
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         """Get session by ID, updating last_active timestamp."""
         session = self._sessions.get(session_id)
         if session:
@@ -592,7 +588,7 @@ class MCPSessionManager:
             del self._sessions[sid]
         return len(expired)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get session manager statistics."""
         return {
             "active_sessions": len(self._sessions),
@@ -605,8 +601,8 @@ class MCPSessionManager:
 
 def create_mcp_streamable_router(
     mcp_server: MCPServer,
-    session_manager: Optional[MCPSessionManager] = None,
-    auth_handler: Optional[Callable[..., Coroutine]] = None,
+    session_manager: MCPSessionManager | None = None,
+    auth_handler: Callable[..., Coroutine] | None = None,
 ) -> APIRouter:
     """
     Create a FastAPI router with MCP Streamable HTTP endpoints.
@@ -720,7 +716,7 @@ def create_mcp_streamable_router(
             result = {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32603, "message": f"Internal error: {str(exc)}"},
+                "error": {"code": -32603, "message": f"Internal error: {exc!s}"},
             }
 
         # Mark session as initialized after successful initialize

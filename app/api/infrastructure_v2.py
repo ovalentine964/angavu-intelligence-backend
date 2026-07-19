@@ -15,22 +15,19 @@ Endpoints:
     POST /api/v1/infrastructure/ab-test    — Start/manage A/B tests
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user
 from app.models.user import User
-
 from app.services.federated_learning_v2 import (
     AnonymizedUpdate,
     DataCategory,
     FederatedLearningV2Service,
 )
-from app.services.model_registry import ModelRegistry
 from app.services.infrastructure.health_monitor import HealthMonitor
+from app.services.model_registry import ModelRegistry
 
 # Singleton instances
 _fl_v2 = FederatedLearningV2Service()
@@ -53,14 +50,14 @@ class FederatedUpdateRequest(BaseModel):
         description="Data category: transaction_patterns, vocabulary, behavior, pricing, inventory, demand",
     )
     dialect: str = Field(default="sw", description="Language/dialect code")
-    gradient_deltas: Optional[str] = Field(None, description="Base64-encoded gradient deltas (encrypted)")
+    gradient_deltas: str | None = Field(None, description="Base64-encoded gradient deltas (encrypted)")
     pattern_count: int = Field(default=0, ge=0, le=10000, description="Number of correction patterns")
     avg_confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Average confidence score")
-    feature_vector: Optional[List[float]] = Field(None, description="Anonymized feature vector")
-    transaction_summary: Optional[dict] = Field(None, description="Anonymized transaction pattern summary")
-    phoneme_corrections: Optional[List[dict]] = Field(None, description="Vocabulary correction patterns")
-    session_duration_avg_s: Optional[float] = Field(None, description="Average session duration in seconds")
-    feature_usage_counts: Optional[dict] = Field(None, description="Feature usage frequency counts")
+    feature_vector: list[float] | None = Field(None, description="Anonymized feature vector")
+    transaction_summary: dict | None = Field(None, description="Anonymized transaction pattern summary")
+    phoneme_corrections: list[dict] | None = Field(None, description="Vocabulary correction patterns")
+    session_duration_avg_s: float | None = Field(None, description="Average session duration in seconds")
+    feature_usage_counts: dict | None = Field(None, description="Feature usage frequency counts")
     device_tier: str = Field(default="basic", description="Device capability tier")
     timestamp_ms: int = Field(default=0, description="Device-side timestamp in milliseconds")
 
@@ -82,8 +79,8 @@ class ModelDeployRequest(BaseModel):
     model_name: str
     version: str
     traffic_pct: float = Field(default=100.0, ge=0.0, le=100.0)
-    target_business_types: Optional[List[str]] = None
-    target_regions: Optional[List[str]] = None
+    target_business_types: list[str] | None = None
+    target_regions: list[str] | None = None
 
 
 class ABTestRequest(BaseModel):
@@ -103,7 +100,7 @@ class MetricRecordRequest(BaseModel):
     disk_usage_pct: float = Field(ge=0.0, le=100.0)
     network_in_mbps: float = Field(default=0.0, ge=0.0)
     network_out_mbps: float = Field(default=0.0, ge=0.0)
-    inference_latency_ms: Optional[float] = None
+    inference_latency_ms: float | None = None
     inference_count: int = Field(default=0, ge=0)
 
 
@@ -120,9 +117,9 @@ class CostRecordRequest(BaseModel):
     component: str = Field(description="server, inference, storage, network, training, other")
     amount_usd: float = Field(ge=0.0)
     phase: str = Field(default="cloud")
-    model_name: Optional[str] = None
-    inference_count: Optional[int] = None
-    workers_served: Optional[int] = None
+    model_name: str | None = None
+    inference_count: int | None = None
+    workers_served: int | None = None
     period_hours: float = Field(default=1.0, gt=0.0)
     notes: str = ""
 
@@ -147,7 +144,7 @@ async def get_infrastructure_health():
 
 
 @router.get("/infrastructure/health/servers")
-async def get_server_health(server_id: Optional[str] = Query(None)):
+async def get_server_health(server_id: str | None = Query(None)):
     """
     Get health status for specific server or all servers.
     """
@@ -177,7 +174,7 @@ async def record_server_metric(
 
 
 @router.get("/infrastructure/inference")
-async def get_inference_metrics(model_name: Optional[str] = Query(None)):
+async def get_inference_metrics(model_name: str | None = Query(None)):
     """
     Get inference latency and cost metrics per model.
 
@@ -210,9 +207,9 @@ async def record_inference(
 
 @router.get("/infrastructure/models")
 async def list_models(
-    model_name: Optional[str] = Query(None),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    dialect: Optional[str] = Query(None),
+    model_name: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    dialect: str | None = Query(None),
 ):
     """
     List registered model versions.
@@ -248,7 +245,7 @@ async def get_champion(model_name: str):
 @router.get("/infrastructure/models/{model_name}/performance")
 async def get_model_performance(
     model_name: str,
-    version: Optional[str] = Query(None),
+    version: str | None = Query(None),
 ):
     """Get performance metrics for a model, optionally by version."""
     return _registry.get_model_performance(model_name, version)
@@ -329,7 +326,7 @@ async def promote_model(
 
 
 @router.get("/infrastructure/ab-tests")
-async def list_ab_tests(model_name: Optional[str] = Query(None)):
+async def list_ab_tests(model_name: str | None = Query(None)):
     """List A/B tests, optionally filtered by model name."""
     return {
         "tests": _registry.get_ab_tests(model_name),
@@ -359,7 +356,7 @@ async def start_ab_test(
 @router.post("/infrastructure/ab-test/{test_id}/end")
 async def end_ab_test(
     test_id: str,
-    winner: Optional[str] = Query(None),
+    winner: str | None = Query(None),
     user: User = Depends(get_current_user),
 ):
     """End an A/B test. Optionally specify the winner version."""
@@ -444,7 +441,7 @@ async def federated_status():
 
 
 @router.get("/infrastructure/federated/models")
-async def list_federated_models(dialect: Optional[str] = Query(None)):
+async def list_federated_models(dialect: str | None = Query(None)):
     """
     List aggregated federated learning models.
     """
@@ -457,7 +454,7 @@ async def list_federated_models(dialect: Optional[str] = Query(None)):
 async def get_federated_model(
     category: str,
     dialect: str,
-    version: Optional[str] = Query(None),
+    version: str | None = Query(None),
 ):
     """
     Get an aggregated model for a specific category and dialect.
@@ -493,8 +490,8 @@ async def get_federated_model(
 
 @router.get("/infrastructure/costs")
 async def get_costs(
-    component: Optional[str] = Query(None),
-    phase: Optional[str] = Query(None),
+    component: str | None = Query(None),
+    phase: str | None = Query(None),
 ):
     """
     Get infrastructure cost tracking data.

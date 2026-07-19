@@ -20,7 +20,7 @@ Key Methods:
 - Heckman selection correction (ECO 424)
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -54,7 +54,7 @@ class OLSRegression:
         y: np.ndarray,
         robust: bool = True,
         add_constant: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit OLS regression model.
 
@@ -195,7 +195,7 @@ class LogitModel:
         add_constant: bool = True,
         max_iter: int = 1000,
         tol: float = 1e-8,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit logistic regression via Maximum Likelihood Estimation.
 
@@ -460,7 +460,7 @@ class TimeSeriesForecaster:
     def simple_exponential_smoothing(
         data: np.ndarray,
         alpha: float = 0.3,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Simple Exponential Smoothing (SES).
 
@@ -509,7 +509,7 @@ class TimeSeriesForecaster:
         data: np.ndarray,
         alpha: float = 0.3,
         beta: float = 0.1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Holt's Linear Trend method.
 
@@ -599,7 +599,7 @@ class HeckmanCorrection:
         selection_indicator: np.ndarray,
         X_outcome: np.ndarray,
         y_outcome: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Heckman two-step estimation.
 
@@ -630,7 +630,6 @@ class HeckmanCorrection:
             )
             return -ll
 
-        from scipy.optimize import minimize
 
         beta0 = np.zeros(X_sel_with_const.shape[1])
         result = minimize(neg_log_lik, beta0, method="BFGS")
@@ -710,12 +709,12 @@ class ARIMAModel:
         self.p = p
         self.d = d
         self.q = q
-        self.ar_coeffs: Optional[np.ndarray] = None
-        self.ma_coeffs: Optional[np.ndarray] = None
-        self.residuals: Optional[np.ndarray] = None
+        self.ar_coeffs: np.ndarray | None = None
+        self.ma_coeffs: np.ndarray | None = None
+        self.residuals: np.ndarray | None = None
         self.sigma2: float = 0.0
-        self._original_data: Optional[np.ndarray] = None
-        self._diff_data: Optional[np.ndarray] = None
+        self._original_data: np.ndarray | None = None
+        self._diff_data: np.ndarray | None = None
 
     @staticmethod
     def _difference(series: np.ndarray, d: int) -> np.ndarray:
@@ -726,7 +725,7 @@ class ARIMAModel:
         return result
 
     @staticmethod
-    def _yule_walker(data: np.ndarray, p: int) -> Tuple[np.ndarray, float]:
+    def _yule_walker(data: np.ndarray, p: int) -> tuple[np.ndarray, float]:
         """
         Estimate AR(p) coefficients via Yule-Walker equations.
 
@@ -765,7 +764,7 @@ class ARIMAModel:
 
     @staticmethod
     def _innovation_ma(data: np.ndarray, q: int, ar_coeffs: np.ndarray = None,
-                       ar_sigma2: float = 1.0) -> Tuple[np.ndarray, float]:
+                       ar_sigma2: float = 1.0) -> tuple[np.ndarray, float]:
         """
         Estimate MA(q) coefficients via the innovation algorithm.
 
@@ -829,7 +828,7 @@ class ARIMAModel:
 
         return ma_coeffs, max(sigma2, 1e-10)
 
-    def fit(self, data: np.ndarray) -> Dict[str, Any]:
+    def fit(self, data: np.ndarray) -> dict[str, Any]:
         """
         Fit ARIMA(p,d,q) model to time series data.
 
@@ -933,7 +932,7 @@ class ARIMAModel:
         return residuals[start:]
 
     @staticmethod
-    def _ljung_box(residuals: np.ndarray, max_lag: int = None) -> Dict[str, Any]:
+    def _ljung_box(residuals: np.ndarray, max_lag: int = None) -> dict[str, Any]:
         """
         Ljung-Box portmanteau test for residual autocorrelation.
 
@@ -974,7 +973,7 @@ class ARIMAModel:
             "white_noise": p_value > 0.05,
         }
 
-    def forecast(self, steps: int = 12, alpha: float = 0.05) -> Dict[str, Any]:
+    def forecast(self, steps: int = 12, alpha: float = 0.05) -> dict[str, Any]:
         """
         Multi-step ahead forecasting with prediction intervals.
 
@@ -1061,7 +1060,7 @@ class ARIMAModel:
 
     @classmethod
     def auto_select(cls, data: np.ndarray, max_p: int = 5, max_d: int = 2,
-                    max_q: int = 5) -> Dict[str, Any]:
+                    max_q: int = 5) -> dict[str, Any]:
         """
         Automatic ARIMA order selection via AIC/BIC grid search.
 
@@ -1161,13 +1160,13 @@ class VARModel:
 
     def __init__(self, p: int = 1):
         self.p = p
-        self.coefficients: Optional[np.ndarray] = None  # (k, k*p+1) — intercept + lags
-        self.sigma: Optional[np.ndarray] = None  # residual covariance
-        self.variable_names: Optional[List[str]] = None
-        self._data: Optional[np.ndarray] = None
-        self._residuals: Optional[np.ndarray] = None
+        self.coefficients: np.ndarray | None = None  # (k, k*p+1) — intercept + lags
+        self.sigma: np.ndarray | None = None  # residual covariance
+        self.variable_names: list[str] | None = None
+        self._data: np.ndarray | None = None
+        self._residuals: np.ndarray | None = None
 
-    def fit(self, data: np.ndarray, variable_names: Optional[List[str]] = None) -> Dict[str, Any]:
+    def fit(self, data: np.ndarray, variable_names: list[str] | None = None) -> dict[str, Any]:
         """
         Fit VAR(p) model via equation-by-equation OLS.
 
@@ -1187,7 +1186,7 @@ class VARModel:
         self._data = data
         self.variable_names = variable_names or [f"y{i+1}" for i in range(k)]
 
-        if T <= self.p + k + 1:
+        if self.p + k + 1 >= T:
             return {"error": f"Insufficient observations: {T} for VAR({self.p}) with {k} variables"}
 
         # Build lag matrix: [1, Y_{t-1}', Y_{t-2}', ..., Y_{t-p}']
@@ -1266,7 +1265,7 @@ class VARModel:
 
     def _granger_causality_tests(self, X: np.ndarray, Y: np.ndarray,
                                  B_hat: np.ndarray, k: int,
-                                 n_obs: int, df: int) -> List[Dict[str, Any]]:
+                                 n_obs: int, df: int) -> list[dict[str, Any]]:
         """
         Granger causality F-tests.
 
@@ -1324,7 +1323,7 @@ class VARModel:
 
         return results
 
-    def impulse_response(self, periods: int = 20) -> Dict[str, Any]:
+    def impulse_response(self, periods: int = 20) -> dict[str, Any]:
         """
         Compute impulse response functions (IRFs).
 
@@ -1382,7 +1381,7 @@ class VARModel:
             "ordering": names,
         }
 
-    def variance_decomposition(self, periods: int = 20) -> Dict[str, Any]:
+    def variance_decomposition(self, periods: int = 20) -> dict[str, Any]:
         """
         Forecast error variance decomposition (FEVD).
 
@@ -1486,7 +1485,7 @@ class CointegrationTester:
 
     @staticmethod
     def _adf_test(series: np.ndarray, max_lag: int = None,
-                  regression: str = "c") -> Dict[str, Any]:
+                  regression: str = "c") -> dict[str, Any]:
         """
         Augmented Dickey-Fuller test for unit root.
 
@@ -1580,7 +1579,7 @@ class CointegrationTester:
 
     @classmethod
     def engle_granger(cls, y: np.ndarray, x: np.ndarray,
-                      max_lag_adf: int = None) -> Dict[str, Any]:
+                      max_lag_adf: int = None) -> dict[str, Any]:
         """
         Engle-Granger two-step cointegration test.
 
@@ -1669,7 +1668,7 @@ class CointegrationTester:
     def _estimate_ecm(y: np.ndarray, x: np.ndarray,
                       coint_residuals: np.ndarray,
                       alpha: float, beta: float,
-                      max_lag: int = None) -> Dict[str, Any]:
+                      max_lag: int = None) -> dict[str, Any]:
         """
         Estimate Error Correction Model (ECM).
 
@@ -1796,9 +1795,9 @@ class DifferenceInDifferences:
         y: np.ndarray,
         treat: np.ndarray,
         post: np.ndarray,
-        covariates: Optional[np.ndarray] = None,
-        cluster: Optional[np.ndarray] = None,
-    ) -> Dict[str, Any]:
+        covariates: np.ndarray | None = None,
+        cluster: np.ndarray | None = None,
+    ) -> dict[str, Any]:
         """
         Estimate DiD model.
 
@@ -1978,10 +1977,10 @@ class RegressionDiscontinuity:
         y: np.ndarray,
         running_variable: np.ndarray,
         cutoff: float,
-        bandwidth: Optional[float] = None,
+        bandwidth: float | None = None,
         kernel: str = "triangular",
         polynomial_order: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate sharp RDD at the cutoff.
 
@@ -2117,7 +2116,7 @@ class RegressionDiscontinuity:
             return np.maximum(0, 1 - u)  # Default: triangular
 
     @staticmethod
-    def _density_test(X: np.ndarray, cutoff: float, bandwidth: float) -> Dict[str, Any]:
+    def _density_test(X: np.ndarray, cutoff: float, bandwidth: float) -> dict[str, Any]:
         """
         Simplified McCrary density test.
 
@@ -2126,10 +2125,10 @@ class RegressionDiscontinuity:
         """
         # Count observations in bins around cutoff
         bin_width = bandwidth / 5
-        bins_below = np.sum((X >= cutoff - bandwidth) & (X < cutoff))
-        bins_above = np.sum((X >= cutoff) & (X < cutoff + bandwidth))
-        total_below = np.sum(X < cutoff)
-        total_above = np.sum(X >= cutoff)
+        bins_below = np.sum((cutoff - bandwidth <= X) & (cutoff > X))
+        bins_above = np.sum((cutoff <= X) & (cutoff + bandwidth > X))
+        total_below = np.sum(cutoff > X)
+        total_above = np.sum(cutoff <= X)
 
         # Simple chi-squared test for density discontinuity
         expected_below = bins_below

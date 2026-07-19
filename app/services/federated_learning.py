@@ -21,19 +21,16 @@ Quality validation uses hypothesis testing (STA 342).
 """
 
 import base64
-import hashlib
 import json
 import math
-import struct
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
 from app.schemas.federated_learning import (
-    AnonymizedPattern,
     CalibrationParams,
     FLStatusResponse,
     FLUpdate,
@@ -93,11 +90,11 @@ class _FLState:
 
     def reset(self):
         # Pending updates per language: {language: [FLUpdate, ...]}
-        self.pending_updates: Dict[str, List[FLUpdate]] = defaultdict(list)
+        self.pending_updates: dict[str, list[FLUpdate]] = defaultdict(list)
         # Aggregated models per language
-        self.global_models: Dict[str, Dict[str, Any]] = {}
+        self.global_models: dict[str, dict[str, Any]] = {}
         # Version counters per language
-        self.version_counters: Dict[str, int] = defaultdict(int)
+        self.version_counters: dict[str, int] = defaultdict(int)
         # Total updates ever received
         self.total_updates: int = 0
         # Unique device IDs seen (hashed)
@@ -105,11 +102,11 @@ class _FLState:
         # Aggregation round counter
         self.aggregation_round: int = 0
         # Last aggregation timestamp
-        self.last_aggregation_at: Optional[str] = None
+        self.last_aggregation_at: str | None = None
         # Dialect cluster assignments: {device_id: dialect_code}
-        self.device_clusters: Dict[str, str] = {}
+        self.device_clusters: dict[str, str] = {}
         # Quality scores per device: {device_id: float}
-        self.device_quality: Dict[str, float] = {}
+        self.device_quality: dict[str, float] = {}
 
 
 _state = _FLState()
@@ -122,8 +119,8 @@ _persistence = FLPersistence()
 
 
 def _fedavg_aggregate(
-    updates: List[FLUpdate],
-) -> Tuple[Optional[CalibrationParams], List[VocabularyUpdate]]:
+    updates: list[FLUpdate],
+) -> tuple[CalibrationParams | None, list[VocabularyUpdate]]:
     """
     Federated Averaging (FedAvg) aggregation.
 
@@ -180,8 +177,8 @@ def _fedavg_aggregate(
 
     # ── Vocabulary aggregation from correction patterns ──
     # Count phoneme confusion patterns across all devices
-    phoneme_counts: Dict[str, int] = defaultdict(int)
-    error_type_counts: Dict[str, int] = defaultdict(int)
+    phoneme_counts: dict[str, int] = defaultdict(int)
+    error_type_counts: dict[str, int] = defaultdict(int)
     edit_distance_sum = 0.0
     edit_distance_count = 0
 
@@ -217,7 +214,7 @@ def _fedavg_aggregate(
 
 
 def _weighted_lora_average(
-    adapter_updates: List[Tuple[bytes, float]],
+    adapter_updates: list[tuple[bytes, float]],
 ) -> str:
     """
     Compute sample-count-weighted element-wise average of LoRA adapter deltas.
@@ -238,7 +235,7 @@ def _weighted_lora_average(
     import struct as _struct
 
     # Decode all delta arrays and determine max length
-    decoded_arrays: List[Tuple[List[float], float]] = []
+    decoded_arrays: list[tuple[list[float], float]] = []
     max_len = 0
     for raw_bytes, weight in adapter_updates:
         # Interpret as little-endian float32 array
@@ -276,9 +273,9 @@ def _weighted_lora_average(
 
 
 def _secure_aggregate_gradients(
-    updates: List[FLUpdate],
+    updates: list[FLUpdate],
     noise_sigma: float,
-) -> List[FLUpdate]:
+) -> list[FLUpdate]:
     """
     Basic secure aggregation: apply per-update clipping and noise
     before the server sees individual gradients.
@@ -305,7 +302,7 @@ def _secure_aggregate_gradients(
 
     L2_CLIP_NORM = 1.0  # Maximum L2 norm per update (tight for ε=0.1 DP)
 
-    secured: List[FLUpdate] = []
+    secured: list[FLUpdate] = []
     for update in updates:
         if not update.adapter_deltas:
             secured.append(update)
@@ -392,8 +389,8 @@ def _apply_dp_to_calibration(
 
 
 def _apply_dp_to_vocabulary(
-    vocab: List[VocabularyUpdate], sigma: float
-) -> List[VocabularyUpdate]:
+    vocab: list[VocabularyUpdate], sigma: float
+) -> list[VocabularyUpdate]:
     """Apply Gaussian noise to vocabulary frequency counts."""
     noisy_vocab = []
     for vu in vocab:
@@ -431,7 +428,7 @@ def _verify_update_signature(update: FLUpdate) -> bool:
         return False
 
     # Reject stale updates (> 24 hours old)
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(datetime.now(UTC).timestamp() * 1000)
     age_hours = (now_ms - update.timestamp) / (1000 * 60 * 60)
     if age_hours > 24:
         logger.warning("fl_stale_update", device_id=update.device_id, age_hours=age_hours)
@@ -445,7 +442,7 @@ def _verify_update_signature(update: FLUpdate) -> bool:
     return True
 
 
-def _decrypt_adapter_deltas(encrypted_b64: str) -> Optional[bytes]:
+def _decrypt_adapter_deltas(encrypted_b64: str) -> bytes | None:
     """
     Decrypt adapter deltas received from device.
 
@@ -490,7 +487,7 @@ def _cluster_dialect(update: FLUpdate) -> str:
         return declared
 
     # Secondary: analyze phoneme patterns for dialect hints
-    phoneme_features: Dict[str, int] = defaultdict(int)
+    phoneme_features: dict[str, int] = defaultdict(int)
     for pattern in update.correction_patterns:
         if pattern.phoneme_pattern:
             for pp in pattern.phoneme_pattern.split(","):
@@ -723,7 +720,7 @@ class FederatedLearningService:
             next_download_version=next_version,
         )
 
-    async def get_global_model(self, dialect: str) -> Optional[GlobalModelResponse]:
+    async def get_global_model(self, dialect: str) -> GlobalModelResponse | None:
         """
         Get the latest aggregated global model for a dialect.
 
@@ -771,7 +768,7 @@ class FederatedLearningService:
             timestamp=model.get("timestamp", 0),
         )
 
-    async def check_version(self, dialect: str, client_version: str) -> Dict[str, Any]:
+    async def check_version(self, dialect: str, client_version: str) -> dict[str, Any]:
         """
         Check if a newer model version is available for a dialect.
 
@@ -882,7 +879,7 @@ class FederatedLearningService:
         # decode each device's LoRA adapter deltas, compute a
         # sample-count-weighted element-wise average, and re-encode.
         adapter_deltas_b64 = None
-        adapter_updates_with_weights: List[Tuple[bytes, float]] = []
+        adapter_updates_with_weights: list[tuple[bytes, float]] = []
         for update in updates:
             if update.adapter_deltas:
                 decoded = _decrypt_adapter_deltas(update.adapter_deltas)
@@ -908,7 +905,7 @@ class FederatedLearningService:
 
         # ── Generate candidate version ──
         candidate_version = _next_version(dialect)
-        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        now_ms = int(datetime.now(UTC).timestamp() * 1000)
 
         # ── Verify improvement (closes the FL verification loop) ──
         improvement_verified = await self._verify_improvement(
@@ -944,7 +941,7 @@ class FederatedLearningService:
         }
 
         _state.aggregation_round += 1
-        _state.last_aggregation_at = datetime.now(timezone.utc).isoformat()
+        _state.last_aggregation_at = datetime.now(UTC).isoformat()
 
         # Persist aggregated model to SQLite
         agg_params_dict = {
@@ -972,10 +969,10 @@ class FederatedLearningService:
     async def _verify_improvement(
         self,
         dialect: str,
-        updates: List[FLUpdate],
+        updates: list[FLUpdate],
         new_calibration: CalibrationParams,
-        new_vocab: List[VocabularyUpdate],
-        previous_model: Optional[Dict[str, Any]],
+        new_vocab: list[VocabularyUpdate],
+        previous_model: dict[str, Any] | None,
     ) -> bool:
         """
         Verify that the new aggregated model improves over the previous one.

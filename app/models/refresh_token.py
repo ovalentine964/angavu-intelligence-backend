@@ -11,7 +11,7 @@ detects token theft.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
@@ -69,7 +69,7 @@ class RefreshToken(Base):
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     used_at = Column(

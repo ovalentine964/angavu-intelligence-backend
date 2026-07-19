@@ -8,15 +8,15 @@ SQLAlchemy models for persisting autonomous agent state:
     - RevenueMetricDB: Revenue metric time-series
 """
 
-from app.models.autonomous.lead import LeadDB
 from app.models.autonomous.invoice import InvoiceDB, InvoiceItemDB
-from app.models.autonomous.onboarding import OnboardingFlowDB, OnboardingStepDB
+from app.models.autonomous.lead import LeadDB
 from app.models.autonomous.metric import RevenueMetricDB
+from app.models.autonomous.onboarding import OnboardingFlowDB, OnboardingStepDB
 
 __all__ = [
-    "LeadDB",
     "InvoiceDB",
     "InvoiceItemDB",
+    "LeadDB",
     "OnboardingFlowDB",
     "OnboardingStepDB",
     "RevenueMetricDB",

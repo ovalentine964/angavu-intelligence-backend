@@ -11,13 +11,10 @@ Usage in main.py lifespan:
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 from fastapi import FastAPI
 
 from app.agents.protocols.a2a import (
-    A2AAgentCard,
     A2AServer,
     create_angavu_agent_card,
 )
@@ -33,8 +30,8 @@ logger = structlog.get_logger(__name__)
 
 def register_protocol_routes(
     app: FastAPI,
-    a2a_server: Optional[A2AServer] = None,
-    mcp_server: Optional[MCPServer] = None,
+    a2a_server: A2AServer | None = None,
+    mcp_server: MCPServer | None = None,
     prefix: str = "/api/v1",
 ) -> None:
     """

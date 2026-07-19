@@ -15,15 +15,13 @@ V2 Enhancements:
 
 from __future__ import annotations
 
-import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
 from app.agents.base import (
     AgentDecision,
-    AgentEvent,
     AgentResult,
     BiasharaAgent,
     EventType,
@@ -129,11 +127,11 @@ def _fuzzy_match(text: str, keyword: str, threshold: float = 0.7) -> bool:
 
 def _compute_domain_score(
     text: str,
-    keywords: List[str],
-    swahili_keywords: List[str],
+    keywords: list[str],
+    swahili_keywords: list[str],
     sector: str,
     domain_name: str,
-) -> Tuple[float, List[str]]:
+) -> tuple[float, list[str]]:
     """
     Compute a confidence score for domain relevance.
 
@@ -189,12 +187,12 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
     """
 
     DOMAIN_NAME: str = "generic"
-    DOMAIN_KEYWORDS: List[str] = []
-    SWAHILI_KEYWORDS: List[str] = []
-    DOMAIN_METRICS: List[str] = []
+    DOMAIN_KEYWORDS: list[str] = []
+    SWAHILI_KEYWORDS: list[str] = []
+    DOMAIN_METRICS: list[str] = []
 
     # Which ECO/STA units ground this domain's analysis
-    ACADEMIC_GROUNDING: Dict[str, List[str]] = {
+    ACADEMIC_GROUNDING: dict[str, list[str]] = {
         "ECO": ["ECO_202", "ECO_203"],  # Economic Statistics
         "STA": ["STA_342", "STA_346"],  # Hypothesis testing, SPC
     }
@@ -202,7 +200,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
     def __init__(
         self,
         name: str,
-        capabilities: List[str],
+        capabilities: list[str],
     ):
         super().__init__(
             name=name,
@@ -213,7 +211,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
 
         # Track domain-specific metrics
         self._analysis_count: int = 0
-        self._match_history: List[Dict[str, Any]] = []
+        self._match_history: list[dict[str, Any]] = []
 
         # Data access services (injected by factory)
         self._transaction_service: Any = None  # Service-level domain agent
@@ -232,7 +230,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
         """Inject cache service."""
         self._cache = cache
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
         payload = event_data.get("payload", {})
@@ -336,7 +334,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _matches_domain(self, payload: Dict[str, Any]) -> Optional[str]:
+    def _matches_domain(self, payload: dict[str, Any]) -> str | None:
         """Check if payload matches this domain. Returns match reason or None."""
         text = str(payload).lower()
         # Check English keywords
@@ -352,7 +350,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
             return f"sector={sector}"
         return None
 
-    def _score_domain(self, payload: Dict[str, Any]) -> Tuple[float, List[str]]:
+    def _score_domain(self, payload: dict[str, Any]) -> tuple[float, list[str]]:
         """
         Compute domain relevance score with reasons.
 
@@ -370,7 +368,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
             domain_name=self.DOMAIN_NAME,
         )
 
-    def _get_academic_context(self) -> Dict[str, Any]:
+    def _get_academic_context(self) -> dict[str, Any]:
         """
         Return ECO/STA academic context for this domain's analysis.
 
@@ -386,7 +384,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
                 context[sta_unit] = STA_FRAMEWORK[sta_unit]
         return context
 
-    def _analyze(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze domain-specific data with ECO/STA grounding.
 
@@ -422,7 +420,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
 
         return result
 
-    def _query_service_data(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _query_service_data(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """
         Query the injected service-level agent for real analysis data.
 
@@ -431,7 +429,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
         """
         return None
 
-    def _process_transaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Process a domain-relevant transaction with validation."""
         # ECO 202: Validate against economic theory constraints
         validations = []
@@ -458,7 +456,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
             "academic_basis": "ECO_202_data_validation",
         }
 
-    def _compliance_review(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _compliance_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Review domain data for compliance and security."""
         return {
             "domain": self.DOMAIN_NAME,
@@ -470,7 +468,7 @@ class DomainAgent(SubAgentCapableMixin, BiasharaAgent):
             ],
         }
 
-    def get_domain_stats(self) -> Dict[str, Any]:
+    def get_domain_stats(self) -> dict[str, Any]:
         """Return domain agent statistics."""
         return {
             "domain": self.DOMAIN_NAME,

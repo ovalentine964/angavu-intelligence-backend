@@ -34,11 +34,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import time
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -47,7 +47,6 @@ from app.exceptions import AgentError, EventBusError
 from app.infrastructure.streams_signing import (
     SIGNING_ENABLED,
     MessageSigner,
-    AgentKeyRegistry,
     get_agent_key_registry,
 )
 
@@ -107,38 +106,38 @@ class EventBus:
     def __init__(
         self,
         persist_events: bool = True,
-        instance_id: Optional[str] = None,
+        instance_id: str | None = None,
         max_consumers_per_group: int = 10,
         enable_stream_sharding: bool = False,
         shard_count: int = 4,
         max_stream_length: int = MAX_STREAM_LENGTH,
     ):
         self._redis: Any = None  # aioredis.Redis | None
-        self._subscriptions: Dict[str, List[str]] = defaultdict(list)
+        self._subscriptions: dict[str, list[str]] = defaultdict(list)
         # event_type → [agent_name, ...]
-        self._handlers: Dict[str, List[Callable[..., Coroutine]]] = defaultdict(list)
+        self._handlers: dict[str, list[Callable[..., Coroutine]]] = defaultdict(list)
         # event_type → [handler_coroutine, ...]
 
         # In-memory fallback (when Redis is unavailable)
-        self._in_memory_streams: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self._in_memory_streams: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._in_memory_enabled: bool = False
         # Buffer for events to be picked up by polling (no immediate dispatch)
-        self._pending_buffer: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self._pending_buffer: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
         # Dead letter queue for events that fail processing
-        self._dead_letters: List[Dict[str, Any]] = []
+        self._dead_letters: list[dict[str, Any]] = []
 
         # Idempotency tracking (event_id → timestamp)
-        self._idempotency_cache: Dict[str, float] = {}
+        self._idempotency_cache: dict[str, float] = {}
 
         # Backpressure state
         self._backpressure_active: bool = False
-        self._backpressure_streams: Dict[str, bool] = defaultdict(lambda: False)
+        self._backpressure_streams: dict[str, bool] = defaultdict(lambda: False)
 
         # Event persistence (append-only JSONL for audit/replay)
         self._persist_events = persist_events
-        self._persist_dir: Optional[Path] = None
-        self._persist_handles: Dict[str, Any] = {}  # stream_key → file handle
+        self._persist_dir: Path | None = None
+        self._persist_handles: dict[str, Any] = {}  # stream_key → file handle
         self._persisted_count: int = 0
 
         # Horizontal scaling configuration
@@ -155,7 +154,7 @@ class EventBus:
 
         # Message signing (feature-flagged)
         self._signing_enabled = SIGNING_ENABLED
-        self._message_signers: Dict[str, MessageSigner] = {}  # agent_name → signer
+        self._message_signers: dict[str, MessageSigner] = {}  # agent_name → signer
         self._signing_stats = {
             "signed_published": 0,
             "unsigned_published": 0,
@@ -265,7 +264,7 @@ class EventBus:
             self._message_signers[agent_name] = MessageSigner(agent_name)
         return self._message_signers[agent_name]
 
-    def _sign_event_data(self, event_data: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
+    def _sign_event_data(self, event_data: dict[str, Any], agent_name: str) -> dict[str, Any]:
         """
         Sign event data if signing is enabled.
 
@@ -280,7 +279,7 @@ class EventBus:
         self._signing_stats["signed_published"] += 1
         return signed
 
-    def _verify_event_fields(self, fields: Dict[str, str]) -> tuple[bool, str]:
+    def _verify_event_fields(self, fields: dict[str, str]) -> tuple[bool, str]:
         """
         Verify a received message's signature if signing is enabled.
 
@@ -312,7 +311,7 @@ class EventBus:
 
         return valid, reason
 
-    def get_signing_stats(self) -> Dict[str, Any]:
+    def get_signing_stats(self) -> dict[str, Any]:
         """Return message signing statistics."""
         return {
             "enabled": self._signing_enabled,
@@ -464,16 +463,15 @@ class EventBus:
     async def get_events(
         self,
         agent: BiasharaAgent,
-        event_types: Optional[List[str]] = None,
+        event_types: list[str] | None = None,
         limit: int = 10,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """
         Pull new events for an agent.
 
         Uses Redis XREADGROUP when available, otherwise reads from
         the in-memory buffer.
         """
-        from app.agents.base import AgentEvent
 
         target_types = event_types or [
             et for et, agents in self._subscriptions.items()
@@ -491,9 +489,9 @@ class EventBus:
     async def _get_events_redis(
         self,
         agent: BiasharaAgent,
-        event_types: List[str],
+        event_types: list[str],
         limit: int,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """Pull events from Redis Streams using consumer groups."""
         from app.agents.base import AgentEvent
 
@@ -544,9 +542,9 @@ class EventBus:
     def _get_events_in_memory(
         self,
         agent: BiasharaAgent,
-        event_types: List[str],
+        event_types: list[str],
         limit: int,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """Pull events from in-memory pending buffer."""
         from app.agents.base import AgentEvent
 
@@ -589,7 +587,7 @@ class EventBus:
 
     # ── Event Persistence ────────────────────────────────────────────
 
-    def _persist_event(self, stream_key: str, event_data: Dict[str, Any]) -> None:
+    def _persist_event(self, stream_key: str, event_data: dict[str, Any]) -> None:
         """
         Append an event to a JSONL file for audit and replay.
 
@@ -615,7 +613,7 @@ class EventBus:
         self,
         event_type: str,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Read persisted events from disk for replay or debugging.
 
@@ -648,7 +646,7 @@ class EventBus:
 
     # ── Monitoring ──────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return event bus statistics for monitoring."""
         return {
             "mode": "redis" if (self._redis and not self._in_memory_enabled) else "in_memory",
@@ -681,7 +679,7 @@ class EventBus:
             },
         }
 
-    def get_scaling_config(self) -> Dict[str, Any]:
+    def get_scaling_config(self) -> dict[str, Any]:
         """Return horizontal scaling configuration."""
         return {
             "instance_id": self._instance_id,
@@ -737,7 +735,7 @@ class EventBus:
     async def publish_to_dlq(
         self,
         original_stream: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
         error: str,
     ) -> None:
         """
@@ -787,7 +785,7 @@ class EventBus:
         self,
         event_type: str,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Read events from the dead letter queue for inspection.
 
@@ -820,7 +818,7 @@ class EventBus:
             self._logger.warning("dlq_read_failed", error=str(exc))
             return self._dead_letters[-limit:]
 
-    async def get_dlq_stats(self) -> Dict[str, Any]:
+    async def get_dlq_stats(self) -> dict[str, Any]:
         """Get dead letter queue statistics across all streams."""
         stats = {
             "total_in_memory": len(self._dead_letters),
@@ -862,9 +860,9 @@ class EventBus:
     async def replay_events(
         self,
         event_type: str,
-        handler: Callable[[Dict[str, Any]], Coroutine],
-        from_timestamp: Optional[float] = None,
-        to_timestamp: Optional[float] = None,
+        handler: Callable[[dict[str, Any]], Coroutine],
+        from_timestamp: float | None = None,
+        to_timestamp: float | None = None,
         limit: int = 1000,
         from_dlq: bool = False,
     ) -> int:
@@ -1010,6 +1008,6 @@ class EventBus:
         """Inject the agent metrics recorder for telemetry."""
         self._agent_metrics = agent_metrics
 
-    def get_dead_letters(self) -> List[Dict[str, Any]]:
+    def get_dead_letters(self) -> list[dict[str, Any]]:
         """Return dead letter events for debugging."""
         return list(self._dead_letters)

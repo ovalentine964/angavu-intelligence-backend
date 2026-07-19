@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -94,7 +94,7 @@ class VoicePipelineAgent(SubAgentCapableMixin, BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Decide how to process the voice input."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -192,7 +192,7 @@ class VoicePipelineAgent(SubAgentCapableMixin, BiasharaAgent):
             self._transcription_stats["english_detected"] += 1
             return "en"
 
-    async def _transcribe(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _transcribe(self, params: dict[str, Any]) -> dict[str, Any]:
         """Transcribe voice input to text."""
         # In production, this would call a speech-to-text API
         # For now, return structured placeholder
@@ -212,7 +212,7 @@ class VoicePipelineAgent(SubAgentCapableMixin, BiasharaAgent):
             "next_action": "route_to_domain_agent",
         }
 
-    async def _generate_response(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_response(self, params: dict[str, Any]) -> dict[str, Any]:
         """Generate voice response from report data."""
         language = params.get("language", "sw")
         report_type = params.get("report_type", "daily")
@@ -226,7 +226,7 @@ class VoicePipelineAgent(SubAgentCapableMixin, BiasharaAgent):
             "delivery_channel": "whatsapp_voice",
         }
 
-    def get_transcription_stats(self) -> Dict[str, Any]:
+    def get_transcription_stats(self) -> dict[str, Any]:
         """Return voice pipeline statistics."""
         return dict(self._transcription_stats)
 
@@ -305,7 +305,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
             return  # Process these
         self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine compliance checks needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -394,7 +394,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
                     payload={
                         "violations": result.get("violations", []),
                         "severity": result.get("severity", "warning"),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -411,7 +411,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _validate_privacy(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_privacy(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate privacy compliance on data processing."""
         payload = params.get("payload", {})
         checks = params.get("checks", [])
@@ -448,7 +448,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
             "severity": "critical" if any(v["severity"] == "critical" for v in violations) else "ok",
         }
 
-    def _validate_output_privacy(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_output_privacy(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate privacy on intelligence outputs before delivery."""
         payload = params.get("payload", {})
         violations = []
@@ -478,7 +478,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
             "violations": violations,
         }
 
-    def _validate_report(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_report(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate report meets statistical standards (STA 342)."""
         payload = params.get("payload", {})
         violations = []
@@ -510,7 +510,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
             "statistical_standards": ["STA_342", "ECO_315"],
         }
 
-    def _full_audit(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_audit(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Run full compliance audit."""
         return {
             "compliant": True,
@@ -528,7 +528,7 @@ class ComplianceAgent(SubAgentCapableMixin, BiasharaAgent):
             "reference": "Kenya_DPA_2019",
         }
 
-    def get_compliance_stats(self) -> Dict[str, Any]:
+    def get_compliance_stats(self) -> dict[str, Any]:
         """Return compliance agent statistics."""
         return {
             "checks_performed": self._checks_performed,
@@ -598,7 +598,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine security analysis needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -669,7 +669,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
                     payload={
                         "threats": result.get("threats", []),
                         "severity": result.get("severity", "medium"),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -686,7 +686,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _fraud_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _fraud_check(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run fraud detection on transaction."""
         payload = params.get("payload", {})
         threats = []
@@ -715,7 +715,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
             "checks_performed": params.get("checks", []),
         }
 
-    def _incident_check(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _incident_check(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Check if error indicates a security incident."""
         error = payload.get("error", "")
         error_lower = error.lower()
@@ -732,7 +732,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
             "action": "escalate" if is_incident else "log",
         }
 
-    def _full_scan(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_scan(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Run full security scan."""
         return {
             "threat_detected": False,
@@ -747,7 +747,7 @@ class SecurityAgent(SubAgentCapableMixin, BiasharaAgent):
             "status": "all_clear",
         }
 
-    def get_security_stats(self) -> Dict[str, Any]:
+    def get_security_stats(self) -> dict[str, Any]:
         """Return security agent statistics."""
         return {
             "alerts_generated": self._alerts_generated,
@@ -813,7 +813,7 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Decide which social action to take."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -913,7 +913,7 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    async def _check_peer_comparison(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _check_peer_comparison(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run peer comparison using ComparisonEngine."""
         user_id = params.get("user_id")
         business_type = params.get("business_type", "")
@@ -963,14 +963,14 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
             "k_anonymity_met": False,
         }
 
-    async def _check_leaderboard(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _check_leaderboard(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Check leaderboard position.
 
         Anti-shame design: No public rankings. Shows anonymized percentile
         and level progression instead of exact position.
         """
-        from app.data.gamification import get_level_for_xp, LEVELS
+        from app.data.gamification import get_level_for_xp
 
         user_id = params.get("user_id")
         locale = params.get("locale", "sw")
@@ -1017,9 +1017,9 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
 
         return result
 
-    async def _view_community_tips(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _view_community_tips(self, params: dict[str, Any]) -> dict[str, Any]:
         """Get community tips and wisdom."""
-        from app.data.gamification import WISDOM_QUOTES, SOCIAL_PROOF_TEMPLATES
+        from app.data.gamification import SOCIAL_PROOF_TEMPLATES, WISDOM_QUOTES
 
         locale = params.get("locale", "sw")
         category = params.get("category", "general")
@@ -1049,7 +1049,7 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
             "total": len(tips),
         }
 
-    async def _submit_tip(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _submit_tip(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle user tip submission."""
         user_id = params.get("user_id")
         tip_text = params.get("tip_text", "")
@@ -1075,14 +1075,14 @@ class SocialHandler(SubAgentCapableMixin, BiasharaAgent):
             "type": "tip_submitted",
             "success": True,
             "message": (
-                f"Asante! Neno lako limewasilishwa."
+                "Asante! Neno lako limewasilishwa."
                 if locale == "sw"
                 else "Thank you! Your tip has been submitted."
             ),
             "xp_earned": 50,  # Badge: rafiki_wa_biashara
         }
 
-    def get_social_stats(self) -> Dict[str, Any]:
+    def get_social_stats(self) -> dict[str, Any]:
         """Return social handler statistics."""
         return {
             "has_comparison_engine": self._comparison_engine is not None,
@@ -1139,7 +1139,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
                 "onboarding_ab_testing",
             ],
         )
-        self._onboarding_sessions: Dict[str, Dict[str, Any]] = {}
+        self._onboarding_sessions: dict[str, dict[str, Any]] = {}
 
     async def observe(self, event: AgentEvent) -> None:
         """Filter for onboarding events."""
@@ -1152,7 +1152,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine onboarding action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -1235,7 +1235,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _start_onboarding(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _start_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
         """Initialize onboarding session."""
         user_id = params["user_id"]
         self._onboarding_sessions[user_id] = {
@@ -1255,7 +1255,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
             "language": params.get("language", "sw"),
         }
 
-    def _advance_onboarding(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _advance_onboarding(self, params: dict[str, Any]) -> dict[str, Any]:
         """Advance to next onboarding step."""
         user_id = params["user_id"]
         completed_step = params.get("completed_step", "")
@@ -1286,7 +1286,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
             "progress": f"{session['current_step']}/{len(self.ONBOARDING_STEPS)}",
         }
 
-    def _verify_identity(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _verify_identity(self, params: dict[str, Any]) -> dict[str, Any]:
         """Process identity verification."""
         user_id = params["user_id"]
         verification_data = params.get("verification_data", {})
@@ -1307,7 +1307,7 @@ class OnboardingAgent(SubAgentCapableMixin, BiasharaAgent):
             "next_action": "proceed_to_mpesa_linking" if verified else "request_additional_info",
         }
 
-    def get_onboarding_stats(self) -> Dict[str, Any]:
+    def get_onboarding_stats(self) -> dict[str, Any]:
         """Return onboarding statistics."""
         active = len(self._onboarding_sessions)
         return {

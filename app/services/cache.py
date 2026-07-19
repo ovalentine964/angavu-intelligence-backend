@@ -16,7 +16,7 @@ Falls back to an in-memory dict when Redis is unavailable (dev mode).
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -42,7 +42,7 @@ class InMemoryFallback:
         self._store: dict[str, tuple[str, float | None]] = {}
         self._lock = asyncio.Lock()
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:
@@ -96,8 +96,8 @@ class CacheService:
     """
 
     def __init__(self):
-        self._redis: Optional[aioredis.Redis] = None
-        self._fallback: Optional[InMemoryFallback] = None
+        self._redis: aioredis.Redis | None = None
+        self._fallback: InMemoryFallback | None = None
         self._connected = False
 
     async def connect(self) -> None:
@@ -142,7 +142,7 @@ class CacheService:
     # Core Operations
     # ------------------------------------------------------------------
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """
         Retrieve a cached value by key.
 
@@ -237,7 +237,7 @@ class CacheService:
         """Cache an intelligence product (TTL: 1 hour)."""
         return await self.set(f"intelligence:{product_id}", data, ttl=TTL_INTELLIGENCE)
 
-    async def get_intelligence_product(self, product_id: str) -> Optional[dict]:
+    async def get_intelligence_product(self, product_id: str) -> dict | None:
         """Retrieve a cached intelligence product."""
         return await self.get(f"intelligence:{product_id}")
 
@@ -245,7 +245,7 @@ class CacheService:
         """Cache a worker profile (TTL: 24 hours)."""
         return await self.set(f"profile:{worker_id}", data, ttl=TTL_PROFILES)
 
-    async def get_worker_profile(self, worker_id: str) -> Optional[dict]:
+    async def get_worker_profile(self, worker_id: str) -> dict | None:
         """Retrieve a cached worker profile."""
         return await self.get(f"profile:{worker_id}")
 
@@ -253,7 +253,7 @@ class CacheService:
         """Cache market prices (TTL: 15 minutes — prices change frequently)."""
         return await self.set(f"prices:{market_id}", data, ttl=TTL_MARKET_PRICES)
 
-    async def get_market_prices(self, market_id: str) -> Optional[dict]:
+    async def get_market_prices(self, market_id: str) -> dict | None:
         """Retrieve cached market prices."""
         return await self.get(f"prices:{market_id}")
 
@@ -261,7 +261,7 @@ class CacheService:
         """Cache a generated report (TTL: 1 hour)."""
         return await self.set(f"report:{report_id}", data, ttl=TTL_REPORTS)
 
-    async def get_report(self, report_id: str) -> Optional[dict]:
+    async def get_report(self, report_id: str) -> dict | None:
         """Retrieve a cached report."""
         return await self.get(f"report:{report_id}")
 
@@ -276,7 +276,7 @@ class CacheService:
 
 
 # Singleton instance
-_cache_service: Optional[CacheService] = None
+_cache_service: CacheService | None = None
 
 
 def get_cache() -> CacheService:

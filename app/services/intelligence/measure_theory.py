@@ -19,7 +19,7 @@ Key Applications:
 This module is wired into StatisticalFoundation as the theoretical base.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -45,9 +45,9 @@ class ProbabilitySpace:
 
     @staticmethod
     def construct_discrete_space(
-        outcomes: List[Any],
+        outcomes: list[Any],
         probabilities: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Construct a discrete probability space.
 
@@ -82,9 +82,9 @@ class ProbabilitySpace:
     @staticmethod
     def conditional_probability(
         joint_probs: np.ndarray,
-        event_indices: List[int],
-        given_indices: List[int],
-    ) -> Dict[str, Any]:
+        event_indices: list[int],
+        given_indices: list[int],
+    ) -> dict[str, Any]:
         """
         Compute conditional probability P(A|B) = P(A∩B)/P(B).
 
@@ -134,7 +134,7 @@ class ConditionalExpectation:
     def compute_discrete(
         X: np.ndarray,
         groups: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute E[X|G] for discrete partition G.
 
@@ -182,7 +182,7 @@ class ConditionalExpectation:
         data_mean: float,
         data_var: float,
         n: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Bayesian conditional expectation (Normal-Normal conjugacy).
 
@@ -243,8 +243,8 @@ class ConvergenceTheorems:
     def verify_lln(
         data: np.ndarray,
         true_mean: float,
-        sample_sizes: Optional[List[int]] = None,
-    ) -> Dict[str, Any]:
+        sample_sizes: list[int] | None = None,
+    ) -> dict[str, Any]:
         """
         Verify Law of Large Numbers convergence.
 
@@ -287,7 +287,7 @@ class ConvergenceTheorems:
     def clt_diagnostics(
         data: np.ndarray,
         n_bootstrap: int = 1000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         CLT diagnostics — check if sample mean is approximately normal.
 
@@ -349,7 +349,7 @@ class MartingaleAnalyzer:
     def test_martingale_property(
         series: np.ndarray,
         alpha: float = 0.05,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Test whether a series satisfies the martingale property.
 

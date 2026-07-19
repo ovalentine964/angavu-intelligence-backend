@@ -20,7 +20,7 @@ Plus a generic research flow for custom research tasks.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -33,12 +33,12 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/research", tags=["Long-Horizon Research"])
 
 # Global references — set during app startup
-_orchestrators: Dict[str, LongHorizonOrchestrator] = {}
-_research_orchestrator: Optional[LongHorizonOrchestrator] = None
+_orchestrators: dict[str, LongHorizonOrchestrator] = {}
+_research_orchestrator: LongHorizonOrchestrator | None = None
 
 
 def set_long_horizon_infrastructure(
-    intelligence_flows: Dict[str, LongHorizonOrchestrator],
+    intelligence_flows: dict[str, LongHorizonOrchestrator],
     research_orchestrator: LongHorizonOrchestrator,
 ) -> None:
     """Set the long-horizon infrastructure (called during app startup)."""
@@ -62,7 +62,7 @@ class ResearchStartRequest(BaseModel):
             "distribution_analysis, competitor_analysis, or generic"
         ),
     )
-    scope: Dict[str, Any] = Field(
+    scope: dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "Research scope parameters: region, product_category, "
@@ -75,7 +75,7 @@ class ResearchStartRequest(BaseModel):
         le=14400.0,
         description="Task timeout in seconds (1 min to 4 hours)",
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional metadata for the task",
     )
@@ -95,10 +95,10 @@ class SubTaskStatusResponse(BaseModel):
     subtask_id: str
     name: str
     status: str
-    assigned_agent: Optional[str] = None
+    assigned_agent: str | None = None
     attempts: int = 0
-    error: Optional[str] = None
-    elapsed_seconds: Optional[float] = None
+    error: str | None = None
+    elapsed_seconds: float | None = None
 
 
 class ResearchStatusResponse(BaseModel):
@@ -112,9 +112,9 @@ class ResearchStatusResponse(BaseModel):
     subtasks_running: int
     subtasks_failed: int
     subtasks_pending: int
-    elapsed_seconds: Optional[float] = None
+    elapsed_seconds: float | None = None
     checkpoint_count: int
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class ResearchResultsResponse(BaseModel):
@@ -123,10 +123,10 @@ class ResearchResultsResponse(BaseModel):
     goal: str
     status: str
     progress_pct: float
-    aggregated_result: Optional[Dict[str, Any]] = None
-    subtasks: List[SubTaskStatusResponse] = []
-    error: Optional[str] = None
-    elapsed_seconds: Optional[float] = None
+    aggregated_result: dict[str, Any] | None = None
+    subtasks: list[SubTaskStatusResponse] = []
+    error: str | None = None
+    elapsed_seconds: float | None = None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -149,7 +149,6 @@ async def start_research(request: ResearchStartRequest):
     - **competitor_analysis**: Competitor mapping, pricing, features, threats
     - **generic**: Custom research using the full research flow
     """
-    import asyncio
 
     pipeline_type = request.pipeline_type
 
@@ -292,7 +291,7 @@ async def get_research_results(task_id: str):
 
 @router.get("/")
 async def list_research_tasks(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
 ):
     """List all research tasks, optionally filtered by status."""
@@ -382,7 +381,6 @@ async def research_health():
 
 def _find_task(task_id: str):
     """Find a task across all orchestrators."""
-    import time as _time
 
     for orch in _orchestrators.values():
         task = orch.tracker.get_task(task_id)

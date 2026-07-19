@@ -28,11 +28,14 @@ from __future__ import annotations
 import base64
 import os
 import re
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
 
 logger = structlog.get_logger(__name__)
 
@@ -52,7 +55,7 @@ PROMPT_GUARD_STRICT = os.getenv(
 # ════════════════════════════════════════════════════════════════════
 
 
-class InjectionSeverity(str, Enum):
+class InjectionSeverity(StrEnum):
     """Severity of detected injection attempt."""
     LOW = "low"          # Suspicious but could be legitimate
     MEDIUM = "medium"    # Likely injection attempt
@@ -179,12 +182,12 @@ class PromptGuard:
 
     def __init__(self, strict_mode: bool = False):
         self._strict = strict_mode or PROMPT_GUARD_STRICT
-        self._detections: List[InjectionDetection] = []
+        self._detections: list[InjectionDetection] = []
         self._blocked_count = 0
         self._scanned_count = 0
         self._logger = logger.bind(component="prompt_guard")
 
-    def scan_message(self, data: Dict[str, Any]) -> Optional[InjectionDetection]:
+    def scan_message(self, data: dict[str, Any]) -> InjectionDetection | None:
         """
         Scan a message payload for injection attempts.
 
@@ -224,7 +227,7 @@ class PromptGuard:
 
         return None
 
-    def _scan_text(self, text: str, field_name: str) -> Optional[InjectionDetection]:
+    def _scan_text(self, text: str, field_name: str) -> InjectionDetection | None:
         """Scan a text string for injection patterns."""
         for pattern, severity, name in ALL_PATTERNS:
             match = re.search(pattern, text)
@@ -241,7 +244,7 @@ class PromptGuard:
         # Additional heuristic checks
         return self._heuristic_check(text, field_name)
 
-    def _heuristic_check(self, text: str, field_name: str) -> Optional[InjectionDetection]:
+    def _heuristic_check(self, text: str, field_name: str) -> InjectionDetection | None:
         """
         Heuristic-based injection detection for patterns that don't
         match deterministic regexes.
@@ -325,7 +328,7 @@ class PromptGuard:
             matched_text=detection.matched_text[:100],
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return guard statistics."""
         return {
             "scanned": self._scanned_count,
@@ -373,10 +376,10 @@ class SecureMessageHandler:
     def __init__(
         self,
         agent_name: str,
-        signer: Optional[Any] = None,  # MessageSigner from streams_signing
-        token: Optional[Any] = None,  # AgentCapabilityToken
-        token_issuer: Optional[Any] = None,  # CapabilityTokenIssuer
-        prompt_guard: Optional[PromptGuard] = None,
+        signer: Any | None = None,  # MessageSigner from streams_signing
+        token: Any | None = None,  # AgentCapabilityToken
+        token_issuer: Any | None = None,  # CapabilityTokenIssuer
+        prompt_guard: PromptGuard | None = None,
     ):
         self._agent_name = agent_name
         self._signer = signer
@@ -456,7 +459,7 @@ class SecureMessageHandler:
 # Singleton
 # ════════════════════════════════════════════════════════════════════
 
-_prompt_guard: Optional[PromptGuard] = None
+_prompt_guard: PromptGuard | None = None
 
 
 def get_prompt_guard() -> PromptGuard:

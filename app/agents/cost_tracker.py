@@ -24,12 +24,9 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any
 
 import structlog
-
-if TYPE_CHECKING:
-    from app.agents.event_bus import EventBus
 
 logger = structlog.get_logger(__name__)
 
@@ -37,6 +34,7 @@ logger = structlog.get_logger(__name__)
 
 try:
     from prometheus_client import Counter, Gauge, Histogram
+
     from app.infrastructure.metrics import _registry
 
     # Per-agent token usage
@@ -188,29 +186,29 @@ class AgentCostTracker:
         stats = tracker.get_stats()
     """
 
-    def __init__(self, event_bus: Optional[Any] = None):
-        self._records: List[CostRecord] = []
+    def __init__(self, event_bus: Any | None = None):
+        self._records: list[CostRecord] = []
         self._max_records = 50_000
         self._event_bus = event_bus
         self._logger = logger.bind(component="cost_tracker")
 
         # Agent → swarm mapping
-        self._agent_swarm: Dict[str, str] = {}
+        self._agent_swarm: dict[str, str] = {}
         # Agent → domain mapping
-        self._agent_domain: Dict[str, str] = {}
+        self._agent_domain: dict[str, str] = {}
 
         # Budgets
-        self._budgets: Dict[str, CostBudget] = {}
+        self._budgets: dict[str, CostBudget] = {}
 
         # Running totals (in-memory, reset daily)
-        self._daily_costs: Dict[str, float] = defaultdict(float)
-        self._daily_swarm_costs: Dict[str, float] = defaultdict(float)
-        self._daily_domain_costs: Dict[str, float] = defaultdict(float)
+        self._daily_costs: dict[str, float] = defaultdict(float)
+        self._daily_swarm_costs: dict[str, float] = defaultdict(float)
+        self._daily_domain_costs: dict[str, float] = defaultdict(float)
         self._daily_total: float = 0.0
         self._current_day: str = ""
 
         # Rate tracking (for cost/hour calculation)
-        self._rate_window: Dict[str, List[float]] = defaultdict(list)
+        self._rate_window: dict[str, list[float]] = defaultdict(list)
         self._rate_window_seconds = 3600  # 1 hour
 
     def register_agent(
@@ -450,7 +448,7 @@ class AgentCostTracker:
 
     # ── Query Methods ───────────────────────────────────────────────
 
-    def get_agent_cost(self, agent_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_agent_cost(self, agent_name: str, hours: int = 24) -> dict[str, Any]:
         """Get cost breakdown for a specific agent."""
         cutoff = time.time() - hours * 3600
         records = [r for r in self._records if r.agent_name == agent_name and r.timestamp > cutoff]
@@ -463,8 +461,8 @@ class AgentCostTracker:
         total_cost = sum(r.cost_usd for r in records)
 
         # Breakdown by model
-        model_costs: Dict[str, float] = defaultdict(float)
-        model_tokens: Dict[str, int] = defaultdict(int)
+        model_costs: dict[str, float] = defaultdict(float)
+        model_tokens: dict[str, int] = defaultdict(int)
         for r in records:
             if r.model:
                 model_costs[r.model] += r.cost_usd
@@ -485,7 +483,7 @@ class AgentCostTracker:
             "daily_spend": round(self._daily_costs.get(agent_name, 0), 8),
         }
 
-    def get_swarm_cost(self, swarm_name: str, hours: int = 24) -> Dict[str, Any]:
+    def get_swarm_cost(self, swarm_name: str, hours: int = 24) -> dict[str, Any]:
         """Get aggregated cost for a swarm."""
         cutoff = time.time() - hours * 3600
         agents = [name for name, s in self._agent_swarm.items() if s == swarm_name]
@@ -498,7 +496,7 @@ class AgentCostTracker:
             return {"swarm_name": swarm_name, "total_cost_usd": 0.0}
 
         total_cost = sum(r.cost_usd for r in records)
-        agent_costs: Dict[str, float] = defaultdict(float)
+        agent_costs: dict[str, float] = defaultdict(float)
         for r in records:
             agent_costs[r.agent_name] += r.cost_usd
 
@@ -512,7 +510,7 @@ class AgentCostTracker:
             "total_tokens": sum(r.input_tokens + r.output_tokens for r in records),
         }
 
-    def get_domain_cost(self, domain: str, hours: int = 24) -> Dict[str, Any]:
+    def get_domain_cost(self, domain: str, hours: int = 24) -> dict[str, Any]:
         """Get aggregated cost for a business domain."""
         cutoff = time.time() - hours * 3600
         records = [r for r in self._records if r.domain == domain and r.timestamp > cutoff]
@@ -521,7 +519,7 @@ class AgentCostTracker:
             return {"domain": domain, "total_cost_usd": 0.0}
 
         total_cost = sum(r.cost_usd for r in records)
-        agent_costs: Dict[str, float] = defaultdict(float)
+        agent_costs: dict[str, float] = defaultdict(float)
         for r in records:
             agent_costs[r.agent_name] += r.cost_usd
 
@@ -533,7 +531,7 @@ class AgentCostTracker:
             "call_count": len(records),
         }
 
-    def get_stats(self, hours: int = 24) -> Dict[str, Any]:
+    def get_stats(self, hours: int = 24) -> dict[str, Any]:
         """Get overall cost statistics."""
         cutoff = time.time() - hours * 3600
         records = [r for r in self._records if r.timestamp > cutoff]
@@ -545,17 +543,17 @@ class AgentCostTracker:
         total_tokens = sum(r.input_tokens + r.output_tokens for r in records)
 
         # By swarm
-        swarm_costs: Dict[str, float] = defaultdict(float)
+        swarm_costs: dict[str, float] = defaultdict(float)
         for r in records:
             swarm_costs[r.swarm] += r.cost_usd
 
         # By domain
-        domain_costs: Dict[str, float] = defaultdict(float)
+        domain_costs: dict[str, float] = defaultdict(float)
         for r in records:
             domain_costs[r.domain] += r.cost_usd
 
         # By source (inference vs evaluation)
-        source_costs: Dict[str, float] = defaultdict(float)
+        source_costs: dict[str, float] = defaultdict(float)
         for r in records:
             source_costs[r.source] += r.cost_usd
 
@@ -585,7 +583,7 @@ class AgentCostTracker:
 # Singleton
 # ════════════════════════════════════════════════════════════════════
 
-_cost_tracker: Optional[AgentCostTracker] = None
+_cost_tracker: AgentCostTracker | None = None
 
 
 def get_cost_tracker() -> AgentCostTracker:

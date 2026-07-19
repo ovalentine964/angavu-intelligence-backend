@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -44,12 +44,12 @@ class TraceStep:
 
     step_id: str
     action: str
-    tool_used: Optional[str] = None
-    input_data: Optional[str] = None
-    output_data: Optional[str] = None
+    tool_used: str | None = None
+    input_data: str | None = None
+    output_data: str | None = None
     duration_ms: int = 0
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
@@ -65,12 +65,12 @@ class InteractionTrace:
     worker_id: str
     query: str
     response: str
-    steps: List[TraceStep] = field(default_factory=list)
+    steps: list[TraceStep] = field(default_factory=list)
     outcome: str = "success"  # success, partial, failure
-    lessons: List[str] = field(default_factory=list)
+    lessons: list[str] = field(default_factory=list)
     dialect: str = "sw"
     language: str = "sw"
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     started_at: str = ""
     ended_at: str = ""
     total_duration_ms: int = 0
@@ -106,9 +106,9 @@ class GeneratedSkill:
     skill_id: str
     title: str
     category: SkillCategory
-    procedure: List[str]
-    pitfalls: List[str]
-    verification: List[str]
+    procedure: list[str]
+    pitfalls: list[str]
+    verification: list[str]
     academic_basis: str
     complexity: int
     confidence: float
@@ -117,7 +117,7 @@ class GeneratedSkill:
     source_trace_id: str = ""
     created_at: str = ""
     last_used_at: str = ""
-    keywords: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
     dialect: str = "sw"
 
     @property
@@ -175,14 +175,14 @@ class SkillGenerator:
 
     def __init__(self, episodic_memory: Any = None):
         self._episodic_memory = episodic_memory
-        self._active_traces: Dict[str, InteractionTrace] = {}
-        self._generated_skills: Dict[str, GeneratedSkill] = {}
+        self._active_traces: dict[str, InteractionTrace] = {}
+        self._generated_skills: dict[str, GeneratedSkill] = {}
 
     def start_trace(
         self,
         worker_id: str,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """Start tracing an interaction."""
         trace_id = str(uuid.uuid4())
@@ -192,7 +192,7 @@ class SkillGenerator:
             query=query,
             response="",
             context=context or {},
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=datetime.now(UTC).isoformat(),
         )
         self._active_traces[trace_id] = trace
         logger.debug("trace_started", trace_id=trace_id, worker_id=worker_id)
@@ -202,12 +202,12 @@ class SkillGenerator:
         self,
         trace_id: str,
         action: str,
-        tool_used: Optional[str] = None,
-        input_data: Optional[str] = None,
-        output_data: Optional[str] = None,
+        tool_used: str | None = None,
+        input_data: str | None = None,
+        output_data: str | None = None,
         duration_ms: int = 0,
         success: bool = True,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Record a step in the active trace."""
         trace = self._active_traces.get(trace_id)
@@ -231,8 +231,8 @@ class SkillGenerator:
         trace_id: str,
         response: str,
         outcome: str = "success",
-        lessons: Optional[List[str]] = None,
-    ) -> Optional[GeneratedSkill]:
+        lessons: list[str] | None = None,
+    ) -> GeneratedSkill | None:
         """
         End the trace and potentially generate a skill.
 
@@ -246,7 +246,7 @@ class SkillGenerator:
         trace.response = response
         trace.outcome = outcome
         trace.lessons = lessons or []
-        trace.ended_at = datetime.now(timezone.utc).isoformat()
+        trace.ended_at = datetime.now(UTC).isoformat()
 
         # Calculate total duration
         total_ms = sum(s.duration_ms for s in trace.steps)
@@ -333,7 +333,7 @@ class SkillGenerator:
             complexity=trace.complexity,
             confidence=confidence,
             source_trace_id=trace.trace_id,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             keywords=keywords,
             dialect=trace.dialect,
         )
@@ -381,7 +381,7 @@ class SkillGenerator:
 
         return best_category
 
-    def _extract_procedure(self, trace: InteractionTrace) -> List[str]:
+    def _extract_procedure(self, trace: InteractionTrace) -> list[str]:
         """Extract step-by-step procedure from trace steps."""
         procedure = []
         for step in trace.steps:
@@ -392,7 +392,7 @@ class SkillGenerator:
                 procedure.append(desc)
         return procedure
 
-    def _extract_pitfalls(self, trace: InteractionTrace) -> List[str]:
+    def _extract_pitfalls(self, trace: InteractionTrace) -> list[str]:
         """Extract pitfalls from errors and lessons."""
         pitfalls = []
 
@@ -408,7 +408,7 @@ class SkillGenerator:
 
     def _generate_verification(
         self, trace: InteractionTrace, category: SkillCategory
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate verification checklist for the skill."""
         verification = []
 
@@ -461,7 +461,7 @@ class SkillGenerator:
             query_summary += "..."
         return f"{category.value.title()} Protocol: {query_summary}"
 
-    def _extract_keywords(self, trace: InteractionTrace) -> List[str]:
+    def _extract_keywords(self, trace: InteractionTrace) -> list[str]:
         """Extract searchable keywords from the trace."""
         words = set()
         text = f"{trace.query} {trace.response} {' '.join(trace.lessons)}"
@@ -517,7 +517,7 @@ class SkillGenerator:
         skill.usage_count += 1
         if success:
             skill.success_count += 1
-        skill.last_used_at = datetime.now(timezone.utc).isoformat()
+        skill.last_used_at = datetime.now(UTC).isoformat()
 
         # Update confidence based on success rate
         if skill.usage_count >= 3:
@@ -534,9 +534,9 @@ class SkillGenerator:
     def search_skills(
         self,
         query: str,
-        category: Optional[SkillCategory] = None,
+        category: SkillCategory | None = None,
         limit: int = 5,
-    ) -> List[GeneratedSkill]:
+    ) -> list[GeneratedSkill]:
         """Search for relevant skills by query and optional category."""
         results = []
         query_lower = query.lower()
@@ -559,15 +559,15 @@ class SkillGenerator:
         results.sort(key=lambda x: (x[0], x[1].confidence), reverse=True)
         return [skill for _, skill in results[:limit]]
 
-    def get_skill(self, skill_id: str) -> Optional[GeneratedSkill]:
+    def get_skill(self, skill_id: str) -> GeneratedSkill | None:
         """Get a specific skill by ID."""
         return self._generated_skills.get(skill_id)
 
-    def get_all_skills(self) -> List[GeneratedSkill]:
+    def get_all_skills(self) -> list[GeneratedSkill]:
         """Get all generated skills."""
         return list(self._generated_skills.values())
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get skill generator statistics."""
         skills = list(self._generated_skills.values())
         return {

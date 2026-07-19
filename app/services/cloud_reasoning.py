@@ -5,11 +5,10 @@ Wraps Gemini REST API with retry, cost tracking, and complexity classification.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 import structlog
 
@@ -18,7 +17,7 @@ from app.services.gemini_config import get_gemini_config
 logger = structlog.get_logger(__name__)
 
 
-class QueryComplexity(str, Enum):
+class QueryComplexity(StrEnum):
     """Query complexity for routing decisions."""
     SIMPLE = "simple"      # "What's my balance?" → on-device
     MODERATE = "moderate"  # "How much did I spend on stock?" → either
@@ -60,7 +59,7 @@ class CloudResponse:
     output_tokens: int = 0
     cost_usd: float = 0.0
     latency_ms: float = 0.0
-    function_calls: List[str] = field(default_factory=list)
+    function_calls: list[str] = field(default_factory=list)
     model: str = ""
     cached: bool = False
 
@@ -68,7 +67,7 @@ class CloudResponse:
 class CloudReasoningService:
     """
     Gemini 3.5 Flash cloud reasoning service.
-    
+
     Handles:
     - Query complexity classification
     - Gemini REST API calls with retry
@@ -79,8 +78,8 @@ class CloudReasoningService:
 
     def __init__(self) -> None:
         self._config = get_gemini_config()
-        self._user_daily_tokens: Dict[str, int] = {}  # user_id → tokens used today
-        self._user_daily_queries: Dict[str, int] = {}  # user_id → queries today
+        self._user_daily_tokens: dict[str, int] = {}  # user_id → tokens used today
+        self._user_daily_queries: dict[str, int] = {}  # user_id → queries today
         self._daily_token_budget_remaining = self._config.tokens_per_day
         self._last_reset_day = 0
 
@@ -94,11 +93,11 @@ class CloudReasoningService:
         user_id: str,
         transaction_context: str = "",
         system_prompt: str = "",
-        tools: Optional[List[Dict[str, Any]]] = None,
-    ) -> Optional[CloudResponse]:
+        tools: list[dict[str, Any]] | None = None,
+    ) -> CloudResponse | None:
         """
         Send a query to Gemini for cloud reasoning.
-        
+
         Returns None if:
         - Cloud reasoning is disabled
         - User exceeded daily budget
@@ -159,7 +158,7 @@ class CloudReasoningService:
         query: str,
         transaction_context: str,
         system_prompt: str,
-        tools: Optional[List[Dict[str, Any]]],
+        tools: list[dict[str, Any]] | None,
     ) -> CloudResponse:
         """Make REST API call to Gemini with retry."""
         import httpx
@@ -176,7 +175,7 @@ class CloudReasoningService:
             user_text = f"{query}\n\n=== Transaction Context ===\n{transaction_context}"
         contents.append({"role": "user", "parts": [{"text": user_text}]})
 
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "contents": contents,
             "generationConfig": {
                 "maxOutputTokens": self._config.max_tokens_per_query,
@@ -219,7 +218,7 @@ class CloudReasoningService:
 
         raise last_error or RuntimeError("Gemini API call failed after retries")
 
-    def _parse_response(self, data: Dict[str, Any]) -> CloudResponse:
+    def _parse_response(self, data: dict[str, Any]) -> CloudResponse:
         """Parse Gemini API response."""
         candidates = data.get("candidates", [])
         if not candidates:
@@ -269,10 +268,7 @@ class CloudReasoningService:
         if user_queries >= self._config.max_queries_per_user_per_day:
             return False
 
-        if self._daily_token_budget_remaining <= 0:
-            return False
-
-        return True
+        return not self._daily_token_budget_remaining <= 0
 
     def _check_rate_limit(self, user_id: str) -> bool:
         """Simple per-user rate limiting."""

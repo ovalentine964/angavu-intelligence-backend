@@ -22,10 +22,9 @@ import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +142,7 @@ class WorkerValueTracker:
     _VALID_TIME_SOURCES = {"voice_bookkeeping", "automated_reports"}
     _MAX_LIMIT = 1000
 
-    def __init__(self, state_dir: Optional[str] = None):
+    def __init__(self, state_dir: str | None = None):
         self._state_dir = Path(state_dir) if state_dir else _DEFAULT_STATE_DIR
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._workers: dict[str, WorkerMetrics] = {}
@@ -338,7 +337,7 @@ class WorkerValueTracker:
             if worker.last_active_at:
                 try:
                     last = datetime.fromisoformat(worker.last_active_at)
-                    if (datetime.now(timezone.utc) - last).days <= 30:
+                    if (datetime.now(UTC) - last).days <= 30:
                         agg.active_workers_30d += 1
                 except ValueError:
                     pass
@@ -386,17 +385,17 @@ class WorkerValueTracker:
         if worker_id not in self._workers:
             self._workers[worker_id] = WorkerMetrics(
                 worker_id=worker_id,
-                first_active_at=datetime.now(timezone.utc).isoformat(),
+                first_active_at=datetime.now(UTC).isoformat(),
             )
         return self._workers[worker_id]
 
     def _touch_worker(self, worker: WorkerMetrics) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         worker.last_active_at = now
         # Estimate days active from first_active_at
         try:
             first = datetime.fromisoformat(worker.first_active_at)
-            worker.days_active = max(1, (datetime.now(timezone.utc) - first).days)
+            worker.days_active = max(1, (datetime.now(UTC) - first).days)
         except ValueError:
             worker.days_active = 1
 
@@ -467,6 +466,6 @@ class WorkerValueTracker:
                 f"KES {total_value_kes:,.0f} in value. Keep recording to unlock more."
             )
         return (
-            f"You've just started with Msaidizi. Record your sales daily to see "
-            f"your business value grow!"
+            "You've just started with Msaidizi. Record your sales daily to see "
+            "your business value grow!"
         )

@@ -11,8 +11,7 @@ with the new macroeconomic intelligence capabilities.
 """
 
 import time
-from datetime import date, datetime
-from typing import Optional
+from datetime import date
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import get_buyer_from_api_key
 from app.db.database import get_db
 from app.models.buyer import Buyer
-from app.services.anonymizer import Anonymizer
 from app.services.intelligence.gdp_estimator import GDPEstimatorService
 from app.services.intelligence.inflation_tracker import InflationTrackerService
 from app.services.pricing.outcome_pricing import OutcomePricingEngine
@@ -47,8 +45,8 @@ class GDPRequest(BaseModel):
         pattern=r"^(monthly|quarterly|annual)$",
         description="Estimation period",
     )
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    period_start: date | None = None
+    period_end: date | None = None
 
 
 class InflationRequest(BaseModel):
@@ -63,8 +61,8 @@ class InflationRequest(BaseModel):
         pattern=r"^(daily|weekly|monthly)$",
         description="Tracking period",
     )
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    period_start: date | None = None
+    period_end: date | None = None
 
 
 class OutcomePricingRequest(BaseModel):
@@ -74,25 +72,25 @@ class OutcomePricingRequest(BaseModel):
         ...,
         description="Product code: alama_score, tax_base, distribution_gap, soko_pulse",
     )
-    client_id: Optional[str] = Field(None, description="Client identifier")
+    client_id: str | None = Field(None, description="Client identifier")
 
     # Alama Score params
-    approved_loan_value_usd: Optional[float] = Field(None, description="Total approved loan value")
-    score_tier: Optional[str] = Field("basic", description="Score tier: basic, enhanced, full")
-    volume_discount_pct: Optional[float] = Field(0, description="Volume discount (0-30%)")
+    approved_loan_value_usd: float | None = Field(None, description="Total approved loan value")
+    score_tier: str | None = Field("basic", description="Score tier: basic, enhanced, full")
+    volume_discount_pct: float | None = Field(0, description="Volume discount (0-30%)")
 
     # Tax Base params
-    incremental_tax_revenue_kes: Optional[float] = Field(None, description="New tax revenue (KES)")
-    collection_rate_pct: Optional[float] = Field(100, description="Collection rate (0-100)")
+    incremental_tax_revenue_kes: float | None = Field(None, description="New tax revenue (KES)")
+    collection_rate_pct: float | None = Field(100, description="Collection rate (0-100)")
 
     # Distribution Gap params
-    first_year_new_market_revenue_usd: Optional[float] = Field(None, description="New market revenue")
-    margin_pct: Optional[float] = Field(25, description="Product margin %")
-    expansion_success_pct: Optional[float] = Field(100, description="Expansion success %")
+    first_year_new_market_revenue_usd: float | None = Field(None, description="New market revenue")
+    margin_pct: float | None = Field(25, description="Product margin %")
+    expansion_success_pct: float | None = Field(100, description="Expansion success %")
 
     # Soko Pulse params
-    base_monthly_fee_usd: Optional[float] = Field(2000, description="Base monthly fee")
-    forecast_accuracy_pct: Optional[float] = Field(0, description="Forecast accuracy (0-100)")
+    base_monthly_fee_usd: float | None = Field(2000, description="Base monthly fee")
+    forecast_accuracy_pct: float | None = Field(0, description="Forecast accuracy (0-100)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,8 +101,8 @@ class OutcomePricingRequest(BaseModel):
 async def get_gdp_estimate(
     county: str,
     period: str,
-    period_start: Optional[date] = Query(None),
-    period_end: Optional[date] = Query(None),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
     request: Request = None,
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),
@@ -200,8 +198,8 @@ async def post_gdp_estimate(
 async def get_inflation(
     county: str,
     period: str,
-    period_start: Optional[date] = Query(None),
-    period_end: Optional[date] = Query(None),
+    period_start: date | None = Query(None),
+    period_end: date | None = Query(None),
     request: Request = None,
     buyer: Buyer = Depends(get_buyer_from_api_key),
     db: AsyncSession = Depends(get_db),

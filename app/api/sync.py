@@ -24,11 +24,9 @@ Data Flow — Angavu Intelligence → Msaidizi:
 """
 
 import hashlib
-import hmac
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -42,12 +40,10 @@ from app.models.user import User
 from app.schemas.sync import (
     SyncRequest,
     SyncResponse,
+    SyncStatusResponse,
     TransactionBatch,
     TransactionBatchResponse,
-    SyncStatusResponse,
-    IntelligenceUpdate,
 )
-from app.services.anonymizer import Anonymizer
 from app.services.intelligence_delivery import IntelligenceDelivery
 from app.services.sync_service import SyncService
 
@@ -118,7 +114,7 @@ async def sync_data(
             logger.error("sync_decompression_failed", error=str(e))
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to decompress payload: {str(e)}",
+                detail=f"Failed to decompress payload: {e!s}",
             )
 
     # Process the sync
@@ -318,12 +314,12 @@ async def upload_transactions(
                 continue
 
             # Timestamp sanity check
-            if record.timestamp > datetime.now(timezone.utc) + timedelta(hours=1):
+            if record.timestamp > datetime.now(UTC) + timedelta(hours=1):
                 rejected += 1
                 reasons.append(f"Future timestamp: {record.timestamp}")
                 continue
 
-            if record.timestamp < datetime.now(timezone.utc) - timedelta(days=90):
+            if record.timestamp < datetime.now(UTC) - timedelta(days=90):
                 rejected += 1
                 reasons.append(f"Too old: {record.timestamp}")
                 continue
@@ -361,7 +357,7 @@ async def upload_transactions(
                 recorded_via=record.recorded_via or "voice",
                 confidence_score=record.confidence_score or 1.0,
                 timestamp=record.timestamp,
-                synced_at=datetime.now(timezone.utc),
+                synced_at=datetime.now(UTC),
                 device_id=batch.device_id,
                 location_geohash=(
                     record.location_geohash[:5]
@@ -374,7 +370,7 @@ async def upload_transactions(
 
         except Exception as e:
             rejected += 1
-            reasons.append(f"Error: {str(e)}")
+            reasons.append(f"Error: {e!s}")
             logger.warning(
                 "sync_txn_error",
                 sync_id=sync_id,
@@ -406,7 +402,7 @@ async def upload_transactions(
 async def get_intelligence(
     worker_id: str,
     request: Request,
-    since: Optional[datetime] = None,
+    since: datetime | None = None,
     language: str = "sw",
     db: AsyncSession = Depends(get_db),
 ):
@@ -502,7 +498,7 @@ async def sync_status_worker(
     sync_health = "healthy"
 
     if last_sync:
-        delta = datetime.now(timezone.utc) - last_sync
+        delta = datetime.now(UTC) - last_sync
         freshness_hours = round(delta.total_seconds() / 3600, 1)
 
         if freshness_hours > 48:
@@ -520,7 +516,7 @@ async def sync_status_worker(
         pending_transactions=0,  # Would come from device in real impl
         intelligence_freshness_hours=(
             round(
-                (datetime.now(timezone.utc) - intel_freshness).total_seconds() / 3600,
+                (datetime.now(UTC) - intel_freshness).total_seconds() / 3600,
                 1,
             )
             if intel_freshness

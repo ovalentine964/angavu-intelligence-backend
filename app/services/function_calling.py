@@ -5,16 +5,16 @@ Backed by SQLAlchemy (works with both SQLite and PostgreSQL).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
@@ -99,7 +99,7 @@ FINANCIAL_TOOLS = [
 class FunctionExecutor:
     """
     Executes financial functions backed by SQLAlchemy.
-    
+
     Works with both SQLite (on-device/dev) and PostgreSQL (production).
     Each function queries real transaction data and returns
     structured JSON that Gemini can reason over.
@@ -108,7 +108,7 @@ class FunctionExecutor:
     def __init__(self, db_session: AsyncSession) -> None:
         self._db = db_session
 
-    async def execute(self, function_name: str, args: Dict[str, Any], user_id: str = "") -> str:
+    async def execute(self, function_name: str, args: dict[str, Any], user_id: str = "") -> str:
         """Execute a financial function and return JSON result."""
         try:
             result = await self._dispatch(function_name, args, user_id)
@@ -118,7 +118,7 @@ class FunctionExecutor:
             logger.error("function_call.error", function=function_name, error=str(e))
             return json.dumps({"error": str(e), "function": function_name})
 
-    async def _dispatch(self, function_name: str, args: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    async def _dispatch(self, function_name: str, args: dict[str, Any], user_id: str) -> dict[str, Any]:
         """Route function call to handler."""
         handlers = {
             "get_transaction_summary": self._get_transaction_summary,
@@ -145,8 +145,8 @@ class FunctionExecutor:
         return start_date, end_date
 
     async def _get_transaction_summary(
-        self, period: str, user_id: str, category: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, period: str, user_id: str, category: str | None = None
+    ) -> dict[str, Any]:
         """Get transaction summary for a period."""
         start_date, end_date = self._period_to_dates(period)
 
@@ -187,7 +187,7 @@ class FunctionExecutor:
 
     async def _analyze_cash_flow(
         self, start_date: str, end_date: str, user_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze income vs expenses."""
         start = datetime.fromisoformat(start_date)
         end = datetime.fromisoformat(end_date)
@@ -243,7 +243,7 @@ class FunctionExecutor:
         previous_start: str,
         previous_end: str,
         user_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Compare two periods."""
         cur = await self._analyze_cash_flow(current_start, current_end, user_id)
         prev = await self._analyze_cash_flow(previous_start, previous_end, user_id)
@@ -267,7 +267,7 @@ class FunctionExecutor:
             "net_change_pct": round(income_change - expense_change, 1),
         }
 
-    async def _predict_expenses(self, horizon_days: int, user_id: str) -> Dict[str, Any]:
+    async def _predict_expenses(self, horizon_days: int, user_id: str) -> dict[str, Any]:
         """Predict upcoming expenses based on historical patterns."""
         # Simple average-based prediction
         end = datetime.now()
@@ -306,7 +306,7 @@ class FunctionExecutor:
             "based_on_days_of_history": 90,
         }
 
-    async def _check_credit_readiness(self, user_id: str) -> Dict[str, Any]:
+    async def _check_credit_readiness(self, user_id: str) -> dict[str, Any]:
         """Assess credit readiness based on transaction history."""
         end = datetime.now()
         start = end - timedelta(days=90)

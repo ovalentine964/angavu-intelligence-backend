@@ -33,13 +33,12 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from enum import StrEnum
+from typing import Any
 
 import structlog
 
-from app.security.pqc.ml_dsa import MlDsaProvider, MlDsaParameterSet
-from app.security.pqc.crypto_provider import CryptoKeyPair
+from app.security.pqc.ml_dsa import MlDsaParameterSet, MlDsaProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -72,7 +71,7 @@ def is_swarm_capability_enabled(swarm: str) -> bool:
 # ════════════════════════════════════════════════════════════════════
 
 
-class Action(str, Enum):
+class Action(StrEnum):
     """Permitted actions for agents."""
     READ = "read"
     WRITE = "write"
@@ -83,7 +82,7 @@ class Action(str, Enum):
     ADMIN = "admin"
 
 
-class ResourceScope(str, Enum):
+class ResourceScope(StrEnum):
     """Resource scopes that agents can access."""
     TRANSACTION = "transaction"
     INTELLIGENCE = "intelligence"
@@ -99,11 +98,11 @@ class ResourceScope(str, Enum):
 class Capability:
     """A single capability grant."""
     resource: ResourceScope
-    actions: Set[Action]
+    actions: set[Action]
     # Optional: restrict to specific resource patterns
     resource_pattern: str = "*"  # e.g., "transaction.processed", "intelligence.*"
     # Optional: restrict to specific tenants
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
 
     def allows(self, resource: str, action: Action) -> bool:
         """Check if this capability allows the given resource + action."""
@@ -117,7 +116,7 @@ class Capability:
                 return False
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "resource": self.resource.value,
             "actions": [a.value for a in self.actions],
@@ -140,10 +139,10 @@ class AgentCapabilityToken:
     swarm: str = ""  # e.g., "intelligence", "revenue_ops", "governance"
 
     # Capabilities
-    capabilities: List[Capability] = field(default_factory=list)
+    capabilities: list[Capability] = field(default_factory=list)
 
     # Allowed communication targets (empty = no restrictions)
-    allowed_recipients: Optional[Set[str]] = None
+    allowed_recipients: set[str] | None = None
 
     # Temporal constraints
     issued_at: float = field(default_factory=time.time)
@@ -154,8 +153,8 @@ class AgentCapabilityToken:
     issued_by: str = "governance_agent"
 
     # Signature (filled by issuer)
-    signature: Optional[bytes] = None
-    issuer_public_key: Optional[bytes] = None
+    signature: bytes | None = None
+    issuer_public_key: bytes | None = None
 
     # Usage tracking
     use_count: int = 0
@@ -181,7 +180,7 @@ class AgentCapabilityToken:
     def record_use(self) -> None:
         self.use_count += 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "token_id": self.token_id,
             "agent_name": self.agent_name,
@@ -213,7 +212,7 @@ class CapabilityTokenIssuer:
         self._provider = MlDsaProvider(MlDsaParameterSet.ML_DSA_65)
         self._key_pair = self._provider.generate_key_pair()
         self._issuer_name = issuer_name
-        self._issued_tokens: Dict[str, AgentCapabilityToken] = {}
+        self._issued_tokens: dict[str, AgentCapabilityToken] = {}
         self._logger = logger.bind(component="capability_issuer")
 
     @property
@@ -224,10 +223,10 @@ class CapabilityTokenIssuer:
         self,
         agent_name: str,
         swarm: str,
-        capabilities: List[Capability],
+        capabilities: list[Capability],
         ttl_seconds: int = 3600,
         max_uses: int = 0,
-        allowed_recipients: Optional[Set[str]] = None,
+        allowed_recipients: set[str] | None = None,
     ) -> AgentCapabilityToken:
         """
         Issue a capability token for an agent.
@@ -363,7 +362,7 @@ def create_default_token(
 # Singleton Issuer (for convenience)
 # ════════════════════════════════════════════════════════════════════
 
-_capability_issuer: Optional[CapabilityTokenIssuer] = None
+_capability_issuer: CapabilityTokenIssuer | None = None
 
 
 def get_capability_issuer() -> CapabilityTokenIssuer:

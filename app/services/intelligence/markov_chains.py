@@ -21,7 +21,7 @@ Key Applications:
    Lagrange multipliers and Kuhn-Tucker conditions.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -53,13 +53,13 @@ class MarkovChainAnalyzer:
     """
 
     def __init__(self):
-        self.transition_matrix: Optional[np.ndarray] = None
-        self.steady_state: Optional[np.ndarray] = None
+        self.transition_matrix: np.ndarray | None = None
+        self.steady_state: np.ndarray | None = None
         self.n_states = len(SCORE_BANDS)
 
     def estimate_transition_matrix(
         self,
-        score_sequences: List[List[int]],
+        score_sequences: list[list[int]],
         n_states: int = 5,
     ) -> np.ndarray:
         """
@@ -92,7 +92,7 @@ class MarkovChainAnalyzer:
         self.transition_matrix = P
         return P
 
-    def compute_steady_state(self, P: Optional[np.ndarray] = None) -> np.ndarray:
+    def compute_steady_state(self, P: np.ndarray | None = None) -> np.ndarray:
         """
         Compute steady-state distribution π such that πP = π.
 
@@ -129,7 +129,7 @@ class MarkovChainAnalyzer:
         return pi
 
     def n_step_transition(
-        self, P: Optional[np.ndarray], n: int
+        self, P: np.ndarray | None, n: int
     ) -> np.ndarray:
         """
         Compute n-step transition matrix P^n.
@@ -151,8 +151,8 @@ class MarkovChainAnalyzer:
     def absorption_probability(
         self,
         P: np.ndarray,
-        transient_states: List[int],
-        absorbing_states: List[int],
+        transient_states: list[int],
+        absorbing_states: list[int],
     ) -> np.ndarray:
         """
         Compute absorption probabilities.
@@ -190,7 +190,7 @@ class MarkovChainAnalyzer:
     def expected_time_to_absorption(
         self,
         P: np.ndarray,
-        transient_states: List[int],
+        transient_states: list[int],
     ) -> np.ndarray:
         """
         Expected number of steps before absorption.
@@ -222,7 +222,7 @@ class MarkovChainAnalyzer:
         revenue_growth_pct: float,
         consistency_score: float,
         months_of_data: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate credit score transition report.
 
@@ -373,8 +373,8 @@ class OptimizationEngine:
         objective: callable,
         constraint: callable,
         x0: np.ndarray,
-        bounds: Optional[List[Tuple[float, float]]] = None,
-    ) -> Dict[str, Any]:
+        bounds: list[tuple[float, float]] | None = None,
+    ) -> dict[str, Any]:
         """
         Constrained optimization using Lagrange multiplier method.
 
@@ -423,10 +423,10 @@ class OptimizationEngine:
     @staticmethod
     def kuhn_tucker_optimize(
         objective: callable,
-        inequality_constraints: List[callable],
+        inequality_constraints: list[callable],
         x0: np.ndarray,
-        bounds: Optional[List[Tuple[float, float]]] = None,
-    ) -> Dict[str, Any]:
+        bounds: list[tuple[float, float]] | None = None,
+    ) -> dict[str, Any]:
         """
         Constrained optimization with inequality constraints (Kuhn-Tucker).
 
@@ -484,7 +484,7 @@ class OptimizationEngine:
         demand_func: callable,
         cost_func: callable,
         n_products: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimal pricing for revenue maximization.
 
@@ -534,7 +534,7 @@ class OptimizationEngine:
         interest_rate: float,
         periods: int = 12,
         risk_aversion: float = 2.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Optimal savings-consumption allocation.
 

@@ -32,24 +32,23 @@ Integration points:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.channels.session_sync import SessionSync, Session, Interaction
-from app.agents.skill_generator import (
-    SkillGenerator,
-    GeneratedSkill,
-    InteractionTrace,
-    SkillCategory,
-)
 from app.agents.event_bus import EventBus
+from app.agents.skill_generator import (
+    GeneratedSkill,
+    SkillCategory,
+    SkillGenerator,
+)
+from app.channels.session_sync import Session, SessionSync
 
 logger = structlog.get_logger(__name__)
 
@@ -103,12 +102,12 @@ class WorkerProfile:
     preferred_language: str = "sw"
     preferred_channel: str = ""
     business_domain: str = ""  # retail, agriculture, transport, etc.
-    skill_affinities: Dict[str, float] = field(default_factory=dict)
+    skill_affinities: dict[str, float] = field(default_factory=dict)
     # category → affinity score (0.0-1.0)
-    frequent_topics: List[str] = field(default_factory=list)
-    correction_patterns: Dict[str, int] = field(default_factory=dict)
+    frequent_topics: list[str] = field(default_factory=list)
+    correction_patterns: dict[str, int] = field(default_factory=dict)
     # correction_type → count
-    satisfaction_trend: List[float] = field(default_factory=list)
+    satisfaction_trend: list[float] = field(default_factory=list)
     # Rolling window of satisfaction scores
 
 
@@ -120,7 +119,7 @@ class MemoryConsolidation:
     interactions_consolidated: int
     patterns_extracted: int
     summary: str
-    topics: List[str]
+    topics: list[str]
     timestamp: str
 
 
@@ -129,15 +128,15 @@ class HermesSessionState:
     """Extended session state for Hermes protocol."""
 
     session: Session
-    trace_id: Optional[str] = None
-    active_skills: List[str] = field(default_factory=list)
+    trace_id: str | None = None
+    active_skills: list[str] = field(default_factory=list)
     # skill_ids being used in this session
-    pending_feedback: List[Dict[str, Any]] = field(default_factory=list)
+    pending_feedback: list[dict[str, Any]] = field(default_factory=list)
     # feedback waiting to be processed
-    context_window: List[Dict[str, Any]] = field(default_factory=list)
+    context_window: list[dict[str, Any]] = field(default_factory=list)
     # Recent interactions for context
-    last_skill_search: Optional[str] = None
-    last_skill_search_result: List[str] = field(default_factory=list)
+    last_skill_search: str | None = None
+    last_skill_search_result: list[str] = field(default_factory=list)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -165,27 +164,27 @@ class HermesService:
         self,
         session_sync: SessionSync,
         skill_generator: SkillGenerator,
-        event_bus: Optional[EventBus] = None,
+        event_bus: EventBus | None = None,
     ):
         self._session_sync = session_sync
         self._skill_generator = skill_generator
         self._event_bus = event_bus
 
         # Worker profiles (in-memory, persisted via session context)
-        self._profiles: Dict[str, WorkerProfile] = {}
+        self._profiles: dict[str, WorkerProfile] = {}
 
         # Active Hermes sessions (worker_id → state)
-        self._hermes_sessions: Dict[str, HermesSessionState] = {}
+        self._hermes_sessions: dict[str, HermesSessionState] = {}
 
         # Memory consolidation state
-        self._last_consolidation: Dict[str, float] = {}  # worker_id → timestamp
-        self._consolidation_summaries: Dict[str, List[str]] = {}
+        self._last_consolidation: dict[str, float] = {}  # worker_id → timestamp
+        self._consolidation_summaries: dict[str, list[str]] = {}
 
         # Skill application callbacks (skill_category → handler)
-        self._skill_handlers: Dict[str, Callable[..., Coroutine]] = {}
+        self._skill_handlers: dict[str, Callable[..., Coroutine]] = {}
 
         # Background task references
-        self._background_tasks: List[asyncio.Task] = []
+        self._background_tasks: list[asyncio.Task] = []
 
         self._logger = logger.bind(component="hermes_service")
 
@@ -227,7 +226,6 @@ class HermesService:
         Returns:
             HermesSessionState with full context
         """
-        from app.channels.adapters.base import ChannelType
 
         # Map channel string to ChannelType
         channel_type = self._resolve_channel_type(channel)
@@ -292,7 +290,7 @@ class HermesService:
         worker_id: str,
         query: str,
         limit: int = 3,
-    ) -> List[GeneratedSkill]:
+    ) -> list[GeneratedSkill]:
         """
         Discover relevant skills for a worker's query.
 
@@ -363,7 +361,7 @@ class HermesService:
         self,
         worker_id: str,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """
         Start tracing a worker interaction for the closed learning loop.
@@ -397,12 +395,12 @@ class HermesService:
         self,
         trace_id: str,
         action: str,
-        tool_used: Optional[str] = None,
-        input_data: Optional[str] = None,
-        output_data: Optional[str] = None,
+        tool_used: str | None = None,
+        input_data: str | None = None,
+        output_data: str | None = None,
         duration_ms: int = 0,
         success: bool = True,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Record a step in an active interaction trace."""
         self._skill_generator.record_step(
@@ -423,8 +421,8 @@ class HermesService:
         response: str,
         channel: str = "app_text",
         outcome: str = "success",
-        lessons: Optional[List[str]] = None,
-    ) -> Optional[GeneratedSkill]:
+        lessons: list[str] | None = None,
+    ) -> GeneratedSkill | None:
         """
         Complete an interaction and potentially generate a skill.
 
@@ -446,7 +444,6 @@ class HermesService:
         )
 
         # Record interaction in SessionSync
-        from app.channels.adapters.base import ChannelType
         channel_type = self._resolve_channel_type(channel)
 
         state = self._hermes_sessions.get(worker_id)
@@ -469,7 +466,7 @@ class HermesService:
             state.context_window.append({
                 "user_message": state.context_window[-1].get("user_message", "") if state.context_window else "",
                 "agent_response": response,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "outcome": outcome,
             })
             # Keep context window bounded
@@ -519,7 +516,7 @@ class HermesService:
         worker_id: str,
         skill_id: str,
         success: bool,
-        feedback_text: Optional[str] = None,
+        feedback_text: str | None = None,
     ) -> None:
         """
         Record feedback on a skill application.
@@ -565,7 +562,7 @@ class HermesService:
     async def consolidate_memory(
         self,
         worker_id: str,
-    ) -> Optional[MemoryConsolidation]:
+    ) -> MemoryConsolidation | None:
         """
         Consolidate short-term memory into long-term.
 
@@ -596,7 +593,7 @@ class HermesService:
                 "consolidated_patterns": patterns,
                 "consolidated_topics": topics,
                 "consolidated_summary": summary,
-                "last_consolidation": datetime.now(timezone.utc).isoformat(),
+                "last_consolidation": datetime.now(UTC).isoformat(),
             },
         )
 
@@ -619,7 +616,7 @@ class HermesService:
             patterns_extracted=len(patterns),
             summary=summary,
             topics=topics,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
         await self._publish_event(
@@ -659,7 +656,7 @@ class HermesService:
 
     # ── Statistics & Diagnostics ──────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get Hermes service statistics."""
         return {
             "active_sessions": len(self._hermes_sessions),
@@ -672,7 +669,7 @@ class HermesService:
             "registered_handlers": list(self._skill_handlers.keys()),
         }
 
-    def get_session_state(self, worker_id: str) -> Optional[HermesSessionState]:
+    def get_session_state(self, worker_id: str) -> HermesSessionState | None:
         """Get the Hermes session state for a worker."""
         return self._hermes_sessions.get(worker_id)
 
@@ -684,8 +681,8 @@ class HermesService:
 
         profile = WorkerProfile(
             worker_id=worker_id,
-            first_seen=context.get("first_seen", datetime.now(timezone.utc).isoformat()),
-            last_active=datetime.now(timezone.utc).isoformat(),
+            first_seen=context.get("first_seen", datetime.now(UTC).isoformat()),
+            last_active=datetime.now(UTC).isoformat(),
             preferred_language=context.get("preferred_language", "sw"),
             business_domain=context.get("business_domain", ""),
             skill_affinities=context.get("skill_affinities", {}),
@@ -698,12 +695,12 @@ class HermesService:
         self,
         worker_id: str,
         outcome: str,
-        skill: Optional[GeneratedSkill],
+        skill: GeneratedSkill | None,
     ) -> None:
         """Update worker profile after an interaction."""
         profile = await self.get_worker_profile(worker_id)
         profile.total_interactions += 1
-        profile.last_active = datetime.now(timezone.utc).isoformat()
+        profile.last_active = datetime.now(UTC).isoformat()
 
         # Track satisfaction trend
         satisfaction = 1.0 if outcome == "success" else 0.5 if outcome == "partial" else 0.0
@@ -734,12 +731,12 @@ class HermesService:
                 task = asyncio.create_task(self.consolidate_memory(worker_id))
                 self._background_tasks.append(task)
 
-    def _extract_patterns(self, history: List[Dict[str, Any]]) -> List[str]:
+    def _extract_patterns(self, history: list[dict[str, Any]]) -> list[str]:
         """Extract behavioral patterns from interaction history."""
         patterns = []
 
         # Count intents
-        intent_counts: Dict[str, int] = {}
+        intent_counts: dict[str, int] = {}
         for interaction in history:
             msg = interaction.get("user_message", "").lower()
             if any(w in msg for w in ["nimeuza", "sold", "sale"]):
@@ -765,9 +762,9 @@ class HermesService:
 
         return patterns[:10]
 
-    def _extract_topics(self, history: List[Dict[str, Any]]) -> List[str]:
+    def _extract_topics(self, history: list[dict[str, Any]]) -> list[str]:
         """Extract frequent topics from history."""
-        topic_words: Dict[str, int] = {}
+        topic_words: dict[str, int] = {}
         for interaction in history:
             msg = interaction.get("user_message", "").lower()
             for word in msg.split():
@@ -779,7 +776,7 @@ class HermesService:
         sorted_topics = sorted(topic_words.items(), key=lambda x: x[1], reverse=True)
         return [word for word, _ in sorted_topics[:10]]
 
-    def _generate_summary(self, history: List[Dict[str, Any]]) -> str:
+    def _generate_summary(self, history: list[dict[str, Any]]) -> str:
         """Generate a summary of recent interactions."""
         if not history:
             return ""
@@ -807,8 +804,8 @@ class HermesService:
     async def _default_skill_handler(
         self,
         skill: GeneratedSkill,
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
         """Default handler: returns skill procedure as guidance."""
         return {
             "skill_id": skill.skill_id,
@@ -835,7 +832,7 @@ class HermesService:
     async def _publish_event(
         self,
         event_type: HermesEventType,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> None:
         """Publish a Hermes event to the event bus."""
         if not self._event_bus:
@@ -849,7 +846,7 @@ class HermesService:
                 event_type=event_type.value,
                 source="HermesService",
                 payload=payload,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
             await self._event_bus.publish(event)
         except Exception as e:
@@ -862,9 +859,9 @@ class HermesService:
 
 
 def create_hermes_service(
-    session_sync: Optional[SessionSync] = None,
-    skill_generator: Optional[SkillGenerator] = None,
-    event_bus: Optional[EventBus] = None,
+    session_sync: SessionSync | None = None,
+    skill_generator: SkillGenerator | None = None,
+    event_bus: EventBus | None = None,
     db_path: str = "angavu_sessions.db",
 ) -> HermesService:
     """

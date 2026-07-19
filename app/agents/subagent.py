@@ -29,13 +29,14 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentEvent, AgentResult, BiasharaAgent, EventType
+from app.agents.base import AgentEvent, BiasharaAgent, EventType
 
 logger = structlog.get_logger(__name__)
 
@@ -76,17 +77,17 @@ class SubAgentTask:
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str = ""
     description: str = ""
-    handler: Optional[Callable[..., Coroutine]] = None
-    agent: Optional[BiasharaAgent] = None
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    handler: Callable[..., Coroutine] | None = None
+    agent: BiasharaAgent | None = None
+    parameters: dict[str, Any] = field(default_factory=dict)
     priority: SubAgentPriority = SubAgentPriority.NORMAL
     timeout_seconds: float = 60.0
     max_retries: int = 0
-    parent_task_id: Optional[str] = None
+    parent_task_id: str | None = None
     depth: int = 0  # How deep in the sub-agent tree
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize sub-agent task to dictionary."""
         return {
             "task_id": self.task_id,
@@ -112,19 +113,19 @@ class SubAgentResult:
     task_id: str = ""
     status: SubAgentStatus = SubAgentStatus.COMPLETED
     data: Any = None
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
     started_at: float = 0.0
     completed_at: float = 0.0
     attempts: int = 1
-    sub_results: List["SubAgentResult"] = field(default_factory=list)  # Nested results
+    sub_results: list[SubAgentResult] = field(default_factory=list)  # Nested results
 
     @property
     def success(self) -> bool:
         """Check if the sub-agent completed successfully."""
         return self.status == SubAgentStatus.COMPLETED
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize sub-agent result to dictionary."""
         return {
             "task_id": self.task_id,
@@ -151,7 +152,7 @@ class SubAgentMetrics:
     current_concurrent: int = 0
     total_retries: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_spawned": self.total_spawned,
             "total_completed": self.total_completed,
@@ -219,7 +220,7 @@ class SubAgentOrchestrator:
 
     def __init__(
         self,
-        parent_agent: Optional[BiasharaAgent] = None,
+        parent_agent: BiasharaAgent | None = None,
         max_concurrency: int = 10,
         max_depth: int = 3,
         default_timeout: float = 60.0,
@@ -231,10 +232,10 @@ class SubAgentOrchestrator:
         self._default_timeout = default_timeout
 
         # Active sub-agents
-        self._tasks: Dict[str, SubAgentTask] = {}
-        self._futures: Dict[str, asyncio.Future] = {}
-        self._results: Dict[str, SubAgentResult] = {}
-        self._running: Set[str] = set()
+        self._tasks: dict[str, SubAgentTask] = {}
+        self._futures: dict[str, asyncio.Future] = {}
+        self._results: dict[str, SubAgentResult] = {}
+        self._running: set[str] = set()
 
         # Metrics
         self._metrics = SubAgentMetrics()
@@ -252,13 +253,13 @@ class SubAgentOrchestrator:
     def spawn(
         self,
         name: str,
-        handler: Optional[Callable[..., Coroutine]] = None,
-        agent: Optional[BiasharaAgent] = None,
-        parameters: Optional[Dict[str, Any]] = None,
-        timeout_seconds: Optional[float] = None,
+        handler: Callable[..., Coroutine] | None = None,
+        agent: BiasharaAgent | None = None,
+        parameters: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
         priority: SubAgentPriority = SubAgentPriority.NORMAL,
         max_retries: int = 0,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> str:
         """
         Spawn a sub-agent for a task.
@@ -390,7 +391,7 @@ class SubAgentOrchestrator:
                 self._push_result(task.task_id, result)
                 return
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = f"Timeout after {task.timeout_seconds}s"
                 self._logger.warning(
                     "subagent_timeout",
@@ -493,8 +494,8 @@ class SubAgentOrchestrator:
 
     async def wait_all(
         self,
-        timeout_seconds: Optional[float] = None,
-    ) -> List[SubAgentResult]:
+        timeout_seconds: float | None = None,
+    ) -> list[SubAgentResult]:
         """
         Wait for all spawned sub-agents to complete.
 
@@ -520,8 +521,8 @@ class SubAgentOrchestrator:
 
     async def wait_first(
         self,
-        timeout_seconds: Optional[float] = None,
-    ) -> Optional[SubAgentResult]:
+        timeout_seconds: float | None = None,
+    ) -> SubAgentResult | None:
         """Wait for the first sub-agent to complete."""
         if not self._futures:
             return None
@@ -564,26 +565,26 @@ class SubAgentOrchestrator:
 
     # ── Query ───────────────────────────────────────────────────────
 
-    def get_result(self, task_id: str) -> Optional[SubAgentResult]:
+    def get_result(self, task_id: str) -> SubAgentResult | None:
         """Get a cached result (doesn't wait)."""
         return self._results.get(task_id)
 
-    def get_pending_tasks(self) -> List[Dict[str, Any]]:
+    def get_pending_tasks(self) -> list[dict[str, Any]]:
         """Get list of pending/running tasks."""
         return [
             t.to_dict() for t in self._tasks.values()
             if t.task_id in self._running
         ]
 
-    def get_all_results(self) -> List[SubAgentResult]:
+    def get_all_results(self) -> list[SubAgentResult]:
         """Get all completed results."""
         return list(self._results.values())
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get orchestration metrics."""
         return self._metrics.to_dict()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get full orchestrator statistics."""
         return {
             "parent": self._parent_name,
@@ -623,7 +624,7 @@ class SubAgentCapableMixin:
                 result = await orch.wait_for(task_id)
     """
 
-    _orchestrator: Optional[SubAgentOrchestrator] = None
+    _orchestrator: SubAgentOrchestrator | None = None
     _current_subagent_depth: int = 0
 
     def get_or_create_orchestrator(
@@ -640,7 +641,7 @@ class SubAgentCapableMixin:
             )
         return self._orchestrator
 
-    def get_subagent_metrics(self) -> Dict[str, Any]:
+    def get_subagent_metrics(self) -> dict[str, Any]:
         """Get sub-agent metrics if orchestrator exists."""
         if self._orchestrator:
             return self._orchestrator.get_metrics()

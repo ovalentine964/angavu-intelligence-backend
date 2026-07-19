@@ -34,7 +34,7 @@ References:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -56,13 +56,13 @@ class NashEquilibriumResult:
     """Result of Nash equilibrium computation."""
 
     equilibrium_type: EquilibriumType
-    strategies: Tuple  # (row_strategy, col_strategy) for 2-player
-    payoffs: Tuple[float, float]  # (player1_payoff, player2_payoff)
+    strategies: tuple  # (row_strategy, col_strategy) for 2-player
+    payoffs: tuple[float, float]  # (player1_payoff, player2_payoff)
     is_pure: bool
-    support: Optional[Tuple[List[int], List[int]]] = None  # for mixed strategies
-    all_equilibria: List[Dict[str, Any]] = field(default_factory=list)
+    support: tuple[list[int], list[int]] | None = None  # for mixed strategies
+    all_equilibria: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "equilibrium_type": self.equilibrium_type.value,
             "strategies": [
@@ -90,7 +90,7 @@ class CournotResult:
     consumer_surplus: float
     is_nash_equilibrium: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "firm1_quantity": round(self.firm1_quantity, 4),
             "firm2_quantity": round(self.firm2_quantity, 4),
@@ -116,7 +116,7 @@ class BertrandResult:
     consumer_surplus: float
     market_structure: str  # "competitive", "collusive", "asymmetric"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "firm1_price": round(self.firm1_price, 4),
             "firm2_price": round(self.firm2_price, 4),
@@ -137,9 +137,9 @@ class BestResponseResult:
     best_strategy_index: int
     best_strategy_mixed: np.ndarray
     expected_payoff: float
-    payoff_against_all: List[float]
+    payoff_against_all: list[float]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "player_id": self.player_id,
             "best_strategy_index": self.best_strategy_index,
@@ -176,7 +176,7 @@ class NashEquilibriumSolver:
     def find_pure_equilibria(
         payoff_matrix_p1: np.ndarray,
         payoff_matrix_p2: np.ndarray,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Find all pure-strategy Nash equilibria by enumeration.
 
@@ -233,7 +233,7 @@ class NashEquilibriumSolver:
     def find_mixed_equilibria_2x2(
         payoff_matrix_p1: np.ndarray,
         payoff_matrix_p2: np.ndarray,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Find mixed-strategy equilibrium for 2×2 games analytically.
 
@@ -293,7 +293,7 @@ class NashEquilibriumSolver:
         payoff_matrix_p1: np.ndarray,
         payoff_matrix_p2: np.ndarray,
         max_support_size: int = 3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Find mixed-strategy equilibria via support enumeration.
 
@@ -354,9 +354,9 @@ class NashEquilibriumSolver:
     def _solve_support(
         A: np.ndarray,
         B: np.ndarray,
-        s1: List[int],
-        s2: List[int],
-    ) -> Optional[Dict[str, Any]]:
+        s1: list[int],
+        s2: list[int],
+    ) -> dict[str, Any] | None:
         """Solve for mixed equilibrium on given supports."""
         n1, n2 = A.shape
         k1, k2 = len(s1), len(s2)
@@ -668,8 +668,8 @@ class CournotDuopoly:
     def solve_linear_n_firm(
         demand_intercept: float,
         demand_slope: float,
-        marginal_costs: List[float],
-    ) -> Dict[str, Any]:
+        marginal_costs: list[float],
+    ) -> dict[str, Any]:
         """
         Solve Cournot oligopoly with N firms and linear demand.
 

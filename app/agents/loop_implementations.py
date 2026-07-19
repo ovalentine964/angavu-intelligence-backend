@@ -18,8 +18,8 @@ while preserving their original service-wrapping behavior.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -33,14 +33,12 @@ from app.agents.loops import (
     FeedbackAgent,
     HumanInTheLoopAgent,
     OODAAgent,
-    OrientationState,
     PlanExecuteAgent,
     PlanStep,
     ReActAgent,
     ReflexionAgent,
     SupervisorAgent,
 )
-from app.agents.loops.feedback_loop import LearningSignal, SignalType
 
 logger = structlog.get_logger(__name__)
 
@@ -78,7 +76,7 @@ class TransactionProcessorReAct(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Generate explicit reasoning about transaction processing."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -156,7 +154,7 @@ class TransactionProcessorReAct(ReActAgent):
                 payload={
                     "user_id": user_id,
                     "is_batch": is_batch,
-                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "processed_at": datetime.now(UTC).isoformat(),
                     "status": "cleaned_and_validated",
                 },
             )
@@ -217,8 +215,8 @@ class IntelligenceGeneratorPlanExecute(PlanExecuteAgent):
     async def _create_plan(
         self,
         goal: str,
-        context: Dict[str, Any],
-        reflexion_feedback: Optional[Dict] = None,
+        context: dict[str, Any],
+        reflexion_feedback: dict | None = None,
     ) -> ExecutionPlan:
         """Create a multi-step intelligence generation plan."""
         event_data = context.get("event", {})
@@ -305,8 +303,8 @@ class IntelligenceGeneratorPlanExecute(PlanExecuteAgent):
         return plan
 
     async def _execute_plan_step(
-        self, action: str, parameters: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a single plan step."""
         start = time.time()
 
@@ -410,7 +408,7 @@ class ReportGeneratorReflexion(ReflexionAgent):
             max_retries=2,
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Decide which report to generate with reasoning."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -465,7 +463,7 @@ class ReportGeneratorReflexion(ReflexionAgent):
                     "user_id": user_id,
                     "report_type": report_type,
                     "language": language,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": datetime.now(UTC).isoformat(),
                 },
             )
             delivery_event = AgentEvent(
@@ -475,7 +473,7 @@ class ReportGeneratorReflexion(ReflexionAgent):
                     "user_id": user_id,
                     "report_type": report_type,
                     "channel": "whatsapp",
-                    "delivered_at": datetime.now(timezone.utc).isoformat(),
+                    "delivered_at": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -553,7 +551,7 @@ class SelfEvolutionEventSourced(EventSourcedAgent):
     - Debugging: Trace why a particular feature spec was generated
     """
 
-    def __init__(self, event_store: Optional[EventStore] = None):
+    def __init__(self, event_store: EventStore | None = None):
         super().__init__(
             name="SelfEvolution",
             role="Self-improvement and feedback analysis specialist (Event-Sourced)",
@@ -569,7 +567,7 @@ class SelfEvolutionEventSourced(EventSourcedAgent):
             event_store=event_store,
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Decide how to process feedback with reasoning."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -619,7 +617,7 @@ class SelfEvolutionEventSourced(EventSourcedAgent):
                         "worker_id": worker_id,
                         "feedback_type": feedback_type,
                         "cluster_size": decision.parameters.get("feedback_count", 0),
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "generated_at": datetime.now(UTC).isoformat(),
                     },
                 ))
                 events_to_publish.append(AgentEvent(
@@ -668,14 +666,14 @@ class PipelineSupervisor(SupervisorAgent):
     - Supervision audit trail via event sourcing
     """
 
-    def __init__(self, event_store: Optional[EventStore] = None):
+    def __init__(self, event_store: EventStore | None = None):
         super().__init__(
             name="PipelineSupervisor",
             role="Full pipeline coordinator and supervisor",
             event_store=event_store,
         )
 
-    def setup_agents(self, event_store: Optional[EventStore] = None) -> None:
+    def setup_agents(self, event_store: EventStore | None = None) -> None:
         """Register all pipeline agents with fallbacks."""
         store = event_store or self._event_store
 
@@ -729,7 +727,7 @@ class PriceAlertOODA(OODAAgent):
             ],
         )
 
-    async def _extract_observations(self, event: AgentEvent) -> Dict[str, Any]:
+    async def _extract_observations(self, event: AgentEvent) -> dict[str, Any]:
         """Extract price-related signals from the event."""
         payload = event.payload or {}
 
@@ -754,7 +752,7 @@ class PriceAlertOODA(OODAAgent):
             "confidence": payload.get("confidence", 0.9),
         }
 
-    async def _compute_orientation_update(self, observations: Dict[str, Any]) -> Dict[str, float]:
+    async def _compute_orientation_update(self, observations: dict[str, Any]) -> dict[str, float]:
         """Update orientation axes based on price observations."""
         updates = {}
         urgency = observations.get("urgency", 0.3)
@@ -770,7 +768,7 @@ class PriceAlertOODA(OODAAgent):
         return updates
 
     async def _ooda_decide(
-        self, event: AgentEvent, observations: Dict[str, Any]
+        self, event: AgentEvent, observations: dict[str, Any]
     ) -> AgentDecision:
         """Decide whether to alert based on observation and orientation."""
         data = observations.get("data", {})
@@ -922,7 +920,7 @@ class MarketFeedbackAgent(FeedbackAgent):
 
         return result
 
-    async def _compute_outcome_value(self, payload: Dict[str, Any]) -> float:
+    async def _compute_outcome_value(self, payload: dict[str, Any]) -> float:
         """Compute normalized outcome value from market data."""
         # Price prediction accuracy
         if "predicted_price" in payload and "actual_price" in payload:
@@ -936,14 +934,14 @@ class MarketFeedbackAgent(FeedbackAgent):
         # Default: use success/failure
         return await super()._compute_outcome_value(payload)
 
-    async def _compute_expected_value(self, payload: Dict[str, Any]) -> float:
+    async def _compute_expected_value(self, payload: dict[str, Any]) -> float:
         """Compute expected outcome value for market predictions."""
         if "predicted_price" in payload:
             # We expect our predictions to be accurate
             return 0.8
         return 0.5
 
-    def _extract_tags(self, payload: Dict[str, Any]) -> List[str]:
+    def _extract_tags(self, payload: dict[str, Any]) -> list[str]:
         """Extract market-specific tags for pattern grouping."""
         tags = super()._extract_tags(payload)
         if "product" in payload:
@@ -978,7 +976,7 @@ class CreditDecisionHITL(HumanInTheLoopAgent):
     - 3+ consecutive failures: Pause and escalate
     """
 
-    def __init__(self, wrapped_agent: Optional[BiasharaAgent] = None):
+    def __init__(self, wrapped_agent: BiasharaAgent | None = None):
         # Create a default wrapped agent if none provided
         if wrapped_agent is None:
             wrapped_agent = BiasharaAgent(
@@ -998,9 +996,9 @@ class CreditDecisionHITL(HumanInTheLoopAgent):
 
 
 def create_loop_enhanced_agents(
-    event_store: Optional[EventStore] = None,
+    event_store: EventStore | None = None,
     event_bus: Any = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create all loop-enhanced agents for the Angavu Intelligence pipeline.
 

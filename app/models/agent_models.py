@@ -12,13 +12,12 @@ These are Pydantic models for API serialization, not ORM models.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
-from uuid import UUID, uuid4
+from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
-
 
 # ── Worker Types ────────────────────────────────────────────────────
 
@@ -40,7 +39,7 @@ class AgentConfig(BaseModel):
     agent_name: str = Field(..., description="Agent name (e.g., TransportAgent)")
     worker_type: WorkerType = Field(..., description="Worker type this agent serves")
     tier: int = Field(..., ge=1, le=3, description="Agent tier (1=Core, 2=Domain, 3=Utility)")
-    capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
+    capabilities: list[str] = Field(default_factory=list, description="Agent capabilities")
     is_active: bool = Field(default=True, description="Whether agent is active")
     version: str = Field(default="1.0.0", description="Agent version")
 
@@ -60,11 +59,11 @@ class AgentInsight(BaseModel):
     category: str = Field(..., description="Insight category (e.g., fuel_efficiency, spoilage)")
     title: str = Field(..., description="Short insight title")
     value: Any = Field(..., description="Insight value (number, string, dict)")
-    metric: Optional[str] = Field(None, description="Unit of measurement")
-    trend: Optional[str] = Field(None, description="Trend direction: up, down, stable")
+    metric: str | None = Field(None, description="Unit of measurement")
+    trend: str | None = Field(None, description="Trend direction: up, down, stable")
     period_days: int = Field(default=30, description="Analysis period in days")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="When insight was generated",
     )
 
@@ -95,7 +94,7 @@ class AgentRecommendation(BaseModel):
     )
     language: str = Field(default="en", description="Language: en or sw")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         description="When recommendation was generated",
     )
 
@@ -110,7 +109,7 @@ class AgentRecommendation(BaseModel):
 class ClassifyRequest(BaseModel):
     """Request to classify a worker's type."""
     user_id: str = Field(..., description="User ID to classify")
-    transactions: Optional[List[Dict[str, Any]]] = Field(
+    transactions: list[dict[str, Any]] | None = Field(
         None,
         description="Transaction data (if not fetching from DB)",
     )
@@ -120,7 +119,7 @@ class ClassifyResponse(BaseModel):
     """Response from worker classification."""
     user_id: str
     primary_type: WorkerType
-    types: List[Dict[str, Any]] = Field(
+    types: list[dict[str, Any]] = Field(
         ...,
         description="List of {type, confidence, evidence}",
     )
@@ -133,8 +132,8 @@ class InsightsResponse(BaseModel):
     worker_type: WorkerType
     agent_name: str
     period_days: int
-    insights: List[AgentInsight]
-    analysis: Dict[str, Any] = Field(
+    insights: list[AgentInsight]
+    analysis: dict[str, Any] = Field(
         default_factory=dict,
         description="Raw analysis data",
     )
@@ -145,5 +144,5 @@ class RecommendationsResponse(BaseModel):
     user_id: str
     worker_type: WorkerType
     agent_name: str
-    recommendations: List[AgentRecommendation]
+    recommendations: list[AgentRecommendation]
     language: str = "en"

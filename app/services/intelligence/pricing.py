@@ -9,8 +9,7 @@ Revenue Model (from Doc 18):
 - 4 buyer segments: FMCG, Government, Financial Institutions, NGOs
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -20,10 +19,10 @@ class TierPricing:
     tier: str
     price_monthly_kes: float
     price_monthly_usd: float
-    features: List[str]
+    features: list[str]
     refresh_frequency: str
-    max_markets: Optional[int] = None
-    api_queries_per_month: Optional[int] = None
+    max_markets: int | None = None
+    api_queries_per_month: int | None = None
     support_level: str = "email"
 
 
@@ -34,10 +33,10 @@ class ProductPricing:
     product_name: str
     product_code: str
     buyer_segment: str
-    tiers: List[TierPricing]
-    one_time_price_kes: Optional[float] = None
-    one_time_price_usd: Optional[float] = None
-    per_query_price_usd: Optional[float] = None
+    tiers: list[TierPricing]
+    one_time_price_kes: float | None = None
+    one_time_price_usd: float | None = None
+    per_query_price_usd: float | None = None
 
 
 # USD to KES rate (approximate)
@@ -437,7 +436,7 @@ DISTRIBUTION_MONITORING_MONTHLY_USD = 3_000
 # =========================================================================
 
 
-def get_product_pricing(product_code: str) -> Optional[ProductPricing]:
+def get_product_pricing(product_code: str) -> ProductPricing | None:
     """Get pricing configuration for a product."""
     pricing_map = {
         "soko_pulse": SOKO_PULSE_PRICING,
@@ -480,7 +479,7 @@ def calculate_monthly_cost(
     product_code: str,
     tier: str,
     volume: int = 0,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate monthly cost for a product/tier combination.
 

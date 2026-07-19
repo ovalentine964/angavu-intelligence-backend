@@ -19,15 +19,14 @@ Configuration:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import and_, select, func
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from app.models.transaction import Transaction
+from app.models.user import User
 from app.services.whatsapp_delivery import WhatsAppDelivery
 
 logger = structlog.get_logger(__name__)
@@ -41,7 +40,7 @@ EAT_OFFSET = timedelta(hours=3)
 
 def now_eat() -> datetime:
     """Get current time in East Africa Time (UTC+3)."""
-    return datetime.now(timezone.utc) + EAT_OFFSET
+    return datetime.now(UTC) + EAT_OFFSET
 
 
 # =========================================================================
@@ -57,11 +56,11 @@ class DailyReportScheduler:
     FastAPI lifespan event).
     """
 
-    def __init__(self, db_session_factory, whatsapp: Optional[WhatsAppDelivery] = None):
+    def __init__(self, db_session_factory, whatsapp: WhatsAppDelivery | None = None):
         self.db_session_factory = db_session_factory
         self.whatsapp = whatsapp or WhatsAppDelivery()
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     async def start(self):
         """Start the scheduler loop."""
@@ -142,7 +141,7 @@ class DailyReportScheduler:
                     # Get today's transactions for this worker
                     today_start = datetime.combine(
                         now_eat().date(), datetime.min.time()
-                    ).replace(tzinfo=timezone.utc) - EAT_OFFSET
+                    ).replace(tzinfo=UTC) - EAT_OFFSET
 
                     result = await db.execute(
                         select(Transaction).where(
@@ -224,7 +223,7 @@ class DailyReportScheduler:
                     now = now_eat()
                     today_start = datetime.combine(
                         now.date(), datetime.min.time()
-                    ).replace(tzinfo=timezone.utc) - EAT_OFFSET
+                    ).replace(tzinfo=UTC) - EAT_OFFSET
                     yesterday_start = today_start - timedelta(days=1)
 
                     result = await db.execute(
@@ -283,7 +282,7 @@ class DailyReportScheduler:
 
             logger.info("morning_briefings_complete", sent=sent_count)
 
-    async def _get_whatsapp_workers(self, db: AsyncSession) -> List[User]:
+    async def _get_whatsapp_workers(self, db: AsyncSession) -> list[User]:
         """
         Get all active workers who have WhatsApp enabled.
 
@@ -303,7 +302,7 @@ class DailyReportScheduler:
         )
         return result.scalars().all()
 
-    def _get_whatsapp_number(self, worker: User) -> Optional[str]:
+    def _get_whatsapp_number(self, worker: User) -> str | None:
         """
         Extract WhatsApp number from worker profile.
         Checks multiple possible storage locations.

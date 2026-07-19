@@ -14,7 +14,7 @@ Products:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -32,7 +32,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
 from app.db.database import Base
-
 
 # =========================================================================
 # 1. Soko Pulse — FMCG Demand Forecasting
@@ -124,7 +123,7 @@ class SokoPulseReport(Base):
         nullable=False, default="pending", index=True,
     )
     methodology = Column(JSON, nullable=True, doc="Forecast methodology info")
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -218,7 +217,7 @@ class BiasharaPulseReport(Base):
         nullable=False, default="pending", index=True,
     )
     price_charged_kes = Column(Float, nullable=True, default=0)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -326,7 +325,7 @@ class AlamaScore(Base):
         nullable=False, default="pending", index=True,
     )
     computed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -422,7 +421,7 @@ class JamiiInsightsReport(Base):
         nullable=False, default="pending", index=True,
     )
     price_charged_kes = Column(Float, nullable=True, default=0)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -517,7 +516,7 @@ class TaxBaseEstimation(Base):
         nullable=False, default="pending", index=True,
     )
     price_charged_kes = Column(Float, nullable=True, default=0)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -617,7 +616,7 @@ class DistributionGapReport(Base):
         Enum("one_time", "monitoring", name="dist_gap_report_type_enum"),
         nullable=False, default="one_time",
     )
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -661,8 +660,8 @@ class AlamaScoreOutcome(Base):
     amount = Column(Float, nullable=True)
     predicted_default_prob = Column(Float, nullable=True)
     alama_score_at_issue = Column(Integer, nullable=True)
-    recorded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    recorded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         Index("idx_alama_outcome_business", "business_hash"),

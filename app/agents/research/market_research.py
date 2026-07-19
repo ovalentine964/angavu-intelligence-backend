@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -80,8 +80,8 @@ class MarketResearchAgent(BiasharaAgent):
             ],
         )
         self._price_history: deque = deque(maxlen=max_history)
-        self._trend_signals: List[Dict[str, Any]] = []
-        self._competitor_signals: List[Dict[str, Any]] = []
+        self._trend_signals: list[dict[str, Any]] = []
+        self._competitor_signals: list[dict[str, Any]] = []
         self._research_count = 0
 
     async def observe(self, event: AgentEvent) -> None:
@@ -96,7 +96,7 @@ class MarketResearchAgent(BiasharaAgent):
         ):
             self._logger.debug("ignoring_event", event_type=event.event_type.value)
 
-    async def think(self, context: Dict[str, Any]) -> AgentDecision:
+    async def think(self, context: dict[str, Any]) -> AgentDecision:
         """Determine research action needed."""
         event_data = context.get("event", {})
         event_type = event_data.get("event_type", "")
@@ -195,7 +195,7 @@ class MarketResearchAgent(BiasharaAgent):
                     payload={
                         "research_type": "market",
                         "focus": decision.parameters.get("focus", "all"),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     },
                 ))
 
@@ -227,7 +227,7 @@ class MarketResearchAgent(BiasharaAgent):
                 duration_ms=(time.time() - start) * 1000,
             )
 
-    def _full_research(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _full_research(self, params: dict[str, Any]) -> dict[str, Any]:
         """Run comprehensive market research."""
         focus = params.get("focus", "all")
 
@@ -263,10 +263,10 @@ class MarketResearchAgent(BiasharaAgent):
             },
             "commodities_tracked": len(self.TRACKED_COMMODITIES),
             "competitors_tracked": len(self.TRACKED_COMPETITORS),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
-    def _analyze_alert(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_alert(self, params: dict[str, Any]) -> dict[str, Any]:
         """Analyze a market alert for implications."""
         commodity = params.get("commodity", "")
         change_pct = params.get("change_pct", 0)
@@ -274,7 +274,7 @@ class MarketResearchAgent(BiasharaAgent):
         self._trend_signals.append({
             "commodity": commodity,
             "change_pct": change_pct,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Assess if this is a trend or noise
@@ -301,7 +301,7 @@ class MarketResearchAgent(BiasharaAgent):
             } if abs(change_pct) > 10 else None,
         }
 
-    def _extract_price_signal(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_price_signal(self, params: dict[str, Any]) -> dict[str, Any]:
         """Extract price signal from transaction data."""
         amount = params.get("amount", 0)
         quantity = params.get("quantity", 0)
@@ -312,7 +312,7 @@ class MarketResearchAgent(BiasharaAgent):
                 "commodity": params.get("commodity"),
                 "market": params.get("market"),
                 "unit_price": unit_price,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             })
 
         return {
@@ -322,7 +322,7 @@ class MarketResearchAgent(BiasharaAgent):
             "price_history_size": len(self._price_history),
         }
 
-    def _integrate_insight(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _integrate_insight(self, params: dict[str, Any]) -> dict[str, Any]:
         """Integrate domain-specific insights into market research."""
         domain = params.get("domain", "")
         insights = params.get("insights", {})
@@ -333,7 +333,7 @@ class MarketResearchAgent(BiasharaAgent):
             "market_research_enriched": True,
         }
 
-    def get_research_stats(self) -> Dict[str, Any]:
+    def get_research_stats(self) -> dict[str, Any]:
         """Return market research agent statistics."""
         return {
             "research_count": self._research_count,

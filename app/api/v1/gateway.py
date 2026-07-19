@@ -7,12 +7,10 @@ adapters and external services can call.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 logger = structlog.get_logger(__name__)
@@ -54,14 +52,14 @@ class GatewayMessageRequest(BaseModel):
     )
     worker_id: str = Field(..., description="Worker UUID or phone number")
     content: str = Field(..., description="Message content or ASR transcript")
-    language: Optional[str] = Field(default="sw", description="Language code")
-    content_type: Optional[str] = Field(
+    language: str | None = Field(default="sw", description="Language code")
+    content_type: str | None = Field(
         default="text", description="text, audio, image"
     )
-    media_url: Optional[str] = Field(
+    media_url: str | None = Field(
         default=None, description="URL for audio/image content"
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None, description="Additional metadata"
     )
 
@@ -70,11 +68,11 @@ class GatewayResponse(BaseModel):
     """Standard gateway response."""
 
     success: bool
-    content: Optional[str] = None
-    session_id: Optional[str] = None
-    request_id: Optional[str] = None
-    elapsed_ms: Optional[int] = None
-    error: Optional[str] = None
+    content: str | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    elapsed_ms: int | None = None
+    error: str | None = None
 
 
 class GatewayStatsResponse(BaseModel):
@@ -267,9 +265,9 @@ async def get_stats(
 async def send_proactive(
     worker_id: str,
     content: str,
-    channel: Optional[str] = None,
+    channel: str | None = None,
     gateway: Any = Depends(get_gateway),
-) -> Dict[str, bool]:
+) -> dict[str, bool]:
     """
     Send a proactive message to a worker on their preferred channel.
     Used for alerts, reminders, and notifications.

@@ -22,13 +22,9 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any
 
 import structlog
-
-if TYPE_CHECKING:
-    from app.agents.base import BiasharaAgent
-    from app.agents.event_bus import EventBus
 
 logger = structlog.get_logger(__name__)
 
@@ -64,32 +60,32 @@ class CircuitBreakerGovernance:
 
     def __init__(
         self,
-        event_bus: Optional[Any] = None,
-        agent_registry: Optional[Dict[str, Any]] = None,
+        event_bus: Any | None = None,
+        agent_registry: dict[str, Any] | None = None,
     ):
         self._event_bus = event_bus
         self._agent_registry = agent_registry or {}
-        self._circuit_events: List[CircuitEvent] = []
+        self._circuit_events: list[CircuitEvent] = []
         self._max_events = 1000
-        self._paused_agents: Dict[str, float] = {}  # agent_name → paused_at
-        self._auto_resume_tasks: Dict[str, asyncio.Task] = {}
+        self._paused_agents: dict[str, float] = {}  # agent_name → paused_at
+        self._auto_resume_tasks: dict[str, asyncio.Task] = {}
         self._logger = logger.bind(component="circuit_governance")
 
         # Configuration
         self._auto_resume_enabled: bool = True
         self._auto_resume_max_attempts: int = 3
         self._escalate_after_failures: int = 3  # Escalate after N auto-resume failures
-        self._auto_resume_failures: Dict[str, int] = {}
+        self._auto_resume_failures: dict[str, int] = {}
 
         # Auto-pause policy: pause agent after N failures in T seconds
         self._auto_pause_threshold: int = 5
         self._auto_pause_window_s: float = 60.0
-        self._failure_timestamps: Dict[str, List[float]] = {}
+        self._failure_timestamps: dict[str, list[float]] = {}
 
         # Half-open exponential backoff
         self._half_open_backoff_base: float = 30.0
         self._half_open_backoff_max: float = 300.0
-        self._half_open_attempts: Dict[str, int] = {}
+        self._half_open_attempts: dict[str, int] = {}
 
     def register_agent(self, agent_name: str, agent: Any) -> None:
         """Register an agent for governance monitoring."""
@@ -316,6 +312,7 @@ class CircuitBreakerGovernance:
                 # Update Prometheus
                 try:
                     from prometheus_client import Gauge
+
                     from app.infrastructure.metrics import _registry
                     if not hasattr(self, '_prom_agent_paused'):
                         self._prom_agent_paused = Gauge(
@@ -345,7 +342,6 @@ class CircuitBreakerGovernance:
 
                 # Update Prometheus
                 try:
-                    from prometheus_client import Gauge
                     if hasattr(self, '_prom_agent_paused'):
                         self._prom_agent_paused.labels(agent_name=agent_name).set(0)
                 except Exception:
@@ -480,15 +476,15 @@ class CircuitBreakerGovernance:
         self._auto_resume_failures[agent_name] = 0
         return True
 
-    def get_paused_agents(self) -> List[str]:
+    def get_paused_agents(self) -> list[str]:
         """Get list of currently paused agents."""
         return list(self._paused_agents.keys())
 
     def get_circuit_history(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         limit: int = 50,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Get circuit breaker event history."""
         events = self._circuit_events
         if agent_name:

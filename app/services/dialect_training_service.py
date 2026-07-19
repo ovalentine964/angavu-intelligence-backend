@@ -43,9 +43,9 @@ import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -79,7 +79,7 @@ class DialectCode(str, Enum):
 
 
 # Map dialect codes to language family for grouped aggregation
-DIALECT_FAMILIES: Dict[str, str] = {
+DIALECT_FAMILIES: dict[str, str] = {
     DialectCode.SHENG: "bantu_creole",       # Swahili-based creole
     DialectCode.KIKUYU: "bantu",
     DialectCode.DHOLUO: "nilotic",
@@ -96,7 +96,7 @@ DIALECT_FAMILIES: Dict[str, str] = {
 }
 
 # Geographic metadata for dialect regions
-DIALECT_GEO: Dict[str, Dict[str, Any]] = {
+DIALECT_GEO: dict[str, dict[str, Any]] = {
     DialectCode.SHENG:    {"name": "Sheng",    "center": [-1.29, 36.82], "country": "KE"},
     DialectCode.KIKUYU:   {"name": "Kikuyu",   "center": [-0.72, 36.98], "country": "KE"},
     DialectCode.DHOLUO:   {"name": "Dholuo",   "center": [-0.10, 34.76], "country": "KE"},
@@ -143,11 +143,11 @@ class DialectGradient:
     device_id: str                              # SHA-256 hashed device ID
     dialect: str                                # Dialect code
     timestamp: int                              # Epoch milliseconds
-    phoneme_corrections: List[Dict[str, Any]]   # Phoneme-level correction patterns
-    vocabulary_signals: List[Dict[str, Any]]    # New/corrected vocabulary entries
-    pronunciation_delta: Optional[str] = None   # Base64-encoded pronunciation model delta
-    prosody_signals: Optional[Dict[str, Any]] = None  # Tone/stress/rhythm patterns
-    grammar_patterns: Optional[List[Dict[str, Any]]] = None  # Grammar correction patterns
+    phoneme_corrections: list[dict[str, Any]]   # Phoneme-level correction patterns
+    vocabulary_signals: list[dict[str, Any]]    # New/corrected vocabulary entries
+    pronunciation_delta: str | None = None   # Base64-encoded pronunciation model delta
+    prosody_signals: dict[str, Any] | None = None  # Tone/stress/rhythm patterns
+    grammar_patterns: list[dict[str, Any]] | None = None  # Grammar correction patterns
     confidence_score: float = 0.5               # Device-side confidence in gradient quality
     sample_count: int = 1                       # Number of local samples used
 
@@ -158,14 +158,14 @@ class DialectModelVersion:
     version: str
     dialect: str
     family: str
-    asr_adapter_deltas: Optional[str] = None    # Base64 LoRA deltas for ASR
-    tts_adapter_deltas: Optional[str] = None    # Base64 LoRA deltas for TTS
-    vocabulary: List[Dict[str, Any]] = field(default_factory=list)
-    pronunciation_map: List[Dict[str, Any]] = field(default_factory=list)
-    prosody_params: Optional[Dict[str, Any]] = None
-    grammar_rules: List[Dict[str, Any]] = field(default_factory=list)
-    calibration_params: Dict[str, float] = field(default_factory=dict)
-    training_metrics: Dict[str, Any] = field(default_factory=dict)
+    asr_adapter_deltas: str | None = None    # Base64 LoRA deltas for ASR
+    tts_adapter_deltas: str | None = None    # Base64 LoRA deltas for TTS
+    vocabulary: list[dict[str, Any]] = field(default_factory=list)
+    pronunciation_map: list[dict[str, Any]] = field(default_factory=list)
+    prosody_params: dict[str, Any] | None = None
+    grammar_rules: list[dict[str, Any]] = field(default_factory=list)
+    calibration_params: dict[str, float] = field(default_factory=dict)
+    training_metrics: dict[str, Any] = field(default_factory=dict)
     contributor_count: int = 0
     aggregation_round: int = 0
     created_at: str = ""
@@ -182,10 +182,10 @@ class DialectTrainingStatus:
     pending_gradients: int
     total_gradients_received: int
     unique_devices: int
-    last_aggregation_at: Optional[str]
+    last_aggregation_at: str | None
     aggregation_round: int
     model_available: bool
-    training_metrics: Dict[str, Any]
+    training_metrics: dict[str, Any]
 
 
 @dataclass
@@ -249,9 +249,9 @@ def _add_gaussian_noise(value: float, sigma: float) -> float:
 
 
 def _aggregate_phoneme_corrections(
-    gradients: List[DialectGradient],
+    gradients: list[DialectGradient],
     sigma: float,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Aggregate phoneme correction patterns across devices.
 
@@ -261,7 +261,7 @@ def _aggregate_phoneme_corrections(
     Applies differential privacy noise before returning.
     """
     # Count phoneme corrections across all devices
-    phoneme_counts: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+    phoneme_counts: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "count": 0,
         "weighted_confidence": 0.0,
         "total_weight": 0.0,
@@ -311,16 +311,16 @@ def _aggregate_phoneme_corrections(
 
 
 def _aggregate_vocabulary(
-    gradients: List[DialectGradient],
+    gradients: list[DialectGradient],
     sigma: float,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Aggregate vocabulary signals from device gradients.
 
     Words must appear across ≥ k (k-anonymity) distinct devices
     to be included. Frequencies are DP-noised.
     """
-    word_devices: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+    word_devices: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "devices": set(),
         "total_frequency": 0,
         "meanings": defaultdict(int),
@@ -371,8 +371,8 @@ def _aggregate_vocabulary(
 
 
 def _aggregate_pronunciation_deltas(
-    gradients: List[DialectGradient],
-) -> Optional[str]:
+    gradients: list[DialectGradient],
+) -> str | None:
     """
     Aggregate pronunciation model deltas via weighted average.
 
@@ -382,7 +382,7 @@ def _aggregate_pronunciation_deltas(
     import base64
     import struct
 
-    deltas_with_weights: List[Tuple[List[float], float]] = []
+    deltas_with_weights: list[tuple[list[float], float]] = []
     max_len = 0
 
     for grad in gradients:
@@ -425,9 +425,9 @@ def _aggregate_pronunciation_deltas(
 
 
 def _aggregate_prosody(
-    gradients: List[DialectGradient],
+    gradients: list[DialectGradient],
     sigma: float,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Aggregate prosody signals (tone, stress, rhythm) across devices.
 
@@ -441,7 +441,7 @@ def _aggregate_prosody(
     features = ["pitch_mean", "pitch_std", "speaking_rate", "energy_mean",
                  "rhythm_regularity", "tone_contour_mean"]
 
-    aggregated: Dict[str, float] = {}
+    aggregated: dict[str, float] = {}
     for feat in features:
         values = [p.get(feat, 0.0) for p in prosody_data if feat in p]
         if values:
@@ -453,9 +453,9 @@ def _aggregate_prosody(
 
 
 def _aggregate_grammar_patterns(
-    gradients: List[DialectGradient],
+    gradients: list[DialectGradient],
     sigma: float,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Aggregate grammar correction patterns.
 
@@ -463,7 +463,7 @@ def _aggregate_grammar_patterns(
     (e.g., SOV word order in some Bantu languages, tone-based
     distinctions in Yoruba/Igbo).
     """
-    pattern_counts: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+    pattern_counts: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "count": 0,
         "examples": [],
         "confidence_sum": 0.0,
@@ -524,21 +524,21 @@ class DialectTrainingService:
 
         # In-memory state (production: Redis/PostgreSQL)
         # Pending gradients per dialect
-        self._pending: Dict[str, List[DialectGradient]] = defaultdict(list)
+        self._pending: dict[str, list[DialectGradient]] = defaultdict(list)
         # Published models per dialect
-        self._models: Dict[str, DialectModelVersion] = {}
+        self._models: dict[str, DialectModelVersion] = {}
         # Version counters per dialect
-        self._version_counters: Dict[str, int] = defaultdict(int)
+        self._version_counters: dict[str, int] = defaultdict(int)
         # Unique devices per dialect
-        self._devices: Dict[str, set] = defaultdict(set)
+        self._devices: dict[str, set] = defaultdict(set)
         # Total gradients received per dialect
-        self._total_gradients: Dict[str, int] = defaultdict(int)
+        self._total_gradients: dict[str, int] = defaultdict(int)
         # Aggregation round per dialect
-        self._aggregation_rounds: Dict[str, int] = defaultdict(int)
+        self._aggregation_rounds: dict[str, int] = defaultdict(int)
         # Evaluation metrics per dialect
-        self._metrics: Dict[str, DialectEvaluationMetrics] = {}
+        self._metrics: dict[str, DialectEvaluationMetrics] = {}
         # Last aggregation timestamp per dialect
-        self._last_aggregation: Dict[str, Optional[str]] = defaultdict(lambda: None)
+        self._last_aggregation: dict[str, str | None] = defaultdict(lambda: None)
 
         self._logger = logger.bind(component="dialect_training")
 
@@ -547,7 +547,7 @@ class DialectTrainingService:
     async def submit_gradients(
         self,
         gradient: DialectGradient,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Receive dialect gradient submission from a device.
 
@@ -612,7 +612,7 @@ class DialectTrainingService:
             "pending_count": len(self._pending[dialect]),
         }
 
-    async def list_models(self) -> List[Dict[str, Any]]:
+    async def list_models(self) -> list[dict[str, Any]]:
         """
         List all available dialect models.
 
@@ -639,7 +639,7 @@ class DialectTrainingService:
 
         return models
 
-    async def get_model_download(self, dialect: str) -> Optional[Dict[str, Any]]:
+    async def get_model_download(self, dialect: str) -> dict[str, Any] | None:
         """
         Get the latest dialect model for device download.
 
@@ -676,7 +676,7 @@ class DialectTrainingService:
             "checksum": model.checksum,
         }
 
-    async def get_training_status(self) -> List[DialectTrainingStatus]:
+    async def get_training_status(self) -> list[DialectTrainingStatus]:
         """
         Get training progress for all dialects.
 
@@ -711,7 +711,7 @@ class DialectTrainingService:
 
         return statuses
 
-    async def get_evaluation_metrics(self, dialect: str) -> Optional[Dict[str, Any]]:
+    async def get_evaluation_metrics(self, dialect: str) -> dict[str, Any] | None:
         """
         Get detailed evaluation metrics for a dialect model.
 
@@ -749,7 +749,7 @@ class DialectTrainingService:
 
     # ── Internal Training ─────────────────────────────────────────
 
-    async def _train_dialect(self, dialect: str) -> Optional[str]:
+    async def _train_dialect(self, dialect: str) -> str | None:
         """
         Aggregate pending gradients and train dialect model.
 
@@ -842,7 +842,7 @@ class DialectTrainingService:
         self._version_counters[dialect] += 1
         version = f"v{MODEL_MAJOR}.{self._version_counters[dialect]}"
 
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
 
         # Compute checksum over model content
         import json as _json
@@ -900,10 +900,10 @@ class DialectTrainingService:
     def _compute_evaluation(
         self,
         dialect: str,
-        gradients: List[DialectGradient],
-        vocabulary: List[Dict[str, Any]],
-        phoneme_corrections: List[Dict[str, Any]],
-        prev_metrics: Optional[DialectEvaluationMetrics],
+        gradients: list[DialectGradient],
+        vocabulary: list[dict[str, Any]],
+        phoneme_corrections: list[dict[str, Any]],
+        prev_metrics: DialectEvaluationMetrics | None,
     ) -> DialectEvaluationMetrics:
         """
         Compute evaluation metrics for the aggregated model.
@@ -963,7 +963,7 @@ class DialectTrainingService:
             grammar_accuracy=round(grammar_acc, 4),
             prosody_naturalness=round(max(0.0, 1.0 - estimated_wer * 0.5), 4),
             sample_count=sum(g.sample_count for g in gradients),
-            evaluated_at=datetime.now(timezone.utc).isoformat(),
+            evaluated_at=datetime.now(UTC).isoformat(),
         )
 
     def _verify_improvement(
@@ -1003,7 +1003,7 @@ class DialectTrainingService:
         self,
         dialect: str,
         model: DialectModelVersion,
-        gradients: List[DialectGradient],
+        gradients: list[DialectGradient],
     ) -> None:
         """
         Push aggregated dialect model into the federated learning pipeline.
@@ -1013,9 +1013,9 @@ class DialectTrainingService:
         """
         try:
             from app.schemas.federated_learning import (
-                FLUpdate,
                 AnonymizedPattern,
                 CalibrationParams,
+                FLUpdate,
                 UploadMetadata,
             )
 
@@ -1030,7 +1030,7 @@ class DialectTrainingService:
                         f"{pattern_str}:{pc.get('confidence', 0)}".encode()
                     ).hexdigest()[:16],
                     phoneme_pattern=pattern_str,
-                    hour_of_day=datetime.now(timezone.utc).hour,
+                    hour_of_day=datetime.now(UTC).hour,
                     edit_distance=max(0.0, min(1.0, 1.0 - pc.get("confidence", 0.5))),
                 ))
 
@@ -1080,7 +1080,7 @@ class DialectTrainingService:
 
     # ── Metrics ───────────────────────────────────────────────────
 
-    def get_system_metrics(self) -> Dict[str, Any]:
+    def get_system_metrics(self) -> dict[str, Any]:
         """Get system-wide dialect training metrics."""
         return {
             "supported_dialects": len(DialectCode),
@@ -1110,7 +1110,7 @@ class DialectTrainingService:
 
 
 # Module-level singleton
-_service: Optional[DialectTrainingService] = None
+_service: DialectTrainingService | None = None
 
 
 def get_dialect_training_service(

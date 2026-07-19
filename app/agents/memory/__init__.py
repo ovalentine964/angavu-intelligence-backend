@@ -8,25 +8,25 @@ Implements:
 """
 
 from app.agents.memory.tiered import (
-    MemoryTier,
+    EpisodicMemory,
+    EpisodicRecord,
+    LongTermMemory,
+    LongTermPattern,
     MemoryImportance,
     MemoryItem,
-    EpisodicRecord,
-    LongTermPattern,
-    WorkingMemory,
-    EpisodicMemory,
-    LongTermMemory,
+    MemoryTier,
     TieredMemoryManager,
+    WorkingMemory,
 )
 
 __all__ = [
-    "MemoryTier",
+    "EpisodicMemory",
+    "EpisodicRecord",
+    "LongTermMemory",
+    "LongTermPattern",
     "MemoryImportance",
     "MemoryItem",
-    "EpisodicRecord",
-    "LongTermPattern",
-    "WorkingMemory",
-    "EpisodicMemory",
-    "LongTermMemory",
+    "MemoryTier",
     "TieredMemoryManager",
+    "WorkingMemory",
 ]

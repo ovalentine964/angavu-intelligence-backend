@@ -48,11 +48,10 @@ import math
 import secrets
 import time
 import uuid
-from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -86,14 +85,14 @@ class AggregatedSignal:
     surprise: float = 0.0
     signal_count: int = 1
     confidence: float = 0.0
-    context_tags: List[str] = field(default_factory=list)
+    context_tags: list[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
     # Derived correction patterns for FL
     error_type: str = ""
     edit_distance: float = 0.0
     phoneme_pattern: str = ""
 
-    def to_fl_pattern(self) -> Dict[str, Any]:
+    def to_fl_pattern(self) -> dict[str, Any]:
         """Convert to FL-compatible correction pattern."""
         return {
             "errorType": self.error_type or f"adaptive_{self.source.value}",
@@ -104,7 +103,7 @@ class AggregatedSignal:
                 f"{self.outcome_value}:{self.expected_value}".encode()
             ).hexdigest()[:16],
             "phonemePattern": self.phoneme_pattern,
-            "hourOfDay": datetime.now(timezone.utc).hour,
+            "hourOfDay": datetime.now(UTC).hour,
             "editDistance": max(0.0, min(1.0, self.surprise)),
         }
 
@@ -121,11 +120,11 @@ class WorkerLearningState:
     total_signals: int = 0
     cumulative_outcome: float = 0.0
     cumulative_expected: float = 0.0
-    signal_buffer: List[AggregatedSignal] = field(default_factory=list)
+    signal_buffer: list[AggregatedSignal] = field(default_factory=list)
     last_aggregated: float = 0.0
     last_pushed_to_fl: float = 0.0
     # Rolling window of recent outcomes for trend detection
-    recent_outcomes: List[float] = field(default_factory=list)
+    recent_outcomes: list[float] = field(default_factory=list)
     max_recent = 100
 
     @property
@@ -217,10 +216,10 @@ class AdaptiveLearningService:
         """
         self._fl_service = fl_service
         self._session_sync = session_sync
-        self._worker_states: Dict[str, WorkerLearningState] = {}
+        self._worker_states: dict[str, WorkerLearningState] = {}
         self._running = False
         self._event_bus: Any = None
-        self._flush_task: Optional[Any] = None
+        self._flush_task: Any | None = None
 
         # Metrics
         self._total_signals_received = 0
@@ -356,7 +355,7 @@ class AdaptiveLearningService:
 
     def _extract_feedback_signal(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         state: WorkerLearningState,
     ) -> AggregatedSignal:
         """Extract signal from explicit feedback event."""
@@ -388,7 +387,7 @@ class AdaptiveLearningService:
 
     def _extract_transaction_signal(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         state: WorkerLearningState,
     ) -> AggregatedSignal:
         """Extract signal from transaction outcome."""
@@ -424,7 +423,7 @@ class AdaptiveLearningService:
 
     def _extract_performance_signal(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         state: WorkerLearningState,
     ) -> AggregatedSignal:
         """Extract signal from agent performance recording."""
@@ -518,7 +517,7 @@ class AdaptiveLearningService:
 
     def _aggregate_to_fl_update(
         self,
-        signals: List[AggregatedSignal],
+        signals: list[AggregatedSignal],
         state: WorkerLearningState,
     ) -> Any:
         """
@@ -632,7 +631,7 @@ class AdaptiveLearningService:
                 "outcome_trend": state.outcome_trend(),
                 "mean_outcome": state.mean_outcome,
                 "mean_surprise": state.mean_surprise,
-                "synced_at": datetime.now(timezone.utc).isoformat(),
+                "synced_at": datetime.now(UTC).isoformat(),
             },
         )
 
@@ -650,7 +649,7 @@ class AdaptiveLearningService:
     async def get_learning_context(
         self,
         worker_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get the current adaptive learning context for a worker.
 
@@ -715,8 +714,14 @@ class AdaptiveLearningService:
         try:
             from app.schemas.federated_learning import (
                 AnonymizedPattern as AP,
-                FLUpdate as FU,
+            )
+            from app.schemas.federated_learning import (
                 CalibrationParams as CP,
+            )
+            from app.schemas.federated_learning import (
+                FLUpdate as FU,
+            )
+            from app.schemas.federated_learning import (
                 UploadMetadata as UM,
             )
             self._fl_update_cls = FU
@@ -728,7 +733,7 @@ class AdaptiveLearningService:
 
     # ── Metrics ────────────────────────────────────────────────────
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get adaptive learning service metrics."""
         return {
             "total_signals_received": self._total_signals_received,
@@ -751,7 +756,7 @@ class AdaptiveLearningService:
             },
         }
 
-    def get_worker_state(self, worker_id: str) -> Optional[Dict[str, Any]]:
+    def get_worker_state(self, worker_id: str) -> dict[str, Any] | None:
         """Get learning state for a specific worker."""
         state = self._worker_states.get(worker_id)
         if not state:

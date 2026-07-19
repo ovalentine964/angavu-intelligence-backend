@@ -15,14 +15,13 @@ Research-backed behavioral nudges:
 - Present bias countermeasures (small immediate wins)
 """
 
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import polars as pl
 import structlog
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.goal import Goal, GoalMilestone, GoalProgressEntry
@@ -122,7 +121,7 @@ _CATEGORY_KEYWORDS = {
 }
 
 
-def _parse_voice_goal(transcript: str) -> Dict[str, Any]:
+def _parse_voice_goal(transcript: str) -> dict[str, Any]:
     """
     Parse natural language (Swahili/English) into structured goal data.
 
@@ -181,17 +180,17 @@ async def create_goal(
     title: str,
     category: str,
     target_amount: float,
-    target_date: Optional[date] = None,
-    description: Optional[str] = None,
-    title_sw: Optional[str] = None,
-    deeper_purpose: Optional[str] = None,
-    what_i_lose: Optional[str] = None,
-    milestones: Optional[List[Dict[str, Any]]] = None,
-    commitment_declaration: Optional[str] = None,
-    accountability_partner_id: Optional[UUID] = None,
-    voice_transcript: Optional[str] = None,
+    target_date: date | None = None,
+    description: str | None = None,
+    title_sw: str | None = None,
+    deeper_purpose: str | None = None,
+    what_i_lose: str | None = None,
+    milestones: list[dict[str, Any]] | None = None,
+    commitment_declaration: str | None = None,
+    accountability_partner_id: UUID | None = None,
+    voice_transcript: str | None = None,
     currency: str = "KES",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Create a goal with auto-generated milestones and commitment device.
 
@@ -250,7 +249,7 @@ async def create_goal(
         target_date=target_date,
         status="active",
         commitment_declaration=commitment_declaration,
-        commitment_made_at=datetime.now(timezone.utc) if commitment_declaration else None,
+        commitment_made_at=datetime.now(UTC) if commitment_declaration else None,
         accountability_partner_id=accountability_partner_id,
         shared_with_partner=accountability_partner_id is not None,
         deeper_purpose=deeper_purpose,
@@ -294,8 +293,8 @@ async def create_goal(
     commitment_msg = None
     if commitment_declaration:
         commitment_msg = {
-            "sw": "Umeahidi: '{}' — Msaidizi atakukumbusha kila siku!".format(commitment_declaration),
-            "en": "You committed: '{}' — Msaidizi will remind you daily!".format(commitment_declaration),
+            "sw": f"Umeahidi: '{commitment_declaration}' — Msaidizi atakukumbusha kila siku!",
+            "en": f"You committed: '{commitment_declaration}' — Msaidizi will remind you daily!",
         }
 
     logger.info(
@@ -345,12 +344,12 @@ async def update_progress(
     goal_id: UUID,
     user_id: UUID,
     amount: float,
-    notes: Optional[str] = None,
+    notes: str | None = None,
     source: str = "manual",
-    voice_transcript: Optional[str] = None,
-    mood: Optional[str] = None,
-    entry_date: Optional[date] = None,
-) -> Dict[str, Any]:
+    voice_transcript: str | None = None,
+    mood: str | None = None,
+    entry_date: date | None = None,
+) -> dict[str, Any]:
     """
     Record a progress entry and update goal state.
 
@@ -423,7 +422,7 @@ async def update_progress(
     for m in milestones:
         if new_total >= m.target_amount:
             m.completed = True
-            m.completed_at = datetime.now(timezone.utc)
+            m.completed_at = datetime.now(UTC)
             m.completed_amount = new_total
             milestone_hit = m.percentage
 
@@ -431,7 +430,7 @@ async def update_progress(
     completed = new_total >= goal.target_amount
     if completed:
         goal.status = "completed"
-        goal.completed_at = datetime.now(timezone.utc)
+        goal.completed_at = datetime.now(UTC)
 
     await db.flush()
 
@@ -486,11 +485,11 @@ async def update_progress(
 
 def _build_encouragement(
     completed: bool,
-    milestone_hit: Optional[int],
+    milestone_hit: int | None,
     streak: int,
     streak_broken: bool,
-    prediction: Dict[str, Any],
-) -> Dict[str, str]:
+    prediction: dict[str, Any],
+) -> dict[str, str]:
     """Build encouragement message based on context."""
     if completed:
         return NUDGE_MESSAGES["goal_complete"]
@@ -513,17 +512,17 @@ def _build_encouragement(
 
 def _select_nudge(
     completed: bool,
-    milestone_hit: Optional[int],
+    milestone_hit: int | None,
     streak: int,
     streak_broken: bool,
-    prediction: Dict[str, Any],
-) -> Dict[str, str]:
+    prediction: dict[str, Any],
+) -> dict[str, str]:
     """Select the most appropriate behavioral nudge."""
     if completed:
         return {"type": "celebration", **NUDGE_MESSAGES["goal_complete"]}
 
     # Time-of-day based nudge
-    hour = datetime.now(timezone.utc).hour
+    hour = datetime.now(UTC).hour
     if hour < 10:
         base = NUDGE_MESSAGES["morning_motivation"]
         nudge_type = "morning"
@@ -549,7 +548,7 @@ async def get_goal_progress(
     db: AsyncSession,
     goal_id: UUID,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get detailed goal progress with milestones, streak, and prediction."""
 
     result = await db.execute(
@@ -654,7 +653,7 @@ async def get_time_to_goal(
     db: AsyncSession,
     goal_id: UUID,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Predict time-to-goal using Polars rolling averages.
 
@@ -823,7 +822,7 @@ async def get_obstacle_analysis(
     db: AsyncSession,
     goal_id: UUID,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Identify potential obstacles to goal achievement using Polars pattern analysis.
 
@@ -1014,7 +1013,7 @@ async def get_obstacle_analysis(
 async def get_accountability_report(
     db: AsyncSession,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate an accountability partner report for all active goals.
 

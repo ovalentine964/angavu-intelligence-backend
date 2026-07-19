@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -21,7 +21,7 @@ class MCPToolParameter:
     description: str
     required: bool = False
     default: Any = None
-    enum: Optional[List[str]] = None
+    enum: list[str] | None = None
 
 
 @dataclass
@@ -30,15 +30,15 @@ class MCPToolDefinition:
 
     name: str
     description: str
-    parameters: List[MCPToolParameter] = field(default_factory=list)
+    parameters: list[MCPToolParameter] = field(default_factory=list)
     category: str = "general"
 
-    def to_schema(self) -> Dict[str, Any]:
+    def to_schema(self) -> dict[str, Any]:
         """Convert to JSON Schema for MCP protocol."""
         properties = {}
         required = []
         for p in self.parameters:
-            prop: Dict[str, Any] = {"type": p.type, "description": p.description}
+            prop: dict[str, Any] = {"type": p.type, "description": p.description}
             if p.enum:
                 prop["enum"] = p.enum
             if p.default is not None:
@@ -80,19 +80,19 @@ class MCPServerConfig:
     rate_limit_burst: int = 20
 
     # Server capabilities
-    capabilities: Dict[str, Any] = field(default_factory=lambda: {
+    capabilities: dict[str, Any] = field(default_factory=lambda: {
         "tools": {},
         "resources": {},
         "prompts": {},
     })
 
     @property
-    def server_info(self) -> Dict[str, str]:
+    def server_info(self) -> dict[str, str]:
         return {"name": self.name, "version": self.version}
 
 
 # Default configuration singleton
-_default_config: Optional[MCPServerConfig] = None
+_default_config: MCPServerConfig | None = None
 
 
 def get_mcp_config() -> MCPServerConfig:

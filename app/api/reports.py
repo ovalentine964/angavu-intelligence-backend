@@ -5,8 +5,7 @@ Provides daily, weekly, and AI-generated advice reports for users.
 Reports are available in Swahili, English, and Sheng.
 """
 
-from datetime import date, datetime, timedelta
-from typing import Optional
+from datetime import date
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,7 +28,7 @@ router = APIRouter(prefix="/reports", tags=["Business Reports"])
 @router.get("/{user_id}/daily", response_model=DailyReport)
 async def get_daily_report(
     user_id: str,
-    report_date: Optional[date] = Query(
+    report_date: date | None = Query(
         None,
         description="Report date (defaults to today)",
     ),
@@ -81,7 +80,7 @@ async def get_daily_report(
 @router.get("/{user_id}/weekly", response_model=WeeklyReport)
 async def get_weekly_report(
     user_id: str,
-    week_end: Optional[date] = Query(
+    week_end: date | None = Query(
         None,
         description="End of week (defaults to today)",
     ),

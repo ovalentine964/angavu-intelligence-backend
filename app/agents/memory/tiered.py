@@ -14,14 +14,13 @@ Reference:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -52,16 +51,16 @@ class MemoryImportance(int, Enum):
 class MemoryItem:
     """A single memory item across all tiers."""
     item_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    content: Dict[str, Any] = field(default_factory=dict)
+    content: dict[str, Any] = field(default_factory=dict)
     tier: MemoryTier = MemoryTier.WORKING
     importance: MemoryImportance = MemoryImportance.NORMAL
     created_at: float = field(default_factory=time.time)
     accessed_at: float = field(default_factory=time.time)
     access_count: int = 0
-    tags: List[str] = field(default_factory=list)
-    embedding: Optional[List[float]] = None  # For semantic search
-    session_id: Optional[str] = None
-    agent_name: Optional[str] = None
+    tags: list[str] = field(default_factory=list)
+    embedding: list[float] | None = None  # For semantic search
+    session_id: str | None = None
+    agent_name: str | None = None
 
     @property
     def age_seconds(self) -> float:
@@ -86,7 +85,7 @@ class MemoryItem:
         self.accessed_at = time.time()
         self.access_count += 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "item_id": self.item_id,
             "content": self.content,
@@ -111,20 +110,20 @@ class EpisodicRecord:
     episode_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     agent_name: str = ""
     session_id: str = ""
-    trigger_event: Dict[str, Any] = field(default_factory=dict)
-    decision: Dict[str, Any] = field(default_factory=dict)
-    result: Dict[str, Any] = field(default_factory=dict)
-    context_snapshot: Dict[str, Any] = field(default_factory=dict)
+    trigger_event: dict[str, Any] = field(default_factory=dict)
+    decision: dict[str, Any] = field(default_factory=dict)
+    result: dict[str, Any] = field(default_factory=dict)
+    context_snapshot: dict[str, Any] = field(default_factory=dict)
     duration_ms: float = 0.0
     success: bool = True
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
 
     # Derived metrics
-    lessons_learned: List[str] = field(default_factory=list)
-    similar_episodes: List[str] = field(default_factory=list)
+    lessons_learned: list[str] = field(default_factory=list)
+    similar_episodes: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "episode_id": self.episode_id,
             "agent_name": self.agent_name,
@@ -155,8 +154,8 @@ class LongTermPattern:
     description: str = ""
     confidence: float = 0.5      # 0.0 - 1.0, grows with evidence
     evidence_count: int = 0      # Number of episodes supporting this
-    evidence_ids: List[str] = field(default_factory=list)
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    evidence_ids: list[str] = field(default_factory=list)
+    parameters: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     last_reinforced: float = field(default_factory=time.time)
     agent_name: str = ""
@@ -180,7 +179,7 @@ class LongTermPattern:
         if days_since_reinforcement > 90:
             self.confidence *= 0.9
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pattern_id": self.pattern_id,
             "pattern_type": self.pattern_type,
@@ -210,18 +209,18 @@ class WorkingMemory:
     """
 
     def __init__(self, max_tokens: int = 4000, max_items: int = 50):
-        self._items: List[MemoryItem] = []
+        self._items: list[MemoryItem] = []
         self._max_tokens = max_tokens
         self._max_items = max_items
         self._total_tokens = 0
 
     def add(
         self,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         importance: MemoryImportance = MemoryImportance.NORMAL,
-        tags: Optional[List[str]] = None,
-        session_id: Optional[str] = None,
-        agent_name: Optional[str] = None,
+        tags: list[str] | None = None,
+        session_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryItem:
         """Add an item to working memory."""
         item = MemoryItem(
@@ -246,9 +245,9 @@ class WorkingMemory:
 
     def get_context(
         self,
-        max_items: Optional[int] = None,
-        filter_tags: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        max_items: int | None = None,
+        filter_tags: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Get prioritized context items."""
         items = self._items
         if filter_tags:
@@ -265,11 +264,11 @@ class WorkingMemory:
 
         return result
 
-    def get_recent(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_recent(self, n: int = 10) -> list[dict[str, Any]]:
         """Get N most recent items."""
         return [i.content for i in self._items[-n:]]
 
-    def search(self, query: str) -> List[MemoryItem]:
+    def search(self, query: str) -> list[MemoryItem]:
         """Simple text search in working memory."""
         query_lower = query.lower()
         results = []
@@ -301,7 +300,7 @@ class WorkingMemory:
         return len(self._items)
 
     @property
-    def token_usage(self) -> Dict[str, Any]:
+    def token_usage(self) -> dict[str, Any]:
         return {
             "items": len(self._items),
             "total_tokens": self._total_tokens,
@@ -334,14 +333,14 @@ class EpisodicMemory:
         max_episodes: int = 500,
         consolidation_threshold: int = 5,
     ):
-        self._episodes: List[EpisodicRecord] = []
+        self._episodes: list[EpisodicRecord] = []
         self._max_episodes = max_episodes
         self._consolidation_threshold = consolidation_threshold
 
         # Index for fast lookup
-        self._by_agent: Dict[str, List[str]] = defaultdict(list)
-        self._by_tag: Dict[str, List[str]] = defaultdict(list)
-        self._by_success: Dict[bool, List[str]] = {True: [], False: []}
+        self._by_agent: dict[str, list[str]] = defaultdict(list)
+        self._by_tag: dict[str, list[str]] = defaultdict(list)
+        self._by_success: dict[bool, list[str]] = {True: [], False: []}
 
         self._logger = logger.bind(component="episodic_memory")
 
@@ -374,10 +373,10 @@ class EpisodicMemory:
 
     def get_recent(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         n: int = 10,
-        success_only: Optional[bool] = None,
-    ) -> List[EpisodicRecord]:
+        success_only: bool | None = None,
+    ) -> list[EpisodicRecord]:
         """Get recent episodes, optionally filtered."""
         episodes = self._episodes
 
@@ -392,10 +391,10 @@ class EpisodicMemory:
 
     def get_similar(
         self,
-        trigger_event: Dict[str, Any],
-        agent_name: Optional[str] = None,
+        trigger_event: dict[str, Any],
+        agent_name: str | None = None,
         limit: int = 5,
-    ) -> List[EpisodicRecord]:
+    ) -> list[EpisodicRecord]:
         """
         Find episodes with similar trigger events.
 
@@ -428,9 +427,9 @@ class EpisodicMemory:
 
     def get_lessons(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         limit: int = 10,
-    ) -> List[str]:
+    ) -> list[str]:
         """Extract lessons from recent episodes."""
         episodes = self.get_recent(agent_name=agent_name, n=50)
         lessons = []
@@ -440,14 +439,14 @@ class EpisodicMemory:
 
     def get_failure_patterns(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         limit: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Analyze failure patterns from episodes."""
         failures = self.get_recent(agent_name=agent_name, n=100, success_only=False)
 
         # Group failures by error type
-        error_types: Dict[str, int] = Counter()
+        error_types: dict[str, int] = Counter()
         for ep in failures:
             error = ep.result.get("error", "unknown")
             error_types[error] += 1
@@ -487,12 +486,12 @@ class LongTermMemory:
     """
 
     def __init__(self, max_patterns: int = 200):
-        self._patterns: Dict[str, LongTermPattern] = {}
+        self._patterns: dict[str, LongTermPattern] = {}
         self._max_patterns = max_patterns
 
         # Indexes
-        self._by_type: Dict[str, List[str]] = defaultdict(list)
-        self._by_agent: Dict[str, List[str]] = defaultdict(list)
+        self._by_type: dict[str, list[str]] = defaultdict(list)
+        self._by_agent: dict[str, list[str]] = defaultdict(list)
 
         self._logger = logger.bind(component="longterm_memory")
 
@@ -523,10 +522,10 @@ class LongTermMemory:
 
     def retrieve(
         self,
-        pattern_type: Optional[str] = None,
-        agent_name: Optional[str] = None,
+        pattern_type: str | None = None,
+        agent_name: str | None = None,
         min_confidence: float = 0.0,
-    ) -> List[LongTermPattern]:
+    ) -> list[LongTermPattern]:
         """Retrieve patterns matching criteria."""
         patterns = list(self._patterns.values())
 
@@ -546,13 +545,13 @@ class LongTermMemory:
 
     def get_strongest(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         limit: int = 10,
-    ) -> List[LongTermPattern]:
+    ) -> list[LongTermPattern]:
         """Get the strongest (highest confidence) patterns."""
         return self.retrieve(agent_name=agent_name, min_confidence=0.3)[:limit]
 
-    def consolidate_episode(self, episode: EpisodicRecord) -> Optional[LongTermPattern]:
+    def consolidate_episode(self, episode: EpisodicRecord) -> LongTermPattern | None:
         """
         Attempt to consolidate an episode into a long-term pattern.
 
@@ -604,7 +603,7 @@ class LongTermMemory:
 
         return removed
 
-    def _find_similar(self, pattern: LongTermPattern) -> Optional[LongTermPattern]:
+    def _find_similar(self, pattern: LongTermPattern) -> LongTermPattern | None:
         """Find an existing pattern similar to the given one."""
         for existing in self._patterns.values():
             if (existing.pattern_type == pattern.pattern_type
@@ -669,9 +668,9 @@ class TieredMemoryManager:
 
     def on_observe(
         self,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
         importance: MemoryImportance = MemoryImportance.NORMAL,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> MemoryItem:
         """Record an observed event in working memory."""
         return self.working.add(
@@ -684,7 +683,7 @@ class TieredMemoryManager:
 
     # ── Think Phase ─────────────────────────────────────────────────
 
-    def get_context_for_decision(self) -> Dict[str, Any]:
+    def get_context_for_decision(self) -> dict[str, Any]:
         """
         Get the full context for a decision.
 
@@ -722,9 +721,9 @@ class TieredMemoryManager:
 
     def get_relevant_patterns(
         self,
-        context: Dict[str, Any],
+        context: dict[str, Any],
         min_confidence: float = 0.5,
-    ) -> List[LongTermPattern]:
+    ) -> list[LongTermPattern]:
         """Get patterns relevant to the current context."""
         # For now, return strongest patterns for this agent
         # Could be enhanced with semantic matching against context
@@ -737,7 +736,7 @@ class TieredMemoryManager:
 
     def on_act_result(
         self,
-        result_data: Dict[str, Any],
+        result_data: dict[str, Any],
         importance: MemoryImportance = MemoryImportance.NORMAL,
     ) -> None:
         """Record act result in working memory."""
@@ -753,11 +752,11 @@ class TieredMemoryManager:
 
     def record_episode(
         self,
-        trigger_event: Dict[str, Any],
-        decision: Dict[str, Any],
-        result: Dict[str, Any],
+        trigger_event: dict[str, Any],
+        decision: dict[str, Any],
+        result: dict[str, Any],
         duration_ms: float = 0.0,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> str:
         """
         Record a complete episode and attempt consolidation.
@@ -825,7 +824,7 @@ class TieredMemoryManager:
 
     def on_error(
         self,
-        error_data: Dict[str, Any],
+        error_data: dict[str, Any],
     ) -> None:
         """Record an error with critical importance."""
         self.working.add(
@@ -838,7 +837,7 @@ class TieredMemoryManager:
 
     # ── Maintenance ─────────────────────────────────────────────────
 
-    def maintenance(self) -> Dict[str, Any]:
+    def maintenance(self) -> dict[str, Any]:
         """
         Periodic memory maintenance.
 
@@ -863,7 +862,7 @@ class TieredMemoryManager:
 
     # ── Stats ───────────────────────────────────────────────────────
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "agent": self.agent_name,
             "session_id": self._session_id,

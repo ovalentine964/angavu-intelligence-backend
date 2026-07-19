@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -34,8 +34,6 @@ from app.agents.base import (
     AgentDecision,
     AgentEvent,
     AgentResult,
-    BiasharaAgent,
-    EventType,
 )
 from app.agents.long_horizon import (
     LongHorizonOrchestrator,
@@ -45,14 +43,11 @@ from app.agents.long_horizon import (
     SubTask,
     SubTaskStatus,
     TaskPlanner,
-    TaskStatus,
 )
 from app.agents.loops import (
     Critique,
-    ExecutionPlan,
-    PlanStep,
-    ReflexionAgent,
     ReActAgent,
+    ReflexionAgent,
 )
 
 logger = structlog.get_logger(__name__)
@@ -69,11 +64,11 @@ class ResearchScope:
     def __init__(
         self,
         topic: str,
-        region: Optional[str] = None,
-        product_category: Optional[str] = None,
+        region: str | None = None,
+        product_category: str | None = None,
         time_horizon: str = "30d",
         depth: str = "standard",  # quick | standard | deep
-        sources: Optional[List[str]] = None,
+        sources: list[str] | None = None,
     ):
         self.topic = topic
         self.region = region
@@ -82,7 +77,7 @@ class ResearchScope:
         self.depth = depth
         self.sources = sources or []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize research scope to dictionary."""
         return {
             "topic": self.topic,
@@ -100,11 +95,11 @@ class ResearchResult:
     def __init__(
         self,
         scope: ResearchScope,
-        findings: List[Dict[str, Any]],
-        data_sources_used: List[str],
+        findings: list[dict[str, Any]],
+        data_sources_used: list[str],
         confidence: float = 0.0,
         quality_score: float = 0.0,
-        report: Optional[Dict[str, Any]] = None,
+        report: dict[str, Any] | None = None,
     ):
         self.result_id = uuid.uuid4().hex[:16]
         self.scope = scope
@@ -115,7 +110,7 @@ class ResearchResult:
         self.report = report
         self.created_at = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize research result to dictionary."""
         return {
             "result_id": self.result_id,
@@ -154,9 +149,9 @@ class ResearchPlanner(TaskPlanner):
     async def _decompose(
         self,
         goal: str,
-        context: Dict[str, Any],
-        available_agents: List[str],
-    ) -> List[SubTask]:
+        context: dict[str, Any],
+        available_agents: list[str],
+    ) -> list[SubTask]:
         """Decompose a research goal into sub-tasks."""
         scope = context.get("scope", {})
         depth = scope.get("depth", "standard")
@@ -220,8 +215,8 @@ class ResearchPlanner(TaskPlanner):
         self,
         task: LongHorizonTask,
         failed_subtask: SubTask,
-        context: Dict[str, Any],
-    ) -> List[SubTask]:
+        context: dict[str, Any],
+    ) -> list[SubTask]:
         """Re-plan: retry collection with alternative source, skip if exhausted."""
         if failed_subtask.action == "data_collection" and failed_subtask.attempts < failed_subtask.max_retries:
             # Retry with same source
@@ -280,7 +275,7 @@ class DataCollector(ReActAgent):
                 "government_data",
             ],
         )
-        self._source_handlers: Dict[str, str] = {
+        self._source_handlers: dict[str, str] = {
             "transactions": "collect_transaction_data",
             "market_data": "collect_market_data",
             "worker_feedback": "collect_feedback_data",
@@ -288,7 +283,7 @@ class DataCollector(ReActAgent):
             "government": "collect_government_data",
         }
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Plan data collection based on source type."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -329,7 +324,7 @@ class DataCollector(ReActAgent):
                 "records_count": 0,
                 "time_range": scope.get("time_horizon", "30d"),
                 "region": scope.get("region", "all"),
-                "collected_at": datetime.now(timezone.utc).isoformat(),
+                "collected_at": datetime.now(UTC).isoformat(),
             }
 
             if action == "collect_transaction_data":
@@ -414,7 +409,7 @@ class ResearchAnalyzer(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Plan analysis based on available data."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -475,7 +470,7 @@ class ResearchAnalyzer(ReActAgent):
                 ],
                 "data_quality_score": 0.85,
                 "coverage_pct": 78.5,
-                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "analyzed_at": datetime.now(UTC).isoformat(),
             }
 
             return AgentResult(
@@ -527,7 +522,7 @@ class ResearchReportGenerator(ReflexionAgent):
             max_retries=2,
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Plan report generation."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -590,7 +585,7 @@ class ResearchReportGenerator(ReflexionAgent):
                         "confidence_level": 0.82,
                     },
                 },
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "word_count": 2500,
             }
 
@@ -676,7 +671,7 @@ class QualityValidator(ReActAgent):
             ],
         )
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """Plan quality validation checks."""
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
@@ -743,7 +738,7 @@ class QualityValidator(ReActAgent):
                     "Expand worker feedback sampling to reduce selection bias",
                     "Add external data source for cross-validation",
                 ],
-                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "validated_at": datetime.now(UTC).isoformat(),
             }
 
             return AgentResult(
@@ -770,9 +765,9 @@ class ResearchResultAggregator(ResultAggregator):
 
     def _merge(
         self,
-        results: Dict[str, Dict[str, Any]],
-        errors: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        results: dict[str, dict[str, Any]],
+        errors: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
         """Merge research results with domain-specific logic."""
         findings = []
         data_sources = []

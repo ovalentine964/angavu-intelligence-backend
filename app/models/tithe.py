@@ -11,10 +11,9 @@ re-exports from here for backward compatibility.
 """
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -30,7 +29,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
 from app.db.database import Base
-
 
 # =========================================================================
 # TitheRecord — Individual Giving Record
@@ -90,7 +88,7 @@ class TitheRecord(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
 
@@ -159,19 +157,19 @@ class TitheReport(Base):
     # Metadata
     computed_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
         doc="When this report was last computed",
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (
@@ -270,18 +268,18 @@ class AbundancePattern(Base):
     # Metadata
     computed_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     __table_args__ = (

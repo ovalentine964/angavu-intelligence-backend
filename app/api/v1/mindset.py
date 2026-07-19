@@ -15,7 +15,6 @@ Endpoints:
 """
 
 from datetime import date
-from typing import Optional
 from uuid import UUID
 
 import structlog
@@ -38,7 +37,7 @@ router = APIRouter(prefix="/mindset", tags=["Wealth Mindset"])
 
 class LessonCompleteRequest(BaseModel):
     """Request body for marking a lesson as complete."""
-    score: Optional[int] = Field(
+    score: int | None = Field(
         None,
         ge=0,
         le=100,
@@ -127,7 +126,7 @@ async def complete_lesson(
 @router.get("/habits")
 async def get_rich_habits_score(
     user_id: UUID = Query(..., description="User ID"),
-    score_date: Optional[date] = Query(None, description="Score date (defaults to today)"),
+    score_date: date | None = Query(None, description="Score date (defaults to today)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -191,7 +190,7 @@ async def get_affirmation(
         description="Language: 'en' for English, 'sw' for Swahili",
         regex="^(en|sw)$",
     ),
-    category: Optional[str] = Query(
+    category: str | None = Query(
         None,
         description="Category filter: belief, wealth, habits, savings, giving, compound",
     ),
@@ -265,7 +264,7 @@ async def get_habit_stack(
 @router.get("/mastermind")
 async def get_mastermind_group(
     user_id: UUID = Query(..., description="User ID"),
-    worker_type: Optional[str] = Query(
+    worker_type: str | None = Query(
         None,
         description="Worker type (defaults to mama_mboga if not specified)",
     ),

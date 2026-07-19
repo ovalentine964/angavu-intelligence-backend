@@ -20,9 +20,7 @@ Kenya Data Protection Act 2019 compliance:
 
 import hashlib
 import math
-import secrets
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -54,7 +52,7 @@ class Anonymizer:
     # =========================================================================
 
     @staticmethod
-    def strip_pii(data: Dict[str, Any]) -> Dict[str, Any]:
+    def strip_pii(data: dict[str, Any]) -> dict[str, Any]:
         """
         Remove all personally identifiable information from a data record.
 
@@ -87,7 +85,7 @@ class Anonymizer:
             cleaned[key] = value
 
         # Coarsen location to geohash-5 if geohash is present
-        if "location_geohash" in cleaned and cleaned["location_geohash"]:
+        if cleaned.get("location_geohash"):
             cleaned["location_geohash"] = cleaned["location_geohash"][:5]
 
         return cleaned
@@ -124,8 +122,8 @@ class Anonymizer:
     def check_k_anonymity(
         self,
         group_size: int,
-        custom_threshold: Optional[int] = None,
-    ) -> Tuple[bool, int]:
+        custom_threshold: int | None = None,
+    ) -> tuple[bool, int]:
         """
         Check if a group meets k-anonymity requirements.
 
@@ -143,10 +141,10 @@ class Anonymizer:
 
     def enforce_k_anonymity_on_query(
         self,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         group_key: str,
-        min_group_size: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        min_group_size: int | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Filter query results to enforce k-anonymity.
 
@@ -201,7 +199,7 @@ class Anonymizer:
     def add_laplace_noise(
         value: float,
         sensitivity: float = 1.0,
-        epsilon: Optional[float] = None,
+        epsilon: float | None = None,
     ) -> float:
         """
         Add Laplacian noise for differential privacy.
@@ -227,8 +225,8 @@ class Anonymizer:
     def add_gaussian_noise(
         value: float,
         sensitivity: float = 1.0,
-        epsilon: Optional[float] = None,
-        delta: Optional[float] = None,
+        epsilon: float | None = None,
+        delta: float | None = None,
     ) -> float:
         """
         Add Gaussian noise for (ε,δ)-differential privacy.
@@ -257,10 +255,10 @@ class Anonymizer:
 
     def anonymize_aggregate(
         self,
-        data: Dict[str, Any],
-        sensitive_fields: List[str],
+        data: dict[str, Any],
+        sensitive_fields: list[str],
         sensitivity: float = 1000.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Apply differential privacy to sensitive fields in an aggregate result.
 
@@ -331,17 +329,17 @@ class Anonymizer:
 
     async def log_data_access(
         self,
-        buyer_id: Optional[str],
-        api_key_id: Optional[str],
+        buyer_id: str | None,
+        api_key_id: str | None,
         endpoint: str,
-        query_params: Optional[Dict] = None,
-        response_size_bytes: Optional[int] = None,
-        records_returned: Optional[int] = None,
-        processing_time_ms: Optional[float] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        status_code: Optional[int] = None,
-        error_message: Optional[str] = None,
+        query_params: dict | None = None,
+        response_size_bytes: int | None = None,
+        records_returned: int | None = None,
+        processing_time_ms: float | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        status_code: int | None = None,
+        error_message: str | None = None,
     ) -> DataAccessLog:
         """
         Log a data access event for audit compliance.
@@ -456,7 +454,7 @@ class Anonymizer:
     # =========================================================================
 
     @staticmethod
-    def anonymize_for_sync(transaction: Dict[str, Any]) -> Dict[str, Any]:
+    def anonymize_for_sync(transaction: dict[str, Any]) -> dict[str, Any]:
         """
         Anonymize a transaction before sending to backend.
 
@@ -523,7 +521,7 @@ class Anonymizer:
                 anonymized[key] = value
 
         # Coarsen location to geohash-5 (~5km²) for privacy
-        if "location_geohash" in anonymized and anonymized["location_geohash"]:
+        if anonymized.get("location_geohash"):
             anonymized["location_geohash"] = anonymized["location_geohash"][:5]
 
         # Hash worker_id with HMAC-SHA256 (one-way, consistent)
@@ -540,8 +538,8 @@ class Anonymizer:
 
     @staticmethod
     def anonymize_transaction_batch(
-        transactions: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        transactions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """
         Anonymize a batch of transactions for sync.
 
@@ -558,9 +556,9 @@ class Anonymizer:
 
     @staticmethod
     def minimize_for_export(
-        data: Dict[str, Any],
+        data: dict[str, Any],
         purpose: str = "intelligence",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Apply data minimization — only include fields necessary for purpose.
 

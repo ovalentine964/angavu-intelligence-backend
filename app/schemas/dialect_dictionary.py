@@ -8,11 +8,9 @@ Privacy model:
 - Bayesian confidence scoring prevents low-quality entries from propagating
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Dialect Dictionary — Submit / Lookup
@@ -34,7 +32,7 @@ class WordSubmission(BaseModel):
         "", max_length=1000,
         description="Sentence or context where the word was observed",
     )
-    pronunciation_ipa: Optional[str] = Field(
+    pronunciation_ipa: str | None = Field(
         None, max_length=200,
         description="IPA pronunciation hint (optional)",
     )
@@ -50,14 +48,14 @@ class DialectSubmitRequest(BaseModel):
     worker_id: str = Field(
         ..., description="SHA-256 hashed worker device ID (anonymized)",
     )
-    words: List[WordSubmission] = Field(
+    words: list[WordSubmission] = Field(
         ..., min_length=1, max_length=500,
         description="Batch of observed words (max 500 per submission)",
     )
-    region: Optional[str] = Field(
+    region: str | None = Field(
         None, description="Geographic region code (e.g. 'nairobi', 'kisumu')",
     )
-    timestamp: Optional[int] = Field(
+    timestamp: int | None = Field(
         None, description="Device-side epoch milliseconds",
     )
 
@@ -70,19 +68,19 @@ class WordEntry(BaseModel):
     frequency: int = Field(..., description="Total occurrence count across all workers")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Bayesian confidence score")
     contributor_count: int = Field(..., description="Number of distinct workers who submitted this word")
-    contexts: List[str] = Field(default_factory=list, description="Sample contexts (max 5)")
-    pronunciation_ipa: Optional[str] = None
-    regions: List[str] = Field(default_factory=list, description="Regions where observed")
-    first_seen: Optional[str] = None
-    last_seen: Optional[str] = None
+    contexts: list[str] = Field(default_factory=list, description="Sample contexts (max 5)")
+    pronunciation_ipa: str | None = None
+    regions: list[str] = Field(default_factory=list, description="Regions where observed")
+    first_seen: str | None = None
+    last_seen: str | None = None
 
 
 class DialectLookupResponse(BaseModel):
     """GET /api/v1/dialect/lookup response."""
 
     query: str
-    dialect: Optional[str] = None
-    results: List[WordEntry] = Field(default_factory=list)
+    dialect: str | None = None
+    results: list[WordEntry] = Field(default_factory=list)
     total_results: int = 0
 
 
@@ -93,7 +91,7 @@ class DialectSubmitResponse(BaseModel):
     words_received: int
     words_accepted: int
     words_rejected: int
-    rejection_reasons: Dict[str, int] = Field(default_factory=dict)
+    rejection_reasons: dict[str, int] = Field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -116,15 +114,15 @@ class RegionDialectSummary(BaseModel):
     """Summary of dialect data for a geographic region."""
 
     region: str
-    dialects: List[str]
+    dialects: list[str]
     total_words: int
     unique_words: int
-    top_words: List[Dict[str, Any]] = Field(
+    top_words: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Top 20 words by frequency",
     )
     contributing_workers: int
-    last_aggregated: Optional[str] = None
+    last_aggregated: str | None = None
 
 
 class AggregationStatusResponse(BaseModel):
@@ -134,9 +132,9 @@ class AggregationStatusResponse(BaseModel):
     total_words_tracked: int = 0
     total_dialects: int = 0
     total_workers_contributing: int = 0
-    last_aggregation_at: Optional[str] = None
-    dialects: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    privacy: Dict[str, Any] = Field(default_factory=dict)
+    last_aggregation_at: str | None = None
+    dialects: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    privacy: dict[str, Any] = Field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -161,9 +159,9 @@ class DeltaUpdatePayload(BaseModel):
     dialect: str
     base_version: str = Field(..., description="Client's current version")
     target_version: str = Field(..., description="Server's latest version")
-    new_words: List[WordEntry] = Field(default_factory=list)
-    updated_words: List[WordEntry] = Field(default_factory=list)
-    removed_words: List[str] = Field(default_factory=list, description="Words removed (below confidence threshold)")
+    new_words: list[WordEntry] = Field(default_factory=list)
+    updated_words: list[WordEntry] = Field(default_factory=list)
+    removed_words: list[str] = Field(default_factory=list, description="Words removed (below confidence threshold)")
     checksum: str
     compressed_size_bytes: int = 0
 
@@ -173,7 +171,7 @@ class FullModelPayload(BaseModel):
 
     dialect: str
     version: str
-    words: List[WordEntry]
+    words: list[WordEntry]
     checksum: str
     total_words: int
     compressed_size_bytes: int = 0
@@ -185,4 +183,4 @@ class ModelDistributionResponse(BaseModel):
     update_type: str = Field(..., description="'delta' or 'full'")
     dialect: str
     version: str
-    payload: Dict[str, Any] = Field(..., description="DeltaUpdatePayload or FullModelPayload as dict")
+    payload: dict[str, Any] = Field(..., description="DeltaUpdatePayload or FullModelPayload as dict")

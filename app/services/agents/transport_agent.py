@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID
+from datetime import datetime
+from typing import Any
 
 import structlog
 
@@ -47,9 +46,9 @@ class TransportAgent:
 
     def analyze_trips(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         period_days: int = 30,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze trip transactions to extract transport-specific metrics.
 
@@ -125,10 +124,10 @@ class TransportAgent:
         }
 
     def _calc_hourly_earnings(
-        self, trips: List[Dict[str, Any]]
-    ) -> Dict[str, float]:
+        self, trips: list[dict[str, Any]]
+    ) -> dict[str, float]:
         """Calculate average earnings per hour of the day."""
-        hour_totals: Dict[int, List[float]] = defaultdict(list)
+        hour_totals: dict[int, list[float]] = defaultdict(list)
         for trip in trips:
             ts = trip.get("timestamp")
             if ts:
@@ -143,10 +142,10 @@ class TransportAgent:
         }
 
     def _find_peak_hours(
-        self, trips: List[Dict[str, Any]], top_n: int = 3
-    ) -> List[Dict[str, Any]]:
+        self, trips: list[dict[str, Any]], top_n: int = 3
+    ) -> list[dict[str, Any]]:
         """Find the top N most profitable hours."""
-        hour_data: Dict[int, Dict[str, float]] = defaultdict(
+        hour_data: dict[int, dict[str, float]] = defaultdict(
             lambda: {"total": 0.0, "count": 0}
         )
         for trip in trips:
@@ -174,10 +173,10 @@ class TransportAgent:
         ]
 
     def _calc_daily_earnings(
-        self, trips: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, trips: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Calculate daily earnings statistics."""
-        day_totals: Dict[str, float] = defaultdict(float)
+        day_totals: dict[str, float] = defaultdict(float)
         for trip in trips:
             ts = trip.get("timestamp")
             if ts:
@@ -199,10 +198,10 @@ class TransportAgent:
         }
 
     def _analyze_routes(
-        self, trips: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, trips: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Analyze profitability by route."""
-        route_data: Dict[str, Dict[str, float]] = defaultdict(
+        route_data: dict[str, dict[str, float]] = defaultdict(
             lambda: {"total": 0.0, "count": 0, "profit": 0.0}
         )
         for trip in trips:
@@ -231,9 +230,9 @@ class TransportAgent:
 
     def get_recommendations(
         self,
-        analysis: Dict[str, Any],
+        analysis: dict[str, Any],
         language: str = "en",
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """
         Generate transport-specific recommendations based on analysis.
 
@@ -330,7 +329,7 @@ class TransportAgent:
 
         return recs
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         """Return empty analysis structure."""
         return {
             "period_days": 0,

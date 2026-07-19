@@ -16,7 +16,7 @@ Academic Foundation:
 - ECO 424: Econometrics → Simulation-based estimation
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -35,10 +35,10 @@ class MonteCarloEngine:
     @staticmethod
     def crude_integration(
         func: callable,
-        bounds: List[tuple],
+        bounds: list[tuple],
         n_samples: int = 100000,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Crude Monte Carlo integration."""
         rng = np.random.RandomState(seed)
         dim = len(bounds)
@@ -69,7 +69,7 @@ class MonteCarloEngine:
         statistic_func: callable,
         n_samples: int = 10000,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Importance sampling estimator."""
         rng = np.random.RandomState(seed)
         samples = proposal_sampler(n_samples)
@@ -97,7 +97,7 @@ class MonteCarloEngine:
         n_bootstrap: int = 10000,
         alternative: str = "two-sided",
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Bootstrap permutation hypothesis test."""
         if statistic_func is None:
             statistic_func = lambda x: np.mean(x)
@@ -145,7 +145,7 @@ class MonteCarloEngine:
         n_simulations: int = 10000,
         confidence: float = 0.95,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Simulation-based confidence interval."""
         rng = np.random.RandomState(seed)
         results = np.array([simulate_func(rng) for _ in range(n_simulations)])
@@ -171,7 +171,7 @@ class MonteCarloEngine:
         n_periods: int = 12,
         n_simulations: int = 10000,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Revenue distribution simulation using Geometric Brownian Motion.
 
@@ -226,7 +226,7 @@ class MCMCSampler:
         n_samples: int = 10000,
         burn_in: int = 1000,
         thin: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Metropolis-Hastings MCMC sampler."""
         dim = len(initial_state)
         samples = np.zeros((n_samples, dim))
@@ -261,7 +261,7 @@ class MCMCSampler:
         }
 
     @staticmethod
-    def gelman_rubin_rhat(chains: List[np.ndarray]) -> Dict[str, Any]:
+    def gelman_rubin_rhat(chains: list[np.ndarray]) -> dict[str, Any]:
         """Gelman-Rubin R-hat convergence diagnostic."""
         m = len(chains)
         if m < 2:
