@@ -18,10 +18,10 @@ From STA 342 (Test of Hypothesis):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -64,17 +64,17 @@ class HypothesisTestResult:
     p_value: float
     alpha: float
     reject_null: bool
-    effect_size: Optional[float] = None
-    confidence_interval: Optional[Tuple[float, float]] = None
-    power: Optional[float] = None
+    effect_size: float | None = None
+    confidence_interval: tuple[float, float] | None = None
+    power: float | None = None
     sample_size: int = 0
     null_hypothesis: str = ""
     alternative_hypothesis: str = ""
     interpretation: str = ""
-    correction_applied: Optional[str] = None
-    adjusted_p_value: Optional[float] = None
+    correction_applied: str | None = None
+    adjusted_p_value: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "test_type": self.test_type.value,
             "test_statistic": round(self.test_statistic, 6),
@@ -105,11 +105,11 @@ class SignificanceReport:
     """Aggregated significance report for an intelligence product."""
     product_name: str
     generated_at: datetime
-    tests: List[HypothesisTestResult]
+    tests: list[HypothesisTestResult]
     overall_significant: bool
     summary: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "product": self.product_name,
             "generated_at": self.generated_at.isoformat(),
@@ -139,7 +139,7 @@ class MultipleTestingCorrection:
     """
 
     @staticmethod
-    def bonferroni(p_values: List[float]) -> List[float]:
+    def bonferroni(p_values: list[float]) -> list[float]:
         """
         Bonferroni correction: adjusted_p = min(p * m, 1.0).
 
@@ -149,7 +149,7 @@ class MultipleTestingCorrection:
         return [min(p * m, 1.0) for p in p_values]
 
     @staticmethod
-    def holm(p_values: List[float]) -> List[float]:
+    def holm(p_values: list[float]) -> list[float]:
         """
         Holm's step-down procedure.
 
@@ -175,7 +175,7 @@ class MultipleTestingCorrection:
         return adjusted
 
     @staticmethod
-    def benjamini_hochberg(p_values: List[float]) -> List[float]:
+    def benjamini_hochberg(p_values: list[float]) -> list[float]:
         """
         Benjamini-Hochberg FDR correction.
 
@@ -203,7 +203,7 @@ class MultipleTestingCorrection:
         return adjusted
 
     @staticmethod
-    def benjamini_yekutieli(p_values: List[float]) -> List[float]:
+    def benjamini_yekutieli(p_values: list[float]) -> list[float]:
         """
         Benjamini-Yekutieli correction.
 
@@ -223,9 +223,9 @@ class MultipleTestingCorrection:
     @classmethod
     def apply(
         cls,
-        p_values: List[float],
+        p_values: list[float],
         method: CorrectionMethod = CorrectionMethod.BENJAMINI_HOCHBERG,
-    ) -> List[float]:
+    ) -> list[float]:
         """Apply the specified correction method."""
         if method == CorrectionMethod.BONFERRONI:
             return cls.bonferroni(p_values)
@@ -277,7 +277,7 @@ class HypothesisTester:
 
     def one_sample_t_test(
         self,
-        sample: List[float],
+        sample: list[float],
         null_mean: float,
         alternative: str = "two-sided",
     ) -> HypothesisTestResult:
@@ -326,8 +326,8 @@ class HypothesisTester:
 
     def two_sample_t_test(
         self,
-        sample_a: List[float],
-        sample_b: List[float],
+        sample_a: list[float],
+        sample_b: list[float],
         equal_var: bool = False,
     ) -> HypothesisTestResult:
         """
@@ -383,8 +383,8 @@ class HypothesisTester:
 
     def paired_t_test(
         self,
-        before: List[float],
-        after: List[float],
+        before: list[float],
+        after: list[float],
     ) -> HypothesisTestResult:
         """
         Paired t-test (before/after comparison).
@@ -435,8 +435,8 @@ class HypothesisTester:
 
     def mann_whitney_u(
         self,
-        sample_a: List[float],
-        sample_b: List[float],
+        sample_a: list[float],
+        sample_b: list[float],
         alternative: str = "two-sided",
     ) -> HypothesisTestResult:
         """
@@ -474,8 +474,8 @@ class HypothesisTester:
 
     def wilcoxon_signed_rank(
         self,
-        before: List[float],
-        after: List[float],
+        before: list[float],
+        after: list[float],
     ) -> HypothesisTestResult:
         """
         Wilcoxon signed-rank test (non-parametric paired test).
@@ -511,7 +511,7 @@ class HypothesisTester:
 
     def kruskal_wallis(
         self,
-        groups: List[List[float]],
+        groups: list[list[float]],
     ) -> HypothesisTestResult:
         """
         Kruskal-Wallis test (non-parametric ANOVA).
@@ -550,7 +550,7 @@ class HypothesisTester:
 
     def chi_square_test(
         self,
-        observed: List[List[int]],
+        observed: list[list[int]],
     ) -> HypothesisTestResult:
         """
         Chi-square test of independence.
@@ -627,9 +627,9 @@ class HypothesisTester:
 
     def correct_multiple(
         self,
-        results: List[HypothesisTestResult],
+        results: list[HypothesisTestResult],
         method: CorrectionMethod = CorrectionMethod.BENJAMINI_HOCHBERG,
-    ) -> List[HypothesisTestResult]:
+    ) -> list[HypothesisTestResult]:
         """
         Apply multiple testing correction to a list of results.
 

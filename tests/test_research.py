@@ -11,15 +11,19 @@ Tests cover:
 - Sampling methodology (ECO 315)
 """
 
-import sys
 import os
+import sys
 
 # Add the project root to path and import research modules directly
 # (avoids triggering the full app initialization chain which needs DB)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
-import pytest
+
+from app.services.research.confidence_intervals import (
+    BootstrapCI,
+    ConfidenceIntervalCalculator,
+)
 
 # Import research modules directly (no app/__init__.py chain)
 from app.services.research.data_quality import (
@@ -30,27 +34,20 @@ from app.services.research.data_quality import (
     SPCChart,
     ValidationSeverity,
 )
-from app.services.research.hypothesis_testing import (
-    CorrectionMethod,
-    HypothesisTester,
-    MultipleTestingCorrection,
-)
 from app.services.research.experimental_design import (
     ABTestFramework,
-    DesignType,
     ExperimentDesigner,
     PowerAnalyzer,
     Variant,
 )
-from app.services.research.confidence_intervals import (
-    BootstrapCI,
-    ConfidenceIntervalCalculator,
+from app.services.research.hypothesis_testing import (
+    HypothesisTester,
+    MultipleTestingCorrection,
 )
 from app.services.research.sampling import (
     SampleSizeCalculator,
     SamplingEngine,
 )
-
 
 # =========================================================================
 # Data Quality Tests (ECO 202/203 + STA 346)

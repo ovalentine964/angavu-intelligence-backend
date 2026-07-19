@@ -18,14 +18,40 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import time
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.autonomous.learning import (
+    FailureAnalyzer,
+    LearningSystem,
+    MetricType,
+    PatternType,
+    PerformanceTracker,
+)
+from app.autonomous.loops.content_quality import (
+    ContentExecutor,
+    ContentQualityCritic,
+    ContentQualityLoop,
+    ContentRequest,
+    ContentType,
+)
+from app.autonomous.loops.customer_satisfaction import (
+    CustomerFeedback,
+    CustomerSatisfactionLoop,
+    IssueCategory,
+    Sentiment,
+    SentimentAnalyzer,
+)
+from app.autonomous.loops.revenue_optimization import (
+    OptimizationGoal,
+    OptimizationOpportunity,
+    RevenueAnalyzer,
+    RevenueMetrics,
+    RevenueOptimizationLoop,
+    StrategyGenerator,
+)
 from app.autonomous.reflexion import (
     AdaptiveReviser,
-    Critic,
-    Executor,
     HeuristicCritic,
     ReflexionConfig,
     ReflexionEngine,
@@ -33,47 +59,6 @@ from app.autonomous.reflexion import (
     ReflexionStatus,
     create_reflexion_engine,
 )
-from app.autonomous.learning import (
-    AgentLearningProfile,
-    FailureAnalyzer,
-    LearningSystem,
-    MetricType,
-    PatternType,
-    PerformanceTracker,
-    PromptOptimizer,
-)
-from app.autonomous.loops.content_quality import (
-    ContentExecutor,
-    ContentQualityCritic,
-    ContentQualityLoop,
-    ContentReviser,
-    ContentRequest,
-    ContentType,
-    QualityDimension,
-)
-from app.autonomous.loops.customer_satisfaction import (
-    CustomerFeedback,
-    CustomerSatisfactionLoop,
-    FeedbackChannel,
-    IssueCategory,
-    SatisfactionCritic,
-    SatisfactionExecutor,
-    Sentiment,
-    SentimentAnalyzer,
-    SentimentAnalysis,
-)
-from app.autonomous.loops.revenue_optimization import (
-    OptimizationGoal,
-    OptimizationOpportunity,
-    PricingStrategy,
-    RevenueAnalyzer,
-    RevenueMetrics,
-    RevenueOptimizationCritic,
-    RevenueOptimizationExecutor,
-    RevenueOptimizationLoop,
-    StrategyGenerator,
-)
-
 
 # ════════════════════════════════════════════════════════════════════
 # ReflexionEngine Tests

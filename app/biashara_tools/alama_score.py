@@ -12,9 +12,8 @@ DeerFlow agents invoke this tool when users ask about:
 - Peer comparison and percentile ranking
 """
 
-import json
 import asyncio
-from typing import Optional
+import json
 
 from langchain.tools import tool
 

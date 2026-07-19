@@ -23,9 +23,9 @@ to different audiences. A 15% revenue increase means:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -47,7 +47,7 @@ class ReportSection:
     title: str
     content: str
     priority: int = 5  # 1 = highest priority
-    audience_types: List[AudienceType] = field(default_factory=lambda: list(AudienceType))
+    audience_types: list[AudienceType] = field(default_factory=lambda: list(AudienceType))
     format_hint: str = "text"  # text, table, chart, kpi
 
 
@@ -57,12 +57,12 @@ class AudienceReport:
     audience: AudienceType
     title: str
     executive_summary: str
-    sections: List[ReportSection]
+    sections: list[ReportSection]
     language: str
     format_style: str  # whatsapp, formal, policy, impact
     generated_at: datetime = field(default_factory=datetime.utcnow)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "audience": self.audience.value,
             "title": self.title,
@@ -155,10 +155,10 @@ class AudienceReportGenerator:
 
     def generate(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         audience: AudienceType,
         name: str = "Biashara",
-        language: Optional[str] = None,
+        language: str | None = None,
     ) -> AudienceReport:
         """
         Generate an audience-specific report from intelligence data.
@@ -210,7 +210,7 @@ class AudienceReportGenerator:
             format_style=template["format_style"],
         )
 
-    def _worker_sections(self, data: Dict[str, Any], lang: str) -> List[ReportSection]:
+    def _worker_sections(self, data: dict[str, Any], lang: str) -> list[ReportSection]:
         """Generate worker-friendly sections (Swahili-first, simple)."""
         sections = []
 
@@ -294,7 +294,7 @@ class AudienceReportGenerator:
 
         return sections
 
-    def _bank_sections(self, data: Dict[str, Any]) -> List[ReportSection]:
+    def _bank_sections(self, data: dict[str, Any]) -> list[ReportSection]:
         """Generate bank-formal sections (risk-focused, compliance-ready)."""
         sections = []
 
@@ -363,7 +363,7 @@ class AudienceReportGenerator:
 
         return sections
 
-    def _government_sections(self, data: Dict[str, Any]) -> List[ReportSection]:
+    def _government_sections(self, data: dict[str, Any]) -> list[ReportSection]:
         """Generate government-policy sections (aggregate, policy-relevant)."""
         sections = []
 
@@ -436,7 +436,7 @@ class AudienceReportGenerator:
 
         return sections
 
-    def _ngo_sections(self, data: Dict[str, Any]) -> List[ReportSection]:
+    def _ngo_sections(self, data: dict[str, Any]) -> list[ReportSection]:
         """Generate NGO-impact sections (impact-focused, human-centered)."""
         sections = []
 
@@ -511,7 +511,7 @@ class AudienceReportGenerator:
 
         return sections
 
-    def _fmcg_sections(self, data: Dict[str, Any]) -> List[ReportSection]:
+    def _fmcg_sections(self, data: dict[str, Any]) -> list[ReportSection]:
         """Generate FMCG-commercial sections (trend-focused, actionable)."""
         sections = []
 
@@ -582,14 +582,14 @@ class AudienceReportGenerator:
     # Summary generators
     # -------------------------------------------------------------------
 
-    def _worker_summary(self, data: Dict[str, Any], name: str, lang: str) -> str:
+    def _worker_summary(self, data: dict[str, Any], name: str, lang: str) -> str:
         total = data.get("total_sales", data.get("total_revenue", 0))
         profit = data.get("gross_profit", data.get("net_profit", 0))
         if lang == "sw":
             return f"{name}, biashara yako imefanya mauzo ya KSh {total:,.0f} na faida ya KSh {profit:,.0f}."
         return f"{name}, your business recorded KSh {total:,.0f} in sales with KSh {profit:,.0f} profit."
 
-    def _bank_summary(self, data: Dict[str, Any]) -> str:
+    def _bank_summary(self, data: dict[str, Any]) -> str:
         score = data.get("alama_score", "N/A")
         band = data.get("score_band", "N/A")
         limit = data.get("risk_indicators", {}).get("recommended_credit_limit_kes", 0)
@@ -599,7 +599,7 @@ class AudienceReportGenerator:
             f"Risk profile: {data.get('risk_indicators', {}).get('category_risk', 'moderate')}."
         )
 
-    def _government_summary(self, data: Dict[str, Any]) -> str:
+    def _government_summary(self, data: dict[str, Any]) -> str:
         gdp = data.get("nominal_gdp_kes", data.get("total_value_added_kes", 0))
         return (
             f"Estimated informal sector GDP: KES {gdp:,.0f}. "
@@ -607,21 +607,21 @@ class AudienceReportGenerator:
             f"Business cycle: {data.get('business_cycle_phase', 'N/A')}."
         )
 
-    def _ngo_summary(self, data: Dict[str, Any]) -> str:
+    def _ngo_summary(self, data: dict[str, Any]) -> str:
         return (
             f"Beneficiaries: {data.get('sample_size', data.get('user_count', 0)):,}. "
             f"Financial inclusion index: {data.get('inclusion_metrics', {}).get('financial_inclusion_index', 'N/A')}. "
             f"Women-owned: {data.get('women_owned_pct', 'N/A')}%."
         )
 
-    def _fmcg_summary(self, data: Dict[str, Any]) -> str:
+    def _fmcg_summary(self, data: dict[str, Any]) -> str:
         return (
             f"Category: {data.get('product_category', 'N/A')}. "
             f"Demand trend: {data.get('demand_trend', 'N/A')}. "
             f"Avg price: KES {data.get('price_intelligence', {}).get('avg_price', 0):,.2f}."
         )
 
-    def _bank_recommendation(self, data: Dict[str, Any]) -> str:
+    def _bank_recommendation(self, data: dict[str, Any]) -> str:
         score = data.get("alama_score", 0)
         if score >= 700:
             return "RECOMMENDATION: Approve credit. Strong transaction history with consistent revenue patterns."
@@ -630,7 +630,7 @@ class AudienceReportGenerator:
         else:
             return "RECOMMENDATION: Decline or require collateral. High-risk profile based on transaction analysis."
 
-    def _government_policy_implications(self, data: Dict[str, Any]) -> str:
+    def _government_policy_implications(self, data: dict[str, Any]) -> str:
         phase = data.get("business_cycle_phase", "stable")
         if phase == "expansion":
             return "Policy: Economy expanding. Consider formalization incentives and tax registration drives."

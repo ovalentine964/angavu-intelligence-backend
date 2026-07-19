@@ -14,8 +14,8 @@ import pytest
 
 from app.services.statistical.hypothesis import (
     BootstrapInference,
-    HypothesisTester,
     DistributionFitter,
+    HypothesisTester,
 )
 
 

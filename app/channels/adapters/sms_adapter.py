@@ -7,7 +7,7 @@ This adapter provides the interface for future SMS integration.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -34,9 +34,9 @@ class SMSAdapter(BaseChannelAdapter):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        username: Optional[str] = None,
-        sender_id: Optional[str] = None,
+        api_key: str | None = None,
+        username: str | None = None,
+        sender_id: str | None = None,
     ):
         self._api_key = api_key
         self._username = username
@@ -64,7 +64,7 @@ class SMSAdapter(BaseChannelAdapter):
         logger.info("sms_adapter_shutdown")
 
     async def parse_raw_message(
-        self, raw_data: Dict[str, Any]
+        self, raw_data: dict[str, Any]
     ) -> UnifiedMessage:
         """
         Parse Africa's Talking webhook into UnifiedMessage.
@@ -134,7 +134,7 @@ class SMSAdapter(BaseChannelAdapter):
             logger.error("sms_send_failed", error=str(e))
             return False
 
-    async def resolve_worker_id(self, channel_user_id: str) -> Optional[str]:
+    async def resolve_worker_id(self, channel_user_id: str) -> str | None:
         """Resolve phone number to worker UUID."""
         phone = channel_user_id.lstrip("+")
         return phone

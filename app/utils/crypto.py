@@ -14,10 +14,9 @@ import base64
 import hashlib
 import hmac
 import os
-from typing import Optional
 
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
@@ -123,7 +122,7 @@ def hash_phone(phone: str) -> str:
     return hashlib.sha256(phone.encode()).hexdigest()
 
 
-def hash_value(value: str, salt: Optional[str] = None) -> str:
+def hash_value(value: str, salt: str | None = None) -> str:
     """
     Create a salted SHA-256 hash of any value.
 

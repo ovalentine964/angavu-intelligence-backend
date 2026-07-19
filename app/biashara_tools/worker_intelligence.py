@@ -13,9 +13,8 @@ DeerFlow agents invoke this tool when users ask about:
 - Business performance benchmarking
 """
 
-import json
 import asyncio
-from typing import Optional
+import json
 
 from langchain.tools import tool
 
@@ -23,9 +22,9 @@ from langchain.tools import tool
 @tool("worker_intelligence", parse_docstring=True)
 def worker_intelligence_tool(
     query_type: str,
-    worker_id: Optional[str] = None,
-    business_type: Optional[str] = None,
-    region: Optional[str] = None,
+    worker_id: str | None = None,
+    business_type: str | None = None,
+    region: str | None = None,
 ) -> str:
     """Get worker and business intelligence for informal economy participants.
 
@@ -44,8 +43,6 @@ def worker_intelligence_tool(
     """
     try:
         from app.db.database import async_session_factory
-        from app.services.health_score import BusinessHealthCalculator, BusinessMetrics
-        from app.services.worker_classifier import WorkerClassifier
 
         async def _run():
             async with async_session_factory() as db:

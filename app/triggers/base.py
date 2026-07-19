@@ -16,7 +16,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -76,12 +76,12 @@ class TriggerIntent:
     user_id: str  # Phone number, USSD session ID, etc.
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     language: str = "sw"  # Default Swahili
-    extracted_data: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    extracted_data: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     confidence: float = 1.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "intent_type": self.intent_type.value,
             "raw_input": self.raw_input,
@@ -103,12 +103,12 @@ class TriggerResponse:
     """
     text: str
     response_type: str = "text"  # text, voice, menu, image
-    data: Dict[str, Any] = field(default_factory=dict)
-    follow_up: Optional[str] = None  # Prompt for next input
+    data: dict[str, Any] = field(default_factory=dict)
+    follow_up: str | None = None  # Prompt for next input
     session_end: bool = False  # End the conversation session
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "text": self.text,
             "response_type": self.response_type,
@@ -140,7 +140,7 @@ class BaseTrigger(ABC):
             channel=self.get_channel().value,
             component="trigger",
         )
-        self._sessions: Dict[str, Dict[str, Any]] = {}  # session_id → session state
+        self._sessions: dict[str, dict[str, Any]] = {}  # session_id → session state
 
     @abstractmethod
     def get_channel(self) -> TriggerChannel:
@@ -165,7 +165,7 @@ class BaseTrigger(ABC):
         self,
         response: TriggerResponse,
         user_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         Send a response back through the channel.
@@ -182,7 +182,7 @@ class BaseTrigger(ABC):
 
     # ── Session Management ──────────────────────────────────────────
 
-    def get_session(self, session_id: str) -> Dict[str, Any]:
+    def get_session(self, session_id: str) -> dict[str, Any]:
         """Get or create a session."""
         if session_id not in self._sessions:
             self._sessions[session_id] = {
@@ -193,7 +193,7 @@ class BaseTrigger(ABC):
             }
         return self._sessions[session_id]
 
-    def update_session(self, session_id: str, updates: Dict[str, Any]) -> None:
+    def update_session(self, session_id: str, updates: dict[str, Any]) -> None:
         """Update session state."""
         session = self.get_session(session_id)
         session.update(updates)
@@ -217,7 +217,7 @@ class BaseTrigger(ABC):
 
     # ── Health ──────────────────────────────────────────────────────
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return trigger health status."""
         return {
             "channel": self.get_channel().value,

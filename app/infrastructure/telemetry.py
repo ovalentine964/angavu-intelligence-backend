@@ -32,8 +32,9 @@ References:
 from __future__ import annotations
 
 import time
-from contextlib import asynccontextmanager, contextmanager
-from typing import Any, Dict, Generator, Optional
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any
 
 import structlog
 
@@ -42,23 +43,23 @@ logger = structlog.get_logger(__name__)
 # ── OpenTelemetry Imports (graceful degradation) ───────────────────
 
 try:
-    from opentelemetry import trace, metrics, baggage, context
-    from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
-    from opentelemetry.sdk.trace.export import (
-        BatchSpanProcessor,
-        ConsoleSpanExporter,
-    )
+    from opentelemetry import baggage, context, metrics, trace
+    from opentelemetry.propagate import set_global_textmap
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import (
         ConsoleMetricExporter,
         PeriodicExportingMetricReader,
     )
-    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+    from opentelemetry.sdk.trace.export import (
+        BatchSpanProcessor,
+        ConsoleSpanExporter,
+    )
+    from opentelemetry.trace import Status, StatusCode
     from opentelemetry.trace.propagation.tracecontext import (
         TraceContextTextMapPropagator,
     )
-    from opentelemetry.propagate import set_global_textmap
-    from opentelemetry.trace import StatusCode, Status
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -66,11 +67,11 @@ except ImportError:
 
 # Optional OTLP exporter (requires opentelemetry-exporter-otlp)
 try:
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-        OTLPSpanExporter,
-    )
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
         OTLPMetricExporter,
+    )
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        OTLPSpanExporter,
     )
     OTLP_AVAILABLE = True
 except ImportError:
@@ -117,7 +118,7 @@ class TelemetryConfig:
     def __init__(
         self,
         service_name: str = DEFAULT_SERVICE_NAME,
-        otlp_endpoint: Optional[str] = None,
+        otlp_endpoint: str | None = None,
         enable_console_export: bool = False,
         enable_fastapi: bool = True,
         enable_sqlalchemy: bool = True,
@@ -336,11 +337,11 @@ class TelemetryManager:
         telemetry.shutdown()
     """
 
-    def __init__(self, config: Optional[TelemetryConfig] = None):
+    def __init__(self, config: TelemetryConfig | None = None):
         self._config = config or TelemetryConfig()
-        self._tracer_provider: Optional[TracerProvider] = None
-        self._meter_provider: Optional[MeterProvider] = None
-        self._agent_metrics: Optional[AgentMetricsRecorder] = None
+        self._tracer_provider: TracerProvider | None = None
+        self._meter_provider: MeterProvider | None = None
+        self._agent_metrics: AgentMetricsRecorder | None = None
         self._setup = False
 
         self._logger = logger.bind(component="telemetry")
@@ -468,11 +469,11 @@ class TelemetryManager:
         return trace.get_tracer(name)
 
     @property
-    def agent_metrics(self) -> Optional[AgentMetricsRecorder]:
+    def agent_metrics(self) -> AgentMetricsRecorder | None:
         """Access agent-specific metrics recorder."""
         return self._agent_metrics
 
-    def get_trace_context(self) -> Dict[str, str]:
+    def get_trace_context(self) -> dict[str, str]:
         """
         Get current trace context as a dictionary for propagation.
 
@@ -481,16 +482,16 @@ class TelemetryManager:
         """
         if not OTEL_AVAILABLE:
             return {}
-        carrier: Dict[str, str] = {}
+        carrier: dict[str, str] = {}
         TraceContextTextMapPropagator().inject(carrier)
         return carrier
 
-    def inject_trace_context(self, carrier: Dict[str, str]) -> None:
+    def inject_trace_context(self, carrier: dict[str, str]) -> None:
         """Inject current trace context into a carrier dict."""
         if OTEL_AVAILABLE:
             TraceContextTextMapPropagator().inject(carrier)
 
-    def extract_trace_context(self, carrier: Dict[str, str]) -> Optional[context.Context]:
+    def extract_trace_context(self, carrier: dict[str, str]) -> context.Context | None:
         """
         Extract trace context from a carrier dict.
 
@@ -539,13 +540,13 @@ class _NoopSpan:
     def record_exception(self, exc: Exception) -> None:
         pass
 
-    def add_event(self, name: str, attributes: Dict[str, Any] = None) -> None:
+    def add_event(self, name: str, attributes: dict[str, Any] = None) -> None:
         pass
 
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_telemetry_manager: Optional[TelemetryManager] = None
+_telemetry_manager: TelemetryManager | None = None
 
 
 def get_telemetry_manager() -> TelemetryManager:

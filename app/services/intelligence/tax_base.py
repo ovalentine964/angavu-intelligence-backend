@@ -19,12 +19,12 @@ Buyers: KRA, county governments
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -32,11 +32,8 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.intelligence.cache import intelligence_cache
-from app.services.research.confidence_intervals import BootstrapCI
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BootstrapInference,
-    KernelDensityEstimator,
     bootstrap,
     kde_estimator,
 )
@@ -167,7 +164,7 @@ def _deadweight_loss(
 
 def _tax_incidence(
     supply_elasticity: float, demand_elasticity: float
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Tax incidence: who bears the burden?
 
@@ -210,7 +207,7 @@ def _bootstrap_ci(
     n_bootstrap: int = 1000,
     confidence: float = 0.95,
     seed: int = 42,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Bootstrap confidence interval for any statistic.
 
@@ -263,11 +260,11 @@ class TaxBaseService:
     async def estimate_tax_base(
         self,
         region: str,
-        sector: Optional[str] = None,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        sector: str | None = None,
+        period_start: date | None = None,
+        period_end: date | None = None,
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Estimate tax base for a region/sector.
 
@@ -423,7 +420,7 @@ class TaxBaseService:
             ),
             "elasticity_assumption": 1.5,
             "interpretation": (
-                "current_rate_below_optimal" if VAT_RATE < optimal_rate
+                "current_rate_below_optimal" if optimal_rate > VAT_RATE
                 else "current_rate_above_optimal"
             ),
         }
@@ -514,8 +511,8 @@ class TaxBaseService:
         response = {
             "product": "tax_base_estimation",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, user_count / 100),
             "confidence_level": min(1.0, len(sales) / 100),
@@ -573,7 +570,7 @@ class TaxBaseService:
         sales: list,
         sector_breakdown: list,
         user_count: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -585,12 +582,12 @@ class TaxBaseService:
         if len(sales) < 20:
             return None
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for tax compliance distribution ───────────────────
         try:
             # Per-business revenue as compliance proxy
-            business_revenues: Dict[str, float] = defaultdict(float)
+            business_revenues: dict[str, float] = defaultdict(float)
             for t in sales:
                 business_revenues[str(t.user_id)] += t.amount
             rev_arr = np.array(list(business_revenues.values()), dtype=float)
@@ -618,7 +615,7 @@ class TaxBaseService:
         # ── STA 444: Kruskal-Wallis — compare tax compliance across sectors ──
         if len(sector_breakdown) >= 3:
             try:
-                sector_revenues: Dict[str, list] = defaultdict(list)
+                sector_revenues: dict[str, list] = defaultdict(list)
                 for t in sales:
                     cat = t.item_category or "other"
                     sector_revenues[cat].append(float(t.amount))

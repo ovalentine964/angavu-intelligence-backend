@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class InvoiceStatus(str, Enum):
@@ -46,7 +46,7 @@ class InvoiceItem:
         self.total = self.quantity * self.unit_price * (1 + self.tax_rate)
         return self.total
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "item_id": self.item_id,
             "description": self.description,
@@ -90,22 +90,22 @@ class Invoice:
     client_id: str = ""
     client_name: str = ""
     client_email: str = ""
-    items: List[InvoiceItem] = field(default_factory=list)
+    items: list[InvoiceItem] = field(default_factory=list)
     subtotal: float = 0.0
     tax_total: float = 0.0
     total: float = 0.0
     currency: str = "KES"
     status: InvoiceStatus = InvoiceStatus.DRAFT
-    due_date: Optional[datetime] = None
-    issued_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    sent_at: Optional[datetime] = None
-    paid_at: Optional[datetime] = None
+    due_date: datetime | None = None
+    issued_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    sent_at: datetime | None = None
+    paid_at: datetime | None = None
     payment_method: str = ""
     payment_reference: str = ""
     reminder_count: int = 0
-    last_reminder_at: Optional[datetime] = None
+    last_reminder_at: datetime | None = None
     notes: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def calculate_totals(self) -> None:
         """Recalculate subtotal, tax, and total from line items."""
@@ -125,16 +125,16 @@ class Invoice:
             return False
         if self.due_date is None:
             return False
-        return datetime.now(timezone.utc) > self.due_date
+        return datetime.now(UTC) > self.due_date
 
     @property
     def days_overdue(self) -> int:
         """Number of days past due (0 if not overdue)."""
         if not self.is_overdue or self.due_date is None:
             return 0
-        return (datetime.now(timezone.utc) - self.due_date).days
+        return (datetime.now(UTC) - self.due_date).days
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "invoice_id": self.invoice_id,
             "invoice_number": self.invoice_number,
@@ -155,7 +155,7 @@ class Invoice:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Invoice:
+    def from_dict(cls, data: dict[str, Any]) -> Invoice:
         """Reconstruct an Invoice from a dictionary."""
         items = [
             InvoiceItem(

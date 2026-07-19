@@ -10,7 +10,7 @@ Classes:
 Decomposed from statistical_foundation.py for maintainability.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -29,7 +29,7 @@ class PCAAnalyzer:
         X: np.ndarray,
         n_components: int = 3,
         standardize: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit PCA and transform data.
 
@@ -41,7 +41,7 @@ class PCAAnalyzer:
         mean = np.mean(X, axis=0)
         X_centered = X - mean
 
-        scale: Optional[np.ndarray] = None
+        scale: np.ndarray | None = None
         if standardize:
             scale = np.std(X, axis=0, ddof=1)
             scale = np.maximum(scale, 1e-10)
@@ -88,7 +88,7 @@ class PCAAnalyzer:
         X: np.ndarray,
         variance_threshold: float = 0.90,
         standardize: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Select number of components to retain given variance proportion."""
         result = PCAAnalyzer.fit_transform(X, n_components=X.shape[1], standardize=standardize)
         cum_var = result["cumulative_variance"]
@@ -114,18 +114,18 @@ class PCAAnalyzer:
     @staticmethod
     def interpret_loadings(
         loadings: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         n_components: int = 3,
         threshold: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Interpret PCA loadings to label components."""
-        interpretations: List[Dict[str, Any]] = []
+        interpretations: list[dict[str, Any]] = []
         k: int = min(n_components, loadings.shape[1])
 
         for j in range(k):
             col = loadings[:, j]
             sorted_idx = np.argsort(np.abs(col))[::-1]
-            top_features: List[Dict[str, Any]] = []
+            top_features: list[dict[str, Any]] = []
             for idx in sorted_idx:
                 if abs(col[idx]) >= threshold and idx < len(feature_names):
                     top_features.append({
@@ -159,7 +159,7 @@ class FactorAnalyzer:
         n_factors: int = 3,
         max_iter: int = 50,
         rotation: str = "varimax",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit factor analysis model via iterative principal axis factoring.
         """
@@ -243,20 +243,20 @@ class FactorAnalyzer:
     @staticmethod
     def interpret_factors(
         loadings: np.ndarray,
-        feature_names: List[str],
-        factor_names: Optional[List[str]] = None,
+        feature_names: list[str],
+        factor_names: list[str] | None = None,
         threshold: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Interpret factor loadings for economic meaning."""
         k: int = loadings.shape[1]
         if factor_names is None:
             factor_names = [f"Factor_{j+1}" for j in range(k)]
 
-        interpretations: List[Dict[str, Any]] = []
+        interpretations: list[dict[str, Any]] = []
         for j in range(k):
             col = loadings[:, j]
             sorted_idx = np.argsort(np.abs(col))[::-1]
-            markers: List[Dict[str, Any]] = []
+            markers: list[dict[str, Any]] = []
             for idx in sorted_idx:
                 if abs(col[idx]) >= threshold and idx < len(feature_names):
                     markers.append({
@@ -286,7 +286,7 @@ class DiscriminantAnalyzer:
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_test: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit Fisher's LDA and predict test labels.
         """
@@ -309,7 +309,7 @@ class DiscriminantAnalyzer:
 
         S_W = np.zeros((p, p))
         S_B = np.zeros((p, p))
-        group_stats: Dict[int, Dict[str, Any]] = {}
+        group_stats: dict[int, dict[str, Any]] = {}
 
         for c in classes:
             mask = y_train == c
@@ -367,7 +367,7 @@ class DiscriminantAnalyzer:
             proj_train = X_train @ W
             proj_test = X_test @ W
 
-            proj_means: Dict[int, np.ndarray] = {}
+            proj_means: dict[int, np.ndarray] = {}
             for c in classes:
                 proj_means[int(c)] = np.mean(proj_train[y_train == c], axis=0)
 
@@ -417,7 +417,7 @@ class MANOVA:
     def fit(
         X: np.ndarray,
         groups: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fit one-way MANOVA."""
         X = np.asarray(X, dtype=float)
         groups = np.asarray(groups)
@@ -490,4 +490,4 @@ class MANOVA:
         }
 
 
-__all__ = ["PCAAnalyzer", "FactorAnalyzer", "DiscriminantAnalyzer", "MANOVA"]
+__all__ = ["MANOVA", "DiscriminantAnalyzer", "FactorAnalyzer", "PCAAnalyzer"]

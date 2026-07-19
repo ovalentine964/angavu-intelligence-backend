@@ -28,8 +28,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
@@ -72,7 +72,7 @@ class PoolMetrics:
             return 0.0
         return self.checked_out / (self.pool_size + self.overflow)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pool_size": self.pool_size,
             "checked_out": self.checked_out,
@@ -128,7 +128,7 @@ class ConnectionPoolManager:
 
         self._engine = None
         self._metrics = PoolMetrics()
-        self._health_task: Optional[asyncio.Task] = None
+        self._health_task: asyncio.Task | None = None
         self._initialized = False
         self._logger = logger.bind(component="connection_pool")
 
@@ -276,7 +276,7 @@ class ConnectionPoolManager:
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_pool_manager: Optional[ConnectionPoolManager] = None
+_pool_manager: ConnectionPoolManager | None = None
 
 
 def get_pool_manager() -> ConnectionPoolManager:

@@ -19,27 +19,20 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from datetime import datetime
 
 from .whatsapp_charts import (
     ARROW_DOWN,
     ARROW_UP,
-    ARROW_UP_RIGHT,
     BLOCK_FULL,
     BLOCK_LIGHT,
     BLOCK_SOLID,
-    CHECK,
-    CROSS_MARK,
-    FIRE,
-    WARNING,
-    format_currency,
-    format_percentage,
     SWAHILI_MONTHS,
     SWAHILI_MONTHS_SHORT,
+    format_currency,
+    format_percentage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Data Classes
@@ -64,7 +57,7 @@ class MonthlyData:
 class SeasonalPattern:
     """A detected seasonal pattern."""
     pattern_type: str       # "peak", "slow", "growth", "decline", "stable"
-    months: List[int]       # Months involved (1-12)
+    months: list[int]       # Months involved (1-12)
     description_sw: str     # Swahili description
     description_en: str     # English description
     confidence: float       # 0.0-1.0
@@ -87,16 +80,16 @@ class SeasonalInsight:
 @dataclass
 class SeasonalAnalysisResult:
     """Complete seasonal analysis result."""
-    patterns: List[SeasonalPattern]
-    insights: List[SeasonalInsight]
-    best_months: List[Tuple[int, float]]       # (month, avg_revenue)
-    worst_months: List[Tuple[int, float]]      # (month, avg_revenue)
-    growth_months: List[Tuple[int, float]]     # Months with consistent growth
-    monthly_averages: Dict[int, float]         # month → avg revenue
+    patterns: list[SeasonalPattern]
+    insights: list[SeasonalInsight]
+    best_months: list[tuple[int, float]]       # (month, avg_revenue)
+    worst_months: list[tuple[int, float]]      # (month, avg_revenue)
+    growth_months: list[tuple[int, float]]     # Months with consistent growth
+    monthly_averages: dict[int, float]         # month → avg revenue
     overall_trend: str                          # "growing", "stable", "declining"
     trend_description_sw: str
     trend_description_en: str
-    year_over_year_growth: Optional[float]      # If multi-year data available
+    year_over_year_growth: float | None      # If multi-year data available
     summary_sw: str
     summary_en: str
 
@@ -156,7 +149,7 @@ class SeasonalAnalyzer:
 
     def analyze(
         self,
-        monthly_data: List[MonthlyData],
+        monthly_data: list[MonthlyData],
         locale: str = "sw",
     ) -> SeasonalAnalysisResult:
         """Run complete seasonal analysis.
@@ -225,8 +218,8 @@ class SeasonalAnalyzer:
     # -------------------------------------------------------------------
 
     def _calculate_monthly_averages(
-        self, monthly_data: List[MonthlyData]
-    ) -> Dict[int, float]:
+        self, monthly_data: list[MonthlyData]
+    ) -> dict[int, float]:
         """Calculate average revenue for each calendar month.
 
         Groups data by month number (1-12) across all years and computes
@@ -238,7 +231,7 @@ class SeasonalAnalyzer:
         Returns:
             Dict of month_number (1-12) → average revenue.
         """
-        month_buckets: Dict[int, List[float]] = defaultdict(list)
+        month_buckets: dict[int, list[float]] = defaultdict(list)
 
         for m in monthly_data:
             month_buckets[m.month].append(m.revenue)
@@ -255,10 +248,10 @@ class SeasonalAnalyzer:
 
     def _detect_patterns(
         self,
-        monthly_data: List[MonthlyData],
-        monthly_averages: Dict[int, float],
+        monthly_data: list[MonthlyData],
+        monthly_averages: dict[int, float],
         locale: str,
-    ) -> List[SeasonalPattern]:
+    ) -> list[SeasonalPattern]:
         """Detect seasonal patterns from the data.
 
         Identifies:
@@ -378,8 +371,8 @@ class SeasonalAnalyzer:
     # -------------------------------------------------------------------
 
     def _classify_best_months(
-        self, monthly_averages: Dict[int, float], overall_avg: float
-    ) -> List[Tuple[int, float]]:
+        self, monthly_averages: dict[int, float], overall_avg: float
+    ) -> list[tuple[int, float]]:
         """Identify the best-performing months.
 
         Args:
@@ -397,8 +390,8 @@ class SeasonalAnalyzer:
         return sorted(above_avg, key=lambda x: x[1], reverse=True)
 
     def _classify_worst_months(
-        self, monthly_averages: Dict[int, float], overall_avg: float
-    ) -> List[Tuple[int, float]]:
+        self, monthly_averages: dict[int, float], overall_avg: float
+    ) -> list[tuple[int, float]]:
         """Identify the worst-performing months.
 
         Args:
@@ -416,8 +409,8 @@ class SeasonalAnalyzer:
         return sorted(below_avg, key=lambda x: x[1])
 
     def _detect_growth_months(
-        self, monthly_data: List[MonthlyData]
-    ) -> List[Tuple[int, float]]:
+        self, monthly_data: list[MonthlyData]
+    ) -> list[tuple[int, float]]:
         """Identify months with consistent year-over-year growth.
 
         Args:
@@ -427,7 +420,7 @@ class SeasonalAnalyzer:
             List of (month, growth_pct) for months showing growth.
         """
         # Group by month across years
-        month_years: Dict[int, Dict[int, float]] = defaultdict(dict)
+        month_years: dict[int, dict[int, float]] = defaultdict(dict)
         for m in monthly_data:
             month_years[m.month][m.year] = m.revenue
 
@@ -449,8 +442,8 @@ class SeasonalAnalyzer:
     # -------------------------------------------------------------------
 
     def _detect_trend(
-        self, monthly_data: List[MonthlyData]
-    ) -> Tuple[str, str, str]:
+        self, monthly_data: list[MonthlyData]
+    ) -> tuple[str, str, str]:
         """Detect overall business trend.
 
         Uses linear regression on monthly revenue to determine if the
@@ -507,8 +500,8 @@ class SeasonalAnalyzer:
     # -------------------------------------------------------------------
 
     def _calculate_yoy_growth(
-        self, monthly_data: List[MonthlyData]
-    ) -> Optional[float]:
+        self, monthly_data: list[MonthlyData]
+    ) -> float | None:
         """Calculate year-over-year growth if multi-year data available.
 
         Args:
@@ -518,7 +511,7 @@ class SeasonalAnalyzer:
             YoY growth percentage, or None if insufficient data.
         """
         # Group by year
-        year_totals: Dict[int, float] = defaultdict(float)
+        year_totals: dict[int, float] = defaultdict(float)
         for m in monthly_data:
             year_totals[m.year] += m.revenue
 
@@ -539,12 +532,12 @@ class SeasonalAnalyzer:
 
     def _generate_insights(
         self,
-        monthly_data: List[MonthlyData],
-        patterns: List[SeasonalPattern],
-        monthly_averages: Dict[int, float],
+        monthly_data: list[MonthlyData],
+        patterns: list[SeasonalPattern],
+        monthly_averages: dict[int, float],
         overall_avg: float,
         locale: str,
-    ) -> List[SeasonalInsight]:
+    ) -> list[SeasonalInsight]:
         """Generate actionable seasonal insights.
 
         Creates forward-looking advice based on detected patterns,
@@ -651,11 +644,11 @@ class SeasonalAnalyzer:
 
     def _generate_summary_sw(
         self,
-        patterns: List[SeasonalPattern],
-        best_months: List[Tuple[int, float]],
-        worst_months: List[Tuple[int, float]],
+        patterns: list[SeasonalPattern],
+        best_months: list[tuple[int, float]],
+        worst_months: list[tuple[int, float]],
         trend: str,
-        yoy_growth: Optional[float],
+        yoy_growth: float | None,
     ) -> str:
         """Generate Swahili summary of seasonal analysis.
 
@@ -706,11 +699,11 @@ class SeasonalAnalyzer:
 
     def _generate_summary_en(
         self,
-        patterns: List[SeasonalPattern],
-        best_months: List[Tuple[int, float]],
-        worst_months: List[Tuple[int, float]],
+        patterns: list[SeasonalPattern],
+        best_months: list[tuple[int, float]],
+        worst_months: list[tuple[int, float]],
         trend: str,
-        yoy_growth: Optional[float],
+        yoy_growth: float | None,
     ) -> str:
         """Generate English summary of seasonal analysis.
 

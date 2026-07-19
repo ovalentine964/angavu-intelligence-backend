@@ -9,19 +9,20 @@ Tests cover:
 - Feedback processing
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
-from app.agents.base import AgentEvent, EventType
+import pytest
+
+from app.agents.base import EventType
+from app.autonomous.agents.onboarding_agent import OnboardingAgent
 from app.autonomous.models.onboarding import (
     OnboardingFlow,
-    OnboardingStep,
     OnboardingStatus,
+    OnboardingStep,
     StepStatus,
     create_default_onboarding_steps,
 )
-from app.autonomous.agents.onboarding_agent import OnboardingAgent
 
 
 @pytest.fixture
@@ -105,13 +106,13 @@ class TestOnboardingModel:
         """Test stalled onboarding detection."""
         flow = OnboardingFlow(
             status=OnboardingStatus.IN_PROGRESS,
-            started_at=datetime.now(timezone.utc) - timedelta(days=14),
+            started_at=datetime.now(UTC) - timedelta(days=14),
             steps=[
                 OnboardingStep(
                     name="Step 1",
                     order=1,
                     status=StepStatus.COMPLETED,
-                    completed_at=datetime.now(timezone.utc) - timedelta(days=10),
+                    completed_at=datetime.now(UTC) - timedelta(days=10),
                 ),
                 OnboardingStep(name="Step 2", order=2, status=StepStatus.PENDING),
             ]
@@ -122,13 +123,13 @@ class TestOnboardingModel:
         """Test that recently active flows are not stalled."""
         flow = OnboardingFlow(
             status=OnboardingStatus.IN_PROGRESS,
-            started_at=datetime.now(timezone.utc) - timedelta(days=3),
+            started_at=datetime.now(UTC) - timedelta(days=3),
             steps=[
                 OnboardingStep(
                     name="Step 1",
                     order=1,
                     status=StepStatus.COMPLETED,
-                    completed_at=datetime.now(timezone.utc) - timedelta(days=1),
+                    completed_at=datetime.now(UTC) - timedelta(days=1),
                 ),
             ]
         )
@@ -218,7 +219,7 @@ class TestOnboardingAgent:
         flow = agent._flows[flow_id]
         for step in flow.steps:
             step.status = StepStatus.COMPLETED
-            step.completed_at = datetime.now(timezone.utc)
+            step.completed_at = datetime.now(UTC)
 
         # Process feedback
         feedback_result = await agent._process_feedback(

@@ -7,8 +7,6 @@ for resolving worker identities across channels.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import structlog
 
 from app.channels.adapters.base import BaseChannelAdapter, ChannelType
@@ -23,8 +21,8 @@ class ChannelRegistry:
     """
 
     def __init__(self):
-        self._adapters: Dict[ChannelType, BaseChannelAdapter] = {}
-        self._worker_channel_map: Dict[str, Dict[str, str]] = {}
+        self._adapters: dict[ChannelType, BaseChannelAdapter] = {}
+        self._worker_channel_map: dict[str, dict[str, str]] = {}
 
     def register(self, adapter: BaseChannelAdapter) -> None:
         """Register a channel adapter."""
@@ -47,17 +45,17 @@ class ChannelRegistry:
             del self._adapters[channel]
             logger.info("adapter_unregistered", channel=channel.value)
 
-    def get_adapter(self, channel: ChannelType) -> Optional[BaseChannelAdapter]:
+    def get_adapter(self, channel: ChannelType) -> BaseChannelAdapter | None:
         """Get adapter for a specific channel type."""
         return self._adapters.get(channel)
 
     @property
-    def registered_channels(self) -> List[str]:
+    def registered_channels(self) -> list[str]:
         """List of registered channel names."""
         return [ch.value for ch in self._adapters.keys()]
 
     @property
-    def all_adapters(self) -> Dict[ChannelType, BaseChannelAdapter]:
+    def all_adapters(self) -> dict[ChannelType, BaseChannelAdapter]:
         """All registered adapters."""
         return dict(self._adapters)
 
@@ -94,7 +92,7 @@ class ChannelRegistry:
         self,
         channel: ChannelType,
         channel_user_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Resolve a channel-specific user ID to a canonical worker ID.
 
@@ -139,7 +137,7 @@ class ChannelRegistry:
             channel_user_id=channel_user_id,
         )
 
-    def get_stats(self) -> Dict[str, object]:
+    def get_stats(self) -> dict[str, object]:
         """Get registry statistics."""
         return {
             "registered_channels": self.registered_channels,

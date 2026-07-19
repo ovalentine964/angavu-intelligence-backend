@@ -35,9 +35,14 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, Optional
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from starlette.requests import Request
 
 logger = structlog.get_logger(__name__)
 
@@ -45,13 +50,13 @@ logger = structlog.get_logger(__name__)
 
 try:
     from prometheus_client import (
+        CONTENT_TYPE_LATEST,
         CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
         Info,
         generate_latest,
-        CONTENT_TYPE_LATEST,
     )
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -803,7 +808,7 @@ class MetricsCollector:
             return "text/plain"
         return CONTENT_TYPE_LATEST
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Get a human-readable summary of current metrics.
 
@@ -862,7 +867,6 @@ def create_metrics_middleware(app):
         create_metrics_middleware(app)
     """
     from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.requests import Request
     from starlette.responses import Response
 
     collector = get_metrics_collector()
@@ -921,7 +925,7 @@ def create_metrics_middleware(app):
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_metrics_collector: Optional[MetricsCollector] = None
+_metrics_collector: MetricsCollector | None = None
 
 
 def get_metrics_collector() -> MetricsCollector:

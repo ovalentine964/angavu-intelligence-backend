@@ -20,7 +20,7 @@ USSD Menu Structure:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -142,11 +142,11 @@ class USSDSession:
         self.session_id = session_id
         self.phone_number = phone_number
         self.current_menu = "root"
-        self.history: List[str] = ["root"]
-        self.collected_data: Dict[str, Any] = {}
+        self.history: list[str] = ["root"]
+        self.collected_data: dict[str, Any] = {}
         self.free_text_mode = False
 
-    def navigate(self, input_text: str) -> Tuple[str, Dict[str, Any]]:
+    def navigate(self, input_text: str) -> tuple[str, dict[str, Any]]:
         """
         Process USSD input and return (menu_key, data).
 
@@ -206,7 +206,7 @@ class USSDTrigger(BaseTrigger):
 
     def __init__(self):
         super().__init__()
-        self._sessions: Dict[str, USSDSession] = {}
+        self._sessions: dict[str, USSDSession] = {}
 
     def get_channel(self) -> TriggerChannel:
         return TriggerChannel.USSD
@@ -286,7 +286,7 @@ class USSDTrigger(BaseTrigger):
         self,
         response: TriggerResponse,
         user_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         Send USSD response back to the gateway.
@@ -334,7 +334,7 @@ class USSDTrigger(BaseTrigger):
 
         return text
 
-    def _parse_free_text(self, text: str) -> Dict[str, Any]:
+    def _parse_free_text(self, text: str) -> dict[str, Any]:
         """Parse free text input (e.g., 'nyanya 500')."""
         # Pattern: item amount
         match = re.match(r'(\w+)\s+(\d+)', text.strip())

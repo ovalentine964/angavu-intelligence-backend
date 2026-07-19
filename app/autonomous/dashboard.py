@@ -13,7 +13,7 @@ Designed for API consumption (JSON) — the frontend renders the charts.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -42,7 +42,7 @@ class MonitoringDashboard:
         self._escalation = escalation_manager
         self._logger = logger.bind(component="dashboard")
 
-    def get_overview(self) -> Dict[str, Any]:
+    def get_overview(self) -> dict[str, Any]:
         """
         Get the full dashboard overview.
 
@@ -74,7 +74,7 @@ class MonitoringDashboard:
             "alerts": self._build_alerts(metrics, escalation),
         }
 
-    def get_agent_detail(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_detail(self, agent_name: str) -> dict[str, Any]:
         """Get detailed metrics for a specific agent."""
         agent_metrics = self._monitor.get_agent_metrics(agent_name)
         recent_tasks = [
@@ -93,7 +93,7 @@ class MonitoringDashboard:
             "health_status": self._agent_health_status(agent_metrics),
         }
 
-    def get_cost_report(self) -> Dict[str, Any]:
+    def get_cost_report(self) -> dict[str, Any]:
         """Get detailed cost breakdown."""
         metrics = self._monitor.get_metrics()
         hourly = self._monitor.get_hourly_series(24)
@@ -112,7 +112,7 @@ class MonitoringDashboard:
             "hourly_series": hourly,
         }
 
-    def get_escalation_report(self) -> Dict[str, Any]:
+    def get_escalation_report(self) -> dict[str, Any]:
         """Get detailed escalation report."""
         escalation = self._escalation.get_metrics()
         open_tickets = self._escalation.get_open_tickets()
@@ -128,9 +128,9 @@ class MonitoringDashboard:
 
     def _build_kpis(
         self,
-        metrics: Dict[str, Any],
-        escalation: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, Any],
+        escalation: dict[str, Any],
+    ) -> dict[str, Any]:
         """Build KPI card data."""
         return {
             "success_rate": {
@@ -170,9 +170,9 @@ class MonitoringDashboard:
 
     def _build_alerts(
         self,
-        metrics: Dict[str, Any],
-        escalation: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+        metrics: dict[str, Any],
+        escalation: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         """Build alert list from current state."""
         alerts = []
 
@@ -217,7 +217,7 @@ class MonitoringDashboard:
 
         return alerts
 
-    def _agent_health_status(self, metrics: Dict[str, Any]) -> str:
+    def _agent_health_status(self, metrics: dict[str, Any]) -> str:
         """Determine agent health status from metrics."""
         error_rate = metrics.get("error_rate", 0)
         escalation_rate = metrics.get("escalation_rate", 0)

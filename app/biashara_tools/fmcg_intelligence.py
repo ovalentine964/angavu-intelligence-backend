@@ -13,9 +13,8 @@ DeerFlow agents invoke this tool when users ask about:
 - Fleet utilization and distribution efficiency
 """
 
-import json
 import asyncio
-from typing import Optional
+import json
 
 from langchain.tools import tool
 
@@ -23,9 +22,9 @@ from langchain.tools import tool
 @tool("fmcg_intelligence", parse_docstring=True)
 def fmcg_intelligence_tool(
     query_type: str,
-    company: Optional[str] = None,
-    product_category: Optional[str] = None,
-    region: Optional[str] = None,
+    company: str | None = None,
+    product_category: str | None = None,
+    region: str | None = None,
 ) -> str:
     """Get FMCG intelligence for informal market channels in East Africa.
 

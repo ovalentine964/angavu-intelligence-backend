@@ -24,17 +24,19 @@ ad-hoc error handling into a systematic control plane.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from app.agents.base import AgentEvent, AgentResult, BiasharaAgent
 
 logger = structlog.get_logger(__name__)
@@ -59,7 +61,7 @@ except ImportError:
 # ════════════════════════════════════════════════════════════════════
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     """Circuit breaker states."""
     CLOSED = "closed"        # Normal operation — requests pass through
     OPEN = "open"            # Failing — requests are rejected immediately
@@ -459,7 +461,7 @@ class AgentMetricsCollector:
 
     def get_all_stats(self, hours: int = 24) -> dict[str, Any]:
         """Get stats for all agents."""
-        agent_names = set(r.agent_name for r in self._records)
+        agent_names = {r.agent_name for r in self._records}
         return {
             "agents": {name: self.get_agent_stats(name, hours) for name in agent_names},
             "swarms": self.get_all_swarm_stats(hours),
@@ -714,10 +716,8 @@ class AgentExecutionHarness:
                     cb.record_failure()
                     # Notify governance of failure (for auto-pause tracking)
                     if self._governance:
-                        try:
+                        with contextlib.suppress(Exception):
                             self._governance.record_failure(agent_name)
-                        except Exception:
-                            pass
 
                 # Record metrics
                 self._metrics.record(record)
@@ -1139,7 +1139,7 @@ class CanaryRouter:
         total = sum(w for _, w, _ in versions)
         r = random.uniform(0, total)
         cumulative = 0
-        for agent, weight, version in versions:
+        for agent, weight, _version in versions:
             cumulative += weight
             if r <= cumulative:
                 return agent
@@ -1163,7 +1163,7 @@ class CanaryRouter:
     ) -> bool:
         """Update the traffic weight for a specific version."""
         versions = self._versions.get(agent_name, [])
-        for i, (agent, weight, ver) in enumerate(versions):
+        for i, (agent, _weight, ver) in enumerate(versions):
             if ver == version:
                 versions[i] = (agent, new_weight, version)
                 self._logger.info(

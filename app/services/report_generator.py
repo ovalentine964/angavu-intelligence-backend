@@ -23,57 +23,33 @@ Design Principles:
 
 from __future__ import annotations
 
-import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, date
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from datetime import date, datetime
+from typing import Any
 
+from .comparison_engine import ComparisonEngine, PeerBusiness
+from .health_score import BusinessHealthScorer, BusinessMetrics, HealthScoreResult
+from .seasonal_analyzer import MonthlyData, SeasonalAnalyzer
 from .whatsapp_charts import (
     ARROW_DOWN,
     ARROW_UP,
-    ARROW_UP_RIGHT,
-    ARROW_DOWN_RIGHT,
-    BLOCK_FULL,
-    BLOCK_LIGHT,
-    BLOCK_SOLID,
-    CHECK,
-    CROSS_MARK,
-    WARNING,
-    FIRE,
-    HEART,
-    LIGHTNING,
-    MOOD_GREAT,
-    MOOD_OK,
-    MOOD_SLOW,
-    STAR_FILLED,
-    STAR_EMPTY,
+    SWAHILI_DAYS_SHORT,
+    SWAHILI_MONTHS,
+    SWAHILI_MONTHS_SHORT,
     BarChart,
     CashFlowDiagram,
     Heatmap,
     ProgressBar,
     Sparkline,
-    TrendLine,
     TableBuilder,
+    TrendLine,
     divider,
-    emoji_number,
     format_currency,
-    format_number,
     format_percentage,
-    health_display,
-    mood_indicator,
     mood_label,
-    section_header,
-    star_rating,
-    SWAHILI_DAYS_SHORT,
-    SWAHILI_MONTHS,
-    SWAHILI_MONTHS_SHORT,
 )
-from .health_score import BusinessHealthScorer, BusinessMetrics, HealthScoreResult
-from .seasonal_analyzer import SeasonalAnalyzer, MonthlyData, SeasonalAnalysisResult
-from .comparison_engine import ComparisonEngine, PeerBusiness, ComparisonResult
-
 
 # ---------------------------------------------------------------------------
 # Data Classes
@@ -91,7 +67,7 @@ class UserProfile:
     preferred_report_time: str = "19:00"  # HH:MM format
     currency: str = "KSh"
     phone: str = ""
-    join_date: Optional[date] = None
+    join_date: date | None = None
 
 
 @dataclass
@@ -104,7 +80,7 @@ class TransactionData:
     item_name: str = ""
     item_category: str = ""
     quantity: int = 1
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
     payment_method: str = "cash"    # "cash", "mpesa", "credit"
 
 
@@ -116,7 +92,7 @@ class InventoryItem:
     unit: str = "pieces"
     daily_usage_rate: float = 0.0   # Average units used per day
     restock_threshold: float = 0.0  # Alert when below this
-    last_restock_date: Optional[date] = None
+    last_restock_date: date | None = None
     cost_per_unit: float = 0.0
 
 
@@ -129,7 +105,7 @@ class DailyData:
     profit: float = 0.0
     sales_count: int = 0
     purchase_count: int = 0
-    items_sold: Dict[str, Tuple[int, float]] = field(default_factory=dict)  # item → (qty, revenue)
+    items_sold: dict[str, tuple[int, float]] = field(default_factory=dict)  # item → (qty, revenue)
     best_item: str = ""
     best_item_revenue: float = 0.0
     best_item_qty: int = 0
@@ -140,7 +116,7 @@ class WeeklyData:
     """Aggregated data for a week."""
     week_start: date
     week_end: date
-    daily_data: List[DailyData] = field(default_factory=list)
+    daily_data: list[DailyData] = field(default_factory=list)
     total_sales: float = 0.0
     total_purchases: float = 0.0
     profit: float = 0.0
@@ -149,8 +125,8 @@ class WeeklyData:
     best_day_sales: float = 0.0
     worst_day: str = ""
     worst_day_sales: float = 0.0
-    top_items: List[Tuple[str, int, float]] = field(default_factory=list)  # (name, qty, revenue)
-    inventory_alerts: List[InventoryItem] = field(default_factory=list)
+    top_items: list[tuple[str, int, float]] = field(default_factory=list)  # (name, qty, revenue)
+    inventory_alerts: list[InventoryItem] = field(default_factory=list)
 
 
 @dataclass
@@ -163,9 +139,9 @@ class MonthlyDataAgg:
     profit: float = 0.0
     total_transactions: int = 0
     active_days: int = 0
-    daily_data: List[DailyData] = field(default_factory=list)
-    top_items: List[Tuple[str, int, float]] = field(default_factory=list)
-    expense_categories: Dict[str, float] = field(default_factory=dict)
+    daily_data: list[DailyData] = field(default_factory=list)
+    top_items: list[tuple[str, int, float]] = field(default_factory=list)
+    expense_categories: dict[str, float] = field(default_factory=dict)
     previous_month_sales: float = 0.0
     previous_month_profit: float = 0.0
 
@@ -206,9 +182,9 @@ class ReportGenerator:
         self,
         profile: UserProfile,
         today: DailyData,
-        yesterday: Optional[DailyData] = None,
+        yesterday: DailyData | None = None,
         avg_daily_sales: float = 0.0,
-        inventory_alerts: Optional[List[InventoryItem]] = None,
+        inventory_alerts: list[InventoryItem] | None = None,
     ) -> str:
         """Generate the daily report (Ripoti ya Leo).
 
@@ -332,7 +308,7 @@ class ReportGenerator:
         self,
         profile: UserProfile,
         week: WeeklyData,
-        previous_week: Optional[WeeklyData] = None,
+        previous_week: WeeklyData | None = None,
     ) -> str:
         """Generate the weekly report (Ripoti ya Wiki).
 
@@ -485,9 +461,9 @@ class ReportGenerator:
         self,
         profile: UserProfile,
         month_data: MonthlyDataAgg,
-        previous_months: Optional[List[MonthlyDataAgg]] = None,
-        inventory: Optional[List[InventoryItem]] = None,
-        peer_data: Optional[List[PeerBusiness]] = None,
+        previous_months: list[MonthlyDataAgg] | None = None,
+        inventory: list[InventoryItem] | None = None,
+        peer_data: list[PeerBusiness] | None = None,
     ) -> str:
         """Generate the monthly report (Ripoti ya Mwezi).
 
@@ -637,8 +613,8 @@ class ReportGenerator:
     def generate_semiannual(
         self,
         profile: UserProfile,
-        monthly_data_list: List[MonthlyDataAgg],
-        peer_data: Optional[List[PeerBusiness]] = None,
+        monthly_data_list: list[MonthlyDataAgg],
+        peer_data: list[PeerBusiness] | None = None,
     ) -> str:
         """Generate the semi-annual report (Ripoti ya Nusu Mwaka).
 
@@ -778,9 +754,9 @@ class ReportGenerator:
     def generate_annual(
         self,
         profile: UserProfile,
-        monthly_data_list: List[MonthlyDataAgg],
+        monthly_data_list: list[MonthlyDataAgg],
         previous_year_sales: float = 0.0,
-        peer_data: Optional[List[PeerBusiness]] = None,
+        peer_data: list[PeerBusiness] | None = None,
     ) -> str:
         """Generate the annual report (Ripoti ya Mwaka).
 
@@ -825,7 +801,7 @@ class ReportGenerator:
         worst_month = min(monthly_data_list, key=lambda m: m.total_sales)
 
         # Aggregate top items across all months
-        all_items: Dict[str, Tuple[int, float]] = defaultdict(lambda: (0, 0.0))
+        all_items: dict[str, tuple[int, float]] = defaultdict(lambda: (0, 0.0))
         for m in monthly_data_list:
             for name, qty, revenue in m.top_items:
                 existing_qty, existing_rev = all_items[name]
@@ -1004,7 +980,7 @@ class ReportGenerator:
     def _generate_daily_tip(
         self,
         today: DailyData,
-        yesterday: Optional[DailyData],
+        yesterday: DailyData | None,
         avg_sales: float,
         lang: str,
     ) -> str:
@@ -1064,9 +1040,9 @@ class ReportGenerator:
     def _generate_weekly_insights(
         self,
         week: WeeklyData,
-        previous_week: Optional[WeeklyData],
+        previous_week: WeeklyData | None,
         lang: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate 2-3 insights for the weekly report.
 
         Args:
@@ -1126,10 +1102,10 @@ class ReportGenerator:
     def _generate_monthly_recommendations(
         self,
         month: MonthlyDataAgg,
-        previous_months: Optional[List[MonthlyDataAgg]],
+        previous_months: list[MonthlyDataAgg] | None,
         health: HealthScoreResult,
         lang: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate recommendations for next month.
 
         Args:
@@ -1175,8 +1151,8 @@ class ReportGenerator:
 
     def _render_product_evolution(
         self,
-        monthly_data_list: List[MonthlyDataAgg],
-        lines: List[str],
+        monthly_data_list: list[MonthlyDataAgg],
+        lines: list[str],
         lang: str,
         cfg: Any,
     ) -> None:
@@ -1189,7 +1165,7 @@ class ReportGenerator:
             cfg: Chart config.
         """
         # Track products across months
-        product_trend: Dict[str, List[float]] = defaultdict(list)
+        product_trend: dict[str, list[float]] = defaultdict(list)
         for m in monthly_data_list:
             items_dict = {name: revenue for name, _, revenue in m.top_items}
             all_products = set()
@@ -1238,10 +1214,10 @@ class ReportGenerator:
 
     def _generate_semiannual_goals(
         self,
-        monthly_data_list: List[MonthlyDataAgg],
+        monthly_data_list: list[MonthlyDataAgg],
         health: HealthScoreResult,
         lang: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate goals for next 6 months.
 
         Args:
@@ -1280,11 +1256,11 @@ class ReportGenerator:
 
     def _generate_annual_goals(
         self,
-        monthly_data_list: List[MonthlyDataAgg],
+        monthly_data_list: list[MonthlyDataAgg],
         health: HealthScoreResult,
         credit: Any,
         lang: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate goals for next year.
 
         Args:
@@ -1330,10 +1306,10 @@ class ReportGenerator:
     def _generate_business_narrative(
         self,
         profile: UserProfile,
-        monthly_data: List[MonthlyDataAgg],
+        monthly_data: list[MonthlyDataAgg],
         total_sales: float,
         total_profit: float,
-        yoy_growth: Optional[float],
+        yoy_growth: float | None,
         lang: str,
     ) -> str:
         """Generate a narrative summary of the business year.
@@ -1411,7 +1387,7 @@ class ReportGenerator:
     def _build_health_metrics(
         self,
         month: MonthlyDataAgg,
-        previous_months: Optional[List[MonthlyDataAgg]],
+        previous_months: list[MonthlyDataAgg] | None,
         profile: UserProfile,
     ) -> BusinessMetrics:
         """Build BusinessMetrics for monthly health score.
@@ -1467,7 +1443,7 @@ class ReportGenerator:
 
     def _build_health_metrics_semiannual(
         self,
-        monthly_data_list: List[MonthlyDataAgg],
+        monthly_data_list: list[MonthlyDataAgg],
         profile: UserProfile,
     ) -> BusinessMetrics:
         """Build BusinessMetrics for semi-annual health score."""
@@ -1490,7 +1466,7 @@ class ReportGenerator:
         cv = statistics.stdev(all_daily) / statistics.mean(all_daily) if len(all_daily) >= 2 and statistics.mean(all_daily) > 0 else 0
 
         # Aggregate products
-        all_items: Dict[str, float] = defaultdict(float)
+        all_items: dict[str, float] = defaultdict(float)
         for m in monthly_data_list:
             for name, _, revenue in m.top_items:
                 all_items[name] += revenue
@@ -1516,7 +1492,7 @@ class ReportGenerator:
 
     def _build_health_metrics_annual(
         self,
-        monthly_data_list: List[MonthlyDataAgg],
+        monthly_data_list: list[MonthlyDataAgg],
         profile: UserProfile,
     ) -> BusinessMetrics:
         """Build BusinessMetrics for annual health score."""

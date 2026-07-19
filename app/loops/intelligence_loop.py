@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
+from app.agents.base import AgentEvent, EventType
 from app.agents.loops.core import ExecutionPlan, PlanExecuteAgent, PlanStep
 from app.loops.config import get_loop_config
 
@@ -37,7 +37,7 @@ class IntelligenceRequest:
     """A request for intelligence generation."""
     request_id: str
     worker_id: str
-    products: List[str]  # market_intelligence | price_forecast | credit_score
+    products: list[str]  # market_intelligence | price_forecast | credit_score
     language: str = "sw"
     delivery_channel: str = "whatsapp"
     priority: str = "normal"  # normal | high | urgent
@@ -48,13 +48,13 @@ class IntelligenceProduct:
     """A generated intelligence product."""
     product_type: str
     worker_id: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     confidence: float
     generated_at: str = ""
 
     def __post_init__(self):
         if not self.generated_at:
-            self.generated_at = datetime.now(timezone.utc).isoformat()
+            self.generated_at = datetime.now(UTC).isoformat()
 
 
 @dataclass
@@ -62,7 +62,7 @@ class IntelligenceDelivery:
     """Record of intelligence delivery."""
     request_id: str
     worker_id: str
-    products_delivered: List[str]
+    products_delivered: list[str]
     delivery_channel: str
     delivered_at: str = ""
     success: bool = True
@@ -82,10 +82,10 @@ class IntelligenceLoopState:
     analysis_complete: bool = False
     report_delivered: bool = False
 
-    request: Optional[IntelligenceRequest] = None
-    products: Dict[str, IntelligenceProduct] = field(default_factory=dict)
-    delivery: Optional[IntelligenceDelivery] = None
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    request: IntelligenceRequest | None = None
+    products: dict[str, IntelligenceProduct] = field(default_factory=dict)
+    delivery: IntelligenceDelivery | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def is_satisfied(self) -> bool:
         return self.data_collected and self.analysis_complete and self.report_delivered
@@ -99,7 +99,7 @@ class IntelligenceLoopState:
             return "goal_not_met_yet"
         return "none"
 
-    def record_progress(self, phase: str, result: Dict[str, Any]) -> bool:
+    def record_progress(self, phase: str, result: dict[str, Any]) -> bool:
         changed = False
         if phase == "collect" and not self.data_collected:
             self.data_collected = True
@@ -115,7 +115,7 @@ class IntelligenceLoopState:
             changed = True
         return changed
 
-    def to_goal_state(self) -> Dict[str, Any]:
+    def to_goal_state(self) -> dict[str, Any]:
         return {
             "objective": f"Generate intelligence for worker {self.worker_id}",
             "status": "active" if not self.is_satisfied() else "completed",
@@ -168,7 +168,7 @@ class IntelligenceLoop(PlanExecuteAgent):
             max_replans=2,
         )
         self._config = get_loop_config("intelligence_generation")
-        self._active_states: Dict[str, IntelligenceLoopState] = {}
+        self._active_states: dict[str, IntelligenceLoopState] = {}
 
     def _get_or_create_state(self, request_id: str, worker_id: str) -> IntelligenceLoopState:
         if request_id not in self._active_states:
@@ -181,8 +181,8 @@ class IntelligenceLoop(PlanExecuteAgent):
     async def _create_plan(
         self,
         goal: str,
-        context: Dict[str, Any],
-        reflexion_feedback: Optional[Dict] = None,
+        context: dict[str, Any],
+        reflexion_feedback: dict | None = None,
     ) -> ExecutionPlan:
         """
         Create an intelligence generation plan.
@@ -276,8 +276,8 @@ class IntelligenceLoop(PlanExecuteAgent):
         return plan
 
     async def _execute_plan_step(
-        self, action: str, parameters: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action: str, parameters: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute a single intelligence pipeline step."""
         start = time.time()
         worker_id = parameters.get("worker_id", "unknown")
@@ -309,8 +309,8 @@ class IntelligenceLoop(PlanExecuteAgent):
             }
 
     async def _step_collect(
-        self, worker_id: str, request_id: str, state: Optional[IntelligenceLoopState]
-    ) -> Dict[str, Any]:
+        self, worker_id: str, request_id: str, state: IntelligenceLoopState | None
+    ) -> dict[str, Any]:
         """Collect data for intelligence generation."""
         start = time.time()
 
@@ -337,8 +337,8 @@ class IntelligenceLoop(PlanExecuteAgent):
         }
 
     async def _step_generate(
-        self, product: str, worker_id: str, request_id: str, state: Optional[IntelligenceLoopState]
-    ) -> Dict[str, Any]:
+        self, product: str, worker_id: str, request_id: str, state: IntelligenceLoopState | None
+    ) -> dict[str, Any]:
         """Generate a specific intelligence product."""
         start = time.time()
 
@@ -394,8 +394,8 @@ class IntelligenceLoop(PlanExecuteAgent):
         }
 
     async def _step_format(
-        self, worker_id: str, request_id: str, state: Optional[IntelligenceLoopState]
-    ) -> Dict[str, Any]:
+        self, worker_id: str, request_id: str, state: IntelligenceLoopState | None
+    ) -> dict[str, Any]:
         """Format intelligence products into a report."""
         start = time.time()
 
@@ -430,8 +430,8 @@ class IntelligenceLoop(PlanExecuteAgent):
         }
 
     async def _step_deliver(
-        self, worker_id: str, request_id: str, state: Optional[IntelligenceLoopState]
-    ) -> Dict[str, Any]:
+        self, worker_id: str, request_id: str, state: IntelligenceLoopState | None
+    ) -> dict[str, Any]:
         """Deliver the formatted report."""
         start = time.time()
 
@@ -471,12 +471,12 @@ class IntelligenceLoop(PlanExecuteAgent):
             "delivery": {
                 "channel": channel,
                 "products_delivered": products_delivered,
-                "delivered_at": datetime.now(timezone.utc).isoformat(),
+                "delivered_at": datetime.now(UTC).isoformat(),
             },
             "duration_ms": (time.time() - start) * 1000,
         }
 
-    def get_state(self, request_id: str) -> Optional[Dict[str, Any]]:
+    def get_state(self, request_id: str) -> dict[str, Any] | None:
         state = self._active_states.get(request_id)
         return state.to_goal_state() if state else None
 

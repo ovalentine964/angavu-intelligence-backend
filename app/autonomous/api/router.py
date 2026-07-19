@@ -22,22 +22,21 @@ Security:
 from __future__ import annotations
 
 import re
-import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
+import jwt as pyjwt
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import jwt as pyjwt
 from jwt.exceptions import PyJWTError as JWTError
 from pydantic import BaseModel, Field, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.autonomous.repository import AutonomousRepository
 from app.config import get_settings
 from app.db.database import get_db
-from app.autonomous.repository import AutonomousRepository
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -109,10 +108,10 @@ async def require_auth(
 
 async def optional_auth(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
         HTTPBearer(auto_error=False)
     ),
-) -> Optional[dict]:
+) -> dict | None:
     """
     FastAPI dependency — optional JWT. Returns None if no token provided.
     Used for endpoints that work with or without auth.
@@ -177,10 +176,10 @@ class LeadCreateRequest(BaseModel):
     estimated_budget: float = Field(0.0, ge=0, le=1_000_000_000)
     source: str = Field("other", max_length=50)
     urgency: str = Field("", max_length=50)
-    decision_timeline_days: Optional[int] = Field(None, ge=0, le=3650)
+    decision_timeline_days: int | None = Field(None, ge=0, le=3650)
     meetings_requested: int = Field(0, ge=0, le=1000)
     email_opens: int = Field(0, ge=0, le=100_000)
-    metadata: Dict[str, Any] = Field(default_factory=dict, max_length=50)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=50)
 
     @field_validator("company_name", "contact_name", "contact_email", "industry")
     @classmethod
@@ -199,13 +198,13 @@ class ContentRequest(BaseModel):
     """Request to generate content."""
 
     content_type: str = Field("blog_post", max_length=50)
-    topic: Optional[str] = Field(None, max_length=500)
-    target_channels: List[str] = Field(default_factory=list, max_length=10)
+    topic: str | None = Field(None, max_length=500)
+    target_channels: list[str] = Field(default_factory=list, max_length=10)
     requested_by: str = Field("api", max_length=100)
 
     @field_validator("topic")
     @classmethod
-    def sanitize_topic(cls, v: Optional[str]) -> Optional[str]:
+    def sanitize_topic(cls, v: str | None) -> str | None:
         return _sanitize_string(v) if v else v
 
 
@@ -216,7 +215,7 @@ class InvoiceCreateRequest(BaseModel):
     client_name: str = Field(..., min_length=1, max_length=200)
     client_email: str = Field("", max_length=254)
     product_tier: str = Field("standard", max_length=50)
-    addons: List[str] = Field(default_factory=list, max_length=20)
+    addons: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("client_name", "client_email")
     @classmethod
@@ -276,7 +275,7 @@ async def create_lead(
     request: Request,
     body: LeadCreateRequest,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Submit a new lead for automatic qualification.
@@ -327,10 +326,10 @@ async def create_lead(
 @limiter.limit("60/minute")
 async def list_leads(
     request: Request,
-    status_filter: Optional[str] = None,
+    status_filter: str | None = None,
     limit: int = Field(50, ge=1, le=200),
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """List leads with optional status filter."""
     repo = AutonomousRepository(db)
@@ -349,7 +348,7 @@ async def get_lead(
     request: Request,
     lead_id: str = Field(..., max_length=50),
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get detailed information about a specific lead."""
     repo = AutonomousRepository(db)
@@ -399,7 +398,7 @@ async def request_content(
 @limiter.limit("60/minute")
 async def list_content(
     request: Request,
-    content_type: Optional[str] = None,
+    content_type: str | None = None,
     limit: int = Field(50, ge=1, le=200),
     user: dict = Depends(require_auth),
 ):
@@ -419,7 +418,7 @@ async def get_content_calendar(
 ):
     """Get the current content calendar."""
     return {
-        "week_start": datetime.now(timezone.utc).isoformat(),
+        "week_start": datetime.now(UTC).isoformat(),
         "planned_pieces": [],
         "themes": ["African market intelligence", "SME growth", "Financial inclusion"],
     }
@@ -440,7 +439,7 @@ async def create_invoice(
     request: Request,
     body: InvoiceCreateRequest,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Create and send an invoice for a client.
@@ -485,10 +484,10 @@ async def create_invoice(
 @limiter.limit("60/minute")
 async def list_invoices(
     request: Request,
-    status_filter: Optional[str] = None,
+    status_filter: str | None = None,
     limit: int = Field(50, ge=1, le=200),
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """List invoices with optional status filter."""
     repo = AutonomousRepository(db)
@@ -508,7 +507,7 @@ async def mark_invoice_paid(
     payment_method: str = Field("mpesa", max_length=50),
     payment_reference: str = Field("", max_length=200),
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Mark an invoice as paid (from payment webhook)."""
     repo = AutonomousRepository(db)
@@ -558,9 +557,9 @@ async def get_revenue_forecast(
 @limiter.limit("60/minute")
 async def list_onboarding(
     request: Request,
-    status_filter: Optional[str] = None,
+    status_filter: str | None = None,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all onboarding flows."""
     repo = AutonomousRepository(db)
@@ -578,7 +577,7 @@ async def get_onboarding(
     request: Request,
     flow_id: str = Field(..., max_length=50),
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get detailed onboarding flow progress."""
     repo = AutonomousRepository(db)
@@ -595,7 +594,7 @@ async def submit_onboarding_feedback(
     flow_id: str,
     body: OnboardingFeedbackRequest,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Submit feedback for an onboarding flow."""
     repo = AutonomousRepository(db)
@@ -621,7 +620,7 @@ async def complete_onboarding_step(
     flow_id: str,
     step_name: str,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Mark a specific onboarding step as completed."""
     repo = AutonomousRepository(db)
@@ -699,7 +698,7 @@ async def record_revenue_metric(
     request: Request,
     body: RevenueMetricRequest,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Record a revenue metric data point."""
     repo = AutonomousRepository(db)
@@ -736,7 +735,7 @@ async def record_revenue_metric(
 async def get_dashboard(
     request: Request,
     user: dict = Depends(require_auth),
-    db: "AsyncSession" = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get the full revenue operations dashboard.
@@ -760,7 +759,7 @@ async def get_dashboard(
     orchestrator_status = orchestrator.get_status() if orchestrator else {}
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "leads": {
             "total": total_leads,
             "qualified": qualified_leads,

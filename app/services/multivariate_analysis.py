@@ -21,7 +21,7 @@ Usage:
     from app.services.multivariate_analysis import PCAAnalyzer, FactorAnalyzer
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -43,8 +43,8 @@ class PCAAnalyzer:
     @staticmethod
     def fit_transform(
         X: np.ndarray,
-        n_components: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        n_components: int | None = None,
+    ) -> dict[str, Any]:
         """Fit PCA and transform data."""
         X = np.asarray(X, dtype=float)
         n, p = X.shape
@@ -88,7 +88,7 @@ class PCAAnalyzer:
     def select_n_components(
         X: np.ndarray,
         variance_threshold: float = 0.95,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Select number of components to explain threshold variance."""
         result = PCAAnalyzer.fit_transform(X)
         cum_var = result["cumulative_variance"]
@@ -105,10 +105,10 @@ class PCAAnalyzer:
     @staticmethod
     def interpret_loadings(
         loadings: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         n_components: int = 3,
         threshold: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Interpret PCA loadings for each component."""
         interpretations = []
         for j in range(min(n_components, loadings.shape[1])):
@@ -144,7 +144,7 @@ class FactorAnalyzer:
         X: np.ndarray,
         n_factors: int = 3,
         max_iter: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fit factor analysis model."""
         X = np.asarray(X, dtype=float)
         n, p = X.shape
@@ -214,9 +214,9 @@ class FactorAnalyzer:
     @staticmethod
     def interpret_factors(
         loadings: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         threshold: float = 0.3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Interpret factor loadings."""
         n_factors = loadings.shape[1]
         interpretations = []
@@ -249,7 +249,7 @@ class DiscriminantAnalyzer:
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_test: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fit LDA and predict test samples."""
         X_train = np.asarray(X_train, dtype=float)
         y_train = np.asarray(y_train)
@@ -346,7 +346,7 @@ class MANOVA:
     """
 
     @staticmethod
-    def fit(X: np.ndarray, groups: np.ndarray) -> Dict[str, Any]:
+    def fit(X: np.ndarray, groups: np.ndarray) -> dict[str, Any]:
         """Fit one-way MANOVA."""
         X = np.asarray(X, dtype=float)
         groups = np.asarray(groups)

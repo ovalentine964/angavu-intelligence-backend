@@ -12,8 +12,8 @@ try:
 except ImportError:
     _HAS_OQS = False
 
-from app.security.pqc.ml_kem import MlKemParameterSet, MlKemProvider
 from app.security.pqc.crypto_provider import CryptoKeyPair, EncapsulatedKey
+from app.security.pqc.ml_kem import MlKemParameterSet, MlKemProvider
 
 pytestmark = pytest.mark.skipif(not _HAS_OQS, reason="liboqs not installed")
 

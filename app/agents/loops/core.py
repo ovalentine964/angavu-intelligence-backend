@@ -19,10 +19,9 @@ from __future__ import annotations
 import time
 import uuid
 from abc import abstractmethod
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -33,6 +32,9 @@ from app.agents.base import (
     BiasharaAgent,
     EventType,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
 logger = structlog.get_logger(__name__)
 
@@ -350,7 +352,7 @@ class ReActAgent(BiasharaAgent):
 @dataclass
 class Critique:
     """Result of a self-critique evaluation."""
-    score: float = 0.0           # 0.0 – 1.0 quality score
+    score: float = 0.0           # 0.0 - 1.0 quality score
     issues: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
     should_retry: bool = False   # Whether a retry is warranted
@@ -406,7 +408,7 @@ class ReflexionAgent(ReActAgent):
 
         Flow: execute → critique → (revise → execute → critique)* → accept
         """
-        cycle_start = time.time()
+        time.time()
         attempt = 0
         last_result = None
         critiques: list[Critique] = []
@@ -623,7 +625,7 @@ class ExecutionPlan:
                 return s
         return None
 
-    def mark_step(self, step_id: str, status: str, result: Any = None, error: str = None) -> None:
+    def mark_step(self, step_id: str, status: str, result: Any = None, error: str | None = None) -> None:
         step = self._get_step(step_id)
         if step:
             step.status = status
@@ -687,7 +689,7 @@ class PlanExecuteAgent(ReflexionAgent):
         the next step to execute.
         """
         event_data = context.get("event", {})
-        payload = event_data.get("payload", {})
+        event_data.get("payload", {})
         goal = self._extract_goal(event_data)
 
         # Check for Reflexion feedback (plan revision)
@@ -1145,7 +1147,7 @@ class EventSourcedAgent(PlanExecuteAgent):
 # ════════════════════════════════════════════════════════════════════
 
 
-class SupervisionPolicy(str, Enum):
+class SupervisionPolicy(StrEnum):
     """How the supervisor handles agent failures."""
     RETRY = "retry"              # Retry the same agent
     FALLBACK = "fallback"        # Try a fallback agent
@@ -1472,7 +1474,7 @@ class SupervisorAgent(EventSourcedAgent):
     async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """The supervisor's own think phase — decides which agent to route to."""
         event_data = context.get("event", {})
-        payload = event_data.get("payload", {})
+        event_data.get("payload", {})
 
         # Determine which agent should handle this
         target = self._select_agent_for_event(event_data)

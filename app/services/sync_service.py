@@ -14,8 +14,7 @@ Key responsibilities:
 """
 
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import and_, select
@@ -24,10 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.transaction import Inventory, Transaction
 from app.models.user import User
 from app.schemas.sync import (
+    InventoryRecord,
     SyncRequest,
     SyncResponse,
     TransactionRecord,
-    InventoryRecord,
 )
 
 logger = structlog.get_logger(__name__)
@@ -80,7 +79,7 @@ class SyncService:
             )
 
         # Update user's last sync timestamp and device info
-        user.last_sync_at = datetime.now(timezone.utc)
+        user.last_sync_at = datetime.now(UTC)
         user.device_id = request.device_id
         if request.device_metadata:
             user.app_version = request.device_metadata.app_version
@@ -126,7 +125,7 @@ class SyncService:
             ),
         )
 
-    async def _get_user(self, user_id: str) -> Optional[User]:
+    async def _get_user(self, user_id: str) -> User | None:
         """Fetch active user by ID."""
         try:
             result = await self.db.execute(
@@ -142,10 +141,10 @@ class SyncService:
     async def _process_transactions(
         self,
         user_id,
-        transactions: List[TransactionRecord],
+        transactions: list[TransactionRecord],
         device_id: str,
-        location_geohash: Optional[str],
-    ) -> Tuple[int, int, List[str]]:
+        location_geohash: str | None,
+    ) -> tuple[int, int, list[str]]:
         """
         Process a batch of transactions.
 
@@ -195,7 +194,7 @@ class SyncService:
                     confidence_score=record.confidence_score or 1.0,
                     source_text=record.source_text,
                     timestamp=record.timestamp,
-                    synced_at=datetime.now(timezone.utc),
+                    synced_at=datetime.now(UTC),
                     device_id=device_id,
                     location_geohash=location_geohash or record.location_geohash,
                 )
@@ -204,7 +203,7 @@ class SyncService:
 
             except Exception as e:
                 rejected += 1
-                reasons.append(f"Error processing {record.item}: {str(e)}")
+                reasons.append(f"Error processing {record.item}: {e!s}")
                 logger.warning("transaction_processing_error", error=str(e))
 
         return accepted, rejected, reasons
@@ -214,7 +213,7 @@ class SyncService:
         user_id,
         timestamp: datetime,
         amount: float,
-        item: Optional[str],
+        item: str | None,
     ) -> bool:
         """
         Check if this transaction already exists (deduplication).
@@ -234,7 +233,7 @@ class SyncService:
         )
         return result.scalar_one_or_none() is not None
 
-    def _validate_transaction(self, record: TransactionRecord) -> Optional[str]:
+    def _validate_transaction(self, record: TransactionRecord) -> str | None:
         """
         Validate a transaction record.
 
@@ -250,12 +249,12 @@ class SyncService:
             return f"Invalid transaction type: {record.transaction_type}"
 
         # Timestamp can't be in the future
-        if record.timestamp > datetime.now(timezone.utc):
+        if record.timestamp > datetime.now(UTC):
             return "Timestamp is in the future"
 
         # Timestamp can't be more than 90 days old
         from datetime import timedelta
-        if record.timestamp < datetime.now(timezone.utc) - timedelta(days=90):
+        if record.timestamp < datetime.now(UTC) - timedelta(days=90):
             return "Timestamp is more than 90 days old"
 
         # Quantity should be non-negative
@@ -267,7 +266,7 @@ class SyncService:
     async def _process_inventory(
         self,
         user_id,
-        updates: List[InventoryRecord],
+        updates: list[InventoryRecord],
     ) -> int:
         """
         Process inventory updates from the device.
@@ -300,7 +299,7 @@ class SyncService:
                     existing.restock_threshold = (
                         record.restock_threshold or existing.restock_threshold
                     )
-                    existing.updated_at = datetime.now(timezone.utc)
+                    existing.updated_at = datetime.now(UTC)
                 else:
                     # Create new inventory item
                     inv = Inventory(

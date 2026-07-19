@@ -24,18 +24,17 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
-import math
 import re
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -93,13 +92,13 @@ class InferenceResult:
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     quality_score: float = 0.0       # 0.0–1.0
-    quality_issues: List[str] = field(default_factory=list)
+    quality_issues: list[str] = field(default_factory=list)
     fallback_count: int = 0          # How many models were tried
     cached: bool = False             # Whether result came from cache
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "inference_id": self.inference_id,
             "success": self.success,
@@ -123,7 +122,7 @@ class InferenceResult:
 # ════════════════════════════════════════════════════════════════════
 
 # Maps task types to default complexity
-TASK_COMPLEXITY_MAP: Dict[str, TaskComplexity] = {
+TASK_COMPLEXITY_MAP: dict[str, TaskComplexity] = {
     "transaction_recording": TaskComplexity.TRIVIAL,
     "balance_inquiry": TaskComplexity.TRIVIAL,
     "price_lookup": TaskComplexity.TRIVIAL,
@@ -144,7 +143,7 @@ TASK_COMPLEXITY_MAP: Dict[str, TaskComplexity] = {
 }
 
 # Maps complexity to allowed tiers (ordered by preference)
-COMPLEXITY_TIER_MAP: Dict[TaskComplexity, List[ModelTier]] = {
+COMPLEXITY_TIER_MAP: dict[TaskComplexity, list[ModelTier]] = {
     TaskComplexity.TRIVIAL: [ModelTier.ON_DEVICE],
     TaskComplexity.LOW: [ModelTier.ON_DEVICE],
     TaskComplexity.MEDIUM: [ModelTier.ON_DEVICE, ModelTier.CLOUD_CHEAP],
@@ -179,7 +178,7 @@ class SemanticCache:
     ):
         self._max_entries = max_entries
         self._default_ttl = default_ttl_s
-        self._cache: Dict[str, Tuple[str, float, Dict[str, Any]]] = {}  # key → (output, expires_at, metadata)
+        self._cache: dict[str, tuple[str, float, dict[str, Any]]] = {}  # key → (output, expires_at, metadata)
         self._access_order: deque = deque()  # LRU tracking
         self._hits: int = 0
         self._misses: int = 0
@@ -207,7 +206,7 @@ class SemanticCache:
         prompt: str,
         task_type: str = "general",
         system_prompt: str = "",
-    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+    ) -> tuple[str, dict[str, Any]] | None:
         """
         Look up cached result.
 
@@ -243,8 +242,8 @@ class SemanticCache:
         output: str,
         task_type: str = "general",
         system_prompt: str = "",
-        ttl_s: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        ttl_s: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Store result in cache."""
         key = self._make_key(prompt, task_type, system_prompt)
@@ -277,7 +276,7 @@ class SemanticCache:
         self._access_order.clear()
         return count
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         total = self._hits + self._misses
         return {
@@ -324,13 +323,13 @@ class TokenTracker:
     def __init__(self, retention_days: int = 30):
         self._retention_days = retention_days
         # Key: (user_id, model, date_str) → TokenUsage
-        self._usage: Dict[Tuple[str, str, str], TokenUsage] = {}
+        self._usage: dict[tuple[str, str, str], TokenUsage] = {}
         # Per-user daily aggregates: (user_id, date_str) → {input, output, cost, calls}
-        self._user_daily: Dict[Tuple[str, str], Dict[str, float]] = defaultdict(
+        self._user_daily: dict[tuple[str, str], dict[str, float]] = defaultdict(
             lambda: {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0}
         )
         # Per-model aggregates: model → {input, output, cost, calls}
-        self._model_totals: Dict[str, Dict[str, float]] = defaultdict(
+        self._model_totals: dict[str, dict[str, float]] = defaultdict(
             lambda: {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0}
         )
         self._logger = logger.bind(component="token_tracker")
@@ -344,7 +343,7 @@ class TokenTracker:
         cost_usd: float = 0.0,
     ) -> None:
         """Record token usage for a call."""
-        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = datetime.now(UTC).strftime("%Y-%m-%d")
         key = (user_id, model, date_str)
 
         if key not in self._usage:
@@ -372,10 +371,10 @@ class TokenTracker:
     def get_user_usage(
         self,
         user_id: str,
-        date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        date: str | None = None,
+    ) -> dict[str, Any]:
         """Get token usage for a user on a specific day (or today)."""
-        date_str = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = date or datetime.now(UTC).strftime("%Y-%m-%d")
         entries = [
             u for (uid, _, d), u in self._usage.items()
             if uid == user_id and d == date_str
@@ -405,7 +404,7 @@ class TokenTracker:
             "by_model": by_model,
         }
 
-    def get_model_usage(self, model: Optional[str] = None) -> Dict[str, Any]:
+    def get_model_usage(self, model: str | None = None) -> dict[str, Any]:
         """Get usage stats per model, or for a specific model."""
         if model:
             data = self._model_totals.get(model, {})
@@ -422,9 +421,9 @@ class TokenTracker:
             }
         }
 
-    def get_daily_usage(self, date: Optional[str] = None) -> Dict[str, Any]:
+    def get_daily_usage(self, date: str | None = None) -> dict[str, Any]:
         """Get aggregate usage for a specific day."""
-        date_str = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = date or datetime.now(UTC).strftime("%Y-%m-%d")
         entries = [
             (uid, u) for (uid, d), u in self._user_daily.items()
             if d == date_str
@@ -444,9 +443,9 @@ class TokenTracker:
             "unique_users": len(entries),
         }
 
-    def get_top_users(self, limit: int = 10, date: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_top_users(self, limit: int = 10, date: str | None = None) -> list[dict[str, Any]]:
         """Get top users by token consumption for a day."""
-        date_str = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = date or datetime.now(UTC).strftime("%Y-%m-%d")
         user_totals = []
         for (uid, d), u in self._user_daily.items():
             if d == date_str:
@@ -461,7 +460,7 @@ class TokenTracker:
 
     def prune_old_data(self) -> int:
         """Remove usage data older than retention_days. Returns entries pruned."""
-        cutoff = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        cutoff = datetime.now(UTC).strftime("%Y-%m-%d")
         # Simple: just remove keys with dates older than retention
         # For a real system, we'd parse dates properly
         keys_to_remove = []
@@ -470,7 +469,7 @@ class TokenTracker:
             pass  # In production, compare dates properly
         return 0
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get overall tracker statistics."""
         return {
             "total_entries": len(self._usage),
@@ -502,14 +501,14 @@ class LatencyTracker:
     def __init__(self, window_size: int = 500):
         self._window_size = window_size
         # model → deque of latency measurements
-        self._latencies: Dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
+        self._latencies: dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
         self._logger = logger.bind(component="latency_tracker")
 
     def record(self, model: str, latency_ms: float) -> None:
         """Record a latency measurement for a model."""
         self._latencies[model].append(latency_ms)
 
-    def get_percentiles(self, model: str) -> Dict[str, float]:
+    def get_percentiles(self, model: str) -> dict[str, float]:
         """Get latency percentiles for a model."""
         data = sorted(self._latencies.get(model, []))
         if not data:
@@ -526,11 +525,11 @@ class LatencyTracker:
             "count": n,
         }
 
-    def get_all_percentiles(self) -> Dict[str, Dict[str, float]]:
+    def get_all_percentiles(self) -> dict[str, dict[str, float]]:
         """Get latency percentiles for all tracked models."""
         return {model: self.get_percentiles(model) for model in self._latencies}
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get tracker statistics."""
         return {
             "models_tracked": len(self._latencies),
@@ -571,7 +570,7 @@ class CostBudgetManager:
 
     def __init__(self, default_budget_usd: float = 0.013):
         self._default_budget = default_budget_usd
-        self._users: Dict[str, UserBudget] = {}
+        self._users: dict[str, UserBudget] = {}
         self._logger = logger.bind(component="cost_budget")
 
     def get_user_budget(self, user_id: str) -> UserBudget:
@@ -609,7 +608,7 @@ class CostBudgetManager:
         budget.total_calls += 1
         budget.total_tokens += tokens
 
-    def get_budget_status(self, user_id: str) -> Dict[str, Any]:
+    def get_budget_status(self, user_id: str) -> dict[str, Any]:
         """Get budget status for a user."""
         budget = self.get_user_budget(user_id)
         self._maybe_reset_month(budget)
@@ -631,7 +630,7 @@ class CostBudgetManager:
             "near_limit": pct_used >= 80,
         }
 
-    def get_all_budgets(self) -> Dict[str, Any]:
+    def get_all_budgets(self) -> dict[str, Any]:
         """Get summary of all user budgets."""
         return {
             "total_users": len(self._users),
@@ -686,7 +685,7 @@ class OutputQualityValidator:
         task_type: str = "general",
         expect_json: bool = False,
         input_prompt: str = "",
-    ) -> Tuple[float, List[str]]:
+    ) -> tuple[float, list[str]]:
         """
         Validate output quality.
 
@@ -805,9 +804,9 @@ class ModelProvider:
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-    ) -> Tuple[str, int, int]:
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> tuple[str, int, int]:
         """
         Generate a response from the model.
 
@@ -826,9 +825,9 @@ class LocalGGUFProvider(ModelProvider):
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-    ) -> Tuple[str, int, int]:
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> tuple[str, int, int]:
         """Call local llama.cpp HTTP server."""
         import aiohttp
 
@@ -858,9 +857,9 @@ class HTTPModelProvider(ModelProvider):
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-    ) -> Tuple[str, int, int]:
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> tuple[str, int, int]:
         """Call an OpenAI-compatible HTTP endpoint."""
         import aiohttp
 
@@ -911,7 +910,7 @@ class TaskRouter:
     def resolve_complexity(
         self,
         task_type: str = "general",
-        complexity_override: Optional[str] = None,
+        complexity_override: str | None = None,
         prompt_length: int = 0,
     ) -> TaskComplexity:
         """Resolve the effective task complexity."""
@@ -935,7 +934,7 @@ class TaskRouter:
         self,
         complexity: TaskComplexity,
         budget_utilization: float = 0.0,
-    ) -> List[ModelTier]:
+    ) -> list[ModelTier]:
         """
         Get allowed model tiers for a task.
 
@@ -1007,9 +1006,9 @@ class InferenceHarness:
         )
     """
 
-    def __init__(self, config: Optional[InferenceHarnessConfig] = None):
+    def __init__(self, config: InferenceHarnessConfig | None = None):
         self._config = config or InferenceHarnessConfig()
-        self._providers: Dict[ModelTier, List[ModelProvider]] = {
+        self._providers: dict[ModelTier, list[ModelProvider]] = {
             ModelTier.ON_DEVICE: [],
             ModelTier.CLOUD_CHEAP: [],
             ModelTier.CLOUD_PREMIUM: [],
@@ -1030,13 +1029,13 @@ class InferenceHarness:
         # Global metrics
         self._total_calls: int = 0
         self._total_cost_usd: float = 0.0
-        self._tier_counts: Dict[str, int] = defaultdict(int)
-        self._fallback_counts: Dict[str, int] = defaultdict(int)
+        self._tier_counts: dict[str, int] = defaultdict(int)
+        self._fallback_counts: dict[str, int] = defaultdict(int)
         self._cache_savings_usd: float = 0.0
 
         # Pre/post hooks
-        self._pre_hooks: List[Callable] = []
-        self._post_hooks: List[Callable] = []
+        self._pre_hooks: list[Callable] = []
+        self._post_hooks: list[Callable] = []
 
     # ── Provider Registration ───────────────────────────────────────
 
@@ -1057,15 +1056,15 @@ class InferenceHarness:
     async def infer(
         self,
         prompt: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         task_type: str = "general",
         system_prompt: str = "",
         expect_json: bool = False,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        preferred_tier: Optional[ModelTier] = None,
-        complexity: Optional[str] = None,
-        timeout_override: Optional[float] = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        preferred_tier: ModelTier | None = None,
+        complexity: str | None = None,
+        timeout_override: float | None = None,
         skip_cache: bool = False,
     ) -> InferenceResult:
         """
@@ -1168,7 +1167,7 @@ class InferenceHarness:
 
                 # ── Step 5c: Validate quality ──
                 quality_score = 1.0
-                quality_issues: List[str] = []
+                quality_issues: list[str] = []
                 if self._config.enable_quality_validation:
                     quality_score, quality_issues = self._quality_validator.validate(
                         output, task_type=task_type, expect_json=expect_json,
@@ -1257,7 +1256,7 @@ class InferenceHarness:
 
                 return result
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 latency_ms = (time.time() - call_start) * 1000
                 last_error = f"Timeout after {provider.config.timeout_s}s"
                 self._latency_tracker.record(provider.config.name, latency_ms)
@@ -1300,7 +1299,7 @@ class InferenceHarness:
 
     # ── Fallback Chain ──────────────────────────────────────────────
 
-    def _build_fallback_chain(self, allowed_tiers: List[ModelTier]) -> List[ModelProvider]:
+    def _build_fallback_chain(self, allowed_tiers: list[ModelTier]) -> list[ModelProvider]:
         """Build ordered list of providers to try."""
         chain = []
         for tier in allowed_tiers:
@@ -1334,7 +1333,7 @@ class InferenceHarness:
 
     # ── Monitoring API ──────────────────────────────────────────────
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get overall inference metrics including latency percentiles."""
         return {
             "total_calls": self._total_calls,
@@ -1347,20 +1346,20 @@ class InferenceHarness:
             "tokens": self._token_tracker.get_stats(),
         }
 
-    def get_user_budget(self, user_id: str) -> Dict[str, Any]:
+    def get_user_budget(self, user_id: str) -> dict[str, Any]:
         """Get budget status for a user."""
         return self._cost_manager.get_budget_status(user_id)
 
-    def get_all_budgets(self) -> Dict[str, Any]:
+    def get_all_budgets(self) -> dict[str, Any]:
         """Get all user budget summary."""
         return self._cost_manager.get_all_budgets()
 
     def get_token_usage(
         self,
-        user_id: Optional[str] = None,
-        model: Optional[str] = None,
-        date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        user_id: str | None = None,
+        model: str | None = None,
+        date: str | None = None,
+    ) -> dict[str, Any]:
         """Get token usage with optional filters."""
         if user_id:
             return self._token_tracker.get_user_usage(user_id, date)
@@ -1368,19 +1367,19 @@ class InferenceHarness:
             return self._token_tracker.get_model_usage(model)
         return self._token_tracker.get_daily_usage(date)
 
-    def get_latency_stats(self, model: Optional[str] = None) -> Dict[str, Any]:
+    def get_latency_stats(self, model: str | None = None) -> dict[str, Any]:
         """Get latency percentiles for a model or all models."""
         if model:
             return self._latency_tracker.get_percentiles(model)
         return self._latency_tracker.get_all_percentiles()
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         if self._cache:
             return self._cache.get_stats()
         return {"enabled": False}
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> dict[str, Any]:
         """Get harness health status."""
         providers_healthy = {}
         for tier, providers in self._providers.items():
@@ -1414,7 +1413,7 @@ class InferenceHarness:
 # ════════════════════════════════════════════════════════════════════
 
 
-_global_inference_harness: Optional[InferenceHarness] = None
+_global_inference_harness: InferenceHarness | None = None
 
 
 def get_inference_harness() -> InferenceHarness:
@@ -1460,7 +1459,7 @@ def create_default_inference_harness() -> InferenceHarness:
 
 
 def create_inference_harness(
-    providers: Optional[List[ModelProvider]] = None,
+    providers: list[ModelProvider] | None = None,
     budget_per_user_usd: float = 0.013,
     quality_threshold: float = 0.3,
     enable_cache: bool = True,

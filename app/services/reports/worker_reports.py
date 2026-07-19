@@ -22,59 +22,42 @@ Design Principles:
 
 from __future__ import annotations
 
-import math
 import statistics
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, date
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from datetime import date
 
+from ..comparison_engine import ComparisonEngine, ComparisonResult
+from ..health_score import BusinessHealthScorer, HealthScoreResult
+from ..seasonal_analyzer import MonthlyData, SeasonalAnalysisResult, SeasonalAnalyzer
+from ..statistical_foundation import BayesianUpdater
 from ..whatsapp_charts import (
     ARROW_DOWN,
     ARROW_UP,
     ARROW_UP_RIGHT,
-    ARROW_DOWN_RIGHT,
     BLOCK_FULL,
     BLOCK_LIGHT,
-    BLOCK_SOLID,
     CHECK,
     CROSS_MARK,
-    WARNING,
-    FIRE,
-    HEART,
-    LIGHTNING,
     MOOD_GREAT,
     MOOD_OK,
     MOOD_SLOW,
-    STAR_FILLED,
     STAR_EMPTY,
+    STAR_FILLED,
+    SWAHILI_MONTHS,
+    WARNING,
     BarChart,
     CashFlowDiagram,
     Heatmap,
     ProgressBar,
     Sparkline,
-    TrendLine,
     TableBuilder,
-    divider,
-    emoji_number,
+    TrendLine,
     format_currency,
-    format_number,
-    format_percentage,
     health_display,
-    mood_indicator,
-    mood_label,
-    section_header,
     star_rating,
-    SWAHILI_DAYS_SHORT,
-    SWAHILI_MONTHS,
-    SWAHILI_MONTHS_SHORT,
 )
-from ..health_score import BusinessHealthScorer, BusinessMetrics, HealthScoreResult
-from ..seasonal_analyzer import SeasonalAnalyzer, MonthlyData, SeasonalAnalysisResult
-from ..comparison_engine import ComparisonEngine, PeerBusiness, ComparisonResult
-from ..statistical_foundation import BayesianUpdater
-
 
 # ============================================================================
 # Data Classes — Input structures for each report type
@@ -91,7 +74,7 @@ class WorkerProfile:
     language: str = "sw"                # sw, en, sh
     currency: str = "KSh"
     phone: str = ""
-    join_date: Optional[date] = None
+    join_date: date | None = None
     preferred_time: str = "19:00"
     savings_goal: float = 0.0           # Target savings amount
     current_savings: float = 0.0        # Accumulated savings
@@ -106,11 +89,11 @@ class TransactionSummary:
     total_expenses: float = 0.0
     profit: float = 0.0
     transaction_count: int = 0
-    items_sold: Dict[str, Tuple[int, float]] = field(default_factory=dict)
+    items_sold: dict[str, tuple[int, float]] = field(default_factory=dict)
     best_item: str = ""
     best_item_revenue: float = 0.0
     best_item_qty: int = 0
-    expense_categories: Dict[str, float] = field(default_factory=dict)
+    expense_categories: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -128,8 +111,8 @@ class InventoryStatus:
 class PriceData:
     """Price observation for forecasting."""
     item_name: str
-    prices: List[float] = field(default_factory=list)
-    dates: List[date] = field(default_factory=list)
+    prices: list[float] = field(default_factory=list)
+    dates: list[date] = field(default_factory=list)
     current_price: float = 0.0
     predicted_price: float = 0.0
     predicted_change_pct: float = 0.0
@@ -142,7 +125,7 @@ class CustomerData:
     name: str
     total_spent: float = 0.0
     visit_count: int = 0
-    last_visit: Optional[date] = None
+    last_visit: date | None = None
     credit_balance: float = 0.0
 
 
@@ -276,10 +259,10 @@ class DailyReport(WorkerReport):
         self,
         profile: WorkerProfile,
         today: TransactionSummary,
-        yesterday: Optional[TransactionSummary] = None,
+        yesterday: TransactionSummary | None = None,
         avg_daily_sales: float = 0.0,
-        inventory: Optional[List[InventoryStatus]] = None,
-        price_forecasts: Optional[List[PriceData]] = None,
+        inventory: list[InventoryStatus] | None = None,
+        price_forecasts: list[PriceData] | None = None,
     ) -> str:
         """Generate daily report.
 
@@ -307,7 +290,7 @@ class DailyReport(WorkerReport):
             sales_chg = profit_chg = 0.0
             has_prev = False
 
-        lines: List[str] = []
+        lines: list[str] = []
 
         # ── Header ──
         lines.append(self._header(
@@ -456,10 +439,10 @@ class WeeklyReport(WorkerReport):
         profile: WorkerProfile,
         week_start: date,
         week_end: date,
-        daily_data: List[TransactionSummary],
+        daily_data: list[TransactionSummary],
         previous_week_sales: float = 0.0,
-        customers: Optional[List[CustomerData]] = None,
-        price_trends: Optional[List[PriceData]] = None,
+        customers: list[CustomerData] | None = None,
+        price_trends: list[PriceData] | None = None,
     ) -> str:
         """Generate weekly report."""
         # Aggregate week data
@@ -477,7 +460,7 @@ class WeeklyReport(WorkerReport):
             best_day = worst_day = None
 
         # Top products across the week
-        product_totals: Dict[str, Tuple[int, float]] = defaultdict(lambda: (0, 0.0))
+        product_totals: dict[str, tuple[int, float]] = defaultdict(lambda: (0, 0.0))
         for d in daily_data:
             for item, (qty, rev) in d.items_sold.items():
                 old_qty, old_rev = product_totals[item]
@@ -492,7 +475,7 @@ class WeeklyReport(WorkerReport):
         # Daily revenue list for sparkline
         daily_revenues = [d.total_revenue for d in daily_data]
 
-        lines: List[str] = []
+        lines: list[str] = []
         date_range = f"{self._format_date(week_start, profile.language)} — {self._format_date(week_end, profile.language)}"
 
         # ── Header ──
@@ -690,12 +673,12 @@ class MonthlyReport(WorkerReport):
         profile: WorkerProfile,
         year: int,
         month: int,
-        daily_data: List[TransactionSummary],
+        daily_data: list[TransactionSummary],
         previous_month_revenue: float = 0.0,
         previous_month_profit: float = 0.0,
-        customers: Optional[List[CustomerData]] = None,
-        inventory: Optional[List[InventoryStatus]] = None,
-        peer_data: Optional[ComparisonResult] = None,
+        customers: list[CustomerData] | None = None,
+        inventory: list[InventoryStatus] | None = None,
+        peer_data: ComparisonResult | None = None,
     ) -> str:
         """Generate monthly report."""
         # Aggregates
@@ -713,13 +696,13 @@ class MonthlyReport(WorkerReport):
                          ) if previous_month_profit > 0 else 0.0
 
         # Expense categories (STA 142: Descriptive Statistics)
-        expense_cats: Dict[str, float] = defaultdict(float)
+        expense_cats: dict[str, float] = defaultdict(float)
         for d in daily_data:
             for cat, amt in d.expense_categories.items():
                 expense_cats[cat] += amt
 
         # Top products
-        product_totals: Dict[str, Tuple[int, float]] = defaultdict(lambda: (0, 0.0))
+        product_totals: dict[str, tuple[int, float]] = defaultdict(lambda: (0, 0.0))
         for d in daily_data:
             for item, (qty, rev) in d.items_sold.items():
                 old_qty, old_rev = product_totals[item]
@@ -738,7 +721,7 @@ class MonthlyReport(WorkerReport):
                          ) if daily_data and total_revenue > 0 and avg_inventory_value > 0 else 0
 
         month_name = SWAHILI_MONTHS[month - 1]
-        lines: List[str] = []
+        lines: list[str] = []
 
         # ── Header ──
         lines.append(self._header(
@@ -894,11 +877,11 @@ class MonthlyReport(WorkerReport):
 
     def _generate_monthly_recommendations(
         self, margin: float, rev_growth: float, turnover_days: float,
-        expense_cats: Dict[str, float], total_revenue: float,
+        expense_cats: dict[str, float], total_revenue: float,
         profile: WorkerProfile,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate 3 specific actionable recommendations."""
-        recs: List[str] = []
+        recs: list[str] = []
 
         # 1. Margin-based recommendation
         if margin < 20:
@@ -972,9 +955,9 @@ class SemiAnnualReport(WorkerReport):
         profile: WorkerProfile,
         period_start: date,
         period_end: date,
-        monthly_data: List[MonthlyData],
-        customers: Optional[List[CustomerData]] = None,
-        seasonal_result: Optional[SeasonalAnalysisResult] = None,
+        monthly_data: list[MonthlyData],
+        customers: list[CustomerData] | None = None,
+        seasonal_result: SeasonalAnalysisResult | None = None,
     ) -> str:
         """Generate semi-annual report."""
         # 6-month aggregates
@@ -995,7 +978,7 @@ class SemiAnnualReport(WorkerReport):
         monthly_revenues = [m.revenue for m in monthly_data]
 
         # Product portfolio
-        product_totals: Dict[str, Tuple[int, float]] = defaultdict(lambda: (0, 0.0))
+        product_totals: dict[str, tuple[int, float]] = defaultdict(lambda: (0, 0.0))
         for m in monthly_data:
             # MonthlyData doesn't have items_sold directly; use top_product
             if m.top_product:
@@ -1006,7 +989,7 @@ class SemiAnnualReport(WorkerReport):
         top_products = sorted(product_totals.items(),
                               key=lambda x: x[1][1], reverse=True)[:5]
 
-        lines: List[str] = []
+        lines: list[str] = []
         period_str = f"{self._format_date(period_start, profile.language)} — {self._format_date(period_end, profile.language)}"
 
         # ── Header ──
@@ -1161,13 +1144,13 @@ class AnnualReport(WorkerReport):
         self,
         profile: WorkerProfile,
         year: int,
-        monthly_data: List[MonthlyData],
+        monthly_data: list[MonthlyData],
         previous_year_revenue: float = 0.0,
         previous_year_profit: float = 0.0,
-        customers: Optional[List[CustomerData]] = None,
-        inventory: Optional[List[InventoryStatus]] = None,
-        seasonal_result: Optional[SeasonalAnalysisResult] = None,
-        health_result: Optional[HealthScoreResult] = None,
+        customers: list[CustomerData] | None = None,
+        inventory: list[InventoryStatus] | None = None,
+        seasonal_result: SeasonalAnalysisResult | None = None,
+        health_result: HealthScoreResult | None = None,
     ) -> str:
         """Generate annual report."""
         # Annual aggregates
@@ -1200,7 +1183,7 @@ class AnnualReport(WorkerReport):
         # Profitable months
         profitable_months = len([m for m in monthly_data if m.revenue > m.expenses])
 
-        lines: List[str] = []
+        lines: list[str] = []
 
         # ── Header ──
         lines.append(self._header(

@@ -22,14 +22,17 @@ DeerFlow sub-agent orchestration.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +42,7 @@ logger = structlog.get_logger(__name__)
 # ════════════════════════════════════════════════════════════════════
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """All event types that flow through the event bus."""
 
     # Data pipeline
@@ -157,7 +160,7 @@ class EventType(str, Enum):
     PIPELINE_ERROR = "pipeline.error"
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     """Agent lifecycle states."""
     IDLE = "idle"
     OBSERVING = "observing"
@@ -439,10 +442,8 @@ class BiasharaAgent:
         self._running = False
         if self._poll_task and not self._poll_task.done():
             self._poll_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._poll_task
-            except asyncio.CancelledError:
-                pass
         self._poll_task = None
         self._logger.info("agent_stopped")
 

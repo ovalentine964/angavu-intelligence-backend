@@ -13,10 +13,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -37,7 +36,7 @@ class Session:
     created_at: str
     updated_at: str
     last_channel: str
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     interaction_count: int = 0
 
 
@@ -52,7 +51,7 @@ class Interaction:
     user_message: str
     agent_response: str
     timestamp: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionSync:
@@ -67,8 +66,8 @@ class SessionSync:
 
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self._db_path = db_path
-        self._conn: Optional[sqlite3.Connection] = None
-        self._active_sessions: Dict[str, Session] = {}
+        self._conn: sqlite3.Connection | None = None
+        self._active_sessions: dict[str, Session] = {}
 
     def initialize(self) -> None:
         """Create tables and indexes if they don't exist."""
@@ -134,7 +133,7 @@ class SessionSync:
         Get existing session for worker or create a new one.
         Same session regardless of which channel is used.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Check in-memory cache first
         if worker_id in self._active_sessions:
@@ -202,7 +201,7 @@ class SessionSync:
 
     async def get_last_channel(
         self, worker_id: str
-    ) -> Optional[ChannelType]:
+    ) -> ChannelType | None:
         """Get the last channel a worker used."""
         if worker_id in self._active_sessions:
             ch = self._active_sessions[worker_id].last_channel
@@ -251,10 +250,10 @@ class SessionSync:
         channel: ChannelType,
         user_message: str,
         agent_response: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a complete interaction (user message + agent response)."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         interaction_id = str(uuid.uuid4())
 
         self._conn.execute(
@@ -290,7 +289,7 @@ class SessionSync:
         self,
         worker_id: str,
         limit: int = 10,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Get recent interaction history for context."""
         cursor = self._conn.execute(
             "SELECT channel, user_message, agent_response, timestamp "
@@ -312,7 +311,7 @@ class SessionSync:
 
     async def get_session_context(
         self, worker_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get the current session context for a worker."""
         if worker_id in self._active_sessions:
             return dict(self._active_sessions[worker_id].context)
@@ -330,7 +329,7 @@ class SessionSync:
     async def update_session_context(
         self,
         worker_id: str,
-        context_update: Dict[str, Any],
+        context_update: dict[str, Any],
     ) -> None:
         """Merge context updates into the session."""
         if worker_id in self._active_sessions:

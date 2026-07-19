@@ -12,10 +12,9 @@ DeerFlow agents invoke this tool when users ask about:
 - Consumer surplus and welfare analysis
 """
 
-import json
 import asyncio
+import json
 from datetime import date, timedelta
-from typing import Optional
 
 from langchain.tools import tool
 
@@ -23,8 +22,8 @@ from langchain.tools import tool
 @tool("soko_pulse", parse_docstring=True)
 def soko_pulse_tool(
     product_category: str,
-    product_name: Optional[str] = None,
-    region: Optional[str] = None,
+    product_name: str | None = None,
+    region: str | None = None,
     tier: str = "standard",
     lookback_days: int = 90,
 ) -> str:

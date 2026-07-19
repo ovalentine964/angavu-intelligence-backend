@@ -12,7 +12,6 @@ import os
 import sys
 
 import numpy as np
-import pytest
 from scipy import stats
 
 # Direct module loading (avoids heavy app imports)
@@ -293,7 +292,7 @@ class TestRDD:
         The treatment effect is a jump of `treatment_effect` at the cutoff.
         """
         X = np.random.uniform(-1, 1, n)
-        D = (X >= cutoff).astype(float)
+        D = (cutoff <= X).astype(float)
         Y = 0.5 + treatment_effect * D + 2.0 * X + np.random.randn(n) * noise_sd
         return Y, X
 
@@ -357,7 +356,7 @@ class TestRDD:
         n = 5000
         cutoff = 50.0
         X = np.random.uniform(30, 70, n)
-        D = (X >= cutoff).astype(float)
+        D = (cutoff <= X).astype(float)
         Y = 10.0 + 4.0 * D + 0.3 * X + np.random.randn(n) * 3.0
 
         result = RegressionDiscontinuity.fit(Y, X, cutoff=cutoff, run_mccrary=False)

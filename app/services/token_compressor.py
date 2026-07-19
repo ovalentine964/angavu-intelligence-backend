@@ -17,11 +17,10 @@ Usage:
 
 from __future__ import annotations
 
-import re
 import hashlib
+import re
 from collections import deque
-from datetime import datetime, timezone
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -36,7 +35,7 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
 
 
-def estimate_messages_tokens(messages: List[Dict[str, str]]) -> int:
+def estimate_messages_tokens(messages: list[dict[str, str]]) -> int:
     """Estimate total tokens in a message list."""
     total = 0
     for msg in messages:
@@ -53,7 +52,7 @@ class CompressionStats:
         self.total_compressions: int = 0
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
-        self._ratios: Deque[float] = deque(maxlen=100)
+        self._ratios: deque[float] = deque(maxlen=100)
 
     @property
     def avg_ratio(self) -> float:
@@ -72,7 +71,7 @@ class CompressionStats:
         if input_tokens > 0:
             self._ratios.append(output_tokens / input_tokens)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_compressions": self.total_compressions,
             "total_input_tokens": self.total_input_tokens,
@@ -99,12 +98,12 @@ class TokenCompressor:
 
     def compress(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 4096,
         preserve_system: bool = True,
         preserve_recent: int = 4,
         summarize_old: bool = True,
-    ) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, str]], dict[str, Any]]:
         """
         Compress a message list to fit within max_tokens.
 
@@ -196,7 +195,7 @@ class TokenCompressor:
             "strategy": "aggressive_truncation",
         }
 
-    def _normalize_whitespace(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def _normalize_whitespace(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
         """Remove excessive whitespace and normalize formatting."""
         result = []
         for msg in messages:
@@ -211,7 +210,7 @@ class TokenCompressor:
             result.append({"role": msg["role"], "content": content})
         return result
 
-    def _deduplicate(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def _deduplicate(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
         """Remove duplicate or near-duplicate messages."""
         seen_hashes = set()
         result = []
@@ -226,11 +225,11 @@ class TokenCompressor:
 
     def _trim_history(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int,
         preserve_system: bool,
         preserve_recent: int,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Keep system prompt + most recent messages, drop oldest middle messages."""
         system_msgs = []
         other_msgs = []
@@ -266,11 +265,11 @@ class TokenCompressor:
 
     def _summarize_old(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int,
         preserve_system: bool,
         preserve_recent: int,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """
         Replace old messages with a summary placeholder.
 
@@ -317,10 +316,10 @@ class TokenCompressor:
 
     def _aggressive_truncate(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int,
         preserve_system: bool,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Last resort: aggressively truncate messages to fit."""
         result = []
         used = 0
@@ -342,7 +341,7 @@ class TokenCompressor:
 
         return result
 
-    def compress_text(self, text: str, max_tokens: int = 2000) -> Tuple[str, Dict[str, Any]]:
+    def compress_text(self, text: str, max_tokens: int = 2000) -> tuple[str, dict[str, Any]]:
         """Compress a single text string."""
         input_tokens = estimate_tokens(text)
         if input_tokens <= max_tokens:
@@ -364,12 +363,12 @@ class TokenCompressor:
         self.stats.record(input_tokens, output_tokens)
         return compressed, {"compressed": True, "input_tokens": input_tokens, "output_tokens": output_tokens, "strategy": "truncation"}
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return self.stats.to_dict()
 
 
 # Singleton
-_compressor: Optional[TokenCompressor] = None
+_compressor: TokenCompressor | None = None
 
 
 def get_token_compressor() -> TokenCompressor:

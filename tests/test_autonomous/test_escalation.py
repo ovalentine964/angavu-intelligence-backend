@@ -1,14 +1,14 @@
 """Tests for the escalation system."""
 
+
 import pytest
-import asyncio
+
 from app.autonomous.escalation import (
+    DEFAULT_SLAS,
+    ESCALATION_TRIGGERS,
     EscalationManager,
     EscalationTicket,
     Priority,
-    SLA,
-    DEFAULT_SLAS,
-    ESCALATION_TRIGGERS,
 )
 
 

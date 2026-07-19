@@ -25,11 +25,11 @@ from app.loops.loan_loop import LoanLoop
 from app.loops.tithe_loop import TitheLoop
 
 __all__ = [
-    "TitheLoop",
-    "GoalProgressLoop",
-    "LoanLoop",
-    "IntelligenceLoop",
     "BiasharaLoopConfig",
+    "GoalProgressLoop",
+    "IntelligenceLoop",
+    "LoanLoop",
+    "TitheLoop",
     "get_loop_config",
     "register_loop_config",
 ]

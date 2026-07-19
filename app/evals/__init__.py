@@ -13,16 +13,16 @@ Usage:
     report = await runner.run_all()
 """
 
+from app.evals.categories import EVAL_CATEGORIES, EvalCategory
 from app.evals.harness import EvalHarness, EvalResult, EvalSuite
-from app.evals.categories import EvalCategory, EVAL_CATEGORIES
-from app.evals.runner import EvalRunner, EvalReport
+from app.evals.runner import EvalReport, EvalRunner
 
 __all__ = [
-    "EvalHarness",
-    "EvalResult",
-    "EvalSuite",
-    "EvalCategory",
     "EVAL_CATEGORIES",
-    "EvalRunner",
+    "EvalCategory",
+    "EvalHarness",
     "EvalReport",
+    "EvalResult",
+    "EvalRunner",
+    "EvalSuite",
 ]

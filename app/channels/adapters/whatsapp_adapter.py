@@ -9,7 +9,7 @@ instead of handling them directly.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -60,7 +60,7 @@ class WhatsAppAdapter(BaseChannelAdapter):
         logger.info("whatsapp_adapter_shutdown")
 
     async def parse_raw_message(
-        self, raw_data: Dict[str, Any]
+        self, raw_data: dict[str, Any]
     ) -> UnifiedMessage:
         """
         Parse OpenWA webhook payload into UnifiedMessage.
@@ -150,7 +150,7 @@ class WhatsAppAdapter(BaseChannelAdapter):
             )
             return False
 
-    async def resolve_worker_id(self, channel_user_id: str) -> Optional[str]:
+    async def resolve_worker_id(self, channel_user_id: str) -> str | None:
         """
         Resolve WhatsApp phone number to canonical worker UUID.
 

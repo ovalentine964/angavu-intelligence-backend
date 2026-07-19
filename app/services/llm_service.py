@@ -32,14 +32,12 @@ Architecture:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
+from typing import Any
 
 import httpx
 import structlog
@@ -66,7 +64,7 @@ class LLMMessage:
     role: str
     content: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
 
 
@@ -76,18 +74,18 @@ class LLMCompletion:
     content: str = ""
     model: str = ""
     provider: str = ""
-    usage: Dict[str, int] = field(default_factory=dict)  # prompt_tokens, completion_tokens, total_tokens
+    usage: dict[str, int] = field(default_factory=dict)  # prompt_tokens, completion_tokens, total_tokens
     finish_reason: str = ""  # "stop", "length", "error"
     latency_ms: float = 0.0
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     cached: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def success(self) -> bool:
         return self.error is None and bool(self.content)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "content": self.content[:500] if self.content else "",
             "model": self.model,
@@ -109,7 +107,7 @@ class LLMConfig:
     top_p: float = 0.9
     top_k: int = 40
     repeat_penalty: float = 1.1
-    stop: List[str] = field(default_factory=list)
+    stop: list[str] = field(default_factory=list)
     stream: bool = False
     timeout_seconds: float = 60.0
 
@@ -143,13 +141,13 @@ class LLMProvider(ABC):
     @abstractmethod
     async def complete(
         self,
-        messages: List[LLMMessage],
-        config: Optional[LLMConfig] = None,
+        messages: list[LLMMessage],
+        config: LLMConfig | None = None,
     ) -> LLMCompletion:
         """Generate a completion from a list of messages."""
         ...
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check provider health. Override for custom health checks."""
         return {
             "provider": self.name,
@@ -185,8 +183,8 @@ class LocalGGUFProvider(LLMProvider):
         self._model_path = model_path
         self._timeout = timeout
         self._base_url = f"http://{host}:{port}"
-        self._client: Optional[httpx.AsyncClient] = None
-        self._available: Optional[bool] = None
+        self._client: httpx.AsyncClient | None = None
+        self._available: bool | None = None
         self._last_check: float = 0
         self._logger = logger.bind(provider="local_gguf")
 
@@ -209,7 +207,7 @@ class LocalGGUFProvider(LLMProvider):
             )
         return self._client
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check if llama.cpp server is running and model is loaded."""
         try:
             client = await self._get_client()
@@ -237,8 +235,8 @@ class LocalGGUFProvider(LLMProvider):
 
     async def complete(
         self,
-        messages: List[LLMMessage],
-        config: Optional[LLMConfig] = None,
+        messages: list[LLMMessage],
+        config: LLMConfig | None = None,
     ) -> LLMCompletion:
         """
         Generate completion using llama.cpp's OpenAI-compatible chat endpoint.
@@ -340,8 +338,8 @@ class OpenAICompatibleProvider(LLMProvider):
         self._api_key = api_key
         self._model = model
         self._timeout = timeout
-        self._client: Optional[httpx.AsyncClient] = None
-        self._available: Optional[bool] = None
+        self._client: httpx.AsyncClient | None = None
+        self._available: bool | None = None
         self._last_check: float = 0
         self._logger = logger.bind(provider=name)
 
@@ -368,7 +366,7 @@ class OpenAICompatibleProvider(LLMProvider):
             )
         return self._client
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check if the API is reachable by listing models."""
         try:
             client = await self._get_client()
@@ -394,8 +392,8 @@ class OpenAICompatibleProvider(LLMProvider):
 
     async def complete(
         self,
-        messages: List[LLMMessage],
-        config: Optional[LLMConfig] = None,
+        messages: list[LLMMessage],
+        config: LLMConfig | None = None,
     ) -> LLMCompletion:
         cfg = config or LLMConfig()
         start = time.time()
@@ -482,8 +480,8 @@ class LLMService:
 
     def __init__(
         self,
-        providers: Optional[List[LLMProvider]] = None,
-        default_config: Optional[LLMConfig] = None,
+        providers: list[LLMProvider] | None = None,
+        default_config: LLMConfig | None = None,
     ):
         self._providers = providers or []
         self._default_config = default_config or LLMConfig()
@@ -492,7 +490,7 @@ class LLMService:
         self._logger = logger.bind(component="llm_service")
 
     @classmethod
-    def from_settings(cls) -> "LLMService":
+    def from_settings(cls) -> LLMService:
         """
         Create LLMService from application settings.
 
@@ -503,7 +501,7 @@ class LLMService:
         - LLM_HOST, LLM_PORT, LLM_MODEL_PATH → LocalGGUFProvider
         """
         settings = get_settings()
-        providers: List[LLMProvider] = []
+        providers: list[LLMProvider] = []
 
         # On-device llama.cpp (PRIMARY — Qwen on Oracle Cloud / Android)
         # This is the ONLY provider. Zero cost, zero external dependencies.
@@ -533,9 +531,9 @@ class LLMService:
 
     async def complete(
         self,
-        messages: List[LLMMessage],
-        config: Optional[LLMConfig] = None,
-        preferred_provider: Optional[str] = None,
+        messages: list[LLMMessage],
+        config: LLMConfig | None = None,
+        preferred_provider: str | None = None,
     ) -> LLMCompletion:
         """
         Generate a completion, trying providers in order with fallback.
@@ -601,7 +599,7 @@ class LLMService:
         self,
         prompt: str,
         system_prompt: str = "",
-        config: Optional[LLMConfig] = None,
+        config: LLMConfig | None = None,
     ) -> str:
         """
         Simplified interface: returns just the text content.
@@ -622,7 +620,7 @@ class LLMService:
         result = await self.complete(messages, config)
         return result.content if result.success else ""
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check health of all providers."""
         results = {}
         for provider in self._providers:
@@ -646,7 +644,7 @@ class LLMService:
             except Exception:
                 pass
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get service statistics."""
         return {
             "providers": [p.name for p in self._providers],
@@ -660,7 +658,7 @@ class LLMService:
 # Singleton for FastAPI Dependency Injection
 # ════════════════════════════════════════════════════════════════════
 
-_llm_service_instance: Optional[LLMService] = None
+_llm_service_instance: LLMService | None = None
 
 
 def get_llm_service() -> LLMService:

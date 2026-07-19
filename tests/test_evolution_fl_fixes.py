@@ -13,7 +13,7 @@ import math
 import os
 import struct
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -159,7 +159,7 @@ class TestQualityEvaluation:
         feedback_specs: list of (text, type_override, age_days, status)
         """
         svc = SelfEvolutionService()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for i, spec in enumerate(feedback_specs):
             text = spec[0]

@@ -19,8 +19,8 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any, Callable, Coroutine, Optional
 
 import redis.asyncio as aioredis
 
@@ -89,9 +89,9 @@ class TaskQueue:
     """
 
     def __init__(self):
-        self._redis: Optional[aioredis.Redis] = None
+        self._redis: aioredis.Redis | None = None
         self._connected = False
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_task: asyncio.Task | None = None
         self._running = False
 
     async def connect(self) -> None:
@@ -373,7 +373,7 @@ class TaskQueue:
 
 
 # Singleton instance
-_task_queue: Optional[TaskQueue] = None
+_task_queue: TaskQueue | None = None
 
 
 def get_task_queue() -> TaskQueue:

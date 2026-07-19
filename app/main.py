@@ -24,34 +24,23 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.config import get_settings
-from app.db.database import close_db, init_db
-from app.db.clickhouse import close_clickhouse, get_clickhouse
-from app.services.cache import get_cache
-from app.services.task_queue import get_task_queue
-
-# Infrastructure: circuit breaker + telemetry
-from app.infrastructure.circuit_breaker import (
-    get_circuit_breaker_registry,
-    get_circuit_breaker,
-    CircuitBreakerError,
-)
-from app.infrastructure.telemetry import get_telemetry_manager
+from app.agents.base import AgentEvent, EventType
+from app.agents.factory import AgentFactory
 
 # Loop and long-horizon infrastructure (used in lifespan)
 from app.api.agent_loops import set_loop_infrastructure
 from app.api.long_horizon import set_long_horizon_infrastructure
+from app.config import get_settings
+from app.db.clickhouse import close_clickhouse, get_clickhouse
+from app.db.database import close_db, init_db
 
-from app.agents import (
-    EventBus,
-    AgentTracer,
-    TransactionProcessorAgent,
-    IntelligenceGeneratorAgent,
-    ReportGeneratorAgent,
-    SelfEvolutionAgent,
+# Infrastructure: circuit breaker + telemetry
+from app.infrastructure.circuit_breaker import (
+    get_circuit_breaker_registry,
 )
-from app.agents.base import AgentEvent, EventType
-from app.agents.factory import AgentFactory
+from app.infrastructure.telemetry import get_telemetry_manager
+from app.services.cache import get_cache
+from app.services.task_queue import get_task_queue
 
 settings = get_settings()
 
@@ -239,10 +228,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize Autonomous Orchestrator
     try:
-        from app.autonomous.orchestrator import AutonomousOrchestrator
+        from app.autonomous.config import AgentConfigManager
         from app.autonomous.escalation import EscalationManager
         from app.autonomous.monitoring import AgentMonitor
-        from app.autonomous.config import AgentConfigManager
+        from app.autonomous.orchestrator import AutonomousOrchestrator
 
         auto_orchestrator = AutonomousOrchestrator(
             event_bus=event_bus,
@@ -332,7 +321,7 @@ async def lifespan(app: FastAPI):
 
     # ── Post-Quantum Cryptography Initialization ───────────────────
     try:
-        from app.security.pqc import PqcConfig, AlgorithmRegistry, CryptoAuditLogger
+        from app.security.pqc import AlgorithmRegistry, CryptoAuditLogger, PqcConfig
         pqc_registry = AlgorithmRegistry()
         pqc_audit = CryptoAuditLogger()
         app.state.pqc_config = PqcConfig
@@ -417,6 +406,8 @@ app.add_middleware(
 # Trusted host middleware (prevents Host header attacks)
 # Extract hostnames from URLs for TrustedHostMiddleware
 import urllib.parse
+
+
 def _extract_hostnames(origins: list) -> list:
     """Extract hostnames from URL strings for TrustedHostMiddleware."""
     hosts = []
@@ -440,6 +431,7 @@ app.state.limiter = limiter
 
 # Prometheus metrics middleware
 from app.infrastructure.metrics import create_metrics_middleware
+
 app.middleware("http")(create_metrics_middleware())
 
 
@@ -470,6 +462,7 @@ async def add_security_headers(request: Request, call_next):
 
 # Input validation middleware — SQL injection, XSS, path traversal detection
 from app.security.security_middleware import InputValidationMiddleware
+
 app.add_middleware(InputValidationMiddleware)
 
 # Request ID middleware
@@ -768,8 +761,9 @@ async def prometheus_metrics():
     Returns all application metrics in OpenMetrics text format.
     Scrape this endpoint with Prometheus for dashboards and alerting.
     """
-    from app.infrastructure.metrics import get_registry, collect_system_metrics
     from fastapi.responses import PlainTextResponse
+
+    from app.infrastructure.metrics import collect_system_metrics, get_registry
 
     await collect_system_metrics()
     registry = get_registry()
@@ -788,7 +782,7 @@ async def pqc_status():
     and available providers. Used for monitoring quantum readiness.
     """
     try:
-        from app.security.pqc import PqcConfig, AlgorithmRegistry
+        from app.security.pqc import AlgorithmRegistry, PqcConfig
         registry = AlgorithmRegistry()
         status_report = PqcConfig.get_status_report()
         algorithms = registry.list_algorithms()
@@ -817,95 +811,94 @@ async def root():
 # API Routers
 # =========================================================================
 
+# Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
+from app.api.agent_loops import router as agent_loops_router
+
+# Multi-agent architecture (domain agent routing, worker classification)
+from app.api.agent_router import router as agent_router
+from app.api.analysis import router as analysis_router
 from app.api.auth import router as auth_router
-from app.api.sync import router as sync_router
-from app.api.reports import router as reports_router
-from app.api.intelligence import router as intelligence_router
-from app.api.intelligence_products import router as intelligence_products_router
-from app.api.whatsapp import router as whatsapp_router
+
+# Biashara Sync Protocol (anonymized transaction upload + intelligence pull)
+from app.api.biashara_sync import router as biashara_sync_router
+from app.api.dashboard import router as dashboard_router
+
+# Deployment Harness — canary releases, feature flags, version tracking
+from app.api.deployment import router as deployment_router
+
+# Dialect Dictionary & Language Training Pipeline
+from app.api.dialect_dictionary import router as dialect_dictionary_router
+
+# Evolution / Feedback Sync
+from app.api.evolution import router as evolution_router
+
+# SHAP Explainability (model interpretability for workers)
+from app.api.explain import router as explain_router
 from app.api.federated_learning import router as fl_router
 from app.api.fl_aggregator import router as fl_aggregator_router
-from app.api.analysis import router as analysis_router
-
-# Phase 1 routers
-from app.api.onboarding import router as onboarding_router
-from app.api.dashboard import router as dashboard_router
-from app.api.phase1_intelligence import router as phase1_router
-
-# Formal reports (bank, government, insurance)
-from app.api.formal_reports import router as formal_reports_router
 
 # FMCG intelligence (Pwani Oil, Unilever, Bidco)
 from app.api.fmcg import router as fmcg_router
+
+# Formal reports (bank, government, insurance)
+from app.api.formal_reports import router as formal_reports_router
 
 # Infrastructure dashboard (data center flywheel)
 from app.api.infrastructure import router as infrastructure_router
 
 # Infrastructure V2 (health monitoring, model registry, federated learning v2)
 from app.api.infrastructure_v2 import router as infrastructure_v2_router
-
-# Worker features (tithe, goals, loans, mindset)
-from app.api.worker_features import router as worker_features_router
-
-# Multi-agent architecture (domain agent routing, worker classification)
-from app.api.agent_router import router as agent_router
-
-# OmniRoute-inspired model router (multi-provider inference gateway)
-from app.api.model_router import router as model_router_api
-
-# Skills API (degree-to-skill mappings)
-from app.api.skills import router as skills_router
-
-# Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
-from app.api.agent_loops import router as agent_loops_router
+from app.api.intelligence import router as intelligence_router
+from app.api.intelligence_products import router as intelligence_products_router
 
 # Long-horizon research (DeerFlow-inspired orchestration)
 from app.api.long_horizon import router as long_horizon_router
 
-# MCP (Model Context Protocol) server
-from app.mcp.router import router as mcp_router
+# OmniRoute-inspired model router (multi-provider inference gateway)
+from app.api.model_router import router as model_router_api
 
-# Goal Planner (accountability-driven goal tracking)
-from app.api.v1.goals import router as goals_router
+# Phase 1 routers
+from app.api.onboarding import router as onboarding_router
+
+# OTP-Based Phone Authentication
+from app.api.otp_auth import router as otp_auth_router
+from app.api.phase1_intelligence import router as phase1_router
+from app.api.reports import router as reports_router
+
+# Skills API (degree-to-skill mappings)
+from app.api.skills import router as skills_router
+
+# Stickiness / Engagement (gamification, badges, streaks, social proof)
+from app.api.stickiness import router as stickiness_router
+from app.api.sync import router as sync_router
 
 # 12-Factor: Multi-channel triggers (WhatsApp, USSD, SMS, Voice)
 from app.api.trigger_router import router as trigger_router
 
+# Goal Planner (accountability-driven goal tracking)
+from app.api.v1.goals import router as goals_router
+
 # Loan Manager (dedicated loan management with purpose verification)
 from app.api.v1.loans import router as loans_router
-
-# Stickiness / Engagement (gamification, badges, streaks, social proof)
-from app.api.stickiness import router as stickiness_router
-
-# Tithe Tracker — dedicated giving tracking API
-from app.api.v1.tithe import router as tithe_router
 
 # Wealth Mindset (56 lessons, rich habits, affirmations, mastermind)
 from app.api.v1.mindset import router as mindset_router
 
-# Autonomous Revenue Operations (leads, invoicing, content, onboarding)
-from app.autonomous.api.router import router as autonomous_router
+# Tithe Tracker — dedicated giving tracking API
+from app.api.v1.tithe import router as tithe_router
 
 # WhatsApp Connection Management (connect, verify, disconnect, send-report)
 from app.api.v1.whatsapp_connection import router as whatsapp_connection_router
+from app.api.whatsapp import router as whatsapp_router
 
-# Biashara Sync Protocol (anonymized transaction upload + intelligence pull)
-from app.api.biashara_sync import router as biashara_sync_router
+# Worker features (tithe, goals, loans, mindset)
+from app.api.worker_features import router as worker_features_router
 
-# OTP-Based Phone Authentication
-from app.api.otp_auth import router as otp_auth_router
+# Autonomous Revenue Operations (leads, invoicing, content, onboarding)
+from app.autonomous.api.router import router as autonomous_router
 
-# Evolution / Feedback Sync
-from app.api.evolution import router as evolution_router
-
-# Dialect Dictionary & Language Training Pipeline
-from app.api.dialect_dictionary import router as dialect_dictionary_router
-
-# SHAP Explainability (model interpretability for workers)
-from app.api.explain import router as explain_router
-
-# Deployment Harness — canary releases, feature flags, version tracking
-from app.api.deployment import router as deployment_router
+# MCP (Model Context Protocol) server
+from app.mcp.router import router as mcp_router
 
 # Mount all API routers under versioned prefix
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)

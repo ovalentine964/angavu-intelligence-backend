@@ -11,7 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -31,13 +31,13 @@ class SkillResult:
     """Standardized output from any skill execution."""
     success: bool
     skill_name: str
-    data: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    data: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
     duration_ms: float = 0.0
     confidence: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "skill_name": self.skill_name,
@@ -57,8 +57,8 @@ class SkillMetrics:
     failed_calls: int = 0
     total_duration_ms: float = 0.0
     avg_confidence: float = 0.0
-    last_called_at: Optional[float] = None
-    last_error: Optional[str] = None
+    last_called_at: float | None = None
+    last_error: str | None = None
 
     @property
     def success_rate(self) -> float:
@@ -88,7 +88,7 @@ class SkillMetrics:
         )
         self.last_called_at = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_calls": self.total_calls,
             "successful_calls": self.successful_calls,
@@ -118,7 +118,7 @@ class BaseSkill(ABC):
         course_unit: str,
         description: str,
         version: str = "1.0.0",
-        agent_bindings: Optional[List[str]] = None,
+        agent_bindings: list[str] | None = None,
     ):
         self.name = name
         self.course_unit = course_unit
@@ -172,7 +172,7 @@ class BaseSkill(ABC):
             self._logger.exception("skill_exception", error=str(exc))
             return result
 
-    def get_info(self) -> Dict[str, Any]:
+    def get_info(self) -> dict[str, Any]:
         """Return skill metadata for the registry."""
         return {
             "name": self.name,

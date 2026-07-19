@@ -12,15 +12,14 @@ Report templates include:
 - Buyer-specific formatting
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
+from datetime import UTC, datetime
+from typing import Any
 
 # ════════════════════════════════════════════════════════════════════
 # Swahili Translations — Report Labels & Section Headers
 # ════════════════════════════════════════════════════════════════════
 
-SWAHILI_TRANSLATIONS: Dict[str, Dict[str, str]] = {
+SWAHILI_TRANSLATIONS: dict[str, dict[str, str]] = {
     # Section headers
     "executive_summary": {"en": "Executive Summary", "sw": "Muhtasari wa Uongozi"},
     "demand_overview": {"en": "Demand Overview", "sw": "Muhtasari wa Mahitaji"},
@@ -334,9 +333,9 @@ class IntelligenceReportGenerator:
     def generate_html_report(
         self,
         product_code: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         buyer_company: str = "",
-        report_id: Optional[str] = None,
+        report_id: str | None = None,
         language: str = "en",
     ) -> str:
         """
@@ -357,7 +356,7 @@ class IntelligenceReportGenerator:
             return f"<html><body><h1>Unknown product: {product_code}</h1></body></html>"
 
         if not report_id:
-            report_id = f"RPT-{product_code.upper()}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+            report_id = f"RPT-{product_code.upper()}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
 
         sections_html = self._generate_sections(product_code, data, language=language)
 
@@ -377,7 +376,7 @@ class IntelligenceReportGenerator:
 
         privacy = PRIVACY_STATEMENT.format(
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         )
 
         prepared_label = get_translation("prepared_for", language)
@@ -428,7 +427,7 @@ class IntelligenceReportGenerator:
 
         return html
 
-    def _generate_sections(self, product_code: str, data: Dict[str, Any], language: str = "en") -> str:
+    def _generate_sections(self, product_code: str, data: dict[str, Any], language: str = "en") -> str:
         """Generate HTML sections based on product type."""
         generators = {
             "soko_pulse": self._soko_pulse_sections,
@@ -441,7 +440,7 @@ class IntelligenceReportGenerator:
         generator = generators.get(product_code, self._generic_sections)
         return generator(data, language=language)
 
-    def _soko_pulse_sections(self, d: Dict, language: str = "en") -> str:
+    def _soko_pulse_sections(self, d: dict, language: str = "en") -> str:
         g = get_translation
         price = d.get("price_intelligence", {})
         forecast = d.get("forecast", {})
@@ -467,7 +466,7 @@ class IntelligenceReportGenerator:
     '''}
     """
 
-    def _biashara_pulse_sections(self, d: Dict, language: str = "en") -> str:
+    def _biashara_pulse_sections(self, d: dict, language: str = "en") -> str:
         formation = d.get("business_formation", {})
         return f"""
     <div class="section">
@@ -490,7 +489,7 @@ class IntelligenceReportGenerator:
         </table>
     </div>"""
 
-    def _alama_score_sections(self, d: Dict, language: str = "en") -> str:
+    def _alama_score_sections(self, d: dict, language: str = "en") -> str:
         g = get_translation
         components = d.get("components", {})
         risk = d.get("risk_indicators", {})
@@ -508,7 +507,7 @@ class IntelligenceReportGenerator:
         <div class="metric"><div class="value">{risk.get('category_risk', 'N/A')}</div><div class="label">{g('risk_assessment', language)}</div></div>
     </div>"""
 
-    def _jamii_insights_sections(self, d: Dict, language: str = "en") -> str:
+    def _jamii_insights_sections(self, d: dict, language: str = "en") -> str:
         metrics = d.get("inclusion_metrics", {})
         impact = d.get("program_impact")
         barriers = d.get("barriers", [])
@@ -544,7 +543,7 @@ class IntelligenceReportGenerator:
         </table>
     </div>"""
 
-    def _tax_base_sections(self, d: Dict, language: str = "en") -> str:
+    def _tax_base_sections(self, d: dict, language: str = "en") -> str:
         tax = d.get("tax_estimates", {})
         return f"""
     <div class="section">
@@ -567,7 +566,7 @@ class IntelligenceReportGenerator:
         </table>
     </div>"""
 
-    def _distribution_gap_sections(self, d: Dict, language: str = "en") -> str:
+    def _distribution_gap_sections(self, d: dict, language: str = "en") -> str:
         coverage = d.get("coverage", {})
         return f"""
     <div class="section">
@@ -592,7 +591,7 @@ class IntelligenceReportGenerator:
         </table>
     </div>"""
 
-    def _generic_sections(self, d: Dict, language: str = "en") -> str:
+    def _generic_sections(self, d: dict, language: str = "en") -> str:
         """Fallback generic sections."""
         metrics_html = ""
         for key, value in d.items():
@@ -603,7 +602,7 @@ class IntelligenceReportGenerator:
     def generate_summary_text(
         self,
         product_code: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> str:
         """
         Generate a plain-text summary for WhatsApp/Telegram delivery.
@@ -626,7 +625,7 @@ class IntelligenceReportGenerator:
         generator = generators.get(product_code, lambda d: "Report generated successfully.")
         return generator(data)
 
-    def _soko_text_summary(self, d: Dict) -> str:
+    def _soko_text_summary(self, d: dict) -> str:
         price = d.get("price_intelligence", {})
         return (
             f"📊 *Soko Pulse — Demand Report*\n"
@@ -639,7 +638,7 @@ class IntelligenceReportGenerator:
             f"🔒 k-Anonymity: {d.get('vendor_count', 0)} (threshold: 10)"
         )
 
-    def _biashara_text_summary(self, d: Dict) -> str:
+    def _biashara_text_summary(self, d: dict) -> str:
         return (
             f"📊 *Angavu Pulse — MSME Activity*\n"
             f"Region: {d.get('region', 'N/A')}\n\n"
@@ -650,7 +649,7 @@ class IntelligenceReportGenerator:
             f"🏭 Top Sectors: {', '.join(d.get('top_sectors', [])[:3])}"
         )
 
-    def _alama_text_summary(self, d: Dict) -> str:
+    def _alama_text_summary(self, d: dict) -> str:
         return (
             f"🎯 *Alama Score — Credit Assessment*\n"
             f"Business: {d.get('business_hash', 'N/A')[:8]}...\n\n"
@@ -661,7 +660,7 @@ class IntelligenceReportGenerator:
             f"⚠️ Risk: {d.get('risk_indicators', {}).get('category_risk', 'N/A').title()}"
         )
 
-    def _jamii_text_summary(self, d: Dict) -> str:
+    def _jamii_text_summary(self, d: dict) -> str:
         m = d.get("inclusion_metrics", {})
         return (
             f"🌍 *Jamii Insights — Financial Inclusion*\n"
@@ -673,7 +672,7 @@ class IntelligenceReportGenerator:
             f"👷 Employment: {d.get('employment_created', 0):,}"
         )
 
-    def _tax_text_summary(self, d: Dict) -> str:
+    def _tax_text_summary(self, d: dict) -> str:
         tax = d.get("tax_estimates", {})
         return (
             f"💰 *Tax Base Estimation*\n"
@@ -685,7 +684,7 @@ class IntelligenceReportGenerator:
             f"📊 Compliance: {tax.get('tax_compliance_rate', 0)}%"
         )
 
-    def _dist_gap_text_summary(self, d: Dict) -> str:
+    def _dist_gap_text_summary(self, d: dict) -> str:
         c = d.get("coverage", {})
         return (
             f"📍 *Distribution Gap Analysis*\n"
@@ -702,7 +701,7 @@ class IntelligenceReportGenerator:
     def generate_summary_text_sw(
         self,
         product_code: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> str:
         """
         Generate a plain-text summary in Swahili for WhatsApp/Telegram delivery.
@@ -723,7 +722,7 @@ class IntelligenceReportGenerator:
         generator = generators.get(product_code, lambda d: "Ripoti imetolewa kwa mafanikio.")
         return generator(data)
 
-    def _soko_text_summary_sw(self, d: Dict) -> str:
+    def _soko_text_summary_sw(self, d: dict) -> str:
         price = d.get("price_intelligence", {})
         return (
             f"📊 *Soko Pulse — Ripoti ya Mahitaji*\n"
@@ -736,7 +735,7 @@ class IntelligenceReportGenerator:
             f"🔒 k-Faragha: {d.get('vendor_count', 0)} (kikomo: 10)"
         )
 
-    def _biashara_text_summary_sw(self, d: Dict) -> str:
+    def _biashara_text_summary_sw(self, d: dict) -> str:
         return (
             f"📊 *Angavu Pulse — Shughuli za Biashara Ndogo*\n"
             f"Eneo: {d.get('region', 'N/A')}\n\n"
@@ -747,7 +746,7 @@ class IntelligenceReportGenerator:
             f"🏭 Sekta Kuu: {', '.join(d.get('top_sectors', [])[:3])}"
         )
 
-    def _alama_text_summary_sw(self, d: Dict) -> str:
+    def _alama_text_summary_sw(self, d: dict) -> str:
         return (
             f"🎯 *Alama Score — Tathmini ya Mkopo*\n"
             f"Biashara: {d.get('business_hash', 'N/A')[:8]}...\n\n"
@@ -758,7 +757,7 @@ class IntelligenceReportGenerator:
             f"⚠️ Hatari: {d.get('risk_indicators', {}).get('category_risk', 'N/A').title()}"
         )
 
-    def _jamii_text_summary_sw(self, d: Dict) -> str:
+    def _jamii_text_summary_sw(self, d: dict) -> str:
         m = d.get("inclusion_metrics", {})
         return (
             f"🌍 *Jamii Insights — Ujumuishaji wa Kifedha*\n"

@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.db.database import Base
 
 # Import all models so Alembic can detect them
-from app.models import *  # noqa: F401, F403
+from app.models import *  # noqa: F403
 
 settings = get_settings()
 

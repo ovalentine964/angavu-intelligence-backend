@@ -7,7 +7,7 @@ Classes:
 Decomposed from statistical_foundation.py for maintainability.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -52,7 +52,7 @@ class ClusterAnalyzer:
         tol: float = 1e-6,
         n_init: int = 10,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         K-means clustering (Lloyd's algorithm with k-means++ init).
 
@@ -75,7 +75,7 @@ class ClusterAnalyzer:
         if k > n:
             raise ValueError("k cannot exceed number of data points")
 
-        best_result: Optional[Dict[str, Any]] = None
+        best_result: dict[str, Any] | None = None
         best_inertia: float = np.inf
         rng = np.random.RandomState(seed)
 
@@ -134,7 +134,7 @@ class ClusterAnalyzer:
     @staticmethod
     def silhouette_score(
         data: np.ndarray, labels: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Silhouette score for cluster quality evaluation.
 
@@ -158,7 +158,7 @@ class ClusterAnalyzer:
         )
 
         sample_scores = np.zeros(n)
-        cluster_scores: Dict[int, float] = {}
+        cluster_scores: dict[int, float] = {}
 
         for i in range(n):
             own_cluster = labels[i]
@@ -199,11 +199,11 @@ class ClusterAnalyzer:
     @staticmethod
     def elbow_method(
         data: np.ndarray,
-        k_range: Optional[List[int]] = None,
+        k_range: list[int] | None = None,
         max_k: int = 10,
         n_init: int = 10,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Elbow method for selecting optimal number of clusters."""
         data = np.asarray(data, dtype=float)
         n: int = data.shape[0]
@@ -212,7 +212,7 @@ class ClusterAnalyzer:
             max_k_eff: int = min(max_k, n - 1)
             k_range = list(range(2, max_k_eff + 1))
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for k in k_range:
             result = ClusterAnalyzer.kmeans(data, k=k, n_init=n_init, seed=seed)
             sil = ClusterAnalyzer.silhouette_score(data, result["labels"])
@@ -254,10 +254,10 @@ class ClusterAnalyzer:
     @staticmethod
     def segment_market(
         data: np.ndarray,
-        feature_names: Optional[List[str]] = None,
+        feature_names: list[str] | None = None,
         max_k: int = 8,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Market segmentation using K-means clustering."""
         data = np.asarray(data, dtype=float)
         n, d = data.shape
@@ -271,11 +271,11 @@ class ClusterAnalyzer:
         result = ClusterAnalyzer.kmeans(data, k=optimal_k, seed=seed)
         sil = ClusterAnalyzer.silhouette_score(data, result["labels"])
 
-        segments: List[Dict[str, Any]] = []
+        segments: list[dict[str, Any]] = []
         for j in range(optimal_k):
             mask = result["labels"] == j
             members = data[mask]
-            profile: Dict[str, Dict[str, float]] = {}
+            profile: dict[str, dict[str, float]] = {}
             for fi, fname in enumerate(feature_names):
                 col = members[:, fi]
                 profile[fname] = {

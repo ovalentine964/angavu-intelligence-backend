@@ -32,11 +32,11 @@ References:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional, TypeVar
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import structlog
 
@@ -96,7 +96,7 @@ class CacheMetrics:
             return 0.0
         return self.total_set_time_ms / self.set_count
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "hits": self.hits,
             "misses": self.misses,
@@ -146,7 +146,7 @@ class CacheAside:
         self._metrics = CacheMetrics()
 
         # Stampede prevention: single-flight per key
-        self._inflight: Dict[str, asyncio.Future] = {}
+        self._inflight: dict[str, asyncio.Future] = {}
 
         self._logger = logger.bind(component="cache_aside")
 
@@ -194,7 +194,7 @@ class CacheAside:
 
     # ── Core Operations ─────────────────────────────────────────────
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from cache. Returns None on miss."""
         full_key = f"{KEY_PREFIX}{key}"
         start = time.monotonic()
@@ -254,7 +254,7 @@ class CacheAside:
                 await self._redis.delete(full_key)
             self._metrics.deletes += 1
             return True
-        except Exception as exc:
+        except Exception:
             self._metrics.errors += 1
             return False
 
@@ -364,7 +364,7 @@ class CacheAside:
         self,
         key: str,
         version: int,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Get a versioned cache entry."""
         versioned_key = f"{key}:v{version}"
         return await self.get(versioned_key)
@@ -375,7 +375,7 @@ class CacheAside:
         self,
         namespace: str,
         key: str,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Get a value from a specific namespace (prices, users, reports, etc.)."""
         return await self.get(f"{namespace}:{key}")
 
@@ -412,25 +412,25 @@ class CacheAside:
     async def cache_worker_profile(self, worker_id: str, data: dict) -> bool:
         return await self.set_namespaced("users", worker_id, data, ttl=TTL_PROFILES)
 
-    async def get_worker_profile(self, worker_id: str) -> Optional[dict]:
+    async def get_worker_profile(self, worker_id: str) -> dict | None:
         return await self.get_namespaced("users", worker_id)
 
     async def cache_intelligence(self, product_id: str, data: dict) -> bool:
         return await self.set_namespaced("intelligence", product_id, data, ttl=TTL_INTELLIGENCE)
 
-    async def get_intelligence(self, product_id: str) -> Optional[dict]:
+    async def get_intelligence(self, product_id: str) -> dict | None:
         return await self.get_namespaced("intelligence", product_id)
 
     async def cache_market_prices(self, market_id: str, data: dict) -> bool:
         return await self.set_namespaced("prices", market_id, data, ttl=TTL_MARKET_PRICES)
 
-    async def get_market_prices(self, market_id: str) -> Optional[dict]:
+    async def get_market_prices(self, market_id: str) -> dict | None:
         return await self.get_namespaced("prices", market_id)
 
     async def cache_report(self, report_id: str, data: dict) -> bool:
         return await self.set_namespaced("reports", report_id, data, ttl=TTL_REPORTS)
 
-    async def get_report(self, report_id: str) -> Optional[dict]:
+    async def get_report(self, report_id: str) -> dict | None:
         return await self.get_namespaced("reports", report_id)
 
     # ── Metrics ─────────────────────────────────────────────────────
@@ -439,13 +439,13 @@ class CacheAside:
         """Get current cache metrics."""
         return self._metrics
 
-    def get_metrics_dict(self) -> Dict[str, Any]:
+    def get_metrics_dict(self) -> dict[str, Any]:
         """Get metrics as a dictionary."""
         return self._metrics.to_dict()
 
     # ── Warm-up ─────────────────────────────────────────────────────
 
-    async def warmup(self, items: List[tuple[str, Any, int]]) -> int:
+    async def warmup(self, items: list[tuple[str, Any, int]]) -> int:
         """
         Pre-populate the cache with critical data.
 
@@ -465,7 +465,7 @@ class CacheAside:
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_cache_aside: Optional[CacheAside] = None
+_cache_aside: CacheAside | None = None
 
 
 def get_cache_aside() -> CacheAside:

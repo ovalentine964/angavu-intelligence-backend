@@ -31,18 +31,16 @@ import hashlib
 import json
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, select, func
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.transaction import Transaction, Inventory
-from app.models.user import User
 from app.config import get_settings
+from app.models.transaction import Inventory, Transaction
+from app.models.user import User
 from app.schemas.formal_report import (
     BalanceSheetApproximation,
     BankReportData,
@@ -124,7 +122,7 @@ COVERAGE_TYPES = {
 
 def _generate_report_id(prefix: str) -> str:
     """Generate a unique report ID."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     short_uuid = uuid.uuid4().hex[:8]
     return f"MSD-{prefix.upper()}-{ts}-{short_uuid}".upper()
 
@@ -136,12 +134,12 @@ def _compute_data_hash(data: dict) -> str:
 
 
 def _estimate_monthly_revenues(
-    transactions: List[Transaction],
+    transactions: list[Transaction],
     period_start: date,
     period_end: date,
-) -> List[Dict[str, float]]:
+) -> list[dict[str, float]]:
     """Compute monthly revenue breakdown from transactions."""
-    monthly: Dict[str, float] = defaultdict(float)
+    monthly: dict[str, float] = defaultdict(float)
     for t in transactions:
         if t.transaction_type == "SALE":
             month_key = t.timestamp.strftime("%Y-%m")
@@ -160,7 +158,7 @@ def _estimate_monthly_revenues(
     return result
 
 
-def _compute_revenue_stability(daily_revenues: List[float]) -> Tuple[float, str]:
+def _compute_revenue_stability(daily_revenues: list[float]) -> tuple[float, str]:
     """Compute coefficient of variation and stability rating."""
     if not daily_revenues or len(daily_revenues) < 2:
         return 0.0, "moderate"
@@ -222,7 +220,7 @@ class BankReport:
     async def generate(
         self,
         worker_id: str,
-        period: Tuple[str, str],
+        period: tuple[str, str],
         language: str = "en",
     ) -> BankReportData:
         """
@@ -290,7 +288,7 @@ class BankReport:
         report = BankReportData(
             report_type="bank",
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             business_name=self._decrypt_field(user, "business_name") or f"{user.business_type or 'Business'}",
             owner_name=self._decrypt_field(user, "owner_name") or "Business Owner",
             business_type=user.business_type or "general",
@@ -323,7 +321,7 @@ class BankReport:
 
         return report
 
-    async def _get_user(self, worker_id: str) -> Optional[User]:
+    async def _get_user(self, worker_id: str) -> User | None:
         """Fetch user by ID."""
         try:
             uid = uuid.UUID(worker_id)
@@ -339,7 +337,7 @@ class BankReport:
         user_id: uuid.UUID,
         start: date,
         end: date,
-    ) -> List[Transaction]:
+    ) -> list[Transaction]:
         """Fetch transactions for the period."""
         result = await self.db.execute(
             select(Transaction).where(
@@ -352,14 +350,14 @@ class BankReport:
         )
         return list(result.scalars().all())
 
-    async def _get_inventory(self, user_id: uuid.UUID) -> List[Inventory]:
+    async def _get_inventory(self, user_id: uuid.UUID) -> list[Inventory]:
         """Fetch current inventory."""
         result = await self.db.execute(
             select(Inventory).where(Inventory.user_id == user_id)
         )
         return list(result.scalars().all())
 
-    def _decrypt_field(self, user: User, field_name: str) -> Optional[str]:
+    def _decrypt_field(self, user: User, field_name: str) -> str | None:
         """
         Decrypt an encrypted user field.
 
@@ -376,7 +374,7 @@ class BankReport:
 
     def _build_income_statement(
         self,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
     ) -> IncomeStatement:
@@ -393,7 +391,7 @@ class BankReport:
         gross_profit = gross_revenue - cost_of_goods_sold
 
         # Categorize operating expenses
-        expense_categories: Dict[str, float] = defaultdict(float)
+        expense_categories: dict[str, float] = defaultdict(float)
         for t in expenses:
             cat = t.item_category or "other"
             expense_categories[cat] += t.amount
@@ -452,7 +450,7 @@ class BankReport:
 
     def _build_cash_flow_statement(
         self,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
     ) -> CashFlowStatement:
@@ -510,8 +508,8 @@ class BankReport:
 
     def _build_balance_sheet(
         self,
-        transactions: List[Transaction],
-        inventory_items: List[Inventory],
+        transactions: list[Transaction],
+        inventory_items: list[Inventory],
         as_of_date: date,
     ) -> BalanceSheetApproximation:
         """Build Balance Sheet approximation from available data."""
@@ -575,10 +573,10 @@ class BankReport:
 
     def _compute_business_metrics(
         self,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
-        inventory_items: List[Inventory],
+        inventory_items: list[Inventory],
     ) -> BusinessPerformanceMetrics:
         """Compute key business metrics from transactions."""
         sales = [t for t in transactions if t.transaction_type == "SALE"]
@@ -592,8 +590,8 @@ class BankReport:
         net_profit = total_revenue - total_purchases - total_expenses
 
         # Daily breakdown
-        daily_rev: Dict[str, float] = defaultdict(float)
-        daily_count: Dict[str, int] = defaultdict(int)
+        daily_rev: dict[str, float] = defaultdict(float)
+        daily_count: dict[str, int] = defaultdict(int)
         active_days = set()
         for t in sales:
             day_key = t.timestamp.strftime("%Y-%m-%d")
@@ -605,8 +603,8 @@ class BankReport:
         operating_days = len(active_days)
 
         # Monthly breakdown
-        monthly_rev: Dict[str, float] = defaultdict(float)
-        monthly_profit: Dict[str, float] = defaultdict(float)
+        monthly_rev: dict[str, float] = defaultdict(float)
+        monthly_profit: dict[str, float] = defaultdict(float)
         for t in sales:
             mk = t.timestamp.strftime("%Y-%m")
             monthly_rev[mk] += t.amount
@@ -652,7 +650,7 @@ class BankReport:
 
         # Product metrics
         unique_items = len(set(t.item for t in sales if t.item))
-        product_revenue: Dict[str, float] = defaultdict(float)
+        product_revenue: dict[str, float] = defaultdict(float)
         for t in sales:
             if t.item:
                 product_revenue[t.item] += t.amount
@@ -674,7 +672,7 @@ class BankReport:
             t.customer_phone_hash for t in sales if t.customer_phone_hash
         ))
         # Customer retention: customers with >1 transaction
-        customer_visits: Dict[str, int] = defaultdict(int)
+        customer_visits: dict[str, int] = defaultdict(int)
         for t in sales:
             if t.customer_phone_hash:
                 customer_visits[t.customer_phone_hash] += 1
@@ -723,7 +721,7 @@ class BankReport:
     async def _compute_credit_assessment(
         self,
         user: User,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
         metrics: BusinessPerformanceMetrics,
@@ -739,7 +737,7 @@ class BankReport:
         total_revenue = sum(t.amount for t in sales)
 
         # Daily metrics
-        daily_rev: Dict[str, float] = defaultdict(float)
+        daily_rev: dict[str, float] = defaultdict(float)
         active_days = set()
         for t in sales:
             day_key = t.timestamp.strftime("%Y-%m-%d")
@@ -878,7 +876,7 @@ class BankReport:
         self,
         metrics: BusinessPerformanceMetrics,
         credit: CreditAssessment,
-    ) -> Tuple[float, str]:
+    ) -> tuple[float, str]:
         """Compute business health score from metrics and credit assessment."""
         score = 0
 
@@ -966,7 +964,7 @@ class BankReport:
     def _build_verification(
         self,
         report_id: str,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
     ) -> ReportVerification:
@@ -1020,8 +1018,8 @@ class BankReport:
             mpesa_verified=mpesa_verified,
             inventory_verified=False,
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
-            valid_until=datetime.now(timezone.utc) + timedelta(days=90),
+            generated_at=datetime.now(UTC),
+            valid_until=datetime.now(UTC) + timedelta(days=90),
             verification_url=verification_url,
             qr_code_data=qr_data,
             data_hash=data_hash,
@@ -1051,7 +1049,7 @@ class GovernmentReport:
     async def generate(
         self,
         worker_id: str,
-        period: Tuple[str, str],
+        period: tuple[str, str],
         language: str = "en",
     ) -> GovernmentReportData:
         """
@@ -1105,7 +1103,7 @@ class GovernmentReport:
         report = GovernmentReportData(
             report_type="government",
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             business_name=self._get_business_name(user),
             owner_name="Business Owner",
             business_type=user.business_type or "general",
@@ -1134,7 +1132,7 @@ class GovernmentReport:
 
         return report
 
-    async def _get_user(self, worker_id: str) -> Optional[User]:
+    async def _get_user(self, worker_id: str) -> User | None:
         try:
             uid = uuid.UUID(worker_id)
         except ValueError:
@@ -1144,7 +1142,7 @@ class GovernmentReport:
 
     async def _get_transactions(
         self, user_id: uuid.UUID, start: date, end: date
-    ) -> List[Transaction]:
+    ) -> list[Transaction]:
         result = await self.db.execute(
             select(Transaction).where(
                 and_(
@@ -1161,7 +1159,7 @@ class GovernmentReport:
 
     def _build_tax_summary(
         self,
-        transactions: List[Transaction],
+        transactions: list[Transaction],
         period_start: date,
         period_end: date,
     ) -> TaxSummary:
@@ -1243,7 +1241,7 @@ class GovernmentReport:
         )
 
     def _build_formalization(
-        self, user: User, transactions: List[Transaction]
+        self, user: User, transactions: list[Transaction]
     ) -> FormalizationReadinessData:
         """Assess business formalization readiness."""
         score = 0
@@ -1361,7 +1359,7 @@ class GovernmentReport:
             estimated_cost_kes=estimated_cost,
         )
 
-    def _compute_data_quality(self, transactions: List[Transaction]) -> float:
+    def _compute_data_quality(self, transactions: list[Transaction]) -> float:
         if not transactions:
             return 0.0
         fields_populated = 0
@@ -1383,7 +1381,7 @@ class GovernmentReport:
         return round(fields_populated / max(fields_total, 1), 2)
 
     def _build_verification(
-        self, report_id: str, transactions: List[Transaction],
+        self, report_id: str, transactions: list[Transaction],
         period_start: date, period_end: date,
     ) -> ReportVerification:
         """Build verification data for government report."""
@@ -1408,8 +1406,8 @@ class GovernmentReport:
             mpesa_verified=any(t.mpesa_receipt for t in transactions),
             inventory_verified=False,
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
-            valid_until=datetime.now(timezone.utc) + timedelta(days=90),
+            generated_at=datetime.now(UTC),
+            valid_until=datetime.now(UTC) + timedelta(days=90),
             verification_url=verification_url,
             qr_code_data=qr_data,
             data_hash=data_hash,
@@ -1439,7 +1437,7 @@ class InsuranceReport:
     async def generate(
         self,
         worker_id: str,
-        period: Tuple[str, str],
+        period: tuple[str, str],
         language: str = "en",
     ) -> InsuranceReportData:
         """
@@ -1499,7 +1497,7 @@ class InsuranceReport:
         report = InsuranceReportData(
             report_type="insurance",
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             business_name=self._get_business_name(user),
             owner_name="Business Owner",
             business_type=user.business_type or "general",
@@ -1529,7 +1527,7 @@ class InsuranceReport:
 
         return report
 
-    async def _get_user(self, worker_id: str) -> Optional[User]:
+    async def _get_user(self, worker_id: str) -> User | None:
         try:
             uid = uuid.UUID(worker_id)
         except ValueError:
@@ -1539,7 +1537,7 @@ class InsuranceReport:
 
     async def _get_transactions(
         self, user_id: uuid.UUID, start: date, end: date
-    ) -> List[Transaction]:
+    ) -> list[Transaction]:
         result = await self.db.execute(
             select(Transaction).where(
                 and_(
@@ -1551,7 +1549,7 @@ class InsuranceReport:
         )
         return list(result.scalars().all())
 
-    async def _get_inventory(self, user_id: uuid.UUID) -> List[Inventory]:
+    async def _get_inventory(self, user_id: uuid.UUID) -> list[Inventory]:
         result = await self.db.execute(
             select(Inventory).where(Inventory.user_id == user_id)
         )
@@ -1563,8 +1561,8 @@ class InsuranceReport:
     def _build_risk_profile(
         self,
         user: User,
-        transactions: List[Transaction],
-        inventory_items: List[Inventory],
+        transactions: list[Transaction],
+        inventory_items: list[Inventory],
         period_start: date,
         period_end: date,
     ) -> RiskProfile:
@@ -1575,7 +1573,7 @@ class InsuranceReport:
         avg_monthly_rev = total_revenue / months
 
         # Revenue stability
-        monthly_rev: Dict[str, float] = defaultdict(float)
+        monthly_rev: dict[str, float] = defaultdict(float)
         for t in sales:
             mk = t.timestamp.strftime("%Y-%m")
             monthly_rev[mk] += t.amount
@@ -1679,7 +1677,7 @@ class InsuranceReport:
             business_interruption_risk=interruption_risk,
         )
 
-    def _compute_data_quality(self, transactions: List[Transaction]) -> float:
+    def _compute_data_quality(self, transactions: list[Transaction]) -> float:
         if not transactions:
             return 0.0
         fields_populated = 0
@@ -1701,7 +1699,7 @@ class InsuranceReport:
         return round(fields_populated / max(fields_total, 1), 2)
 
     def _build_verification(
-        self, report_id: str, transactions: List[Transaction],
+        self, report_id: str, transactions: list[Transaction],
         period_start: date, period_end: date,
     ) -> ReportVerification:
         total_txns = len(transactions)
@@ -1717,8 +1715,8 @@ class InsuranceReport:
             mpesa_verified=any(t.mpesa_receipt for t in transactions),
             inventory_verified=False,
             report_id=report_id,
-            generated_at=datetime.now(timezone.utc),
-            valid_until=datetime.now(timezone.utc) + timedelta(days=90),
+            generated_at=datetime.now(UTC),
+            valid_until=datetime.now(UTC) + timedelta(days=90),
             verification_url=f"{get_settings().VERIFICATION_BASE_URL}/report/{report_id}",
             qr_code_data=json.dumps({"report_id": report_id, "hash": data_hash[:16]}),
             data_hash=data_hash,

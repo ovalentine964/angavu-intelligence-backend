@@ -34,13 +34,11 @@ Architecture:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import structlog
 
@@ -71,24 +69,24 @@ class ReflexionAttempt:
     attempt_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     attempt_number: int = 0
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
     # Execution
     execution_result: Any = None
     execution_success: bool = False
     execution_duration_ms: float = 0.0
-    execution_error: Optional[str] = None
+    execution_error: str | None = None
 
     # Critique
     critique_score: float = 0.0
-    critique_issues: List[str] = field(default_factory=list)
-    critique_suggestions: List[str] = field(default_factory=list)
+    critique_issues: list[str] = field(default_factory=list)
+    critique_suggestions: list[str] = field(default_factory=list)
 
     # Revision
     revision_plan: str = ""
     revision_applied: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "attempt_id": self.attempt_id,
             "attempt_number": self.attempt_number,
@@ -111,12 +109,12 @@ class ReflexionResult:
     loop_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     task_name: str = ""
     status: ReflexionStatus = ReflexionStatus.PENDING
-    attempts: List[ReflexionAttempt] = field(default_factory=list)
+    attempts: list[ReflexionAttempt] = field(default_factory=list)
     final_result: Any = None
     final_score: float = 0.0
     total_duration_ms: float = 0.0
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
     @property
     def attempt_count(self) -> int:
@@ -135,7 +133,7 @@ class ReflexionResult:
             return 0.0
         return self.attempts[-1].critique_score - self.attempts[0].critique_score
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "loop_id": self.loop_id,
             "task_name": self.task_name,
@@ -171,9 +169,9 @@ class Executor(Protocol):
     """Protocol for task execution."""
     async def execute(
         self,
-        task: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Execute a task and return result dict with 'success' key."""
         ...
 
@@ -182,10 +180,10 @@ class Critic(Protocol):
     """Protocol for self-critique evaluation."""
     async def critique(
         self,
-        task: Dict[str, Any],
-        result: Dict[str, Any],
+        task: dict[str, Any],
+        result: dict[str, Any],
         attempt_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate result quality. Must return dict with 'score' (0-1), 'issues', 'suggestions'."""
         ...
 
@@ -194,10 +192,10 @@ class Reviser(Protocol):
     """Protocol for revision strategy."""
     async def revise(
         self,
-        task: Dict[str, Any],
-        critique: Dict[str, Any],
-        previous_attempts: List[ReflexionAttempt],
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        critique: dict[str, Any],
+        previous_attempts: list[ReflexionAttempt],
+    ) -> dict[str, Any]:
         """Create a revised task/context based on critique. Returns revised task dict."""
         ...
 
@@ -232,8 +230,8 @@ class ReflexionEngine:
         self,
         executor: Executor,
         critic: Critic,
-        reviser: Optional[Reviser] = None,
-        config: Optional[ReflexionConfig] = None,
+        reviser: Reviser | None = None,
+        config: ReflexionConfig | None = None,
         event_bus: Any = None,
     ):
         self._executor = executor
@@ -244,12 +242,12 @@ class ReflexionEngine:
         self._logger = logger.bind(component="reflexion_engine")
 
         # History for analytics
-        self._loop_history: List[ReflexionResult] = []
+        self._loop_history: list[ReflexionResult] = []
         self._max_history = 100
 
     async def run(
         self,
-        task: Dict[str, Any],
+        task: dict[str, Any],
         task_name: str = "unnamed",
     ) -> ReflexionResult:
         """
@@ -457,11 +455,11 @@ class ReflexionEngine:
 
     # ── Analytics ───────────────────────────────────────────────────
 
-    def get_history(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_history(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent Reflexion loop results."""
         return [r.to_dict() for r in self._loop_history[-n:]]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get aggregate Reflexion statistics."""
         if not self._loop_history:
             return {"total_loops": 0}
@@ -506,12 +504,12 @@ class HeuristicCritic:
 
     async def critique(
         self,
-        task: Dict[str, Any],
-        result: Dict[str, Any],
+        task: dict[str, Any],
+        result: dict[str, Any],
         attempt_number: int,
-    ) -> Dict[str, Any]:
-        issues: List[str] = []
-        suggestions: List[str] = []
+    ) -> dict[str, Any]:
+        issues: list[str] = []
+        suggestions: list[str] = []
         score = 1.0
 
         if not result.get("success", False):
@@ -552,10 +550,10 @@ class AdaptiveReviser:
 
     async def revise(
         self,
-        task: Dict[str, Any],
-        critique: Dict[str, Any],
-        previous_attempts: List[ReflexionAttempt],
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        critique: dict[str, Any],
+        previous_attempts: list[ReflexionAttempt],
+    ) -> dict[str, Any]:
         revised_task = dict(task)
 
         # Inject critique as context
@@ -585,8 +583,8 @@ class AdaptiveReviser:
 
 def create_reflexion_engine(
     executor: Executor,
-    critic: Optional[Critic] = None,
-    reviser: Optional[Reviser] = None,
+    critic: Critic | None = None,
+    reviser: Reviser | None = None,
     quality_threshold: float = 0.7,
     max_attempts: int = 3,
     event_bus: Any = None,

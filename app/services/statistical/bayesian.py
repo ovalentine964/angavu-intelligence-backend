@@ -8,7 +8,7 @@ Classes:
 Decomposed from statistical_foundation.py for maintainability.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -33,7 +33,7 @@ class BayesianUpdater:
         prior_beta: float,
         successes: int,
         failures: int,
-    ) -> Tuple[float, float, Dict[str, float]]:
+    ) -> tuple[float, float, dict[str, float]]:
         """
         Beta-Binomial conjugate update.
 
@@ -62,7 +62,7 @@ class BayesianUpdater:
         ci_lower: float = float(stats.beta.ppf(0.025, post_alpha, post_beta))
         ci_upper: float = float(stats.beta.ppf(0.975, post_alpha, post_beta))
 
-        summary: Dict[str, float] = {
+        summary: dict[str, float] = {
             "posterior_mean": round(post_mean, 4),
             "posterior_std": round(post_std, 4),
             "credible_interval_95": (round(ci_lower, 4), round(ci_upper, 4)),
@@ -81,7 +81,7 @@ class BayesianUpdater:
         data_mean: float,
         data_var: float,
         n: int,
-    ) -> Tuple[float, float, Dict[str, float]]:
+    ) -> tuple[float, float, dict[str, float]]:
         """
         Normal-Normal conjugate update.
 
@@ -102,7 +102,7 @@ class BayesianUpdater:
         ci_lower: float = post_mean_val - 1.96 * post_std_val
         ci_upper: float = post_mean_val + 1.96 * post_std_val
 
-        summary: Dict[str, Any] = {
+        summary: dict[str, Any] = {
             "posterior_mean": round(post_mean_val, 4),
             "posterior_std": round(post_std_val, 4),
             "credible_interval_95": (round(ci_lower, 4), round(ci_upper, 4)),
@@ -129,9 +129,9 @@ class KernelDensityEstimator:
     @staticmethod
     def gaussian_kde(
         data: np.ndarray,
-        points: Optional[np.ndarray] = None,
-        bandwidth: Optional[float] = None,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        points: np.ndarray | None = None,
+        bandwidth: float | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Gaussian kernel density estimation.
 
@@ -170,7 +170,7 @@ class KernelDensityEstimator:
     def detect_multimodality(
         data: np.ndarray,
         n_modes_max: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Test for multimodality in data distribution.
 
@@ -185,7 +185,7 @@ class KernelDensityEstimator:
         """
         points, density = KernelDensityEstimator.gaussian_kde(data)
 
-        peaks: List[Tuple[float, float]] = []
+        peaks: list[tuple[float, float]] = []
         for i in range(1, len(density) - 1):
             if density[i] > density[i - 1] and density[i] > density[i + 1]:
                 peaks.append((float(points[i]), float(density[i])))

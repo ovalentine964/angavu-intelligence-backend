@@ -12,7 +12,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.deerflow.state.reducers import reduce_state
 
@@ -27,18 +27,18 @@ class ThreadState:
     """
 
     thread_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
-    messages: List[Dict[str, Any]] = field(default_factory=list)
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    delegations: List[Dict[str, Any]] = field(default_factory=list)
-    artifacts: List[str] = field(default_factory=list)
-    intelligence_products: List[Dict[str, Any]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    delegations: list[dict[str, Any]] = field(default_factory=list)
+    artifacts: list[str] = field(default_factory=list)
+    intelligence_products: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     current_agent: str = ""
-    plan: Optional[Dict[str, Any]] = None
-    todos: List[Dict[str, Any]] = field(default_factory=list)
-    error: Optional[str] = None
+    plan: dict[str, Any] | None = None
+    todos: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
 
     def serialize(self) -> str:
         """Serialize state to JSON string for persistence."""
@@ -78,7 +78,7 @@ class ThreadState:
             error=parsed.get("error"),
         )
 
-    def apply_update(self, updates: Dict[str, Any]) -> ThreadState:
+    def apply_update(self, updates: dict[str, Any]) -> ThreadState:
         """Apply state updates using reducers and return new state."""
         new_data = reduce_state(self.__dict__.copy(), updates)
         return ThreadState(**{k: v for k, v in new_data.items() if k in ThreadState.__dataclass_fields__})
@@ -94,14 +94,14 @@ class ThreadState:
         })
         self.updated_at = time.time()
 
-    def get_last_user_message(self) -> Optional[str]:
+    def get_last_user_message(self) -> str | None:
         """Get the content of the last user message."""
         for msg in reversed(self.messages):
             if msg.get("role") == "user":
                 return msg.get("content")
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "thread_id": self.thread_id,

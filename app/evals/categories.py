@@ -13,9 +13,8 @@ Each category defines:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
 
 
 class MetricType(str, Enum):
@@ -44,12 +43,12 @@ class EvalCategory:
     """Definition of an evaluation category."""
     name: str
     description: str
-    metrics: List[MetricType]
+    metrics: list[MetricType]
     weight: float  # 0.0–1.0, relative importance
     task_count: int  # Number of test cases in this category
     data_file: str = ""  # Path to test data JSON
 
-    def composite_score(self, metric_scores: Dict[str, float]) -> float:
+    def composite_score(self, metric_scores: dict[str, float]) -> float:
         """Compute weighted composite score from individual metric scores."""
         if not self.metrics:
             return 0.0
@@ -66,7 +65,7 @@ class EvalCategory:
 # The 5 Core Eval Categories
 # ════════════════════════════════════════════════════════════════════
 
-EVAL_CATEGORIES: Dict[str, EvalCategory] = {
+EVAL_CATEGORIES: dict[str, EvalCategory] = {
     "business_reasoning": EvalCategory(
         name="business_reasoning",
         description=(
@@ -155,6 +154,6 @@ def get_category(name: str) -> EvalCategory:
     return EVAL_CATEGORIES[name]
 
 
-def get_all_weights() -> Dict[str, float]:
+def get_all_weights() -> dict[str, float]:
     """Get weight distribution across categories (should sum to 1.0)."""
     return {name: cat.weight for name, cat in EVAL_CATEGORIES.items()}

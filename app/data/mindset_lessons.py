@@ -16,15 +16,14 @@ Source books:
 Key insight: KSh 50/day → KSh 1.1M in 20 years (compound interest)
 """
 
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Module & Lesson Definitions (56 lessons across 6 modules)
 # ─────────────────────────────────────────────────────────────────────────────
 # Each lesson tuple: (lesson_num, title_en, title_sw, duration_min, takeaway, difficulty)
 
-MODULE_DEFINITIONS: List[Dict[str, Any]] = [
+MODULE_DEFINITIONS: list[dict[str, Any]] = [
     {
         "module_number": 1,
         "title_en": "Believe You Can",
@@ -148,7 +147,7 @@ MODULE_DEFINITIONS: List[Dict[str, Any]] = [
 # Daily Affirmations (from each book)
 # ─────────────────────────────────────────────────────────────────────────────
 
-AFFIRMATIONS: List[Dict[str, str]] = [
+AFFIRMATIONS: list[dict[str, str]] = [
     # Magic of Thinking Big
     {
         "text_en": "I believe in myself and my ability to succeed. My mind is powerful.",
@@ -342,7 +341,7 @@ AFFIRMATIONS: List[Dict[str, str]] = [
 # Habit Stacking Formulas per Worker Type
 # ─────────────────────────────────────────────────────────────────────────────
 
-HABIT_STACKS: Dict[str, Dict[str, Any]] = {
+HABIT_STACKS: dict[str, dict[str, Any]] = {
     "mama_mboga": {
         "worker_type": "mama_mboga",
         "name_en": "Mama Mboga Daily Stack",
@@ -515,7 +514,7 @@ COMPOUND_INTEREST_STORY = {
 }
 
 
-def get_all_lessons() -> List[Dict[str, Any]]:
+def get_all_lessons() -> list[dict[str, Any]]:
     """Return all 56 lessons as flat list of dicts."""
     lessons = []
     order_index = 1
@@ -536,26 +535,26 @@ def get_all_lessons() -> List[Dict[str, Any]]:
     return lessons
 
 
-def get_all_affirmations() -> List[Dict[str, str]]:
+def get_all_affirmations() -> list[dict[str, str]]:
     """Return all affirmations."""
     return AFFIRMATIONS
 
 
-def get_affirmations_by_category(category: str) -> List[Dict[str, str]]:
+def get_affirmations_by_category(category: str) -> list[dict[str, str]]:
     """Return affirmations filtered by category."""
     return [a for a in AFFIRMATIONS if a["category"] == category]
 
 
-def get_affirmation_by_index(index: int) -> Dict[str, str]:
+def get_affirmation_by_index(index: int) -> dict[str, str]:
     """Get affirmation by index (cycling through for daily rotation)."""
     return AFFIRMATIONS[index % len(AFFIRMATIONS)]
 
 
-def get_habit_stack(worker_type: str) -> Optional[Dict[str, Any]]:
+def get_habit_stack(worker_type: str) -> dict[str, Any] | None:
     """Get habit stacking formula for a worker type."""
     return HABIT_STACKS.get(worker_type)
 
 
-def get_all_worker_types() -> List[str]:
+def get_all_worker_types() -> list[str]:
     """Return all available worker types for habit stacking."""
     return list(HABIT_STACKS.keys())

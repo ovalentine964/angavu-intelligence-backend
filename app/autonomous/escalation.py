@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -47,7 +48,7 @@ class SLA:
     priority: Priority
     response_time_seconds: int      # Max time to acknowledge
     resolution_time_seconds: int    # Max time to resolve
-    channels: List[str]             # Notification channels
+    channels: list[str]             # Notification channels
     auto_escalate_seconds: int = 0  # Auto-escalate if no response (0 = disabled)
 
     @property
@@ -61,7 +62,7 @@ class SLA:
 
 
 # Default SLAs
-DEFAULT_SLAS: Dict[Priority, SLA] = {
+DEFAULT_SLAS: dict[Priority, SLA] = {
     Priority.P1_CRITICAL: SLA(
         priority=Priority.P1_CRITICAL,
         response_time_seconds=300,       # 5 minutes
@@ -99,7 +100,7 @@ class EscalationTrigger:
     priority: Priority
     condition: str  # Human-readable condition (e.g., "error_count >= 3")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -109,7 +110,7 @@ class EscalationTrigger:
 
 
 # Predefined escalation triggers
-ESCALATION_TRIGGERS: Dict[str, EscalationTrigger] = {
+ESCALATION_TRIGGERS: dict[str, EscalationTrigger] = {
     "consecutive_errors": EscalationTrigger(
         name="consecutive_errors",
         description="Agent failed 3+ consecutive tasks",
@@ -175,11 +176,11 @@ class EscalationTicket:
     priority: Priority
     agent_name: str
     summary: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
     created_at: float = field(default_factory=time.time)
-    acknowledged_at: Optional[float] = None
-    resolved_at: Optional[float] = None
-    resolution: Optional[str] = None
+    acknowledged_at: float | None = None
+    resolved_at: float | None = None
+    resolution: str | None = None
     status: str = "open"  # open | acknowledged | resolved | dismissed
 
     @property
@@ -212,7 +213,7 @@ class EscalationTicket:
         self.status = "dismissed"
         self.resolved_at = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ticket_id": self.ticket_id,
             "trigger_name": self.trigger_name,
@@ -239,11 +240,11 @@ class EscalationManager:
     """
 
     def __init__(self):
-        self._tickets: Dict[str, EscalationTicket] = {}
-        self._resolved_tickets: List[EscalationTicket] = []
+        self._tickets: dict[str, EscalationTicket] = {}
+        self._resolved_tickets: list[EscalationTicket] = []
         self._total_tasks: int = 0
         self._total_escalations: int = 0
-        self._notification_handlers: Dict[str, Callable[..., Coroutine]] = {}
+        self._notification_handlers: dict[str, Callable[..., Coroutine]] = {}
         self._logger = logger.bind(component="escalation_manager")
 
     def register_notification_handler(
@@ -262,8 +263,8 @@ class EscalationManager:
         trigger_name: str,
         agent_name: str,
         summary: str,
-        details: Optional[Dict[str, Any]] = None,
-        priority: Optional[Priority] = None,
+        details: dict[str, Any] | None = None,
+        priority: Priority | None = None,
     ) -> EscalationTicket:
         """
         Create an escalation ticket and notify the human.
@@ -371,18 +372,18 @@ class EscalationManager:
 
     # ── Query API ───────────────────────────────────────────────────
 
-    def get_open_tickets(self) -> List[Dict[str, Any]]:
+    def get_open_tickets(self) -> list[dict[str, Any]]:
         """Get all open/acknowledged tickets sorted by priority."""
         tickets = [t for t in self._tickets.values() if t.status in ("open", "acknowledged")]
         tickets.sort(key=lambda t: (t.priority.value, -t.created_at))
         return [t.to_dict() for t in tickets]
 
-    def get_breached_tickets(self) -> List[Dict[str, Any]]:
+    def get_breached_tickets(self) -> list[dict[str, Any]]:
         """Get tickets that have breached their SLA."""
         breached = [t for t in self._tickets.values() if t.is_breached]
         return [t.to_dict() for t in breached]
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get escalation metrics for the monitoring dashboard."""
         escalation_rate = (
             self._total_escalations / self._total_tasks
@@ -408,15 +409,15 @@ class EscalationManager:
             "by_trigger": self._tickets_by_trigger(),
         }
 
-    def _tickets_by_priority(self) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def _tickets_by_priority(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for ticket in self._tickets.values():
             key = ticket.priority.name
             counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def _tickets_by_trigger(self) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def _tickets_by_trigger(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for ticket in self._tickets.values():
             key = ticket.trigger_name
             counts[key] = counts.get(key, 0) + 1

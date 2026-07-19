@@ -11,14 +11,11 @@ Tests cover:
 - Encryption utilities
 """
 
-import uuid
-from datetime import datetime, timedelta, timezone
 
-import pytest
 import numpy as np
 
-from app.services.pipeline import DataPipeline, PRODUCT_NORMALIZATION, CATEGORY_MAP
 from app.services.anonymizer import Anonymizer
+from app.services.pipeline import DataPipeline
 from app.utils.compression import (
     compress_payload,
     decompress_payload,
@@ -26,14 +23,12 @@ from app.utils.compression import (
     get_compression_level_for_network,
 )
 from app.utils.crypto import (
-    encrypt_value,
-    decrypt_value,
-    hash_phone,
-    hash_value,
     create_hmac_signature,
+    decrypt_value,
+    encrypt_value,
+    hash_phone,
     verify_hmac_signature,
 )
-
 
 # =========================================================================
 # Product Normalization Tests

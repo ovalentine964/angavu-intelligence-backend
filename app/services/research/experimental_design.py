@@ -21,11 +21,10 @@ from __future__ import annotations
 import hashlib
 import math
 import secrets
-from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -68,7 +67,7 @@ class Variant:
     description: str
     allocation_prob: float = 0.5  # Probability of assignment
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "variant_id": self.variant_id,
             "name": self.name,
@@ -82,20 +81,20 @@ class ExperimentResult:
     """Results from an experiment."""
     experiment_id: str
     status: ExperimentStatus
-    variants: List[Dict[str, Any]]
+    variants: list[dict[str, Any]]
     primary_metric: str
-    winner: Optional[str]
+    winner: str | None
     confidence_level: float
     p_value: float
     effect_size: float
     power: float
-    sample_sizes: Dict[str, int]
-    metric_means: Dict[str, float]
-    metric_stds: Dict[str, float]
-    confidence_intervals: Dict[str, Tuple[float, float]]
+    sample_sizes: dict[str, int]
+    metric_means: dict[str, float]
+    metric_stds: dict[str, float]
+    confidence_intervals: dict[str, tuple[float, float]]
     recommendation: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "experiment_id": self.experiment_id,
             "status": self.status.value,
@@ -127,7 +126,7 @@ class PowerAnalysisResult:
     power: float
     test_type: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "required_n_per_group": self.required_n_per_group,
             "total_n": self.total_n,
@@ -186,9 +185,7 @@ class PowerAnalyzer:
                 test_type=test_type,
             )
 
-        if test_type == "one_sample":
-            n = ((z_alpha + z_beta) / effect_size) ** 2
-        elif test_type == "paired":
+        if test_type == "one_sample" or test_type == "paired":
             n = ((z_alpha + z_beta) / effect_size) ** 2
         elif test_type == "two_sample":
             n = 2 * ((z_alpha + z_beta) / effect_size) ** 2
@@ -255,16 +252,16 @@ class ExperimentDesigner:
     @staticmethod
     def design_crd(
         n_subjects: int,
-        variants: List[Variant],
-        seed: Optional[int] = None,
-    ) -> Dict[str, List[str]]:
+        variants: list[Variant],
+        seed: int | None = None,
+    ) -> dict[str, list[str]]:
         """
         Completely Randomized Design (STA 343 §8.2).
 
         Randomly assign all subjects to treatments with equal probability.
         """
         rng = np.random.default_rng(seed)
-        assignment: Dict[str, List[str]] = {v.variant_id: [] for v in variants}
+        assignment: dict[str, list[str]] = {v.variant_id: [] for v in variants}
 
         # Create allocation array
         variant_ids = []
@@ -288,10 +285,10 @@ class ExperimentDesigner:
 
     @staticmethod
     def design_rcbd(
-        blocks: Dict[str, List[str]],
-        variants: List[Variant],
-        seed: Optional[int] = None,
-    ) -> Dict[str, Dict[str, List[str]]]:
+        blocks: dict[str, list[str]],
+        variants: list[Variant],
+        seed: int | None = None,
+    ) -> dict[str, dict[str, list[str]]]:
         """
         Randomized Complete Block Design (STA 343 §8.3).
 
@@ -299,7 +296,7 @@ class ExperimentDesigner:
         Reduces experimental error from known sources of variation.
         """
         rng = np.random.default_rng(seed)
-        assignment: Dict[str, Dict[str, List[str]]] = {}
+        assignment: dict[str, dict[str, list[str]]] = {}
 
         for block_name, subjects in blocks.items():
             assignment[block_name] = {v.variant_id: [] for v in variants}
@@ -318,9 +315,9 @@ class ExperimentDesigner:
     @staticmethod
     def design_factorial(
         n_subjects: int,
-        factors: Dict[str, List[str]],
-        seed: Optional[int] = None,
-    ) -> List[Dict[str, str]]:
+        factors: dict[str, list[str]],
+        seed: int | None = None,
+    ) -> list[dict[str, str]]:
         """
         Factorial design (STA 343 §8.5).
 
@@ -400,27 +397,27 @@ class ABTestFramework:
     """
 
     def __init__(self):
-        self._experiments: Dict[str, Dict[str, Any]] = {}
-        self._assignments: Dict[str, Dict[str, str]] = {}  # exp_id -> {user_id: variant_id}
-        self._outcomes: Dict[str, Dict[str, List[float]]] = {}  # exp_id -> {variant_id: [values]}
+        self._experiments: dict[str, dict[str, Any]] = {}
+        self._assignments: dict[str, dict[str, str]] = {}  # exp_id -> {user_id: variant_id}
+        self._outcomes: dict[str, dict[str, list[float]]] = {}  # exp_id -> {variant_id: [values]}
 
     def create_experiment(
         self,
         name: str,
-        variants: List[Variant],
+        variants: list[Variant],
         primary_metric: str,
         min_detectable_effect: float = 0.05,
         alpha: float = 0.05,
         power: float = 0.80,
         design: DesignType = DesignType.COMPLETELY_RANDOMIZED,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a new A/B test experiment.
 
         Performs power analysis to determine required sample size.
         """
         exp_id = hashlib.sha256(
-            f"{name}{datetime.now(timezone.utc).isoformat()}{secrets.token_hex(8)}".encode()
+            f"{name}{datetime.now(UTC).isoformat()}{secrets.token_hex(8)}".encode()
         ).hexdigest()[:16]
 
         # Power analysis
@@ -445,7 +442,7 @@ class ABTestFramework:
             "status": ExperimentStatus.DRAFT.value,
             "required_n_per_group": power_result.required_n_per_group,
             "total_required_n": power_result.total_n,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         self._experiments[exp_id] = experiment
@@ -635,7 +632,7 @@ class ABTestFramework:
             recommendation=recommendation,
         )
 
-    def get_experiment(self, experiment_id: str) -> Optional[Dict[str, Any]]:
+    def get_experiment(self, experiment_id: str) -> dict[str, Any] | None:
         """Get experiment details."""
         exp = self._experiments.get(experiment_id)
         if exp:
@@ -647,7 +644,7 @@ class ABTestFramework:
             return exp_copy
         return None
 
-    def list_experiments(self) -> List[Dict[str, Any]]:
+    def list_experiments(self) -> list[dict[str, Any]]:
         """List all experiments."""
         return [
             {

@@ -9,7 +9,8 @@ Classes:
 Decomposed from statistical_foundation.py for maintainability.
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -29,7 +30,7 @@ class MonteCarloEngine:
         upper: float,
         n_samples: int = 100000,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Crude Monte Carlo integration.
 
@@ -58,10 +59,10 @@ class MonteCarloEngine:
         func: Callable,
         proposal_sampler: Callable,
         proposal_pdf: Callable,
-        target_pdf: Optional[Callable] = None,
+        target_pdf: Callable | None = None,
         n_samples: int = 100000,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Importance sampling for variance reduction.
 
@@ -105,7 +106,7 @@ class MonteCarloEngine:
         n_bootstrap: int = 10000,
         alternative: str = "two-sided",
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Bootstrap/permutation hypothesis test.
 
@@ -162,7 +163,7 @@ class MonteCarloEngine:
         confidence: float = 0.95,
         method: str = "percentile",
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Simulation-based confidence intervals.
 
@@ -225,7 +226,7 @@ class MonteCarloEngine:
         n_periods: int = 12,
         n_simulations: int = 10000,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Simulate revenue distribution via geometric Brownian motion.
 
@@ -279,10 +280,10 @@ class MCMCSampler:
         log_target: Callable,
         initial_state: np.ndarray,
         n_samples: int = 10000,
-        proposal_std: Optional[np.ndarray] = None,
+        proposal_std: np.ndarray | None = None,
         burn_in: int = 1000,
         thin: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Metropolis-Hastings sampler with random walk proposal.
 
@@ -318,7 +319,7 @@ class MCMCSampler:
         thinned = post_burnin[::thin]
         acceptance_rate: float = n_accepted / n_samples
 
-        summary: List[Dict[str, Any]] = []
+        summary: list[dict[str, Any]] = []
         for d in range(dim):
             chain = thinned[:, d]
             summary.append({
@@ -343,7 +344,7 @@ class MCMCSampler:
         }
 
     @staticmethod
-    def gelman_rubin_rhat(chains: List[np.ndarray]) -> Dict[str, Any]:
+    def gelman_rubin_rhat(chains: list[np.ndarray]) -> dict[str, Any]:
         """
         Gelman-Rubin R-hat convergence diagnostic.
 
@@ -357,7 +358,7 @@ class MCMCSampler:
         n_samples: int = chains[0].shape[0]
         dim: int = chains[0].shape[1] if chains[0].ndim > 1 else 1
 
-        rhat_values: List[float] = []
+        rhat_values: list[float] = []
 
         for d in range(dim):
             if dim > 1:
@@ -393,20 +394,20 @@ class MCMCSampler:
         }
 
     @staticmethod
-    def _check_convergence_single(samples: np.ndarray) -> Dict[str, Any]:
+    def _check_convergence_single(samples: np.ndarray) -> dict[str, Any]:
         """Basic convergence diagnostics for a single chain."""
         if samples.ndim == 1:
             samples = samples.reshape(-1, 1)
 
         n, dim = samples.shape
 
-        diagnostics: List[Dict[str, Any]] = []
+        diagnostics: list[dict[str, Any]] = []
         for d in range(dim):
             chain = samples[:, d]
             n_chain: int = len(chain)
 
             max_lag: int = min(n_chain // 2, 200)
-            acf_vals: List[float] = []
+            acf_vals: list[float] = []
             mean: float = float(np.mean(chain))
             var: float = float(np.var(chain, ddof=1))
             if var > 0:
@@ -446,4 +447,4 @@ class MCMCSampler:
         }
 
 
-__all__ = ["MonteCarloEngine", "MCMCSampler"]
+__all__ = ["MCMCSampler", "MonteCarloEngine"]

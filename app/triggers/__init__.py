@@ -12,17 +12,17 @@ and routes to the appropriate agent.
 """
 
 from app.triggers.base import BaseTrigger, TriggerIntent, TriggerResponse
-from app.triggers.whatsapp_trigger import WhatsAppTrigger
-from app.triggers.ussd_trigger import USSDTrigger
 from app.triggers.sms_trigger import SMSTrigger
+from app.triggers.ussd_trigger import USSDTrigger
 from app.triggers.voice_trigger import VoiceTrigger
+from app.triggers.whatsapp_trigger import WhatsAppTrigger
 
 __all__ = [
     "BaseTrigger",
+    "SMSTrigger",
     "TriggerIntent",
     "TriggerResponse",
-    "WhatsAppTrigger",
     "USSDTrigger",
-    "SMSTrigger",
     "VoiceTrigger",
+    "WhatsAppTrigger",
 ]

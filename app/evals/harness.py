@@ -26,13 +26,14 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.evals.categories import EvalCategory, MetricType, get_category
+from app.evals.categories import get_category
 
 logger = structlog.get_logger(__name__)
 
@@ -47,11 +48,11 @@ class EvalTask:
     category: str
     input_text: str
     expected_output: str
-    rubric: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    rubric: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], category: str) -> "EvalTask":
+    def from_dict(cls, data: dict[str, Any], category: str) -> EvalTask:
         return cls(
             task_id=data.get("id", ""),
             category=category,
@@ -69,15 +70,15 @@ class EvalResult:
     category: str
     model: str = ""
     output: str = ""
-    metric_scores: Dict[str, float] = field(default_factory=dict)
+    metric_scores: dict[str, float] = field(default_factory=dict)
     composite_score: float = 0.0
     latency_ms: float = 0.0
     tokens_used: int = 0
     passed: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "category": self.category,
@@ -98,9 +99,9 @@ class EvalSuite:
     """Results from running a full eval category."""
     category: str
     model: str
-    results: List[EvalResult] = field(default_factory=list)
+    results: list[EvalResult] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
     @property
     def total_tasks(self) -> int:
@@ -124,9 +125,9 @@ class EvalSuite:
         latencies = [r.latency_ms for r in self.results if r.latency_ms > 0]
         return sum(latencies) / max(len(latencies), 1)
 
-    def metric_averages(self) -> Dict[str, float]:
+    def metric_averages(self) -> dict[str, float]:
         """Average score per metric across all tasks."""
-        metric_totals: Dict[str, List[float]] = {}
+        metric_totals: dict[str, list[float]] = {}
         for result in self.results:
             for metric, score in result.metric_scores.items():
                 metric_totals.setdefault(metric, []).append(score)
@@ -135,7 +136,7 @@ class EvalSuite:
             for metric, scores in metric_totals.items()
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "category": self.category,
             "model": self.model,
@@ -150,10 +151,10 @@ class EvalSuite:
 
 
 # Type for scoring functions
-ScorerFunc = Callable[[str, str, Dict[str, Any]], Dict[str, float]]
+ScorerFunc = Callable[[str, str, dict[str, Any]], dict[str, float]]
 
 
-def heuristic_scorer(output: str, expected: str, rubric: Dict[str, Any]) -> Dict[str, float]:
+def heuristic_scorer(output: str, expected: str, rubric: dict[str, Any]) -> dict[str, float]:
     """
     Heuristic scorer — no LLM required.
 
@@ -163,7 +164,7 @@ def heuristic_scorer(output: str, expected: str, rubric: Dict[str, Any]) -> Dict
     - Format compliance
     - Presence of key elements from rubric
     """
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
 
     # Length similarity (penalize very short or very long outputs)
     expected_len = max(len(expected), 1)
@@ -223,9 +224,9 @@ class EvalHarness:
 
     def __init__(
         self,
-        llm_service: Optional[Any] = None,
-        agent_func: Optional[Callable[..., Coroutine[Any, Any, str]]] = None,
-        scorer: Optional[ScorerFunc] = None,
+        llm_service: Any | None = None,
+        agent_func: Callable[..., Coroutine[Any, Any, str]] | None = None,
+        scorer: ScorerFunc | None = None,
         pass_threshold: float = 0.6,
     ):
         self._llm = llm_service
@@ -234,7 +235,7 @@ class EvalHarness:
         self._pass_threshold = pass_threshold
         self._logger = logger.bind(component="eval_harness")
 
-    def load_tasks(self, category_name: str) -> List[EvalTask]:
+    def load_tasks(self, category_name: str) -> list[EvalTask]:
         """Load test cases for a category from JSON file."""
         category = get_category(category_name)
         data_path = EVAL_DATA_DIR / category.data_file.replace("data/", "")
@@ -304,7 +305,7 @@ class EvalHarness:
     async def run_suite(
         self,
         category_name: str,
-        max_tasks: Optional[int] = None,
+        max_tasks: int | None = None,
         concurrency: int = 5,
     ) -> EvalSuite:
         """Run all tasks in an eval category."""

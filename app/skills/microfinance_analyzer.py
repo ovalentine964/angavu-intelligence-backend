@@ -20,13 +20,11 @@ Wired into: LoanManager, AlamaScoreService
 
 from __future__ import annotations
 
-import time
 from datetime import date, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
-from scipy import stats
 
 from app.skills.base import BaseSkill, SkillResult
 
@@ -90,8 +88,8 @@ class MicrofinanceAnalyzer(BaseSkill):
         interest_rate: float,
         tenure_days: int,
         repayment_frequency: str = "weekly",
-        fees: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
+        fees: dict[str, float] | None = None,
+    ) -> dict[str, Any]:
         """
         Analyze loan terms and compute key metrics.
 
@@ -152,12 +150,12 @@ class MicrofinanceAnalyzer(BaseSkill):
 
     async def _predict_default_risk(
         self,
-        repayment_history: List[Dict[str, Any]],
+        repayment_history: list[dict[str, Any]],
         loan_amount: float,
         daily_income_estimate: float,
         days_active: int,
         purpose: str = "stock",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Predict default risk using logistic regression-inspired model.
 
@@ -276,7 +274,7 @@ class MicrofinanceAnalyzer(BaseSkill):
         income_volatility: float = 0.3,
         days_to_due: int = 30,
         current_streak: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Recommend optimal repayment strategy based on cash flow patterns.
 
@@ -348,10 +346,10 @@ class MicrofinanceAnalyzer(BaseSkill):
         self,
         principal: float,
         interest_amount: float,
-        fees: Dict[str, float],
+        fees: dict[str, float],
         tenure_days: int,
         repayment_frequency: str = "weekly",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute the effective cost of borrowing.
 
@@ -392,7 +390,7 @@ class MicrofinanceAnalyzer(BaseSkill):
 
     # ── Helpers ─────────────────────────────────────────────────────
 
-    def _assess_affordability(self, daily_payment: float, principal: float) -> Dict[str, Any]:
+    def _assess_affordability(self, daily_payment: float, principal: float) -> dict[str, Any]:
         """Assess loan affordability based on estimated daily payment burden."""
         # Assume minimum daily income of KES 300 for informal workers
         min_daily_income = 300
@@ -435,7 +433,7 @@ class MicrofinanceAnalyzer(BaseSkill):
         daily_target: float,
         streak: int,
         days_to_due: int,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Generate behavioral nudges for repayment."""
         nudges = []
 

@@ -1,6 +1,5 @@
 """Tests for StatisticalValidator — validates computed statistics."""
 
-import math
 
 import pytest
 

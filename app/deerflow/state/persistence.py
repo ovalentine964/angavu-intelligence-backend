@@ -17,7 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -32,9 +32,9 @@ class CheckpointRecord:
     state_data: str = ""  # Serialized state
     created_at: float = field(default_factory=time.time)
     step_index: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "checkpoint_id": self.checkpoint_id,
             "thread_id": self.thread_id,
@@ -63,13 +63,13 @@ class StatePersistence:
     def __init__(
         self,
         name: str = "StatePersistence",
-        storage_dir: Optional[str] = None,
+        storage_dir: str | None = None,
         max_checkpoints_per_thread: int = 10,
     ):
         self.name = name
         self._storage_dir = Path(storage_dir) if storage_dir else None
         self._max_checkpoints = max_checkpoints_per_thread
-        self._memory_store: Dict[str, List[CheckpointRecord]] = {}
+        self._memory_store: dict[str, list[CheckpointRecord]] = {}
         self._logger = logger.bind(component="state_persistence")
 
         if self._storage_dir:
@@ -124,9 +124,9 @@ class StatePersistence:
     def load(
         self,
         thread_id: str,
-        checkpoint_id: Optional[str] = None,
+        checkpoint_id: str | None = None,
         state_class: Any = None,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """
         Load a thread state from a checkpoint.
 
@@ -181,7 +181,7 @@ class StatePersistence:
             )
             return None
 
-    def list_checkpoints(self, thread_id: str) -> List[Dict[str, Any]]:
+    def list_checkpoints(self, thread_id: str) -> list[dict[str, Any]]:
         """List all checkpoints for a thread."""
         records = self._memory_store.get(thread_id, [])
         if not records and self._storage_dir:
@@ -203,7 +203,7 @@ class StatePersistence:
 
         return deleted
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get persistence statistics."""
         total_checkpoints = sum(len(records) for records in self._memory_store.values())
         return {
@@ -229,7 +229,7 @@ class StatePersistence:
         except Exception as exc:
             self._logger.warning("checkpoint_persist_failed", error=str(exc))
 
-    def _load_from_disk(self, thread_id: str) -> List[CheckpointRecord]:
+    def _load_from_disk(self, thread_id: str) -> list[CheckpointRecord]:
         """Load checkpoints from disk for a thread."""
         if not self._storage_dir:
             return []

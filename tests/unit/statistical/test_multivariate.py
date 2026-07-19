@@ -13,10 +13,10 @@ import numpy as np
 import pytest
 
 from app.services.statistical.multivariate import (
-    PCAAnalyzer,
-    FactorAnalyzer,
-    DiscriminantAnalyzer,
     MANOVA,
+    DiscriminantAnalyzer,
+    FactorAnalyzer,
+    PCAAnalyzer,
 )
 
 

@@ -35,9 +35,10 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import IntEnum, Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from enum import Enum, IntEnum
+from typing import Any
 
 import structlog
 
@@ -84,20 +85,20 @@ class Task:
     """Represents a background task."""
     id: str
     type: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     priority: Priority = Priority.NORMAL
     status: str = TaskStatus.PENDING
     created_at: float = 0.0
     updated_at: float = 0.0
-    scheduled_at: Optional[float] = None
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
+    scheduled_at: float | None = None
+    started_at: float | None = None
+    completed_at: float | None = None
     retries: int = 0
     max_retries: int = DEFAULT_MAX_RETRIES
-    error: Optional[str] = None
-    result: Optional[Any] = None
-    depends_on: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    result: Any | None = None
+    depends_on: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.created_at:
@@ -105,7 +106,7 @@ class Task:
         if not self.updated_at:
             self.updated_at = self.created_at
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "type": self.type,
@@ -126,13 +127,13 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+    def from_dict(cls, data: dict[str, Any]) -> Task:
         data["priority"] = Priority(data.get("priority", Priority.NORMAL))
         return cls(**data)
 
 
 # Type alias for task handlers
-TaskHandler = Callable[[Dict[str, Any]], Coroutine[Any, Any, Any]]
+TaskHandler = Callable[[dict[str, Any]], Coroutine[Any, Any, Any]]
 
 
 class AsyncTaskQueue:
@@ -174,8 +175,8 @@ class AsyncTaskQueue:
         self._connected = False
         self._running = False
         self._num_workers = num_workers
-        self._worker_tasks: List[asyncio.Task] = []
-        self._handlers: Dict[str, TaskHandler] = {}
+        self._worker_tasks: list[asyncio.Task] = []
+        self._handlers: dict[str, TaskHandler] = {}
 
         # Metrics
         self._tasks_enqueued = 0
@@ -227,12 +228,12 @@ class AsyncTaskQueue:
     async def enqueue(
         self,
         task_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         priority: Priority = Priority.NORMAL,
-        scheduled_at: Optional[float] = None,
-        depends_on: Optional[str] = None,
+        scheduled_at: float | None = None,
+        depends_on: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Enqueue a new task.
@@ -308,8 +309,8 @@ class AsyncTaskQueue:
 
     async def enqueue_batch(
         self,
-        tasks: List[Dict[str, Any]],
-    ) -> List[str]:
+        tasks: list[dict[str, Any]],
+    ) -> list[str]:
         """
         Enqueue multiple tasks in a single pipeline.
 
@@ -359,7 +360,7 @@ class AsyncTaskQueue:
 
     # ── Task Status ─────────────────────────────────────────────────
 
-    async def get_task(self, task_id: str) -> Optional[Task]:
+    async def get_task(self, task_id: str) -> Task | None:
         """Get task by ID."""
         if not self._connected or not self._redis:
             return None
@@ -372,7 +373,7 @@ class AsyncTaskQueue:
             self._logger.warning("get_task_error", task_id=task_id, error=str(exc))
         return None
 
-    async def get_result(self, task_id: str) -> Optional[Any]:
+    async def get_result(self, task_id: str) -> Any | None:
         """
         Get the result of a completed task.
 
@@ -408,7 +409,7 @@ class AsyncTaskQueue:
 
     # ── Workers ─────────────────────────────────────────────────────
 
-    async def start_workers(self, concurrency: Optional[int] = None) -> None:
+    async def start_workers(self, concurrency: int | None = None) -> None:
         """Start background worker tasks."""
         if self._running:
             return
@@ -675,7 +676,7 @@ class AsyncTaskQueue:
 
     # ── Monitoring ──────────────────────────────────────────────────
 
-    async def get_queue_depths(self) -> Dict[str, int]:
+    async def get_queue_depths(self) -> dict[str, int]:
         """Get the depth of each priority queue."""
         if not self._connected or not self._redis:
             return {}
@@ -688,7 +689,7 @@ class AsyncTaskQueue:
 
         return depths
 
-    async def get_dead_letters(self, limit: int = 50) -> List[Task]:
+    async def get_dead_letters(self, limit: int = 50) -> list[Task]:
         """Get tasks in the dead letter queue."""
         if not self._connected or not self._redis:
             return []
@@ -704,7 +705,7 @@ class AsyncTaskQueue:
         except (ConnectionError, OSError, TimeoutError):
             return []
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get queue statistics."""
         return {
             "connected": self._connected,
@@ -720,7 +721,7 @@ class AsyncTaskQueue:
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_async_queue: Optional[AsyncTaskQueue] = None
+_async_queue: AsyncTaskQueue | None = None
 
 
 def get_async_task_queue() -> AsyncTaskQueue:

@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
+from app.agents.base import AgentDecision, AgentEvent, AgentResult
 from app.agents.loops.core import Critique, ReflexionAgent
 from app.loops.config import get_loop_config
 
@@ -41,7 +41,7 @@ class Loan:
     disbursement_date: str = ""
     due_date: str = ""
     status: str = "active"  # active | completed | defaulted | overdue
-    payments: List[Dict[str, Any]] = field(default_factory=list)
+    payments: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def total_paid(self) -> float:
@@ -57,7 +57,7 @@ class Loan:
             return False
         try:
             due = datetime.fromisoformat(self.due_date.replace("Z", "+00:00"))
-            return datetime.now(timezone.utc) > due and self.outstanding_balance > 0
+            return datetime.now(UTC) > due and self.outstanding_balance > 0
         except (ValueError, TypeError):
             return False
 
@@ -67,7 +67,7 @@ class Loan:
             return 0
         try:
             due = datetime.fromisoformat(self.due_date.replace("Z", "+00:00"))
-            return (datetime.now(timezone.utc) - due).days
+            return (datetime.now(UTC) - due).days
         except (ValueError, TypeError):
             return 0
 
@@ -80,7 +80,7 @@ class VerificationResult:
     verified: bool
     new_balance: float
     on_schedule: bool
-    issues: List[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
     confidence: float = 1.0
 
 
@@ -110,10 +110,10 @@ class LoanLoopState:
     verification_complete: bool = False
     alert_sent: bool = False
 
-    loan: Optional[Loan] = None
-    verification: Optional[VerificationResult] = None
-    alert: Optional[LoanAlert] = None
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    loan: Loan | None = None
+    verification: VerificationResult | None = None
+    alert: LoanAlert | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def is_satisfied(self) -> bool:
         return self.payment_recorded and self.verification_complete and self.alert_sent
@@ -127,7 +127,7 @@ class LoanLoopState:
             return "goal_not_met_yet"
         return "none"
 
-    def record_progress(self, phase: str, result: Dict[str, Any]) -> bool:
+    def record_progress(self, phase: str, result: dict[str, Any]) -> bool:
         changed = False
         if phase == "record" and not self.payment_recorded:
             self.payment_recorded = True
@@ -143,7 +143,7 @@ class LoanLoopState:
             changed = True
         return changed
 
-    def to_goal_state(self) -> Dict[str, Any]:
+    def to_goal_state(self) -> dict[str, Any]:
         return {
             "objective": f"Process loan payment for {self.loan_id}",
             "status": "active" if not self.is_satisfied() else "completed",
@@ -192,7 +192,7 @@ class LoanLoop(ReflexionAgent):
             max_retries=2,
         )
         self._config = get_loop_config("loan_management")
-        self._active_states: Dict[str, LoanLoopState] = {}
+        self._active_states: dict[str, LoanLoopState] = {}
 
     def _get_or_create_state(self, loan_id: str, worker_id: str) -> LoanLoopState:
         if loan_id not in self._active_states:
@@ -202,7 +202,7 @@ class LoanLoop(ReflexionAgent):
             )
         return self._active_states[loan_id]
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         loan_id = payload.get("loan_id", "unknown")
@@ -297,8 +297,8 @@ class LoanLoop(ReflexionAgent):
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
     async def _record_phase(
-        self, loan_id: str, worker_id: str, payment_data: Dict[str, Any], state: LoanLoopState
-    ) -> Dict[str, Any]:
+        self, loan_id: str, worker_id: str, payment_data: dict[str, Any], state: LoanLoopState
+    ) -> dict[str, Any]:
         """Record a loan payment or disbursement."""
         amount = payment_data.get("amount", 0)
         payment_type = payment_data.get("type", "repayment")  # repayment | disbursement
@@ -316,7 +316,7 @@ class LoanLoop(ReflexionAgent):
         if payment_type == "repayment":
             state.loan.payments.append({
                 "amount": amount,
-                "date": datetime.now(timezone.utc).isoformat(),
+                "date": datetime.now(UTC).isoformat(),
                 "method": payment_data.get("method", "mpesa"),
             })
             state.loan.outstanding_balance = max(0, state.loan.outstanding_balance - amount)
@@ -342,7 +342,7 @@ class LoanLoop(ReflexionAgent):
 
     async def _verify_phase(
         self, loan_id: str, worker_id: str, state: LoanLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Verify payment against schedule with self-critique."""
         loan = state.loan
         if not loan:
@@ -465,7 +465,7 @@ class LoanLoop(ReflexionAgent):
 
     async def _alert_phase(
         self, loan_id: str, worker_id: str, state: LoanLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate loan alert based on verification."""
         loan = state.loan
         verification = state.verification
@@ -526,7 +526,7 @@ class LoanLoop(ReflexionAgent):
             },
         }
 
-    def get_state(self, loan_id: str) -> Optional[Dict[str, Any]]:
+    def get_state(self, loan_id: str) -> dict[str, Any] | None:
         state = self._active_states.get(loan_id)
         return state.to_goal_state() if state else None
 

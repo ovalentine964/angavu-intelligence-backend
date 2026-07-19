@@ -26,4 +26,4 @@ from app.services.econometric_engine import (
     VARModel,
 )
 
-__all__ = ["ARIMAModel", "VARModel", "CointegrationTester"]
+__all__ = ["ARIMAModel", "CointegrationTester", "VARModel"]

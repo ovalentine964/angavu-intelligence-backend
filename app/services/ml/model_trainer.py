@@ -18,11 +18,10 @@ Training is designed for the informal economy:
 
 from __future__ import annotations
 
-import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -45,13 +44,18 @@ def _import_xgboost():
 def _import_sklearn():
     """Lazy import of sklearn."""
     try:
-        from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+        import sklearn.metrics as metrics
         from sklearn.metrics import (
-            mean_absolute_error, mean_squared_error, r2_score,
-            accuracy_score, precision_score, recall_score, f1_score,
+            accuracy_score,
+            f1_score,
+            mean_absolute_error,
+            mean_squared_error,
+            precision_score,
+            r2_score,
+            recall_score,
             roc_auc_score,
         )
-        import sklearn.metrics as metrics
+        from sklearn.model_selection import TimeSeriesSplit, cross_val_score
         return {
             "TimeSeriesSplit": TimeSeriesSplit,
             "cross_val_score": cross_val_score,
@@ -147,7 +151,7 @@ class ModelTrainer:
         },
     }
 
-    def __init__(self, model_dir: Optional[Path] = None):
+    def __init__(self, model_dir: Path | None = None):
         self.model_dir = Path(model_dir) if model_dir else MODEL_DIR
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.service = XGBoostService(self.model_dir)
@@ -158,8 +162,8 @@ class ModelTrainer:
 
     def prepare_features(
         self,
-        transactions_by_user: Dict[str, List[Any]],
-    ) -> Tuple[np.ndarray, List[str], List[str]]:
+        transactions_by_user: dict[str, list[Any]],
+    ) -> tuple[np.ndarray, list[str], list[str]]:
         """
         Extract features for all users into a training matrix.
 
@@ -188,7 +192,7 @@ class ModelTrainer:
 
     def prepare_demand_targets(
         self,
-        transactions_by_user: Dict[str, List[Any]],
+        transactions_by_user: dict[str, list[Any]],
         forecast_days: int = 7,
     ) -> np.ndarray:
         """
@@ -226,7 +230,7 @@ class ModelTrainer:
 
     def prepare_churn_targets(
         self,
-        transactions_by_user: Dict[str, List[Any]],
+        transactions_by_user: dict[str, list[Any]],
         inactive_days: int = 30,
     ) -> np.ndarray:
         """
@@ -242,7 +246,7 @@ class ModelTrainer:
         Returns:
             Binary target array (1 = churned, 0 = active)
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         targets = []
         for user_id, txns in transactions_by_user.items():
             if not txns:
@@ -262,9 +266,9 @@ class ModelTrainer:
 
     def train_demand_model(
         self,
-        transactions_by_user: Dict[str, List[Any]],
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        transactions_by_user: dict[str, list[Any]],
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Train XGBoost demand forecasting model.
 
@@ -357,10 +361,10 @@ class ModelTrainer:
 
     def train_credit_model(
         self,
-        transactions_by_user: Dict[str, List[Any]],
-        outcomes: Optional[Dict[str, int]] = None,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        transactions_by_user: dict[str, list[Any]],
+        outcomes: dict[str, int] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Train XGBoost credit scoring model.
 
@@ -469,9 +473,9 @@ class ModelTrainer:
 
     def train_churn_model(
         self,
-        transactions_by_user: Dict[str, List[Any]],
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        transactions_by_user: dict[str, list[Any]],
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Train XGBoost churn prediction model.
 
@@ -571,10 +575,10 @@ class ModelTrainer:
 
     def train_anomaly_model(
         self,
-        transactions: List[Any],
+        transactions: list[Any],
         contamination: float = 0.05,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Train XGBoost anomaly detection model.
 
@@ -599,7 +603,7 @@ class ModelTrainer:
 
         # Compute baseline stats per user
         from collections import defaultdict
-        user_txns: Dict[str, list] = defaultdict(list)
+        user_txns: dict[str, list] = defaultdict(list)
         for t in transactions:
             user_txns[str(t.user_id)].append(t)
 
@@ -714,7 +718,7 @@ class ModelTrainer:
         y: np.ndarray,
         model_type: str,
         n_splits: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Time-series-aware cross-validation.
 
@@ -765,8 +769,8 @@ class ModelTrainer:
 
     def _generate_credit_labels(
         self,
-        transactions_by_user: Dict[str, List[Any]],
-        user_ids: List[str],
+        transactions_by_user: dict[str, list[Any]],
+        user_ids: list[str],
     ) -> np.ndarray:
         """
         Generate synthetic credit labels from transaction patterns.
@@ -813,7 +817,7 @@ class ModelTrainer:
         return np.array(labels, dtype=np.int32)
 
     @staticmethod
-    def _get_feature_importance(model: Any, feature_names: List[str], top_k: int = 15) -> List[Dict[str, Any]]:
+    def _get_feature_importance(model: Any, feature_names: list[str], top_k: int = 15) -> list[dict[str, Any]]:
         """Extract top-k feature importances from trained model."""
         try:
             importance = model.feature_importances_

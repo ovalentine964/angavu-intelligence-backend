@@ -11,9 +11,8 @@ Core capabilities:
 Research insight: Giving patterns predict creditworthiness better than bank balances.
 """
 
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import polars as pl
@@ -21,8 +20,8 @@ import structlog
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.tithe import AbundancePattern, TitheRecord
 from app.models.transaction import Transaction
-from app.models.tithe import TitheRecord, TitheReport, AbundancePattern
 
 logger = structlog.get_logger(__name__)
 
@@ -94,13 +93,13 @@ async def record_tithe(
     amount: float,
     currency: str = "KES",
     method: str = "manual",
-    recipient: Optional[str] = None,
+    recipient: str | None = None,
     purpose: str = "offering",
-    giving_date: Optional[date] = None,
-    custom_category_name: Optional[str] = None,
-    voice_transcript: Optional[str] = None,
-    notes: Optional[str] = None,
-) -> Dict[str, Any]:
+    giving_date: date | None = None,
+    custom_category_name: str | None = None,
+    voice_transcript: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
     """
     Record a tithe/giving entry and return encouragement message.
 
@@ -201,9 +200,9 @@ async def get_tithe_report(
     db: AsyncSession,
     user_id: UUID,
     period: str = "monthly",
-    year: Optional[int] = None,
-    month: Optional[int] = None,
-) -> Dict[str, Any]:
+    year: int | None = None,
+    month: int | None = None,
+) -> dict[str, Any]:
     """
     Generate a giving report for a period.
 
@@ -368,7 +367,7 @@ async def get_abundance_pattern(
     db: AsyncSession,
     user_id: UUID,
     months: int = 6,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Analyze giving patterns and produce an abundance score.
 
@@ -504,7 +503,7 @@ async def get_consistency_score(
     db: AsyncSession,
     user_id: UUID,
     period_months: int = 1,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Calculate giving consistency for a user over a period.
 
@@ -627,7 +626,7 @@ async def generate_encouragement(
     user_id: UUID,
     trigger: str,
     language: str = "sw",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate a context-aware encouragement message."""
     if trigger in ENCOURAGEMENT_MESSAGES:
         msg = ENCOURAGEMENT_MESSAGES[trigger]
@@ -661,7 +660,7 @@ async def generate_encouragement(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _calculate_trend(values: List[float]) -> str:
+def _calculate_trend(values: list[float]) -> str:
     """
     Simple trend: compare first half average to second half average.
     Uses Polars for efficient computation.
@@ -768,7 +767,7 @@ def _generate_abundance_insight(
     giving_trend: str,
     avg_giving_pct: float,
     pattern: str,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Generate insight message from abundance pattern analysis."""
     insights = {
         "blessing_cycle": {
@@ -776,16 +775,16 @@ def _generate_abundance_insight(
             "en": f"Your income grew and you increased giving too! The blessing cycle. Average giving is {avg_giving_pct:.1f}% of income.",
         },
         "income_outpacing_giving": {
-            "sw": f"Mapato yako yameongezeka lakini kutoa kumeendelea sawa. Je, ungependa kuongeza kutoa pamoja na mapato?",
-            "en": f"Your income grew but giving stayed the same. Would you like to increase giving along with income?",
+            "sw": "Mapato yako yameongezeka lakini kutoa kumeendelea sawa. Je, ungependa kuongeza kutoa pamoja na mapato?",
+            "en": "Your income grew but giving stayed the same. Would you like to increase giving along with income?",
         },
         "faithful_giving": {
-            "sw": f"Mapato yamepungua lakini bado unatoa. Hii ni sadaka ya kweli — Mungu anaona moyo wako.",
-            "en": f"Income decreased but you're still giving. This is true sacrifice — God sees your heart.",
+            "sw": "Mapato yamepungua lakini bado unatoa. Hii ni sadaka ya kweli — Mungu anaona moyo wako.",
+            "en": "Income decreased but you're still giving. This is true sacrifice — God sees your heart.",
         },
         "parallel_decline": {
-            "sw": f"Na mapato na kutoa vimepungua. Hii ni ya kawaida — usijali. Muhimu ni kuendelea na nidhamu.",
-            "en": f"Both income and giving decreased. This is normal — don't worry. What matters is maintaining discipline.",
+            "sw": "Na mapato na kutoa vimepungua. Hii ni ya kawaida — usijali. Muhimu ni kuendelea na nidhamu.",
+            "en": "Both income and giving decreased. This is normal — don't worry. What matters is maintaining discipline.",
         },
         "steady": {
             "sw": f"Wastani wa kutoa ni {avg_giving_pct:.1f}% ya mapato. Umekuwa na nidhamu nzuri ya kutoa.",
@@ -830,7 +829,7 @@ async def _cache_abundance_pattern(
     db: AsyncSession,
     user_id: UUID,
     months: int,
-    result: Dict[str, Any],
+    result: dict[str, Any],
 ) -> None:
     """Cache abundance pattern analysis result."""
     try:

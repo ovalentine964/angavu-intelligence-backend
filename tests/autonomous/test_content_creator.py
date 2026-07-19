@@ -8,18 +8,19 @@ Tests cover:
 - Channel defaults
 """
 
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
+
 from app.agents.base import AgentEvent, EventType
-from app.autonomous.models.content import (
-    ContentPiece,
-    ContentType,
-    ContentStatus,
-    SEOMetadata,
-    ContentCalendar,
-)
 from app.autonomous.agents.content_creator import ContentCreatorAgent
+from app.autonomous.models.content import (
+    ContentCalendar,
+    ContentPiece,
+    ContentStatus,
+    ContentType,
+    SEOMetadata,
+)
 
 
 @pytest.fixture

@@ -36,7 +36,6 @@ import hashlib
 import json
 import time
 from collections import defaultdict
-from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -51,6 +50,8 @@ from app.infrastructure.streams_signing import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from app.agents.base import AgentEvent, BiasharaAgent
 
 logger = structlog.get_logger(__name__)
@@ -650,9 +651,7 @@ class EventBus:
         """Return event bus statistics for monitoring."""
         return {
             "mode": "redis" if (self._redis and not self._in_memory_enabled) else "in_memory",
-            "subscriptions": {
-                etype: agents for etype, agents in self._subscriptions.items()
-            },
+            "subscriptions": dict(self._subscriptions.items()),
             "in_memory_streams": {
                 k: len(v) for k, v in self._pending_buffer.items()
             },

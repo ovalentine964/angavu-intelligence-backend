@@ -25,22 +25,16 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
+from app.autonomous.learning import LearningSystem, MetricType
 from app.autonomous.reflexion import (
-    AdaptiveReviser,
-    Critic,
-    Executor,
-    HeuristicCritic,
-    ReflexionConfig,
-    ReflexionEngine,
     ReflexionResult,
     ReflexionStatus,
     create_reflexion_engine,
 )
-from app.autonomous.learning import LearningSystem, MetricType
 
 logger = structlog.get_logger(__name__)
 
@@ -76,12 +70,12 @@ class ContentRequest:
     topic: str = ""
     target_audience: str = "small_business_owners"
     language: str = "en"
-    keywords: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
     tone: str = "professional"
     max_words: int = 500
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "content_type": self.content_type.value,
             "topic": self.topic,
@@ -102,10 +96,10 @@ class QualityScore:
     engagement: float = 0.0
     accuracy: float = 0.0
     brand_voice: float = 0.0
-    issues: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "overall": self.overall,
             "readability": self.readability,
@@ -127,11 +121,11 @@ class ContentOutput:
     body: str = ""
     meta_description: str = ""
     word_count: int = 0
-    quality_score: Optional[QualityScore] = None
+    quality_score: QualityScore | None = None
     generated_at: float = field(default_factory=time.time)
     attempt_number: int = 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "content_id": self.content_id,
             "content_type": self.content_type,
@@ -156,7 +150,7 @@ class ContentQualityCritic:
     accuracy, and brand voice consistency.
     """
 
-    def __init__(self, weights: Optional[Dict[str, float]] = None):
+    def __init__(self, weights: dict[str, float] | None = None):
         self._weights = weights or {
             "readability": 0.25,
             "seo": 0.20,
@@ -168,10 +162,10 @@ class ContentQualityCritic:
 
     async def critique(
         self,
-        task: Dict[str, Any],
-        result: Dict[str, Any],
+        task: dict[str, Any],
+        result: dict[str, Any],
         attempt_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate content quality."""
         if not result.get("success", False):
             return {
@@ -202,8 +196,8 @@ class ContentQualityCritic:
         )
 
         # Collect issues and suggestions
-        issues: List[str] = []
-        suggestions: List[str] = []
+        issues: list[str] = []
+        suggestions: list[str] = []
 
         if readability < 0.6:
             issues.append(f"Low readability score: {readability:.2f}")
@@ -254,7 +248,7 @@ class ContentQualityCritic:
 
         return (sentence_score + word_score) / 2
 
-    def _evaluate_seo(self, body: str, title: str, keywords: List[str]) -> float:
+    def _evaluate_seo(self, body: str, title: str, keywords: list[str]) -> float:
         """Evaluate SEO quality."""
         if not body:
             return 0.0
@@ -327,7 +321,7 @@ class ContentQualityCritic:
 
         return min(1.0, score)
 
-    def _evaluate_accuracy(self, content: Dict[str, Any]) -> float:
+    def _evaluate_accuracy(self, content: dict[str, Any]) -> float:
         """Evaluate accuracy (heuristic — checks for data presence)."""
         score = 0.7  # Default assumption of reasonable accuracy
 
@@ -388,9 +382,9 @@ class ContentExecutor:
 
     async def execute(
         self,
-        task: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Generate content based on the task specification."""
         start = time.time()
 
@@ -424,17 +418,17 @@ class ContentExecutor:
                 )
 
             body_parts.append(
-                f"## Key Findings\n\n"
-                f"- Market trends show 15% growth in the sector\n"
-                f"- Customer engagement metrics improved by 23%\n"
-                f"- Revenue optimization opportunities identified in 3 areas\n"
+                "## Key Findings\n\n"
+                "- Market trends show 15% growth in the sector\n"
+                "- Customer engagement metrics improved by 23%\n"
+                "- Revenue optimization opportunities identified in 3 areas\n"
             )
 
             body_parts.append(
-                f"## Recommendations\n\n"
-                f"1. Implement data-driven decision making\n"
-                f"2. Focus on customer retention strategies\n"
-                f"3. Optimize pricing based on market analysis\n"
+                "## Recommendations\n\n"
+                "1. Implement data-driven decision making\n"
+                "2. Focus on customer retention strategies\n"
+                "3. Optimize pricing based on market analysis\n"
             )
 
             body_parts.append(
@@ -485,10 +479,10 @@ class ContentReviser:
 
     async def revise(
         self,
-        task: Dict[str, Any],
-        critique: Dict[str, Any],
+        task: dict[str, Any],
+        critique: dict[str, Any],
         previous_attempts: list,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a revised content task based on critique."""
         revised_task = dict(task)
         suggestions = critique.get("suggestions", [])
@@ -552,7 +546,7 @@ class ContentQualityLoop:
         self,
         quality_threshold: float = 0.7,
         max_attempts: int = 3,
-        learning_system: Optional[LearningSystem] = None,
+        learning_system: LearningSystem | None = None,
         event_bus: Any = None,
     ):
         self._learning = learning_system or LearningSystem()
@@ -610,7 +604,7 @@ class ContentQualityLoop:
 
         return result
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get content quality loop statistics."""
         return {
             "engine_stats": self._engine.get_stats(),

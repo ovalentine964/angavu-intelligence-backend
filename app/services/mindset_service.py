@@ -17,20 +17,18 @@ Research basis:
 - KSh 50/day → KSh 1.1M in 20 years (compound interest)
 """
 
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.mindset_lessons import (
     AFFIRMATIONS,
     COMPOUND_INTEREST_STORY,
-    HABIT_STACKS,
     MODULE_DEFINITIONS,
-    get_affirmation_by_index,
     get_affirmations_by_category,
     get_all_affirmations,
     get_all_lessons,
@@ -303,7 +301,7 @@ async def seed_affirmations(db: AsyncSession) -> int:
 async def get_daily_lesson(
     db: AsyncSession,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get personalized daily lesson for a user.
 
@@ -388,7 +386,7 @@ async def get_daily_lesson(
     }
 
 
-def _format_lesson(lesson: MindsetLesson) -> Dict[str, Any]:
+def _format_lesson(lesson: MindsetLesson) -> dict[str, Any]:
     """Format a lesson for API response."""
     return {
         "id": str(lesson.id),
@@ -410,8 +408,8 @@ async def track_lesson_completion(
     db: AsyncSession,
     user_id: UUID,
     lesson_id: UUID,
-    score: Optional[int] = None,
-) -> Dict[str, Any]:
+    score: int | None = None,
+) -> dict[str, Any]:
     """
     Track lesson completion for a user.
 
@@ -445,7 +443,7 @@ async def track_lesson_completion(
 
     if progress:
         progress.completed = True
-        progress.completed_at = datetime.now(timezone.utc)
+        progress.completed_at = datetime.now(UTC)
         progress.listen_count += 1
         if score is not None:
             progress.score = score
@@ -454,8 +452,8 @@ async def track_lesson_completion(
             user_id=user_id,
             lesson_id=lesson_id,
             completed=True,
-            completed_at=datetime.now(timezone.utc),
-            last_listened_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
+            last_listened_at=datetime.now(UTC),
             listen_count=1,
             score=score,
         )
@@ -528,8 +526,8 @@ async def track_lesson_completion(
 async def get_rich_habits_score(
     db: AsyncSession,
     user_id: UUID,
-    score_date: Optional[date] = None,
-) -> Dict[str, Any]:
+    score_date: date | None = None,
+) -> dict[str, Any]:
     """
     Get or calculate rich habits score for a given date.
 
@@ -614,8 +612,8 @@ async def update_habit(
     user_id: UUID,
     habit_key: str,
     completed: bool = True,
-    score_date: Optional[date] = None,
-) -> Dict[str, Any]:
+    score_date: date | None = None,
+) -> dict[str, Any]:
     """Update a single habit for today and recalculate score."""
 
     if habit_key not in RICH_HABITS:
@@ -686,8 +684,8 @@ async def update_habit(
 async def get_affirmation(
     db: AsyncSession,
     language: str = "en",
-    category: Optional[str] = None,
-) -> Dict[str, Any]:
+    category: str | None = None,
+) -> dict[str, Any]:
     """
     Get a daily affirmation in the specified language.
 
@@ -750,7 +748,7 @@ async def get_habit_stack(
     db: AsyncSession,
     user_id: UUID,
     worker_type: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get habit stacking formula for a specific worker type.
 
@@ -814,8 +812,8 @@ async def get_habit_stack(
 async def get_mastermind_group(
     db: AsyncSession,
     user_id: UUID,
-    worker_type: Optional[str] = None,
-) -> Dict[str, Any]:
+    worker_type: str | None = None,
+) -> dict[str, Any]:
     """
     Get mastermind group recommendations for a user.
 
@@ -911,7 +909,7 @@ async def get_mindset_briefing(
     db: AsyncSession,
     user_id: UUID,
     briefing_type: str = "daily",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate a daily or weekly mindset briefing."""
 
     today = date.today()

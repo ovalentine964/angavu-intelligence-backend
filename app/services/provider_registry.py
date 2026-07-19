@@ -20,11 +20,10 @@ Usage:
 from __future__ import annotations
 
 import statistics
-import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -63,15 +62,15 @@ class ProviderRecord:
         provider_type: ProviderType,
         display_name: str,
         base_url: str = "",
-        models: Optional[List[str]] = None,
-        capabilities: Optional[List[ProviderCapability]] = None,
+        models: list[str] | None = None,
+        capabilities: list[ProviderCapability] | None = None,
         cost_per_1k_input: float = 0.0,
         cost_per_1k_output: float = 0.0,
         max_context_tokens: int = 4096,
         priority: int = 100,  # lower = higher priority
         max_concurrent: int = 10,
         timeout_seconds: float = 30.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.provider_id = provider_id
         self.provider_type = provider_type
@@ -93,23 +92,23 @@ class ProviderRecord:
         self.total_requests: int = 0
         self.total_failures: int = 0
         self.consecutive_failures: int = 0
-        self.last_success_at: Optional[datetime] = None
-        self.last_failure_at: Optional[datetime] = None
-        self.registered_at: datetime = datetime.now(timezone.utc)
+        self.last_success_at: datetime | None = None
+        self.last_failure_at: datetime | None = None
+        self.registered_at: datetime = datetime.now(UTC)
 
         # Rolling window for latency (last 100 requests)
-        self._latency_window: Deque[float] = deque(maxlen=100)
+        self._latency_window: deque[float] = deque(maxlen=100)
         # Rolling window for error rate (last 200 requests)
-        self._request_window: Deque[bool] = deque(maxlen=200)
+        self._request_window: deque[bool] = deque(maxlen=200)
 
     @property
-    def avg_latency_ms(self) -> Optional[float]:
+    def avg_latency_ms(self) -> float | None:
         if not self._latency_window:
             return None
         return statistics.mean(self._latency_window)
 
     @property
-    def p95_latency_ms(self) -> Optional[float]:
+    def p95_latency_ms(self) -> float | None:
         if len(self._latency_window) < 2:
             return self.avg_latency_ms
         sorted_lat = sorted(self._latency_window)
@@ -136,7 +135,7 @@ class ProviderRecord:
         self._latency_window.append(latency_ms)
         self._request_window.append(True)
         self.consecutive_failures = 0
-        self.last_success_at = datetime.now(timezone.utc)
+        self.last_success_at = datetime.now(UTC)
         if self.status in (ProviderStatus.UNHEALTHY, ProviderStatus.UNKNOWN):
             self.status = ProviderStatus.DEGRADED
         if self.error_rate < 0.05 and self.status == ProviderStatus.DEGRADED:
@@ -148,7 +147,7 @@ class ProviderRecord:
         self.active_requests = max(0, self.active_requests - 1)
         self._request_window.append(False)
         self.consecutive_failures += 1
-        self.last_failure_at = datetime.now(timezone.utc)
+        self.last_failure_at = datetime.now(UTC)
         if self.consecutive_failures >= 5:
             self.status = ProviderStatus.UNHEALTHY
             logger.warning("provider_unhealthy", provider=self.provider_id, consecutive=self.consecutive_failures)
@@ -158,7 +157,7 @@ class ProviderRecord:
     def record_request_start(self):
         self.active_requests += 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "provider_id": self.provider_id,
             "type": self.provider_type.value,
@@ -193,7 +192,7 @@ class ProviderRegistry:
     """
 
     def __init__(self):
-        self._providers: Dict[str, ProviderRecord] = {}
+        self._providers: dict[str, ProviderRecord] = {}
 
     def register(
         self,
@@ -223,16 +222,16 @@ class ProviderRegistry:
             return True
         return False
 
-    def get(self, provider_id: str) -> Optional[ProviderRecord]:
+    def get(self, provider_id: str) -> ProviderRecord | None:
         return self._providers.get(provider_id)
 
     def list_providers(
         self,
-        provider_type: Optional[ProviderType] = None,
-        status: Optional[ProviderStatus] = None,
-        capability: Optional[ProviderCapability] = None,
+        provider_type: ProviderType | None = None,
+        status: ProviderStatus | None = None,
+        capability: ProviderCapability | None = None,
         available_only: bool = False,
-    ) -> List[ProviderRecord]:
+    ) -> list[ProviderRecord]:
         """List providers with optional filters."""
         results = list(self._providers.values())
         if provider_type:
@@ -247,14 +246,14 @@ class ProviderRegistry:
 
     def select_optimal(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         capability: ProviderCapability = ProviderCapability.CHAT,
         task_complexity: str = "medium",
-        max_latency_ms: Optional[float] = None,
-        max_cost_per_1k: Optional[float] = None,
-        prefer_type: Optional[ProviderType] = None,
-        exclude: Optional[List[str]] = None,
-    ) -> Optional[ProviderRecord]:
+        max_latency_ms: float | None = None,
+        max_cost_per_1k: float | None = None,
+        prefer_type: ProviderType | None = None,
+        exclude: list[str] | None = None,
+    ) -> ProviderRecord | None:
         """
         Select the optimal provider for a given task.
 
@@ -332,7 +331,7 @@ class ProviderRegistry:
         if p:
             p.status = status
 
-    def get_health_summary(self) -> Dict[str, Any]:
+    def get_health_summary(self) -> dict[str, Any]:
         providers = list(self._providers.values())
         return {
             "total_providers": len(providers),
@@ -344,7 +343,7 @@ class ProviderRegistry:
             "providers": [p.to_dict() for p in providers],
         }
 
-    def get_cost_summary(self) -> Dict[str, Any]:
+    def get_cost_summary(self) -> dict[str, Any]:
         providers = list(self._providers.values())
         total_requests = sum(p.total_requests for p in providers)
         by_type = defaultdict(lambda: {"requests": 0, "cost_estimate": 0.0})
@@ -359,7 +358,7 @@ class ProviderRegistry:
 
 
 # Singleton
-_registry: Optional[ProviderRegistry] = None
+_registry: ProviderRegistry | None = None
 
 
 def get_provider_registry() -> ProviderRegistry:

@@ -15,11 +15,11 @@ Tests:
 """
 
 import asyncio
-import json
 import os
 import time
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 # Set required env vars before importing app modules
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only-32chars")
@@ -29,8 +29,7 @@ os.environ.setdefault("OPENWA_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
 os.environ.setdefault("APP_ENV", "test")
 
-from app.agents.base import AgentEvent, AgentResult, BiasharaAgent, EventType
-
+from app.agents.base import AgentEvent, BiasharaAgent, EventType
 
 # ════════════════════════════════════════════════════════════════════
 # Helpers
@@ -364,7 +363,7 @@ class TestCheckpointProgressTracker:
 
     def test_restore_checkpoint(self):
         """Should restore task state from checkpoint."""
-        from app.deerflow.progress_tracker import CheckpointProgressTracker, TaskCheckpoint
+        from app.deerflow.progress_tracker import CheckpointProgressTracker
         from app.deerflow.task_planner import SubTask, SubTaskStatus
 
         tracker = CheckpointProgressTracker()
@@ -549,7 +548,7 @@ class TestToolRegistry:
     def test_find_by_capability(self):
         """Should find tools by capability."""
         from app.deerflow.tools.registry import ToolRegistry
-        from app.deerflow.tools.wrappers import SokoPulseTool, AlamaScoreTool
+        from app.deerflow.tools.wrappers import AlamaScoreTool, SokoPulseTool
 
         registry = ToolRegistry()
         registry.register(SokoPulseTool())
@@ -618,7 +617,7 @@ class TestBiasharaTool:
     @pytest.mark.asyncio
     async def test_tool_timeout(self):
         """Should timeout on slow execution."""
-        from app.deerflow.tools.base import BiasharaTool, ToolResult
+        from app.deerflow.tools.base import BiasharaTool
 
         class TimeoutTool(BiasharaTool):
             @property
@@ -910,9 +909,9 @@ class TestDeerFlowIntegration:
     @pytest.mark.asyncio
     async def test_full_stack(self):
         """Should work end-to-end with all components."""
-        from app.deerflow.orchestrator import DeerFlowOrchestrator, TaskStatus
+        from app.deerflow.orchestrator import DeerFlowOrchestrator
+        from app.deerflow.state import BiasharaThreadState, StatePersistence
         from app.deerflow.tools.wrappers import create_default_registry
-        from app.deerflow.state import StatePersistence, BiasharaThreadState
 
         # Create orchestrator
         orchestrator = DeerFlowOrchestrator()

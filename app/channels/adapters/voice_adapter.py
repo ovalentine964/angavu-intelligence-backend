@@ -7,7 +7,7 @@ Supports both IVR (press 1 for...) and natural conversation via ASR.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -37,9 +37,9 @@ class VoiceAdapter(BaseChannelAdapter):
 
     def __init__(
         self,
-        account_sid: Optional[str] = None,
-        auth_token: Optional[str] = None,
-        phone_number: Optional[str] = None,
+        account_sid: str | None = None,
+        auth_token: str | None = None,
+        phone_number: str | None = None,
     ):
         self._account_sid = account_sid
         self._auth_token = auth_token
@@ -67,7 +67,7 @@ class VoiceAdapter(BaseChannelAdapter):
         logger.info("voice_adapter_shutdown")
 
     async def parse_raw_message(
-        self, raw_data: Dict[str, Any]
+        self, raw_data: dict[str, Any]
     ) -> UnifiedMessage:
         """
         Parse Twilio webhook into UnifiedMessage.
@@ -158,7 +158,7 @@ class VoiceAdapter(BaseChannelAdapter):
             logger.error("voice_send_failed", error=str(e))
             return False
 
-    async def resolve_worker_id(self, channel_user_id: str) -> Optional[str]:
+    async def resolve_worker_id(self, channel_user_id: str) -> str | None:
         """Resolve phone number to worker UUID."""
         phone = channel_user_id.lstrip("+")
         return phone

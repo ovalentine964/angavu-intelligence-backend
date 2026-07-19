@@ -8,10 +8,8 @@ intelligence sources or services.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 import structlog
@@ -38,17 +36,17 @@ class MCPClient:
     def __init__(
         self,
         server_url: str,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         timeout: float = 30.0,
     ):
         self.server_url = server_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
         self._request_id = 0
-        self._session: Optional[httpx.AsyncClient] = None
+        self._session: httpx.AsyncClient | None = None
         self._initialized = False
-        self._server_info: Optional[Dict[str, Any]] = None
-        self._capabilities: Optional[Dict[str, Any]] = None
+        self._server_info: dict[str, Any] | None = None
+        self._capabilities: dict[str, Any] | None = None
 
     async def _get_session(self) -> httpx.AsyncClient:
         """Get or create HTTP session."""
@@ -67,8 +65,8 @@ class MCPClient:
         return self._request_id
 
     async def _send_request(
-        self, method: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Send a JSON-RPC request to the MCP server."""
         session = await self._get_session()
         req_id = self._next_id()
@@ -95,7 +93,7 @@ class MCPClient:
                 code=e.response.status_code,
             )
         except httpx.RequestError as e:
-            raise MCPClientError(f"Request failed: {str(e)}")
+            raise MCPClientError(f"Request failed: {e!s}")
 
         elapsed = (time.time() - start) * 1000
         logger.debug(
@@ -117,7 +115,7 @@ class MCPClient:
 
     # ── Protocol Methods ────────────────────────────────────────────
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         """Initialize connection with the remote MCP server."""
         result = await self._send_request("initialize", {
             "protocolVersion": "2024-11-05",
@@ -136,7 +134,7 @@ class MCPClient:
         )
         return result
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List tools available on the remote server."""
         if not self._initialized:
             await self.initialize()
@@ -144,8 +142,8 @@ class MCPClient:
         return result.get("tools", [])
 
     async def call_tool(
-        self, name: str, arguments: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Call a tool on the remote MCP server.
 
@@ -196,10 +194,10 @@ class MCPClient:
 async def call_external_mcp_tool(
     server_url: str,
     tool_name: str,
-    arguments: Dict[str, Any],
-    api_key: Optional[str] = None,
+    arguments: dict[str, Any],
+    api_key: str | None = None,
     timeout: float = 30.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     One-shot convenience function to call a tool on an external MCP server.
 

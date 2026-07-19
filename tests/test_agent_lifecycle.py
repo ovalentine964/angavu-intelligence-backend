@@ -15,14 +15,13 @@ Run: pytest tests/test_agent_lifecycle.py -v
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.base import AgentEvent, AgentResult, AgentStatus, BiasharaAgent, EventType
+from app.agents.base import AgentEvent, AgentResult, AgentStatus, EventType
 from app.agents.event_bus import EventBus
-from app.agents.factory import AgentFactory, AgentInfrastructure
+from app.agents.factory import AgentFactory
 from app.agents.implementations import (
     IntelligenceGeneratorAgent,
     ReportGeneratorAgent,
@@ -30,7 +29,6 @@ from app.agents.implementations import (
     TransactionProcessorAgent,
 )
 from app.agents.observability import AgentTracer
-
 
 # ════════════════════════════════════════════════════════════════════
 # Fixtures

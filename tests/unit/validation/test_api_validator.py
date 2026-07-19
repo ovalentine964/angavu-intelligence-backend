@@ -1,7 +1,6 @@
 """Tests for ApiValidator — validates all incoming API requests."""
 
-import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -203,7 +202,7 @@ class TestValidateMpesa:
 
 class TestValidateDate:
     def test_valid_datetime(self, validator):
-        dt = datetime(2025, 6, 1, tzinfo=timezone.utc)
+        dt = datetime(2025, 6, 1, tzinfo=UTC)
         result = validator.validate_date(dt)
         assert result.is_valid
 
@@ -226,18 +225,18 @@ class TestValidateDate:
         assert result.errors[0].code == ErrorCode.DATE_INVALID
 
     def test_future_date_rejected(self, validator):
-        future = datetime.now(timezone.utc) + timedelta(days=30)
+        future = datetime.now(UTC) + timedelta(days=30)
         result = validator.validate_date(future)
         assert not result.is_valid
         assert result.errors[0].code == ErrorCode.DATE_FUTURE
 
     def test_future_date_allowed(self, validator):
-        future = datetime.now(timezone.utc) + timedelta(days=30)
+        future = datetime.now(UTC) + timedelta(days=30)
         result = validator.validate_date(future, allow_future=True)
         assert result.is_valid
 
     def test_too_old(self, validator):
-        old = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        old = datetime(2020, 1, 1, tzinfo=UTC)
         result = validator.validate_date(old, max_age_days=30)
         assert not result.is_valid
         assert result.errors[0].code == ErrorCode.DATE_TOO_OLD
@@ -254,20 +253,20 @@ class TestValidateDate:
 
 class TestValidateDateRange:
     def test_valid_range(self, validator):
-        start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2025, 6, 1, tzinfo=timezone.utc)
+        start = datetime(2025, 1, 1, tzinfo=UTC)
+        end = datetime(2025, 6, 1, tzinfo=UTC)
         result = validator.validate_date_range(start, end)
         assert result.is_valid
 
     def test_end_before_start(self, validator):
-        start = datetime(2025, 6, 1, tzinfo=timezone.utc)
-        end = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        start = datetime(2025, 6, 1, tzinfo=UTC)
+        end = datetime(2025, 1, 1, tzinfo=UTC)
         result = validator.validate_date_range(start, end)
         assert not result.is_valid
 
     def test_range_too_large(self, validator):
-        start = datetime(2020, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        start = datetime(2020, 1, 1, tzinfo=UTC)
+        end = datetime(2025, 1, 1, tzinfo=UTC)
         result = validator.validate_date_range(start, end, max_range_days=365)
         assert not result.is_valid
 

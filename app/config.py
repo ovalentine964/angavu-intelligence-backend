@@ -7,7 +7,6 @@ for local development. See .env.example for the full list.
 
 import os
 from functools import lru_cache
-from typing import List
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -121,7 +120,7 @@ class Settings(BaseSettings):
     SHERPA_ONNX_MODEL: str = ""                   # Path to sherpa-onnx model directory
 
     # === CORS ===
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -238,7 +237,7 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Get cached application settings.

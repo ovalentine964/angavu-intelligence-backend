@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -59,7 +59,7 @@ class ApiValidator:
     MPESA_CODE_RE = re.compile(r"^[A-Z0-9]{10}$")
 
     # App launch date (earliest plausible transaction)
-    APP_LAUNCH_DATE = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    APP_LAUNCH_DATE = datetime(2024, 1, 1, tzinfo=UTC)
 
     # =====================================================================
     # AMOUNT VALIDATION
@@ -315,10 +315,10 @@ class ApiValidator:
         """
         if date_value is None:
             return ValidationResult.invalid(
-                value=datetime.now(timezone.utc),
+                value=datetime.now(UTC),
                 code=ErrorCode.MISSING_FIELD,
                 message=f"{field_name} is required",
-                message_sw=f"Tarehe inahitajika",
+                message_sw="Tarehe inahitajika",
                 field=field_name,
             )
 
@@ -326,14 +326,14 @@ class ApiValidator:
         dt = self._parse_date(date_value)
         if dt is None:
             return ValidationResult.invalid(
-                value=datetime.now(timezone.utc),
+                value=datetime.now(UTC),
                 code=ErrorCode.DATE_INVALID,
                 message=f"Invalid date format for {field_name}",
                 message_sw="Muundo wa tarehe si sahihi",
                 field=field_name,
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Future check
         if not allow_future and dt > now:
@@ -399,7 +399,7 @@ class ApiValidator:
     # TRANSACTION VALIDATION
     # =====================================================================
 
-    def validate_transaction(self, tx: Dict[str, Any]) -> ValidationResult:
+    def validate_transaction(self, tx: dict[str, Any]) -> ValidationResult:
         """
         Validate a complete transaction object.
 
@@ -494,9 +494,9 @@ class ApiValidator:
 
     def validate_transactions_batch(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         max_batch_size: int = 1000,
-    ) -> Tuple[List[ValidationResult], List[Dict[str, Any]]]:
+    ) -> tuple[list[ValidationResult], list[dict[str, Any]]]:
         """
         Validate a batch of transactions.
 
@@ -527,7 +527,7 @@ class ApiValidator:
     # HELPERS
     # =====================================================================
 
-    def _parse_date(self, value: Any) -> Optional[datetime]:
+    def _parse_date(self, value: Any) -> datetime | None:
         """Parse various date formats into datetime. Delegates to shared utility."""
         return parse_date(value)
 

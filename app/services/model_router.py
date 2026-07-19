@@ -34,9 +34,9 @@ from __future__ import annotations
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -47,9 +47,7 @@ from .fallback_handler import (
     get_fallback_handler,
 )
 from .provider_registry import (
-    ProviderCapability,
     ProviderRegistry,
-    ProviderType,
     get_provider_registry,
 )
 from .token_compressor import TokenCompressor, estimate_messages_tokens, get_token_compressor
@@ -103,7 +101,7 @@ class FinancialTemplate(str, Enum):
 # Task type → preferred provider chain
 # ZERO-COST: Only on-device and Angavu Cloud
 # 80% on-device, 20% Angavu Cloud (when available)
-TASK_ROUTING_TABLE: Dict[str, List[str]] = {
+TASK_ROUTING_TABLE: dict[str, list[str]] = {
     TaskType.TRANSACTION_RECORDING: ["on-device"],
     TaskType.BALANCE_INQUIRY: ["on-device"],
     TaskType.PRICE_LOOKUP: ["on-device"],
@@ -132,7 +130,7 @@ class ReasoningStep:
         self.confidence = confidence
         self.timestamp = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "step": self.step_number,
             "type": self.step_type,
@@ -146,11 +144,11 @@ class ReasoningChain:
     """
     Stores step-by-step reasoning for auditability and learning.
     """
-    def __init__(self, chain_id: str, request_id: str, template: Optional[str] = None):
+    def __init__(self, chain_id: str, request_id: str, template: str | None = None):
         self.chain_id = chain_id
         self.request_id = request_id
         self.template = template
-        self.steps: List[ReasoningStep] = []
+        self.steps: list[ReasoningStep] = []
         self.model_used: str = ""
         self.total_thinking_tokens: int = 0
         self.started_at: float = time.time()
@@ -170,7 +168,7 @@ class ReasoningChain:
         self.success = success
         self.completed_at = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "chain_id": self.chain_id,
             "request_id": self.request_id,
@@ -188,7 +186,7 @@ class ReasoningChain:
 # ═══════════════════════════════════════════════════════════════
 
 
-FINANCIAL_TEMPLATES: Dict[str, str] = {
+FINANCIAL_TEMPLATES: dict[str, str] = {
     FinancialTemplate.PRICE_ANALYSIS: """Analyze pricing for an informal market vendor.
 Data: {data} | Product: {product}
 Step by step: current price vs market, factors (season/supply/demand), optimal price, volume impact.
@@ -242,7 +240,7 @@ Recommend: actions to improve profitability.""",
 }
 
 
-def get_financial_template_prompt(template: str, context: Dict[str, str] = None) -> Optional[str]:
+def get_financial_template_prompt(template: str, context: dict[str, str] = None) -> str | None:
     """Get a financial reasoning template prompt with context injected."""
     template_text = FINANCIAL_TEMPLATES.get(template)
     if not template_text:
@@ -277,9 +275,9 @@ class ModelRouter:
 
     def __init__(
         self,
-        provider_registry: Optional[ProviderRegistry] = None,
-        token_compressor: Optional[TokenCompressor] = None,
-        fallback_handler: Optional[FallbackHandler] = None,
+        provider_registry: ProviderRegistry | None = None,
+        token_compressor: TokenCompressor | None = None,
+        fallback_handler: FallbackHandler | None = None,
         enable_compression: bool = True,
         compression_threshold_tokens: int = 2000,
         default_max_tokens: int = 1024,
@@ -296,41 +294,41 @@ class ModelRouter:
         self.enable_reasoning_chains = enable_reasoning_chains
 
         # Usage tracking
-        self._usage_log: List[Dict[str, Any]] = []
+        self._usage_log: list[dict[str, Any]] = []
         self._max_log = 500
         self._total_tokens_in: int = 0
         self._total_tokens_out: int = 0
         self._total_cost: float = 0.0
-        self._requests_by_provider: Dict[str, int] = defaultdict(int)
-        self._requests_by_model: Dict[str, int] = defaultdict(int)
-        self._requests_by_task_type: Dict[str, int] = defaultdict(int)
+        self._requests_by_provider: dict[str, int] = defaultdict(int)
+        self._requests_by_model: dict[str, int] = defaultdict(int)
+        self._requests_by_task_type: dict[str, int] = defaultdict(int)
 
         # Per-user cost tracking (all $0.00)
-        self._user_monthly_cost: Dict[str, float] = defaultdict(float)
-        self._user_daily_cost: Dict[str, float] = defaultdict(float)
-        self._current_month: int = datetime.now(timezone.utc).month
-        self._current_day: int = datetime.now(timezone.utc).timetuple().tm_yday
+        self._user_monthly_cost: dict[str, float] = defaultdict(float)
+        self._user_daily_cost: dict[str, float] = defaultdict(float)
+        self._current_month: int = datetime.now(UTC).month
+        self._current_day: int = datetime.now(UTC).timetuple().tm_yday
 
         # Reasoning chain storage
-        self._reasoning_chains: Dict[str, ReasoningChain] = {}
+        self._reasoning_chains: dict[str, ReasoningChain] = {}
         self._max_chains = 100
 
     async def infer(
         self,
-        messages: List[Dict[str, str]],
-        model: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         task_complexity: str = "medium",
-        task_type: Optional[str] = None,
-        reasoning_effort: Optional[str] = None,
-        financial_template: Optional[str] = None,
-        template_context: Optional[Dict[str, str]] = None,
-        preferred_providers: Optional[List[str]] = None,
-        enable_compression: Optional[bool] = None,
-        request_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        task_type: str | None = None,
+        reasoning_effort: str | None = None,
+        financial_template: str | None = None,
+        template_context: dict[str, str] | None = None,
+        preferred_providers: list[str] | None = None,
+        enable_compression: bool | None = None,
+        request_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> InferenceResponse:
         """
         Route an inference request to the optimal provider.
@@ -390,7 +388,7 @@ class ModelRouter:
         )
 
         # Step 4: Initialize reasoning chain
-        chain: Optional[ReasoningChain] = None
+        chain: ReasoningChain | None = None
         if self.enable_reasoning_chains:
             chain = ReasoningChain(
                 chain_id=uuid.uuid4().hex[:12],
@@ -498,7 +496,7 @@ class ModelRouter:
         to communicate with the local llama.cpp HTTP server.
         """
         try:
-            from .llm_service import get_llm_service, LLMMessage, LLMConfig
+            from .llm_service import LLMConfig, LLMMessage, get_llm_service
 
             llm = get_llm_service()
 
@@ -624,8 +622,8 @@ class ModelRouter:
     def _track_usage(
         self,
         response: InferenceResponse,
-        user_id: Optional[str] = None,
-        task_type: Optional[str] = None,
+        user_id: str | None = None,
+        task_type: str | None = None,
     ):
         """Track usage statistics. All costs are $0.00 (zero-cost strategy)."""
         self._total_tokens_in += response.input_tokens
@@ -651,13 +649,13 @@ class ModelRouter:
             "user_id": user_id,
             "task_type": task_type,
             "cost_estimate": cost,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._usage_log.append(entry)
         if len(self._usage_log) > self._max_log:
             self._usage_log = self._usage_log[-self._max_log:]
 
-    def _check_budget(self, user_id: str) -> Dict[str, Any]:
+    def _check_budget(self, user_id: str) -> dict[str, Any]:
         """Check user's monthly and daily budget status. Always $0.00."""
         return {
             "user_id": user_id,
@@ -672,7 +670,7 @@ class ModelRouter:
 
     def _reset_counters_if_needed(self) -> None:
         """Reset daily/monthly counters on period change."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now.month != self._current_month:
             self._current_month = now.month
             self._user_monthly_cost.clear()
@@ -690,11 +688,11 @@ class ModelRouter:
             del self._reasoning_chains[oldest_key]
         self._reasoning_chains[chain.chain_id] = chain
 
-    def get_reasoning_chain(self, chain_id: str) -> Optional[Dict[str, Any]]:
+    def get_reasoning_chain(self, chain_id: str) -> dict[str, Any] | None:
         chain = self._reasoning_chains.get(chain_id)
         return chain.to_dict() if chain else None
 
-    def get_recent_reasoning_chains(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_reasoning_chains(self, limit: int = 10) -> list[dict[str, Any]]:
         chains = sorted(
             self._reasoning_chains.values(),
             key=lambda c: c.started_at,
@@ -702,10 +700,10 @@ class ModelRouter:
         )[:limit]
         return [c.to_dict() for c in chains]
 
-    def get_user_budget_status(self, user_id: str) -> Dict[str, Any]:
+    def get_user_budget_status(self, user_id: str) -> dict[str, Any]:
         return self._check_budget(user_id)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "total_requests": len(self._usage_log),
             "total_tokens_input": self._total_tokens_in,
@@ -722,16 +720,16 @@ class ModelRouter:
             "active_users_tracked": len(self._user_monthly_cost),
         }
 
-    def get_recent_requests(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_recent_requests(self, limit: int = 20) -> list[dict[str, Any]]:
         return self._usage_log[-limit:]
 
-    def list_providers(self) -> List[Dict[str, Any]]:
+    def list_providers(self) -> list[dict[str, Any]]:
         return [p.to_dict() for p in self.registry.list_providers()]
 
-    def get_provider_health(self) -> Dict[str, Any]:
+    def get_provider_health(self) -> dict[str, Any]:
         return self.registry.get_health_summary()
 
-    def get_cost_summary(self) -> Dict[str, Any]:
+    def get_cost_summary(self) -> dict[str, Any]:
         return {
             "total_cost_estimate": 0.0,  # Always $0.00
             "total_tokens_input": self._total_tokens_in,
@@ -745,7 +743,7 @@ class ModelRouter:
 
 
 # Singleton
-_router: Optional[ModelRouter] = None
+_router: ModelRouter | None = None
 
 
 def get_model_router() -> ModelRouter:

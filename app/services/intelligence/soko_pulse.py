@@ -61,33 +61,28 @@ Buyers: FMCG companies (Unilever, Coca-Cola, P&G, EABL, etc.)
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.intelligence_products import SokoPulseReport
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.anonymizer import Anonymizer
 from app.services.econometric_engine import ARIMAModel, CointegrationTester, VARModel
-from app.services.game_theory import CournotDuopoly, BertrandDuopoly
+from app.services.game_theory import BertrandDuopoly, CournotDuopoly
 from app.services.intelligence.cache import intelligence_cache
 from app.services.research.confidence_intervals import BootstrapCI, ConfidenceIntervalCalculator
 from app.services.research.hypothesis_testing import HypothesisTester
 from app.services.statistical_foundation import (
-    BootstrapInference,
     ClusterAnalyzer,
-    KernelDensityEstimator,
-    bayesian_updater,
     bootstrap,
     kde_estimator,
 )
-from app.services.intelligence.african_development import AfricanDevelopmentEngine
 
 # ── ML Layer: XGBoost demand forecasting (complements classical stats) ──
 try:
@@ -109,7 +104,7 @@ settings = get_settings()
 
 def _seasonal_decompose_additive(
     series: np.ndarray, period: int = 7
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Additive seasonal decomposition: Y = T + S + I.
 
@@ -167,7 +162,7 @@ def _holt_winters_forecast(
     gamma: float = 0.2,
     n_forecast: int = 4,
     additive: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Holt-Winters triple exponential smoothing (additive or multiplicative).
 
@@ -249,8 +244,8 @@ def _holt_winters_forecast(
 
 
 def _simple_arima_forecast(
-    series: np.ndarray, order: Tuple[int, int, int] = (1, 1, 0), n_forecast: int = 4
-) -> Dict[str, Any]:
+    series: np.ndarray, order: tuple[int, int, int] = (1, 1, 0), n_forecast: int = 4
+) -> dict[str, Any]:
     """
     Lightweight ARIMA(p,d,q) forecast using OLS for AR and MA components.
 
@@ -366,7 +361,7 @@ def _simple_arima_forecast(
 
 def _estimate_price_elasticity(
     prices: np.ndarray, quantities: np.ndarray
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Estimate price elasticity of demand via log-log regression.
 
@@ -486,13 +481,13 @@ class SokoPulseService:
     async def generate_demand_forecast(
         self,
         product_category: str,
-        product_name: Optional[str] = None,
-        region: Optional[str] = None,
-        period_start: Optional[date] = None,
-        period_end: Optional[date] = None,
+        product_name: str | None = None,
+        region: str | None = None,
+        period_start: date | None = None,
+        period_end: date | None = None,
         tier: str = "standard",
-        buyer_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        buyer_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """
         Generate FMCG demand forecasting intelligence.
 
@@ -948,8 +943,8 @@ class SokoPulseService:
         response = {
             "product": "soko_pulse",
             "version": "2.0",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
             "k_anonymity_threshold": settings.K_ANONYMITY_THRESHOLD,
             "quality_score": min(1.0, k / 50),
             "confidence_level": min(1.0, len(transactions) / 100),
@@ -1049,8 +1044,8 @@ class SokoPulseService:
         unit_prices: list,
         quantities: list,
         tier: str,
-        user_ids: Optional[list],
-    ) -> Optional[Dict[str, Any]]:
+        user_ids: list | None,
+    ) -> dict[str, Any] | None:
         """
         Run non-parametric statistical analysis (STA 444).
 
@@ -1061,7 +1056,7 @@ class SokoPulseService:
         if tier == "basic" or len(transactions) < 20:
             return None
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # ── STA 444: KDE for price distribution ─────────────────────────────
         if unit_prices and len(unit_prices) >= 20:
@@ -1088,7 +1083,7 @@ class SokoPulseService:
         if user_ids and len(unit_prices) >= 30:
             try:
                 # Group prices by user (proxy for market/supplier)
-                user_prices: Dict[str, list] = defaultdict(list)
+                user_prices: dict[str, list] = defaultdict(list)
                 for t in transactions:
                     if t.unit_price and t.unit_price > 0:
                         user_prices[str(t.user_id)].append(float(t.unit_price))
@@ -1198,7 +1193,7 @@ class SokoPulseService:
     def _test_demand_significance(
         recent: list,
         older: list,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Test whether demand change is statistically significant.
 
@@ -1317,8 +1312,8 @@ class CrossBorderTradeIntelligence:
         origin: str,
         destination: str,
         product_category: str,
-        observed_flow: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        observed_flow: float | None = None,
+    ) -> dict[str, Any]:
         """
         Estimate bilateral trade flow using the gravity model.
 
@@ -1412,7 +1407,7 @@ class CrossBorderTradeIntelligence:
         product_category: str,
         domestic_share: float,
         world_share: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute Revealed Comparative Advantage (RCA) index.
 
@@ -1486,9 +1481,9 @@ class CrossBorderTradeIntelligence:
         cls,
         origin: str,
         destination: str,
-        exchange_rate_changes: List[float],
-        domestic_price_changes: List[float],
-    ) -> Dict[str, Any]:
+        exchange_rate_changes: list[float],
+        domestic_price_changes: list[float],
+    ) -> dict[str, Any]:
         """
         Estimate exchange rate pass-through to domestic prices.
 
@@ -1588,7 +1583,7 @@ class CrossBorderTradeIntelligence:
         domestic_price: float,
         foreign_price: float,
         exchange_rate: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute Purchasing Power Parity deviation.
 
@@ -1658,7 +1653,7 @@ class CrossBorderTradeIntelligence:
         current_tariff_rate: float,
         current_trade_volume: float,
         price_elasticity_of_demand: float = -1.2,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze impact of AfCFTA tariff reductions on trade.
 
@@ -1765,13 +1760,13 @@ class CrossBorderTradeIntelligence:
         origin: str,
         destination: str,
         product_category: str,
-        domestic_prices: Optional[List[float]] = None,
-        foreign_prices: Optional[List[float]] = None,
-        exchange_rate_changes: Optional[List[float]] = None,
-        domestic_price_changes: Optional[List[float]] = None,
+        domestic_prices: list[float] | None = None,
+        foreign_prices: list[float] | None = None,
+        exchange_rate_changes: list[float] | None = None,
+        domestic_price_changes: list[float] | None = None,
         current_tariff_rate: float = 0.25,
         current_trade_volume: float = 1000000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Comprehensive cross-border trade intelligence report.
 
@@ -1801,7 +1796,7 @@ class CrossBorderTradeIntelligence:
             "origin": origin,
             "destination": destination,
             "product_category": product_category,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         # 1. Gravity model
@@ -1859,7 +1854,7 @@ class CrossBorderTradeIntelligence:
 
     @staticmethod
     def _interpret_gravity(
-        trade_potential: Optional[float], origin: str, dest: str,
+        trade_potential: float | None, origin: str, dest: str,
     ) -> str:
         """Interpret gravity model trade potential ratio."""
         if trade_potential is None:

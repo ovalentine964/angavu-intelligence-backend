@@ -18,7 +18,7 @@ Per SECURITY_ARCHITECTURE.md and data quality standards.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -68,8 +68,8 @@ class StatisticalValidator:
         value: Any,
         sample_size: int,
         field_name: str = "mean",
-        min_value: Optional[float] = None,
-        max_value: Optional[float] = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
     ) -> ValidationResult:
         """
         Validate a computed mean/average.

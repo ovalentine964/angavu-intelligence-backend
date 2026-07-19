@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-import uuid
-from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentEvent, BiasharaAgent, EventType
+from app.agents.base import AgentEvent, BiasharaAgent
 from app.agents.event_bus import EventBus
 from app.agents.observability import AgentTracer
 from app.autonomous.config import AgentConfig, AgentConfigManager
@@ -49,7 +49,7 @@ class ScheduledTask:
     run_count: int = 0
     error_count: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "agent_name": self.agent_name,
@@ -77,9 +77,9 @@ class AutonomousOrchestrator:
         self,
         event_bus: EventBus,
         tracer: AgentTracer,
-        escalation_manager: Optional[EscalationManager] = None,
-        monitor: Optional[AgentMonitor] = None,
-        config_manager: Optional[AgentConfigManager] = None,
+        escalation_manager: EscalationManager | None = None,
+        monitor: AgentMonitor | None = None,
+        config_manager: AgentConfigManager | None = None,
     ):
         self._event_bus = event_bus
         self._tracer = tracer
@@ -88,15 +88,15 @@ class AutonomousOrchestrator:
         self._config_manager = config_manager or AgentConfigManager()
 
         # Agent registry
-        self._agents: Dict[str, BiasharaAgent] = {}
-        self._agent_configs: Dict[str, AgentConfig] = {}
+        self._agents: dict[str, BiasharaAgent] = {}
+        self._agent_configs: dict[str, AgentConfig] = {}
 
         # Scheduled tasks
-        self._scheduled_tasks: Dict[str, ScheduledTask] = {}
+        self._scheduled_tasks: dict[str, ScheduledTask] = {}
 
         # Background loops
-        self._scheduler_task: Optional[asyncio.Task] = None
-        self._health_task: Optional[asyncio.Task] = None
+        self._scheduler_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task | None = None
         self._running: bool = False
 
         # Integration hooks
@@ -157,9 +157,9 @@ class AutonomousOrchestrator:
 
     async def _create_agents(self) -> None:
         """Create and register all autonomous agents."""
-        from app.autonomous.agents.sales_agent import SalesAgent
         from app.autonomous.agents.content_agent import ContentAgent
         from app.autonomous.agents.operations_agent import OperationsAgent
+        from app.autonomous.agents.sales_agent import SalesAgent
 
         agent_classes = [SalesAgent, ContentAgent, OperationsAgent]
 
@@ -315,7 +315,7 @@ class AutonomousOrchestrator:
 
     # ── Query API ───────────────────────────────────────────────────
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get orchestrator status for health endpoints."""
         return {
             "running": self._running,
@@ -331,7 +331,7 @@ class AutonomousOrchestrator:
             "monitor_metrics": self._monitor.get_metrics(),
         }
 
-    def get_agents(self) -> List[Dict[str, Any]]:
+    def get_agents(self) -> list[dict[str, Any]]:
         """Get list of all autonomous agents."""
         return [
             {

@@ -12,8 +12,8 @@ try:
 except ImportError:
     _HAS_OQS = False
 
-from app.security.pqc.ml_dsa import MlDsaParameterSet, MlDsaProvider
 from app.security.pqc.crypto_provider import CryptoKeyPair
+from app.security.pqc.ml_dsa import MlDsaParameterSet, MlDsaProvider
 
 pytestmark = pytest.mark.skipif(not _HAS_OQS, reason="liboqs not installed")
 

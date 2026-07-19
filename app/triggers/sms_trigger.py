@@ -18,7 +18,7 @@ SMS Commands:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -193,7 +193,7 @@ class SMSTrigger(BaseTrigger):
         self,
         response: TriggerResponse,
         user_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         Send an SMS response.

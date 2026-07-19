@@ -1,10 +1,11 @@
 """Tests for the monitoring dashboard."""
 
+
 import pytest
-import time
-from app.autonomous.monitoring import AgentMonitor, TaskRecord
-from app.autonomous.escalation import EscalationManager
+
 from app.autonomous.dashboard import MonitoringDashboard
+from app.autonomous.escalation import EscalationManager
+from app.autonomous.monitoring import AgentMonitor, TaskRecord
 
 
 class TestMonitoringDashboard:

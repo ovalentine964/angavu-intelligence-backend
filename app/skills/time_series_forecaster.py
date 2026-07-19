@@ -23,7 +23,7 @@ Wired into: AnalysisAgent, SokoPulseService
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -87,10 +87,10 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     async def _forecast_prices(
         self,
-        prices: List[float],
+        prices: list[float],
         steps: int = 7,
         method: str = "auto",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Forecast future prices from historical data.
 
@@ -128,9 +128,9 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     async def _detect_seasonality(
         self,
-        data: List[float],
+        data: list[float],
         period: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect seasonal patterns in time series data.
 
@@ -202,12 +202,12 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     async def _auto_forecast(
         self,
-        data: List[float],
+        data: list[float],
         steps: int = 7,
         max_p: int = 3,
         max_d: int = 1,
         max_q: int = 3,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Automatic ARIMA order selection and forecasting.
 
@@ -262,14 +262,14 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     async def _exponential_smoothing(
         self,
-        data: List[float],
+        data: list[float],
         method: str = "ses",
         alpha: float = 0.3,
         beta: float = 0.1,
         gamma: float = 0.1,
         seasonal_period: int = 7,
         steps: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Exponential smoothing forecast.
 
@@ -295,8 +295,8 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     async def _stationarity_test(
         self,
-        data: List[float],
-    ) -> Dict[str, Any]:
+        data: list[float],
+    ) -> dict[str, Any]:
         """
         Test for stationarity using ADF test.
 
@@ -360,7 +360,7 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     def _ses_forecast(
         self, data: np.ndarray, steps: int, alpha: float = 0.3,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Simple Exponential Smoothing."""
         n = len(data)
         smoothed = np.zeros(n)
@@ -397,7 +397,7 @@ class TimeSeriesForecasterSkill(BaseSkill):
     def _holt_forecast(
         self, data: np.ndarray, steps: int,
         alpha: float = 0.3, beta: float = 0.1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Holt's Linear Trend method."""
         n = len(data)
         level = np.zeros(n)
@@ -440,7 +440,7 @@ class TimeSeriesForecasterSkill(BaseSkill):
         self, data: np.ndarray, steps: int,
         alpha: float = 0.3, beta: float = 0.1, gamma: float = 0.1,
         period: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Holt-Winters additive seasonal method."""
         n = len(data)
         if n < period * 2:
@@ -498,7 +498,7 @@ class TimeSeriesForecasterSkill(BaseSkill):
     def _arima_forecast(
         self, data: np.ndarray, steps: int,
         order: tuple = (1, 0, 0),
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """ARIMA forecast using Yule-Walker for AR estimation."""
         p, d, q = order
         result = self._fit_arima(data, p, d, q)
@@ -549,7 +549,7 @@ class TimeSeriesForecasterSkill(BaseSkill):
 
     def _fit_arima(
         self, data: np.ndarray, p: int, d: int, q: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fit ARIMA(p,d,q) model."""
         diff_data = self._difference(data, d) if d > 0 else data.copy()
         n = len(diff_data)

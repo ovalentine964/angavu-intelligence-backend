@@ -31,10 +31,9 @@ Buyers: KNBS, CBK, Treasury, IMF, World Bank
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import numpy as np
 import structlog
@@ -62,10 +61,10 @@ class KalmanState:
     timestamp: datetime
     state_estimate: np.ndarray
     covariance: np.ndarray
-    innovation: Optional[np.ndarray] = None
-    innovation_covariance: Optional[np.ndarray] = None
+    innovation: np.ndarray | None = None
+    innovation_covariance: np.ndarray | None = None
     log_likelihood: float = 0.0
-    kalman_gain: Optional[np.ndarray] = None
+    kalman_gain: np.ndarray | None = None
 
 
 @dataclass
@@ -81,16 +80,16 @@ class KalmanFilterResult:
         log_likelihood: Total log-likelihood
         n_observations: Number of observations processed
     """
-    filtered_states: List[KalmanState]
-    smoothed_states: Optional[List[KalmanState]]
-    state_names: List[str]
-    forecast: Dict[str, Any]
-    filtered_values: Dict[str, Any]
+    filtered_states: list[KalmanState]
+    smoothed_states: list[KalmanState] | None
+    state_names: list[str]
+    forecast: dict[str, Any]
+    filtered_values: dict[str, Any]
     log_likelihood: float
     n_observations: int
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "state_names": self.state_names,
             "n_observations": self.n_observations,
@@ -136,9 +135,9 @@ class KalmanFilter:
         C: np.ndarray,
         Q: np.ndarray,
         R: np.ndarray,
-        B: Optional[np.ndarray] = None,
-        x0: Optional[np.ndarray] = None,
-        P0: Optional[np.ndarray] = None,
+        B: np.ndarray | None = None,
+        x0: np.ndarray | None = None,
+        P0: np.ndarray | None = None,
     ):
         self.A = np.atleast_2d(A)
         self.C = np.atleast_2d(C)
@@ -159,12 +158,12 @@ class KalmanFilter:
         self.P = np.atleast_2d(self.P)
 
         # State history
-        self._history: List[KalmanState] = []
+        self._history: list[KalmanState] = []
         self._total_ll = 0.0
 
     def predict(
-        self, u: Optional[np.ndarray] = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self, u: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Prediction step: x̂_{t|t-1} = A x̂_{t-1|t-1} + B u_t
 
@@ -186,7 +185,7 @@ class KalmanFilter:
         y: np.ndarray,
         x_pred: np.ndarray,
         P_pred: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
         """
         Update step: incorporate observation y_t.
 
@@ -239,8 +238,8 @@ class KalmanFilter:
     def filter(
         self,
         observations: np.ndarray,
-        controls: Optional[np.ndarray] = None,
-        timestamps: Optional[List[datetime]] = None,
+        controls: np.ndarray | None = None,
+        timestamps: list[datetime] | None = None,
     ) -> KalmanFilterResult:
         """
         Run the Kalman filter on a sequence of observations.
@@ -263,7 +262,7 @@ class KalmanFilter:
         for t in range(T):
             y_t = observations[t]
             u_t = controls[t] if controls is not None else None
-            ts = timestamps[t] if timestamps else datetime.now(timezone.utc)
+            ts = timestamps[t] if timestamps else datetime.now(UTC)
 
             # Predict
             x_pred, P_pred = self.predict(u_t)
@@ -350,9 +349,9 @@ class KalmanFilter:
     def smooth(
         self,
         observations: np.ndarray,
-        controls: Optional[np.ndarray] = None,
-        timestamps: Optional[List[datetime]] = None,
-    ) -> List[KalmanState]:
+        controls: np.ndarray | None = None,
+        timestamps: list[datetime] | None = None,
+    ) -> list[KalmanState]:
         """
         Run the Rauch-Tung-Striebel (RTS) smoother.
 
@@ -414,7 +413,7 @@ class KalmanFilter:
 
         return smoothed
 
-    def _get_state_names(self) -> List[str]:
+    def _get_state_names(self) -> list[str]:
         """Get state variable names (generic if not overridden)."""
         return [f"state_{i}" for i in range(self.n_states)]
 
@@ -490,14 +489,14 @@ class GDPNowcastingKalmanFilter(KalmanFilter):
 
         super().__init__(A=A, C=C, Q=Q, R=R, x0=x0, P0=P0)
 
-    def _get_state_names(self) -> List[str]:
+    def _get_state_names(self) -> list[str]:
         return ["gdp_level", "gdp_growth", "business_cycle", "trend"]
 
     def nowcast_from_daily_revenue(
         self,
         daily_revenues: np.ndarray,
-        price_index: Optional[np.ndarray] = None,
-        timestamps: Optional[List[datetime]] = None,
+        price_index: np.ndarray | None = None,
+        timestamps: list[datetime] | None = None,
     ) -> KalmanFilterResult:
         """
         Nowcast GDP from daily revenue data.
@@ -582,7 +581,7 @@ class EconomicIndicatorSmoother:
         self,
         noisy_data: np.ndarray,
         indicator_name: str = "indicator",
-        timestamps: Optional[List[datetime]] = None,
+        timestamps: list[datetime] | None = None,
     ) -> KalmanFilterResult:
         """
         Smooth a noisy economic time series.
@@ -642,8 +641,8 @@ class EconomicIndicatorSmoother:
     def extract_business_cycle(
         self,
         gdp_series: np.ndarray,
-        timestamps: Optional[List[datetime]] = None,
-    ) -> Dict[str, Any]:
+        timestamps: list[datetime] | None = None,
+    ) -> dict[str, Any]:
         """
         Extract business cycle component from GDP series.
 

@@ -10,8 +10,7 @@ Report types:
 - Advice: AI-generated business recommendations
 """
 
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +49,7 @@ class ReportGenerator:
     async def generate_daily_report(
         self,
         user: User,
-        report_date: Optional[date] = None,
+        report_date: date | None = None,
     ) -> DailyReport:
         """
         Generate a daily business summary report.
@@ -171,7 +170,7 @@ class ReportGenerator:
     async def generate_weekly_report(
         self,
         user: User,
-        week_end: Optional[date] = None,
+        week_end: date | None = None,
     ) -> WeeklyReport:
         """
         Generate a weekly business report with trends.
@@ -394,9 +393,9 @@ class ReportGenerator:
 
     def _calculate_health_score(
         self,
-        metrics_7d: Dict,
-        metrics_30d: Dict,
-        trends: Dict,
+        metrics_7d: dict,
+        metrics_30d: dict,
+        trends: dict,
     ) -> int:
         """
         Calculate business health score (0-100).
@@ -467,12 +466,12 @@ class ReportGenerator:
 
     def _generate_advice_items(
         self,
-        metrics_7d: Dict,
-        metrics_30d: Dict,
-        trends: Dict,
-        anomalies: List,
+        metrics_7d: dict,
+        metrics_30d: dict,
+        trends: dict,
+        anomalies: list,
         language: str,
-    ) -> List[AdviceItem]:
+    ) -> list[AdviceItem]:
         """Generate prioritized advice items based on analysis."""
         items = []
 
@@ -589,10 +588,11 @@ class ReportGenerator:
         # For now, return empty list
         return []
 
-    async def _get_low_stock_items(self, user_id) -> List[str]:
+    async def _get_low_stock_items(self, user_id) -> list[str]:
         """Get items below restock threshold."""
-        from app.models.transaction import Inventory
         from sqlalchemy import and_, select
+
+        from app.models.transaction import Inventory
 
         result = await self.db.execute(
             select(Inventory.item).where(

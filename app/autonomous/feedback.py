@@ -27,8 +27,8 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -53,7 +53,7 @@ class AgentPerformanceMetric:
     p95_latency_ms: float = 0.0
     error_rate: float = 0.0
     confidence_avg: float = 0.0
-    measured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    measured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def success_rate(self) -> float:
@@ -61,7 +61,7 @@ class AgentPerformanceMetric:
             return 0.0
         return self.successful_actions / self.total_actions
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "total_actions": self.total_actions,
@@ -83,9 +83,9 @@ class CustomerFeedbackSignal:
     text: str = ""
     score: float = 0.0        # CSAT (1-5) or NPS (-100 to 100)
     sentiment: float = 0.0    # -1 to 1
-    collected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    collected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "signal_id": self.signal_id,
             "client_id": self.client_id,
@@ -104,9 +104,9 @@ class RevenueMetric:
     value: float = 0.0
     period: str = ""          # daily, weekly, monthly
     segment: str = ""         # tier, industry, region
-    measured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    measured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "metric_name": self.metric_name,
             "value": round(self.value, 2),
@@ -142,15 +142,15 @@ class FeedbackLoopManager:
 
     def __init__(self):
         # Loop 1: Agent performance tracking
-        self._agent_metrics: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self._agent_metrics: dict[str, list[dict[str, Any]]] = defaultdict(list)
         # agent_name → [{success, latency_ms, timestamp}, ...]
 
         # Loop 2: Customer feedback
-        self._customer_feedback: List[CustomerFeedbackSignal] = []
+        self._customer_feedback: list[CustomerFeedbackSignal] = []
 
         # Loop 3: Revenue metrics
-        self._revenue_metrics: List[RevenueMetric] = []
-        self._metric_history: Dict[str, List[float]] = defaultdict(list)
+        self._revenue_metrics: list[RevenueMetric] = []
+        self._metric_history: dict[str, list[float]] = defaultdict(list)
         # metric_name → [values over time]
 
         self._logger = logger.bind(component="feedback_loops")
@@ -163,7 +163,7 @@ class FeedbackLoopManager:
         success: bool,
         latency_ms: float = 0.0,
         confidence: float = 0.0,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Record an agent action outcome."""
         self._agent_metrics[agent_name].append({
@@ -203,7 +203,7 @@ class FeedbackLoopManager:
             confidence_avg=sum(confidences) / len(confidences) if confidences else 0.0,
         )
 
-    def get_agent_recommendations(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_recommendations(self, agent_name: str) -> dict[str, Any]:
         """
         Generate recommendations for an agent based on performance.
 
@@ -289,7 +289,7 @@ class FeedbackLoopManager:
 
         return signal
 
-    def get_feedback_themes(self, min_count: int = 2) -> List[Dict[str, Any]]:
+    def get_feedback_themes(self, min_count: int = 2) -> list[dict[str, Any]]:
         """
         Cluster customer feedback into themes.
 
@@ -300,7 +300,7 @@ class FeedbackLoopManager:
             return []
 
         # Group by category
-        by_category: Dict[str, List[CustomerFeedbackSignal]] = defaultdict(list)
+        by_category: dict[str, list[CustomerFeedbackSignal]] = defaultdict(list)
         for signal in self._customer_feedback:
             by_category[signal.category].append(signal)
 
@@ -325,13 +325,13 @@ class FeedbackLoopManager:
                 "sample_texts": [s.text[:100] for s in signals[:3]],
                 "recent_count_7d": sum(
                     1 for s in signals
-                    if (datetime.now(timezone.utc) - s.collected_at).days <= 7
+                    if (datetime.now(UTC) - s.collected_at).days <= 7
                 ),
             })
 
         return themes
 
-    def get_nps_score(self) -> Dict[str, Any]:
+    def get_nps_score(self) -> dict[str, Any]:
         """Calculate Net Promoter Score from feedback."""
         scored = [s for s in self._customer_feedback if s.score > 0]
         if not scored:
@@ -376,21 +376,21 @@ class FeedbackLoopManager:
 
         return metric
 
-    def get_revenue_dashboard(self) -> Dict[str, Any]:
+    def get_revenue_dashboard(self) -> dict[str, Any]:
         """
         Generate a revenue operations dashboard.
 
         Shows key metrics, trends, and alerts.
         """
         dashboard = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "metrics": {},
             "trends": {},
             "alerts": [],
         }
 
         # Latest values for each metric
-        latest_by_name: Dict[str, RevenueMetric] = {}
+        latest_by_name: dict[str, RevenueMetric] = {}
         for metric in reversed(self._revenue_metrics):
             if metric.metric_name not in latest_by_name:
                 latest_by_name[metric.metric_name] = metric
@@ -421,7 +421,7 @@ class FeedbackLoopManager:
 
         return dashboard
 
-    def get_strategy_adjustments(self) -> Dict[str, Any]:
+    def get_strategy_adjustments(self) -> dict[str, Any]:
         """
         Generate strategy adjustment recommendations from revenue data.
 

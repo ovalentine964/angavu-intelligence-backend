@@ -18,11 +18,11 @@ References from Valentine's degree:
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections import deque
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -70,11 +70,11 @@ class ValidationResult:
     passed: bool
     severity: ValidationSeverity
     message: str
-    field_name: Optional[str] = None
-    value: Optional[Any] = None
-    threshold: Optional[float] = None
+    field_name: str | None = None
+    value: Any | None = None
+    threshold: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "rule": self.rule_name,
             "passed": self.passed,
@@ -99,7 +99,7 @@ class ControlChartSignal:
     severity: str             # "warning" or "action"
     message: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "chart_type": self.chart_type.value,
             "signal_type": self.signal_type,
@@ -122,7 +122,7 @@ class OutlierResult:
     score: float              # How extreme (z-score, IQR distance, etc.)
     is_outlier: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "index": self.index,
             "value": round(self.value, 4),
@@ -140,12 +140,12 @@ class DataQualityReport:
     valid_records: int
     invalid_records: int
     quality_score: float              # 0-1
-    validation_results: List[ValidationResult]
-    outlier_results: List[OutlierResult]
-    control_chart_signals: List[ControlChartSignal]
-    recommendations: List[str]
+    validation_results: list[ValidationResult]
+    outlier_results: list[OutlierResult]
+    control_chart_signals: list[ControlChartSignal]
+    recommendations: list[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp.isoformat(),
             "total_records": self.total_records,
@@ -202,16 +202,16 @@ class SPCChart:
         self.cusum_h = cusum_h
 
         self._values: deque = deque(maxlen=window_size * 10)
-        self._signals: List[ControlChartSignal] = []
-        self._ewma_value: Optional[float] = None
+        self._signals: list[ControlChartSignal] = []
+        self._ewma_value: float | None = None
         self._cusum_upper: float = 0.0
         self._cusum_lower: float = 0.0
 
     @property
-    def signals(self) -> List[ControlChartSignal]:
+    def signals(self) -> list[ControlChartSignal]:
         return list(self._signals)
 
-    def update(self, value: float) -> Optional[ControlChartSignal]:
+    def update(self, value: float) -> ControlChartSignal | None:
         """
         Add a new observation and check for out-of-control signals.
 
@@ -239,8 +239,8 @@ class SPCChart:
         return None
 
     def compute_control_limits(
-        self, values: Optional[List[float]] = None
-    ) -> Dict[str, float]:
+        self, values: list[float] | None = None
+    ) -> dict[str, float]:
         """
         Compute control limits from data.
 
@@ -262,7 +262,7 @@ class SPCChart:
             "n": len(data),
         }
 
-    def _check_xbar(self, value: float) -> Optional[ControlChartSignal]:
+    def _check_xbar(self, value: float) -> ControlChartSignal | None:
         """Shewhart X̄ chart — detects large shifts (STA 346)."""
         limits = self.compute_control_limits()
         idx = len(self._values) - 1
@@ -293,7 +293,7 @@ class SPCChart:
 
         return None
 
-    def _check_p(self, value: float) -> Optional[ControlChartSignal]:
+    def _check_p(self, value: float) -> ControlChartSignal | None:
         """p-chart for proportion defective (STA 346)."""
         recent = list(self._values)[-self.window_size:]
         p_bar = np.mean(recent)
@@ -322,7 +322,7 @@ class SPCChart:
             return signal
         return None
 
-    def _check_c(self, value: float) -> Optional[ControlChartSignal]:
+    def _check_c(self, value: float) -> ControlChartSignal | None:
         """c-chart for count of defects (STA 346)."""
         recent = list(self._values)[-self.window_size:]
         c_bar = np.mean(recent)
@@ -347,7 +347,7 @@ class SPCChart:
             return signal
         return None
 
-    def _check_ewma(self, value: float) -> Optional[ControlChartSignal]:
+    def _check_ewma(self, value: float) -> ControlChartSignal | None:
         """
         EWMA chart — detects small sustained shifts (STA 346).
 
@@ -392,7 +392,7 @@ class SPCChart:
             return signal
         return None
 
-    def _check_cusum(self, value: float) -> Optional[ControlChartSignal]:
+    def _check_cusum(self, value: float) -> ControlChartSignal | None:
         """
         CUSUM chart — accumulates deviations from target (STA 346).
 
@@ -448,8 +448,8 @@ class SPCChart:
         return None
 
     def _check_run_rules(
-        self, value: float, limits: Dict[str, float], idx: int
-    ) -> Optional[ControlChartSignal]:
+        self, value: float, limits: dict[str, float], idx: int
+    ) -> ControlChartSignal | None:
         """
         Western Electric run rules for detecting non-random patterns.
 
@@ -486,7 +486,7 @@ class SPCChart:
 
         return None
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current chart status."""
         limits = self.compute_control_limits()
         return {
@@ -519,9 +519,9 @@ class OutlierDetector:
 
     @staticmethod
     def detect_iqr(
-        values: List[float],
+        values: list[float],
         multiplier: float = 1.5,
-    ) -> List[OutlierResult]:
+    ) -> list[OutlierResult]:
         """
         IQR-based outlier detection (non-parametric, STA 342).
 
@@ -564,9 +564,9 @@ class OutlierDetector:
 
     @staticmethod
     def detect_modified_zscore(
-        values: List[float],
+        values: list[float],
         threshold: float = 3.5,
-    ) -> List[OutlierResult]:
+    ) -> list[OutlierResult]:
         """
         Modified Z-score using Median Absolute Deviation (MAD).
 
@@ -615,9 +615,9 @@ class OutlierDetector:
 
     @staticmethod
     def detect_grubbs(
-        values: List[float],
+        values: list[float],
         alpha: float = 0.05,
-    ) -> List[OutlierResult]:
+    ) -> list[OutlierResult]:
         """
         Grubbs' test for outliers (parametric, assumes normality).
 
@@ -759,8 +759,8 @@ class DataValidator:
 
     @classmethod
     def validate_transaction(
-        cls, txn: Dict[str, Any]
-    ) -> List[ValidationResult]:
+        cls, txn: dict[str, Any]
+    ) -> list[ValidationResult]:
         """
         Validate a single transaction record.
 
@@ -858,7 +858,7 @@ class DataValidator:
         # 6. Timestamp validation
         timestamp = txn.get("timestamp")
         if timestamp is not None:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if isinstance(timestamp, str):
                 try:
                     timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -922,8 +922,8 @@ class DataValidator:
 
     @classmethod
     def validate_batch(
-        cls, transactions: List[Dict[str, Any]]
-    ) -> Tuple[List[ValidationResult], float]:
+        cls, transactions: list[dict[str, Any]]
+    ) -> tuple[list[ValidationResult], float]:
         """
         Validate a batch of transactions.
 
@@ -976,9 +976,9 @@ class EWMAAnalyzer:
 
     def __init__(
         self,
-        target_mean: Optional[float] = None,
-        target_std: Optional[float] = None,
-        lambda_: Optional[float] = None,
+        target_mean: float | None = None,
+        target_std: float | None = None,
+        lambda_: float | None = None,
         L: float = 3.0,
     ):
         """
@@ -993,13 +993,13 @@ class EWMAAnalyzer:
         self.lambda_ = lambda_
         self.L = L
 
-        self._ewma_value: Optional[float] = None
-        self._values: List[float] = []
-        self._ewma_history: List[float] = []
-        self._signals: List[ControlChartSignal] = []
+        self._ewma_value: float | None = None
+        self._values: list[float] = []
+        self._ewma_history: list[float] = []
+        self._signals: list[ControlChartSignal] = []
 
     @property
-    def signals(self) -> List[ControlChartSignal]:
+    def signals(self) -> list[ControlChartSignal]:
         return list(self._signals)
 
     @staticmethod
@@ -1007,7 +1007,7 @@ class EWMAAnalyzer:
         delta: float,
         L: float = 3.0,
         ARL0_target: float = 370.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Select optimal λ for detecting a shift of size δ.
 
@@ -1054,7 +1054,7 @@ class EWMAAnalyzer:
                 "p_signal": round(p_signal, 6),
             })
 
-            if ARL1 < best_ARL1:
+            if best_ARL1 > ARL1:
                 best_ARL1 = ARL1
                 best_lambda = lam
 
@@ -1077,7 +1077,7 @@ class EWMAAnalyzer:
     def select_lambda_for_shift_size(
         small_shift: bool = True,
         medium_shift: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Quick λ selection based on expected shift magnitude.
 
@@ -1107,7 +1107,7 @@ class EWMAAnalyzer:
             "note": "For mixed shifts, use λ=0.10–0.15 as compromise",
         }
 
-    def update(self, value: float) -> Optional[ControlChartSignal]:
+    def update(self, value: float) -> ControlChartSignal | None:
         """
         Process a new observation through the EWMA chart.
 
@@ -1172,7 +1172,7 @@ class EWMAAnalyzer:
 
         return None
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current EWMA chart status."""
         n = len(self._values)
         mu = self.target_mean
@@ -1389,7 +1389,7 @@ class DataQualityFramework:
 
     def assess_transactions(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
     ) -> DataQualityReport:
         """
         Comprehensive quality assessment of a transaction batch.
@@ -1446,7 +1446,7 @@ class DataQualityFramework:
         )
 
         return DataQualityReport(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             total_records=len(transactions),
             valid_records=len(transactions) - min(invalid_count, len(transactions)),
             invalid_records=min(invalid_count, len(transactions)),
@@ -1458,8 +1458,8 @@ class DataQualityFramework:
         )
 
     def update_monitoring(
-        self, transaction: Dict[str, Any]
-    ) -> List[ControlChartSignal]:
+        self, transaction: dict[str, Any]
+    ) -> list[ControlChartSignal]:
         """
         Update SPC monitoring with a new transaction.
 
@@ -1497,10 +1497,10 @@ class DataQualityFramework:
 
     def _generate_recommendations(
         self,
-        validation_results: List[ValidationResult],
-        outlier_results: List[OutlierResult],
-        signals: List[ControlChartSignal],
-    ) -> List[str]:
+        validation_results: list[ValidationResult],
+        outlier_results: list[OutlierResult],
+        signals: list[ControlChartSignal],
+    ) -> list[str]:
         """Generate actionable recommendations."""
         recs = []
 
@@ -1535,7 +1535,7 @@ class DataQualityFramework:
 
         return recs
 
-    def get_monitoring_status(self) -> Dict[str, Any]:
+    def get_monitoring_status(self) -> dict[str, Any]:
         """Get current monitoring status across all charts."""
         return {
             "transaction_count": self._transaction_count,

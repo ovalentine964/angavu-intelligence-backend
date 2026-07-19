@@ -37,9 +37,10 @@ import hashlib
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any
 
 import structlog
 
@@ -91,7 +92,7 @@ class HealthCheckResult:
     message: str = ""
     checked_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "check_name": self.check_name,
             "passed": self.passed,
@@ -112,16 +113,16 @@ class DeploymentRecord:
     stage: DeploymentStage = DeploymentStage.PENDING
     status: DeploymentStatus = DeploymentStatus.IN_PROGRESS
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
     duration_s: float = 0.0
     current_traffic_pct: float = 0.0
-    health_checks: List[HealthCheckResult] = field(default_factory=list)
-    stage_history: List[Dict[str, Any]] = field(default_factory=list)
-    rollback_reason: Optional[str] = None
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    health_checks: list[HealthCheckResult] = field(default_factory=list)
+    stage_history: list[dict[str, Any]] = field(default_factory=list)
+    rollback_reason: str | None = None
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "deployment_id": self.deployment_id,
             "component": self.component,
@@ -156,11 +157,11 @@ class VersionInfo:
     deployed_at: float = field(default_factory=time.time)
     is_active: bool = True
     is_canary: bool = False
-    promoted_at: Optional[float] = None
-    rolled_back_at: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    promoted_at: float | None = None
+    rolled_back_at: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "component": self.component,
@@ -183,7 +184,7 @@ class VersionTracker:
 
     def __init__(self):
         # component → version → VersionInfo
-        self._versions: Dict[str, Dict[str, VersionInfo]] = defaultdict(dict)
+        self._versions: dict[str, dict[str, VersionInfo]] = defaultdict(dict)
         self._logger = logger.bind(component="version_tracker")
 
     def register_version(
@@ -235,21 +236,21 @@ class VersionTracker:
             info.traffic_pct = 0.0
             info.rolled_back_at = time.time()
 
-    def get_active_versions(self, component: str) -> List[VersionInfo]:
+    def get_active_versions(self, component: str) -> list[VersionInfo]:
         """Get all active versions for a component."""
         return [
             v for v in self._versions.get(component, {}).values()
             if v.is_active
         ]
 
-    def get_version_map(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_version_map(self) -> dict[str, list[dict[str, Any]]]:
         """Get full version map: component → [version info, ...]."""
         return {
             comp: [v.to_dict() for v in versions.values()]
             for comp, versions in self._versions.items()
         }
 
-    def get_serving_versions(self) -> List[Dict[str, Any]]:
+    def get_serving_versions(self) -> list[dict[str, Any]]:
         """Get all versions currently serving traffic."""
         result = []
         for comp, versions in self._versions.items():
@@ -276,14 +277,14 @@ class FeatureFlag:
     name: str
     description: str = ""
     status: FeatureFlagStatus = FeatureFlagStatus.DISABLED
-    enabled_segments: Set[str] = field(default_factory=set)
+    enabled_segments: set[str] = field(default_factory=set)
     rollout_percentage: float = 0.0         # 0-100
-    enabled_at: Optional[float] = None
-    disabled_at: Optional[float] = None
+    enabled_at: float | None = None
+    disabled_at: float | None = None
     created_at: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -315,14 +316,14 @@ class FeatureFlagStore:
     """
 
     def __init__(self):
-        self._flags: Dict[str, FeatureFlag] = {}
+        self._flags: dict[str, FeatureFlag] = {}
         self._logger = logger.bind(component="feature_flags")
 
     def create(
         self,
         name: str,
         description: str = "",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> FeatureFlag:
         """Create a new feature flag (disabled by default)."""
         if name in self._flags:
@@ -337,7 +338,7 @@ class FeatureFlagStore:
     def enable(
         self,
         name: str,
-        segments: Optional[List[str]] = None,
+        segments: list[str] | None = None,
         rollout_percentage: float = 100.0,
     ) -> None:
         """
@@ -381,8 +382,8 @@ class FeatureFlagStore:
     def is_enabled(
         self,
         name: str,
-        user_id: Optional[str] = None,
-        user_segment: Optional[str] = None,
+        user_id: str | None = None,
+        user_segment: str | None = None,
     ) -> bool:
         """
         Check if a feature flag is enabled for a given user.
@@ -410,11 +411,11 @@ class FeatureFlagStore:
 
         return True
 
-    def get_all(self) -> List[Dict[str, Any]]:
+    def get_all(self) -> list[dict[str, Any]]:
         """Get all feature flags."""
         return [f.to_dict() for f in self._flags.values()]
 
-    def get_flag(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_flag(self, name: str) -> dict[str, Any] | None:
         """Get a specific feature flag."""
         flag = self._flags.get(name)
         return flag.to_dict() if flag else None
@@ -447,11 +448,11 @@ class VersionMetrics:
     request_count: int = 0
     error_count: int = 0
     total_latency_ms: float = 0.0
-    latency_samples: List[float] = field(default_factory=list)
+    latency_samples: list[float] = field(default_factory=list)
     max_latency_ms: float = 0.0
     min_latency_ms: float = float("inf")
-    last_error_at: Optional[float] = None
-    last_request_at: Optional[float] = None
+    last_error_at: float | None = None
+    last_request_at: float | None = None
     window_start: float = field(default_factory=time.time)
 
     # Sliding window for recent errors (last 5 min)
@@ -513,7 +514,7 @@ class VersionMetrics:
             self.last_error_at = now
             self._recent_errors.append(now)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "component": self.component,
             "version": self.version,
@@ -540,7 +541,7 @@ class DeploymentMetricsCollector:
 
     def __init__(self):
         # component → version → VersionMetrics
-        self._metrics: Dict[str, Dict[str, VersionMetrics]] = defaultdict(dict)
+        self._metrics: dict[str, dict[str, VersionMetrics]] = defaultdict(dict)
         self._logger = logger.bind(component="deployment_metrics")
 
     def get_or_create(
@@ -566,20 +567,20 @@ class DeploymentMetricsCollector:
 
     def get_metrics(
         self, component: str, version: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get metrics for a specific component version."""
         metrics = self._metrics.get(component, {}).get(version)
         return metrics.to_dict() if metrics else {}
 
     def get_component_metrics(
         self, component: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get metrics for all versions of a component."""
         return [
             m.to_dict() for m in self._metrics.get(component, {}).values()
         ]
 
-    def get_all_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_all_metrics(self) -> dict[str, list[dict[str, Any]]]:
         """Get all metrics across all components."""
         return {
             comp: [m.to_dict() for m in versions.values()]
@@ -588,7 +589,7 @@ class DeploymentMetricsCollector:
 
     def get_baseline_metrics(
         self, component: str, version: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get metrics formatted for health checker baseline comparison.
 
@@ -629,13 +630,13 @@ class HealthChecker:
     """
 
     def __init__(self):
-        self._custom_checks: Dict[str, List[Callable]] = {}
+        self._custom_checks: dict[str, list[Callable]] = {}
         self._logger = logger.bind(component="health_checker")
 
     def register_check(
         self,
         component: str,
-        check_fn: Callable[[Dict[str, Any]], Coroutine],
+        check_fn: Callable[[dict[str, Any]], Coroutine],
     ) -> None:
         """Register a custom health check for a component."""
         self._custom_checks.setdefault(component, []).append(check_fn)
@@ -643,9 +644,9 @@ class HealthChecker:
     async def run_checks(
         self,
         component: str,
-        new_version_metrics: Dict[str, Any],
-        old_version_metrics: Optional[Dict[str, Any]] = None,
-    ) -> List[HealthCheckResult]:
+        new_version_metrics: dict[str, Any],
+        old_version_metrics: dict[str, Any] | None = None,
+    ) -> list[HealthCheckResult]:
         """
         Run all health checks for a deployment.
 
@@ -657,7 +658,7 @@ class HealthChecker:
         Returns:
             List of HealthCheckResult
         """
-        results: List[HealthCheckResult] = []
+        results: list[HealthCheckResult] = []
 
         # 1. Error rate check — ≤ 1% (production-grade threshold)
         error_rate = new_version_metrics.get("error_rate", 0.0)
@@ -718,7 +719,7 @@ class HealthChecker:
 
         return results
 
-    def all_passed(self, results: List[HealthCheckResult]) -> bool:
+    def all_passed(self, results: list[HealthCheckResult]) -> bool:
         """Check if all health checks passed."""
         return all(r.passed for r in results)
 
@@ -739,7 +740,7 @@ class TrafficRouter:
 
     def __init__(self):
         # component → [(version, weight), ...]
-        self._routes: Dict[str, List[tuple]] = {}
+        self._routes: dict[str, list[tuple]] = {}
         self._logger = logger.bind(component="traffic_router")
 
     def set_traffic_split(
@@ -798,7 +799,7 @@ class TrafficRouter:
         self._routes[component] = [(stable_version, 1.0)]
         self._logger.info("traffic_rollback", component=component, version=stable_version)
 
-    def get_routes(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_routes(self) -> dict[str, list[dict[str, Any]]]:
         """Get current traffic routes."""
         return {
             component: [
@@ -858,7 +859,7 @@ class DeploymentHarness:
     - Deployment metrics: error rate, latency, throughput per version
     """
 
-    def __init__(self, config: Optional[DeploymentHarnessConfig] = None):
+    def __init__(self, config: DeploymentHarnessConfig | None = None):
         self._config = config or DeploymentHarnessConfig()
         self._health_checker = HealthChecker()
         self._traffic_router = TrafficRouter()
@@ -868,19 +869,19 @@ class DeploymentHarness:
         self._logger = logger.bind(component="deployment_harness")
 
         # Active deployments
-        self._deployments: Dict[str, DeploymentRecord] = {}
+        self._deployments: dict[str, DeploymentRecord] = {}
         # deployment_id → background task
-        self._deployment_tasks: Dict[str, asyncio.Task] = {}
+        self._deployment_tasks: dict[str, asyncio.Task] = {}
         # Completed deployments (audit trail)
-        self._completed: List[DeploymentRecord] = []
+        self._completed: list[DeploymentRecord] = []
         self._max_completed = 100
 
         # Metrics collection callback (external source)
-        self._metrics_fn: Optional[Callable[[str, str], Coroutine]] = None
+        self._metrics_fn: Callable[[str, str], Coroutine] | None = None
         # Approval callback
-        self._approval_fn: Optional[Callable[[DeploymentRecord], Coroutine]] = None
+        self._approval_fn: Callable[[DeploymentRecord], Coroutine] | None = None
         # Rollback callback
-        self._rollback_fn: Optional[Callable[[str, str], Coroutine]] = None
+        self._rollback_fn: Callable[[str, str], Coroutine] | None = None
 
     # ── Configuration ───────────────────────────────────────────────
 
@@ -913,7 +914,7 @@ class DeploymentHarness:
         component: str,
         old_version: str,
         new_version: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> DeploymentRecord:
         """
         Start a canary deployment.
@@ -1205,7 +1206,7 @@ class DeploymentHarness:
 
     async def _collect_metrics(
         self, component: str, version: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Collect metrics for a component version.
 
@@ -1253,7 +1254,7 @@ class DeploymentHarness:
 
     # ── Monitoring API ──────────────────────────────────────────────
 
-    def get_deployment_status(self, deployment_id: str) -> Optional[Dict[str, Any]]:
+    def get_deployment_status(self, deployment_id: str) -> dict[str, Any] | None:
         """Get status of a specific deployment."""
         record = self._deployments.get(deployment_id)
         if record:
@@ -1264,40 +1265,40 @@ class DeploymentHarness:
                 return r.to_dict()
         return None
 
-    def get_active_deployments(self) -> List[Dict[str, Any]]:
+    def get_active_deployments(self) -> list[dict[str, Any]]:
         """Get all active deployments."""
         return [
             d.to_dict() for d in self._deployments.values()
             if d.status == DeploymentStatus.IN_PROGRESS
         ]
 
-    def get_all_deployments(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_all_deployments(self, limit: int = 20) -> list[dict[str, Any]]:
         """Get recent deployments (active + completed)."""
         all_deps = list(self._deployments.values()) + self._completed
         all_deps.sort(key=lambda d: d.started_at, reverse=True)
         return [d.to_dict() for d in all_deps[:limit]]
 
-    def get_traffic_routes(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_traffic_routes(self) -> dict[str, list[dict[str, Any]]]:
         """Get current traffic routing state."""
         return self._traffic_router.get_routes()
 
-    def get_version_map(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_version_map(self) -> dict[str, list[dict[str, Any]]]:
         """Get full version map: which version serves what %."""
         return self._version_tracker.get_version_map()
 
-    def get_serving_versions(self) -> List[Dict[str, Any]]:
+    def get_serving_versions(self) -> list[dict[str, Any]]:
         """Get all versions currently serving traffic."""
         return self._version_tracker.get_serving_versions()
 
-    def get_all_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_all_metrics(self) -> dict[str, list[dict[str, Any]]]:
         """Get deployment metrics for all components and versions."""
         return self._metrics_collector.get_all_metrics()
 
-    def get_component_metrics(self, component: str) -> List[Dict[str, Any]]:
+    def get_component_metrics(self, component: str) -> list[dict[str, Any]]:
         """Get metrics for all versions of a specific component."""
         return self._metrics_collector.get_component_metrics(component)
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> dict[str, Any]:
         """Get deployment harness health."""
         active = sum(
             1 for d in self._deployments.values()
@@ -1333,7 +1334,7 @@ class DeploymentHarness:
 # ════════════════════════════════════════════════════════════════════
 
 
-_global_deployment_harness: Optional[DeploymentHarness] = None
+_global_deployment_harness: DeploymentHarness | None = None
 
 
 def get_deployment_harness() -> DeploymentHarness:

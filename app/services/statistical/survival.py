@@ -21,15 +21,13 @@ Buyers: Microfinance banks, M-Shwari, Fuliza, Tala, Branch
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import numpy as np
 import structlog
 from scipy import stats as sp_stats
-from scipy.optimize import minimize
 
 logger = structlog.get_logger(__name__)
 
@@ -70,17 +68,17 @@ class SurvivalPrediction:
     entity_id: str
     entity_type: str  # "worker" | "loan"
     event_type: str  # "default" | "churn" | "closure"
-    survival_curve: Dict[int, float]  # time_days -> survival_prob
+    survival_curve: dict[int, float]  # time_days -> survival_prob
     median_survival_time: float  # days
     hazard_ratio: float
     risk_score: float
-    risk_factors: List[str]
+    risk_factors: list[str]
     confidence: float
     explanation_sw: str
-    feature_importance: Dict[str, float]
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    feature_importance: dict[str, float]
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "entity_id": self.entity_id,
             "entity_type": self.entity_type,
@@ -112,17 +110,17 @@ class CoxModelResult:
         n_observations: Number of observations used
         n_events: Number of events observed
     """
-    coefficients: Dict[str, float]
-    hazard_ratios: Dict[str, float]
-    standard_errors: Dict[str, float]
-    p_values: Dict[str, float]
-    confidence_intervals: Dict[str, Tuple[float, float]]
+    coefficients: dict[str, float]
+    hazard_ratios: dict[str, float]
+    standard_errors: dict[str, float]
+    p_values: dict[str, float]
+    confidence_intervals: dict[str, tuple[float, float]]
     concordance_index: float
     log_likelihood: float
     n_observations: int
     n_events: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         features = {}
         for feat in self.coefficients:
             features[feat] = {
@@ -158,8 +156,8 @@ class _BuiltinCoxPH:
     """
 
     def __init__(self):
-        self.coefficients: Optional[np.ndarray] = None
-        self.feature_names: List[str] = []
+        self.coefficients: np.ndarray | None = None
+        self.feature_names: list[str] = []
         self._fitted = False
 
     def fit(
@@ -167,7 +165,7 @@ class _BuiltinCoxPH:
         X: np.ndarray,
         durations: np.ndarray,
         events: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
     ) -> CoxModelResult:
         """
         Fit the Cox PH model.
@@ -252,8 +250,8 @@ class _BuiltinCoxPH:
         durations_train: np.ndarray,
         events_train: np.ndarray,
         X_train: np.ndarray,
-        time_points: Optional[np.ndarray] = None,
-    ) -> Dict[int, float]:
+        time_points: np.ndarray | None = None,
+    ) -> dict[int, float]:
         """
         Predict survival function S(t|x) for a new observation.
 
@@ -292,7 +290,7 @@ class _BuiltinCoxPH:
 
     def predict_median_survival(
         self,
-        survival_curve: Dict[int, float],
+        survival_curve: dict[int, float],
     ) -> float:
         """Find median survival time from survival curve."""
         for t, s in sorted(survival_curve.items()):
@@ -318,7 +316,7 @@ class _BuiltinCoxPH:
         durations: np.ndarray,
         events: np.ndarray,
         beta: np.ndarray,
-    ) -> Tuple[float, np.ndarray, np.ndarray]:
+    ) -> tuple[float, np.ndarray, np.ndarray]:
         """Compute partial log-likelihood, gradient, and Hessian.
 
         Uses Breslow's method for ties.
@@ -373,7 +371,7 @@ class _BuiltinCoxPH:
         durations: np.ndarray,
         events: np.ndarray,
         X: np.ndarray,
-    ) -> Dict[int, float]:
+    ) -> dict[int, float]:
         """Estimate baseline survival S₀(t) using Breslow's estimator."""
         if not self._fitted or self.coefficients is None:
             return {}
@@ -454,7 +452,7 @@ class KaplanMeierEstimator:
     def fit(
         durations: np.ndarray,
         events: np.ndarray,
-    ) -> Dict[int, float]:
+    ) -> dict[int, float]:
         """
         Estimate the Kaplan-Meier survival curve.
 
@@ -504,7 +502,7 @@ class KaplanMeierEstimator:
         return survival
 
     @staticmethod
-    def median_survival(survival_curve: Dict[int, float]) -> Optional[float]:
+    def median_survival(survival_curve: dict[int, float]) -> float | None:
         """Find median survival time from KM curve."""
         for t, s in sorted(survival_curve.items()):
             if s <= 0.5:
@@ -553,18 +551,18 @@ class SurvivalAnalysisService:
         self._cox_model = _BuiltinCoxPH()
         self._kaplan_meier = KaplanMeierEstimator()
         self._is_fitted = False
-        self._feature_names: List[str] = []
-        self._train_durations: Optional[np.ndarray] = None
-        self._train_events: Optional[np.ndarray] = None
-        self._train_X: Optional[np.ndarray] = None
-        self._model_result: Optional[CoxModelResult] = None
+        self._feature_names: list[str] = []
+        self._train_durations: np.ndarray | None = None
+        self._train_events: np.ndarray | None = None
+        self._train_X: np.ndarray | None = None
+        self._model_result: CoxModelResult | None = None
 
     @property
     def is_fitted(self) -> bool:
         return self._is_fitted
 
     @property
-    def model_result(self) -> Optional[CoxModelResult]:
+    def model_result(self) -> CoxModelResult | None:
         return self._model_result
 
     def fit_model(
@@ -572,7 +570,7 @@ class SurvivalAnalysisService:
         X: np.ndarray,
         durations: np.ndarray,
         events: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
     ) -> CoxModelResult:
         """
         Fit Cox PH model on historical data.
@@ -738,9 +736,9 @@ class SurvivalAnalysisService:
 
     def get_kaplan_meier_curve(
         self,
-        durations: Optional[np.ndarray] = None,
-        events: Optional[np.ndarray] = None,
-    ) -> Dict[int, float]:
+        durations: np.ndarray | None = None,
+        events: np.ndarray | None = None,
+    ) -> dict[int, float]:
         """
         Get Kaplan-Meier survival curve (non-parametric).
 
@@ -765,7 +763,7 @@ class SurvivalAnalysisService:
         group2_events: np.ndarray,
         group1_name: str = "Group A",
         group2_name: str = "Group B",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compare survival between two groups (log-rank test).
 
@@ -826,7 +824,7 @@ class SurvivalAnalysisService:
     # Private Helpers
     # -------------------------------------------------------------------
 
-    def _identify_risk_factors(self, features: np.ndarray) -> List[str]:
+    def _identify_risk_factors(self, features: np.ndarray) -> list[str]:
         """Identify risk factors from feature values."""
         factors = []
         if self._cox_model.coefficients is None:
@@ -849,7 +847,7 @@ class SurvivalAnalysisService:
         entity_id: str,
         median_days: float,
         risk_score: float,
-        risk_factors: List[str],
+        risk_factors: list[str],
     ) -> str:
         """Generate Swahili explanation for default prediction."""
         if risk_score < 0.2:
@@ -876,7 +874,7 @@ class SurvivalAnalysisService:
         entity_id: str,
         median_days: float,
         risk_score: float,
-        risk_factors: List[str],
+        risk_factors: list[str],
     ) -> str:
         """Generate Swahili explanation for churn prediction."""
         if risk_score < 0.2:
@@ -896,7 +894,7 @@ class SurvivalAnalysisService:
         self,
         d1: np.ndarray, e1: np.ndarray,
         d2: np.ndarray, e2: np.ndarray,
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Simplified log-rank test statistic."""
         all_times = np.unique(np.concatenate([d1, d2]))
         O1, E1, V1 = 0.0, 0.0, 0.0

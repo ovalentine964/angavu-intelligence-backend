@@ -8,19 +8,17 @@ Tests cover:
 - Reflect→behavior feedback loop
 """
 
-import pytest
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from app.agents.base import AgentEvent, EventType
-from app.autonomous.models.lead import Lead, LeadScore, LeadStatus, LeadSource
 from app.autonomous.agents.lead_qualifier import (
-    LeadQualifierAgent,
     ESCALATE_THRESHOLD,
     QUALIFY_THRESHOLD,
-    INDUSTRY_FIT_SCORES,
-    COMPANY_SIZE_SCORES,
+    LeadQualifierAgent,
 )
+from app.autonomous.models.lead import Lead, LeadScore, LeadSource
 
 
 @pytest.fixture

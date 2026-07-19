@@ -17,13 +17,13 @@ Behavioral economics principles applied:
 - Endowed progress effect (show closeness to completion)
 """
 
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import polars as pl
 import structlog
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.loan import (
@@ -83,13 +83,13 @@ async def record_loan(
     interest_rate: float,
     start_date: date,
     end_date: date,
-    purpose_subcategory: Optional[str] = None,
-    purpose_description: Optional[str] = None,
+    purpose_subcategory: str | None = None,
+    purpose_description: str | None = None,
     repayment_frequency: str = "weekly",
-    commitment_text: Optional[str] = None,
-    accountability_partner_id: Optional[UUID] = None,
+    commitment_text: str | None = None,
+    accountability_partner_id: UUID | None = None,
     currency: str = "KES",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Record a new loan with purpose verification and behavioral nudges.
 
@@ -169,7 +169,7 @@ async def record_loan(
         repayment_frequency=repayment_frequency,
         suggested_payment_amount=suggested_payment,
         commitment_text=commitment_text,
-        commitment_date=datetime.now(timezone.utc) if commitment_text else None,
+        commitment_date=datetime.now(UTC) if commitment_text else None,
         accountability_partner_id=accountability_partner_id,
     )
     db.add(loan)
@@ -251,9 +251,9 @@ async def record_repayment(
     amount: float,
     date: date,
     method: str = "manual",
-    notes: Optional[str] = None,
-    nudge_type: Optional[str] = None,
-) -> Dict[str, Any]:
+    notes: str | None = None,
+    nudge_type: str | None = None,
+) -> dict[str, Any]:
     """
     Record a repayment toward a loan.
 
@@ -322,7 +322,7 @@ async def record_repayment(
     alama_impact = 0
     if completed:
         loan.status = "completed"
-        loan.completed_at = datetime.now(timezone.utc)
+        loan.completed_at = datetime.now(UTC)
         alama_impact = 20  # Full repayment bonus
     else:
         # Partial progress Alama impact
@@ -413,7 +413,7 @@ async def record_repayment(
 async def get_loan_status(
     db: AsyncSession,
     loan_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get comprehensive loan status including ROI, risk, and behavioral data.
 
@@ -545,7 +545,7 @@ async def get_loan_status(
 async def get_default_risk(
     db: AsyncSession,
     user_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Analyze default risk for a user across all active loans using Polars.
 
@@ -741,7 +741,7 @@ async def get_default_risk(
             .values(
                 default_probability=row["risk_score"],
                 risk_level=row["risk_level"],
-                risk_last_updated=datetime.now(timezone.utc),
+                risk_last_updated=datetime.now(UTC),
             )
         )
 
@@ -847,7 +847,7 @@ async def get_default_risk(
 async def get_purpose_verification(
     db: AsyncSession,
     loan_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Verify loan purpose alignment and track ROI for Business loans.
 
@@ -964,7 +964,7 @@ async def get_purpose_verification(
 async def get_repayment_schedule(
     db: AsyncSession,
     loan_id: UUID,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate a repayment schedule with multiple options.
 
@@ -1115,7 +1115,7 @@ async def get_repayment_schedule(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-async def _assess_risk(db: AsyncSession, loan: Loan) -> Dict[str, Any]:
+async def _assess_risk(db: AsyncSession, loan: Loan) -> dict[str, Any]:
     """Internal risk assessment for a single loan."""
     today = date.today()
     days_active = max(0, (today - loan.start_date).days)
@@ -1181,7 +1181,7 @@ async def _assess_risk(db: AsyncSession, loan: Loan) -> Dict[str, Any]:
     # Update loan risk fields
     loan.default_probability = round(risk_score, 3)
     loan.risk_level = risk_level
-    loan.risk_last_updated = datetime.now(timezone.utc)
+    loan.risk_last_updated = datetime.now(UTC)
 
     return {
         "risk_score": round(risk_score, 3),
@@ -1209,14 +1209,14 @@ async def record_loan_legacy(
     interest_rate: float,
     purpose: str,
     source: str = "manual",
-    purpose_details: Optional[Dict] = None,
-    disbursed_at: Optional[datetime] = None,
-    due_date: Optional[date] = None,
+    purpose_details: dict | None = None,
+    disbursed_at: datetime | None = None,
+    due_date: date | None = None,
     repayment_type: str = "flexible",
     repayment_frequency: str = "weekly",
-    commitment_text: Optional[str] = None,
+    commitment_text: str | None = None,
     currency: str = "KES",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Legacy wrapper for backward compatibility with worker_features.py."""
     from app.models.worker_features import LoanRecord
 
@@ -1244,7 +1244,7 @@ async def record_loan_legacy(
         purpose=purpose,
         purpose_details=purpose_details,
         status="active",
-        disbursed_at=disbursed_at or datetime.now(timezone.utc),
+        disbursed_at=disbursed_at or datetime.now(UTC),
         due_date=due_date,
         repayment_type=repayment_type,
         repayment_frequency=repayment_frequency,
@@ -1283,10 +1283,11 @@ async def record_loan_legacy(
 async def get_loan_status_legacy(
     db: AsyncSession,
     user_id: UUID,
-    loan_id: Optional[UUID] = None,
-) -> Dict[str, Any]:
+    loan_id: UUID | None = None,
+) -> dict[str, Any]:
     """Legacy wrapper for backward compatibility with worker_features.py."""
-    from app.models.worker_features import LoanRecord as LegacyLoan, LoanRepayment as LegacyRepayment
+    from app.models.worker_features import LoanRecord as LegacyLoan
+    from app.models.worker_features import LoanRepayment as LegacyRepayment
 
     if loan_id:
         result = await db.execute(
@@ -1370,7 +1371,7 @@ async def get_loan_status_legacy(
 async def predict_default_risk_legacy(
     db: AsyncSession,
     loan,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Legacy risk prediction for LoanRecord model."""
     today = date.today()
     days_active = (today - loan.disbursed_at.date()).days if loan.disbursed_at else 0

@@ -17,7 +17,7 @@ Voice Menu:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -79,7 +79,7 @@ class VoiceTrigger(BaseTrigger):
     def __init__(self, tts_engine: str = "africastalking"):
         super().__init__()
         self.tts_engine = tts_engine
-        self._ivr_states: Dict[str, Dict[str, Any]] = {}
+        self._ivr_states: dict[str, dict[str, Any]] = {}
 
     def get_channel(self) -> TriggerChannel:
         return TriggerChannel.VOICE
@@ -165,7 +165,7 @@ class VoiceTrigger(BaseTrigger):
         self,
         response: TriggerResponse,
         user_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         Send voice response.
@@ -195,7 +195,7 @@ class VoiceTrigger(BaseTrigger):
     def _parse_dtmf(
         self,
         dtmf: str,
-        ivr_state: Dict[str, Any],
+        ivr_state: dict[str, Any],
     ) -> tuple:
         """Parse DTMF key presses into intent."""
         dtmf_map = {
@@ -248,7 +248,7 @@ class VoiceTrigger(BaseTrigger):
 
         return IntentType.UNKNOWN, {"raw": speech}, 0.4
 
-    def _get_ivr_state(self, call_id: str) -> Dict[str, Any]:
+    def _get_ivr_state(self, call_id: str) -> dict[str, Any]:
         """Get or create IVR session state."""
         if call_id not in self._ivr_states:
             self._ivr_states[call_id] = {
@@ -264,7 +264,7 @@ class VoiceTrigger(BaseTrigger):
         self,
         call_id: str,
         intent_type: IntentType,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> None:
         """Update IVR session state after processing."""
         state = self._ivr_states.get(call_id, {})

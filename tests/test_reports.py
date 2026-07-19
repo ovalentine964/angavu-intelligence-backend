@@ -10,16 +10,16 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
+from app.db.database import Base, async_session_factory, engine
 from app.main import app
-from app.db.database import get_db, async_session_factory, Base, engine
-from app.models.user import User
 from app.models.transaction import Transaction
+from app.models.user import User
 from app.utils.crypto import encrypt_value, hash_phone
 
 
@@ -58,7 +58,7 @@ async def user_with_transactions():
         session.add(user)
 
         # Add transactions for today and this week
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         transactions = [
             Transaction(
                 user_id=user_id,

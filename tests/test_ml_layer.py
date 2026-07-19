@@ -10,12 +10,10 @@ Tests cover:
 - Integration with classical stats (fallback behavior)
 """
 
-import sys
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -51,7 +49,7 @@ def _make_transaction(
     profit: float = None,
 ):
     """Create a mock transaction object."""
-    ts = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+    ts = datetime.now(UTC) - timedelta(hours=hours_ago)
     return SimpleNamespace(
         id=uuid.uuid4(),
         user_id=user_id or uuid.uuid4(),
@@ -446,7 +444,9 @@ class TestProactiveAlertEngine:
 
     def test_alert_to_dict(self):
         from app.services.intelligence.proactive_alerts import (
-            ProactiveAlert, AlertType, AlertSeverity,
+            AlertSeverity,
+            AlertType,
+            ProactiveAlert,
         )
 
         alert = ProactiveAlert(
@@ -488,8 +488,8 @@ class TestMLClassicalIntegration:
 
     def test_ml_fallback_when_no_model(self, tmp_path):
         """When no ML model exists, service returns fallback signal."""
-        from app.services.ml.xgboost_service import XGBoostService
         from app.services.ml.feature_engineering import FeatureEngineer
+        from app.services.ml.xgboost_service import XGBoostService
 
         service = XGBoostService(model_dir=tmp_path)
         features = FeatureEngineer.extract_all_features(_make_transactions(30))
@@ -607,9 +607,9 @@ class TestXGBoostTraining:
         if not self._check_xgboost():
             pytest.skip("xgboost not installed")
 
+        from app.services.ml.feature_engineering import FeatureEngineer
         from app.services.ml.model_trainer import ModelTrainer
         from app.services.ml.xgboost_service import XGBoostService
-        from app.services.ml.feature_engineering import FeatureEngineer
 
         trainer = ModelTrainer(model_dir=tmp_path)
 
@@ -636,9 +636,9 @@ class TestXGBoostTraining:
         if not self._check_xgboost():
             pytest.skip("xgboost not installed")
 
+        from app.services.ml.feature_engineering import FeatureEngineer
         from app.services.ml.model_trainer import ModelTrainer
         from app.services.ml.xgboost_service import XGBoostService
-        from app.services.ml.feature_engineering import FeatureEngineer
 
         trainer = ModelTrainer(model_dir=tmp_path)
 

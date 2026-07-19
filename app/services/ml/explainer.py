@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import hashlib
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 import numpy as np
 import structlog
@@ -69,7 +70,7 @@ class FeatureContribution:
     direction: str  # "up" | "down"
     explanation_sw: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "feature": self.feature_name,
             "feature_sw": self.feature_name_sw,
@@ -103,15 +104,15 @@ class PredictionExplanation:
     model_name: str
     predicted_value: float
     base_value: float
-    feature_contributions: List[FeatureContribution]
-    top_positive: List[FeatureContribution]
-    top_negative: List[FeatureContribution]
+    feature_contributions: list[FeatureContribution]
+    top_positive: list[FeatureContribution]
+    top_negative: list[FeatureContribution]
     summary_sw: str
     summary_en: str
     confidence: float
     generated_at: datetime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "prediction_id": self.prediction_id,
             "model_name": self.model_name,
@@ -131,7 +132,7 @@ class PredictionExplanation:
 # Swahili Feature Translations
 # ---------------------------------------------------------------------------
 
-FEATURE_NAMES_SW: Dict[str, str] = {
+FEATURE_NAMES_SW: dict[str, str] = {
     "activity_score": "Shughuli za Biashara",
     "stability_score": "Uthabiti wa Mapato",
     "growth_score": "Ukuaji wa Biashara",
@@ -235,19 +236,19 @@ def _explain_feature_sw(
         if shap_value > 0:
             return f"Una akiba nzuri — {feature_value*100:.0f}% ya mapato."
         else:
-            return f"Huna akiba — unatumia zaidi ya unachopata."
+            return "Huna akiba — unatumia zaidi ya unachopata."
 
     elif feature_name == "income_consistency":
         if shap_value > 0:
-            return f"Mapato yako ni ya kawaida — mabadiliko ni kidogo."
+            return "Mapato yako ni ya kawaida — mabadiliko ni kidogo."
         else:
-            return f"Mapato yako yanabadilika sana — vigumu kubashiri."
+            return "Mapato yako yanabadilika sana — vigumu kubashiri."
 
     elif feature_name == "income_volatility":
         if shap_value < 0:
-            return f"Mabadiliko ya mapato ni makubwa — hatari ya juu."
+            return "Mabadiliko ya mapato ni makubwa — hatari ya juu."
         else:
-            return f"Mabadiliko ya mapato ni madogo — uthabiti mzuri."
+            return "Mabadiliko ya mapato ni madogo — uthabiti mzuri."
 
     else:
         # Generic explanation
@@ -260,8 +261,8 @@ def _explain_feature_sw(
 
 def _generate_summary_sw(
     predicted_value: float,
-    top_positive: List[FeatureContribution],
-    top_negative: List[FeatureContribution],
+    top_positive: list[FeatureContribution],
+    top_negative: list[FeatureContribution],
     model_name: str,
 ) -> str:
     """Generate a Swahili summary of the full prediction explanation."""
@@ -316,14 +317,14 @@ class SHAPExplainer:
     def __init__(
         self,
         model_name: str,
-        feature_names: List[str],
-        feature_names_sw: Optional[Dict[str, str]] = None,
+        feature_names: list[str],
+        feature_names_sw: dict[str, str] | None = None,
     ):
         self.model_name = model_name
         self.feature_names = feature_names
         self.feature_names_sw = feature_names_sw or FEATURE_NAMES_SW
         self._explainer = None
-        self._background_data: Optional[np.ndarray] = None
+        self._background_data: np.ndarray | None = None
 
     def set_background_data(self, X_background: np.ndarray) -> None:
         """Set background dataset for SHAP (used as reference distribution).
@@ -368,7 +369,7 @@ class SHAPExplainer:
         self,
         feature_values: np.ndarray,
         predicted_value: float,
-        base_value: Optional[float] = None,
+        base_value: float | None = None,
     ) -> PredictionExplanation:
         """
         Explain a single prediction using SHAP values.
@@ -433,7 +434,7 @@ class SHAPExplainer:
             summary_sw=summary_sw,
             summary_en=summary_en,
             confidence=confidence,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
         )
 
         logger.info(
@@ -447,7 +448,7 @@ class SHAPExplainer:
 
         return explanation
 
-    def _compute_shap_values(self, feature_values: np.ndarray) -> Optional[np.ndarray]:
+    def _compute_shap_values(self, feature_values: np.ndarray) -> np.ndarray | None:
         """Compute SHAP values using the SHAP library if available."""
         if not SHAP_AVAILABLE or self._explainer is None:
             return None
@@ -522,7 +523,7 @@ class SHAPExplainer:
         feature_values: np.ndarray,
         shap_values: np.ndarray,
         base_value: float,
-    ) -> List[FeatureContribution]:
+    ) -> list[FeatureContribution]:
         """Build FeatureContribution objects from raw SHAP values."""
         total_abs_shap = np.sum(np.abs(shap_values))
         contributions = []
@@ -551,8 +552,8 @@ class SHAPExplainer:
     def _generate_summary_en(
         self,
         predicted_value: float,
-        top_positive: List[FeatureContribution],
-        top_negative: List[FeatureContribution],
+        top_positive: list[FeatureContribution],
+        top_negative: list[FeatureContribution],
     ) -> str:
         """Generate English summary of the explanation."""
         parts = [f"Prediction: {predicted_value:.1f}"]
@@ -609,7 +610,7 @@ class AlamaScoreExplainer(SHAPExplainer):
         self,
         feature_values: np.ndarray,
         predicted_score: int,
-        score_band: Optional[str] = None,
+        score_band: str | None = None,
     ) -> PredictionExplanation:
         """
         Explain an Alama Score prediction in Swahili.
@@ -655,7 +656,7 @@ class AlamaScoreExplainer(SHAPExplainer):
         self,
         feature_values: np.ndarray,
         predicted_score: int,
-        score_band: Optional[str] = None,
+        score_band: str | None = None,
         worker_name: str = "Mfanyabiashara",
     ) -> str:
         """
@@ -677,9 +678,9 @@ class AlamaScoreExplainer(SHAPExplainer):
 
         lines = [
             f"📊 *Alama ya {worker_name}*",
-            f"",
+            "",
             f"Alama: *{predicted_score}* ({score_band or 'N/A'})",
-            f"",
+            "",
         ]
 
         # Top positive factors

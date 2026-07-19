@@ -30,17 +30,15 @@ or the application lifecycle.
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.database import get_db
 from app.models.user import User
 from app.services.whatsapp_delivery import WhatsAppDelivery
 
@@ -53,7 +51,7 @@ EAT_OFFSET = timedelta(hours=3)
 
 def eat_now() -> datetime:
     """Get current time in East Africa Time."""
-    return datetime.now(timezone.utc) + EAT_OFFSET
+    return datetime.now(UTC) + EAT_OFFSET
 
 
 # =========================================================================
@@ -126,7 +124,7 @@ class ReportScheduler:
     # Main Scheduling Loop
     # =========================================================================
 
-    async def check_and_send_reports(self) -> Dict[str, Any]:
+    async def check_and_send_reports(self) -> dict[str, Any]:
         """
         Check for due reports and send them.
 
@@ -167,7 +165,7 @@ class ReportScheduler:
 
     async def send_due_reports(
         self, report_type: ReportType
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Send all due reports of a specific type.
 
@@ -381,7 +379,7 @@ class ReportScheduler:
     # Database Helpers
     # =========================================================================
 
-    async def _get_active_whatsapp_users(self) -> List[User]:
+    async def _get_active_whatsapp_users(self) -> list[User]:
         """Get all active users on the WhatsApp channel."""
         result = await self.db.execute(
             select(User).where(
@@ -411,7 +409,7 @@ class ReportScheduler:
         user_id,
         report_type: ReportType,
         status: DeliveryStatus,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """
         Log a delivery attempt.
@@ -425,14 +423,14 @@ class ReportScheduler:
             report_type=report_type.value,
             status=status.value,
             error=error,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
         )
 
     # =========================================================================
     # Statistics
     # =========================================================================
 
-    async def get_schedule_status(self) -> Dict[str, Any]:
+    async def get_schedule_status(self) -> dict[str, Any]:
         """
         Get current scheduler status and next scheduled runs.
 

@@ -9,11 +9,9 @@ Tests cover:
 """
 
 import pytest
+
 from app.autonomous.feedback import (
     FeedbackLoopManager,
-    AgentPerformanceMetric,
-    CustomerFeedbackSignal,
-    RevenueMetric,
 )
 
 

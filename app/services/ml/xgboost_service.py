@@ -21,9 +21,9 @@ or other classical methods already validated at A-.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -86,12 +86,18 @@ def _import_shap():
 def _import_sklearn():
     """Lazy import of sklearn."""
     try:
-        from sklearn.model_selection import cross_val_score, TimeSeriesSplit
         from sklearn.metrics import (
-            mean_absolute_error, mean_squared_error, r2_score,
-            accuracy_score, precision_score, recall_score, f1_score,
-            roc_auc_score, classification_report,
+            accuracy_score,
+            classification_report,
+            f1_score,
+            mean_absolute_error,
+            mean_squared_error,
+            precision_score,
+            r2_score,
+            recall_score,
+            roc_auc_score,
         )
+        from sklearn.model_selection import TimeSeriesSplit, cross_val_score
         return {
             "cross_val_score": cross_val_score,
             "TimeSeriesSplit": TimeSeriesSplit,
@@ -133,16 +139,16 @@ class XGBoostService:
         anomaly = service.detect_anomaly(txn_features, user_id="abc")
     """
 
-    def __init__(self, model_dir: Optional[Path] = None):
+    def __init__(self, model_dir: Path | None = None):
         self.model_dir = Path(model_dir) if model_dir else MODEL_DIR
         self.model_dir.mkdir(parents=True, exist_ok=True)
-        self._models: Dict[str, Any] = {}  # In-memory model cache
+        self._models: dict[str, Any] = {}  # In-memory model cache
 
     # ─────────────────────────────────────────────────────────────────────
     # Model Loading
     # ─────────────────────────────────────────────────────────────────────
 
-    def _load_model(self, model_type: str, version: str = "latest") -> Optional[Any]:
+    def _load_model(self, model_type: str, version: str = "latest") -> Any | None:
         """
         Load a trained XGBoost model from disk.
 
@@ -186,7 +192,7 @@ class XGBoostService:
             logger.error("model_load_failed", model_type=model_type, error=str(e))
             return None
 
-    def _save_model(self, model: Any, model_type: str, version: str, metadata: Dict[str, Any]) -> Path:
+    def _save_model(self, model: Any, model_type: str, version: str, metadata: dict[str, Any]) -> Path:
         """Save a trained model with metadata."""
         model_path = self.model_dir / f"{model_type}_{version}.ubj"
         model.save_model(str(model_path))
@@ -198,7 +204,7 @@ class XGBoostService:
             "model_type": model_type,
             "version": version,
             "model_file": str(model_path),
-            "trained_at": datetime.now(timezone.utc).isoformat(),
+            "trained_at": datetime.now(UTC).isoformat(),
             "feature_names": FEATURE_NAMES,
             **metadata,
         }
@@ -218,9 +224,9 @@ class XGBoostService:
         self,
         model: Any,
         features: np.ndarray,
-        feature_names: Optional[List[str]] = None,
+        feature_names: list[str] | None = None,
         top_k: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate SHAP explanations for a model prediction.
 
@@ -298,9 +304,9 @@ class XGBoostService:
 
     def predict_demand(
         self,
-        features: Dict[str, float],
+        features: dict[str, float],
         model_version: str = "latest",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Predict next week's sales volume using XGBoost.
 
@@ -354,10 +360,10 @@ class XGBoostService:
 
     def predict_credit_score(
         self,
-        features: Dict[str, float],
-        classical_score: Optional[int] = None,
+        features: dict[str, float],
+        classical_score: int | None = None,
         model_version: str = "latest",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Predict credit risk using XGBoost, enhanced with classical Alama Score.
 
@@ -443,9 +449,9 @@ class XGBoostService:
 
     def predict_churn(
         self,
-        features: Dict[str, float],
+        features: dict[str, float],
         model_version: str = "latest",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Predict whether a worker will stop using Msaidizi.
 
@@ -523,9 +529,9 @@ class XGBoostService:
 
     def detect_anomaly(
         self,
-        transaction_features: Dict[str, float],
+        transaction_features: dict[str, float],
         model_version: str = "latest",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect if a transaction is anomalous using XGBoost.
 
@@ -578,7 +584,7 @@ class XGBoostService:
             logger.error("anomaly_detection_failed", error=str(e))
             return self._zscore_anomaly_fallback(transaction_features)
 
-    def _zscore_anomaly_fallback(self, features: Dict[str, float]) -> Dict[str, Any]:
+    def _zscore_anomaly_fallback(self, features: dict[str, float]) -> dict[str, Any]:
         """Z-score fallback when XGBoost model is not available."""
         amount = features.get("txn_amount", 0)
         mean = features.get("anomaly_hist_mean_amount", 0)
@@ -607,14 +613,14 @@ class XGBoostService:
     # ─────────────────────────────────────────────────────────────────────
 
     def _features_to_array(
-        self, features: Dict[str, float]
-    ) -> Tuple[np.ndarray, List[str]]:
+        self, features: dict[str, float]
+    ) -> tuple[np.ndarray, list[str]]:
         """Convert features dict to ordered numpy array."""
         values = [features.get(k, 0.0) for k in FEATURE_NAMES]
         return np.array(values, dtype=np.float32), FEATURE_NAMES
 
     @staticmethod
-    def _estimate_confidence(features: Dict[str, float], model_type: str) -> float:
+    def _estimate_confidence(features: dict[str, float], model_type: str) -> float:
         """
         Estimate prediction confidence based on data completeness.
 
@@ -641,7 +647,7 @@ class XGBoostService:
         confidence = 0.5 * completeness + 0.5 * volume_score
         return round(min(0.95, max(0.1, confidence)), 2)
 
-    def get_model_info(self, model_type: str) -> Dict[str, Any]:
+    def get_model_info(self, model_type: str) -> dict[str, Any]:
         """Get information about a stored model."""
         import json
 
@@ -660,7 +666,7 @@ class XGBoostService:
             **meta,
         }
 
-    def list_models(self) -> Dict[str, Any]:
+    def list_models(self) -> dict[str, Any]:
         """List all available models."""
         model_types = ["demand", "credit", "churn", "anomaly"]
         return {mt: self.get_model_info(mt) for mt in model_types}

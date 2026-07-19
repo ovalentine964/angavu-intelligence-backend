@@ -11,8 +11,7 @@ Provides:
 Run as a background task alongside the main backend.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import structlog
@@ -28,7 +27,7 @@ EAT_OFFSET = timedelta(hours=3)
 
 def eat_now() -> datetime:
     """Get current time in East Africa Time."""
-    return datetime.now(timezone.utc) + EAT_OFFSET
+    return datetime.now(UTC) + EAT_OFFSET
 
 
 class WhatsAppHealthMonitor:
@@ -42,14 +41,14 @@ class WhatsAppHealthMonitor:
             await monitor.alert_admin("WhatsApp disconnected")
     """
 
-    def __init__(self, openwa_url: Optional[str] = None):
+    def __init__(self, openwa_url: str | None = None):
         self.openwa_url = openwa_url or settings.OPENWA_URL
-        self._last_check: Optional[datetime] = None
-        self._last_status: Optional[Dict] = None
+        self._last_check: datetime | None = None
+        self._last_status: dict | None = None
         self._consecutive_failures: int = 0
         self._alert_sent: bool = False
 
-    async def check_health(self) -> Dict:
+    async def check_health(self) -> dict:
         """
         Check OpenWA service health.
 
@@ -75,13 +74,13 @@ class WhatsAppHealthMonitor:
             "uptime": 0,
             "last_disconnect": None,
             "status": "unknown",
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(UTC).isoformat(),
         }
 
         # If WhatsApp is disabled, return early without attempting connection
         if not settings.ENABLE_WHATSAPP:
             result["status"] = "disabled"
-            self._last_check = datetime.now(timezone.utc)
+            self._last_check = datetime.now(UTC)
             self._last_status = result
             return result
 
@@ -135,7 +134,7 @@ class WhatsAppHealthMonitor:
             self._consecutive_failures += 1
             logger.error("openwa_health_check_error", error=str(e))
 
-        self._last_check = datetime.now(timezone.utc)
+        self._last_check = datetime.now(UTC)
         self._last_status = result
 
         return result
@@ -194,7 +193,7 @@ class WhatsAppHealthMonitor:
         # For now, log the alert
         return True
 
-    def get_status_summary(self) -> Dict:
+    def get_status_summary(self) -> dict:
         """
         Get a summary of the current health status.
 
@@ -236,7 +235,7 @@ class WhatsAppHealthMonitor:
 
 
 # Singleton instance for use across the application
-_health_monitor: Optional[WhatsAppHealthMonitor] = None
+_health_monitor: WhatsAppHealthMonitor | None = None
 
 
 def get_health_monitor() -> WhatsAppHealthMonitor:

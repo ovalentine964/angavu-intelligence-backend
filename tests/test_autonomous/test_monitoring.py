@@ -1,7 +1,9 @@
 """Tests for the agent monitoring system."""
 
-import pytest
 import time
+
+import pytest
+
 from app.autonomous.monitoring import AgentMonitor, TaskRecord
 
 

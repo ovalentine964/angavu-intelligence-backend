@@ -15,8 +15,7 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -41,7 +40,7 @@ class WorkerType:
 # ── Classification Keywords ─────────────────────────────────────────
 
 # Keywords in transaction items that signal each worker type
-TYPE_KEYWORDS: Dict[str, List[str]] = {
+TYPE_KEYWORDS: dict[str, list[str]] = {
     WorkerType.TRANSPORT: [
         "boda", "matatu", "tuk tuk", "tuk-tuk", "taxi", "fare", "trip",
         "ride", "passenger", "route", "fuel", "petrol", "diesel",
@@ -97,10 +96,10 @@ class WorkerClassifier:
 
     def classify(
         self,
-        transactions: List[Dict[str, Any]],
+        transactions: list[dict[str, Any]],
         min_confidence: float = 0.15,
         max_types: int = 3,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Classify worker type from transaction data.
 
@@ -127,8 +126,8 @@ class WorkerClassifier:
             }
 
         # Score each type
-        scores: Dict[str, float] = defaultdict(float)
-        evidence: Dict[str, List[str]] = defaultdict(list)
+        scores: dict[str, float] = defaultdict(float)
+        evidence: dict[str, list[str]] = defaultdict(list)
 
         # 1. Keyword matching (40% weight)
         keyword_scores = self._keyword_score(transactions)
@@ -194,11 +193,11 @@ class WorkerClassifier:
         }
 
     def _keyword_score(
-        self, transactions: List[Dict[str, Any]]
-    ) -> Dict[str, Tuple[float, List[str]]]:
+        self, transactions: list[dict[str, Any]]
+    ) -> dict[str, tuple[float, list[str]]]:
         """Score based on keyword matches in item names."""
-        scores: Dict[str, float] = defaultdict(float)
-        matched_items: Dict[str, List[str]] = defaultdict(list)
+        scores: dict[str, float] = defaultdict(float)
+        matched_items: dict[str, list[str]] = defaultdict(list)
 
         for t in transactions:
             item = (t.get("item") or "").lower()
@@ -220,10 +219,10 @@ class WorkerClassifier:
         }
 
     def _pattern_score(
-        self, transactions: List[Dict[str, Any]]
-    ) -> Dict[str, float]:
+        self, transactions: list[dict[str, Any]]
+    ) -> dict[str, float]:
         """Score based on transaction patterns."""
-        scores: Dict[str, float] = defaultdict(float)
+        scores: dict[str, float] = defaultdict(float)
         n = len(transactions) or 1
 
         sales = [t for t in transactions if t.get("transaction_type") == "SALE"]
@@ -273,8 +272,8 @@ class WorkerClassifier:
         return {t: s / n for t, s in scores.items() if s > 0}
 
     def _category_score(
-        self, transactions: List[Dict[str, Any]]
-    ) -> Dict[str, float]:
+        self, transactions: list[dict[str, Any]]
+    ) -> dict[str, float]:
         """Score based on item_category field."""
         category_map = {
             "transport": WorkerType.TRANSPORT,
@@ -285,7 +284,7 @@ class WorkerClassifier:
             "electronics": WorkerType.DIGITAL,
         }
 
-        scores: Dict[str, float] = defaultdict(float)
+        scores: dict[str, float] = defaultdict(float)
         n = len(transactions) or 1
 
         for t in transactions:
@@ -296,8 +295,8 @@ class WorkerClassifier:
         return {t: s / n for t, s in scores.items() if s > 0}
 
     def _amount_pattern_score(
-        self, transactions: List[Dict[str, Any]]
-    ) -> Dict[str, float]:
+        self, transactions: list[dict[str, Any]]
+    ) -> dict[str, float]:
         """Score based on transaction amount patterns."""
         sales = [
             t for t in transactions
@@ -310,7 +309,7 @@ class WorkerClassifier:
         avg = statistics.mean(amounts)
         cv = statistics.stdev(amounts) / avg if avg > 0 and len(amounts) > 1 else 0
 
-        scores: Dict[str, float] = defaultdict(float)
+        scores: dict[str, float] = defaultdict(float)
 
         # Transport: consistent small amounts
         if 50 <= avg <= 300 and cv < 0.5:
@@ -329,7 +328,7 @@ class WorkerClassifier:
 
 # ── Singleton ───────────────────────────────────────────────────────
 
-_classifier: Optional[WorkerClassifier] = None
+_classifier: WorkerClassifier | None = None
 
 
 def get_worker_classifier() -> WorkerClassifier:

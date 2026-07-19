@@ -11,10 +11,8 @@ Character sets used:
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple, Union
-
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -105,7 +103,7 @@ class ChartConfig:
 # Formatting Utilities
 # ---------------------------------------------------------------------------
 
-def format_currency(amount: float, config: Optional[ChartConfig] = None) -> str:
+def format_currency(amount: float, config: ChartConfig | None = None) -> str:
     """Format a number as Kenyan Shillings with thousand separators.
 
     Args:
@@ -125,7 +123,7 @@ def format_currency(amount: float, config: Optional[ChartConfig] = None) -> str:
         return f"{cfg.currency_prefix} {formatted}"
 
 
-def format_number(n: int, config: Optional[ChartConfig] = None) -> str:
+def format_number(n: int, config: ChartConfig | None = None) -> str:
     """Format a plain number with thousand separators."""
     cfg = config or ChartConfig()
     return f"{n:,.0f}".replace(",", cfg.thousands_sep)
@@ -234,12 +232,12 @@ class BarChart:
         Alhamisi  ▓▓▓▓▓▓      KSh 2,400
     """
 
-    def __init__(self, config: Optional[ChartConfig] = None):
+    def __init__(self, config: ChartConfig | None = None):
         self.config = config or ChartConfig()
 
     def render(
         self,
-        data: Dict[str, float],
+        data: dict[str, float],
         max_label_width: int = 12,
         highlight_max: bool = True,
         highlight_min: bool = False,
@@ -327,7 +325,7 @@ class BarChart:
 
     def render_compact(
         self,
-        data: Dict[str, float],
+        data: dict[str, float],
         bar_width: int = 10,
         currency: bool = True,
     ) -> str:
@@ -350,8 +348,8 @@ class BarChart:
 
     def render_with_comparison(
         self,
-        current: Dict[str, float],
-        previous: Dict[str, float],
+        current: dict[str, float],
+        previous: dict[str, float],
         max_label_width: int = 12,
     ) -> str:
         """Render bars with comparison to previous period.
@@ -403,7 +401,7 @@ class ProgressBar:
         Akiba: ▓▓▓▓▓▓▓░░░░░░░░ 50% (KSh 25,000 / KSh 50,000)
     """
 
-    def __init__(self, config: Optional[ChartConfig] = None):
+    def __init__(self, config: ChartConfig | None = None):
         self.config = config or ChartConfig()
 
     def render(
@@ -411,7 +409,7 @@ class ProgressBar:
         current: float,
         maximum: float,
         width: int = 15,
-        label: Optional[str] = None,
+        label: str | None = None,
         show_percentage: bool = True,
         show_values: bool = True,
         currency: bool = True,
@@ -458,7 +456,7 @@ class ProgressBar:
 
     def render_multi(
         self,
-        items: List[Tuple[str, float, float]],
+        items: list[tuple[str, float, float]],
         width: int = 15,
         currency: bool = True,
     ) -> str:
@@ -497,7 +495,7 @@ class Sparkline:
     def render(
         self,
         values: Sequence[float],
-        label: Optional[str] = None,
+        label: str | None = None,
         highlight_last: bool = False,
     ) -> str:
         """Render a sparkline from a sequence of values.
@@ -538,7 +536,7 @@ class Sparkline:
     def render_with_values(
         self,
         values: Sequence[float],
-        labels: Optional[Sequence[str]] = None,
+        labels: Sequence[str] | None = None,
         currency: bool = True,
     ) -> str:
         """Render sparkline with labeled values below.
@@ -589,7 +587,7 @@ class Heatmap:
 
     def render(
         self,
-        monthly_data: Dict[str, float],
+        monthly_data: dict[str, float],
         label_width: int = 3,
         show_label: bool = True,
         locale: str = "sw",
@@ -755,8 +753,8 @@ class CashFlowDiagram:
 
     def render_weekly(
         self,
-        daily_income: Dict[str, float],
-        daily_expenses: Dict[str, float],
+        daily_income: dict[str, float],
+        daily_expenses: dict[str, float],
         bar_width: int = 15,
     ) -> str:
         """Render weekly cash flow with daily breakdown.
@@ -814,7 +812,7 @@ class TrendLine:
     def render(
         self,
         values: Sequence[float],
-        labels: Optional[Sequence[str]] = None,
+        labels: Sequence[str] | None = None,
         width: int = 30,
         show_trend_arrow: bool = True,
     ) -> str:
@@ -878,14 +876,14 @@ class TableBuilder:
     aligned text using spaces and optional box-drawing characters.
     """
 
-    def __init__(self, config: Optional[ChartConfig] = None):
+    def __init__(self, config: ChartConfig | None = None):
         self.config = config or ChartConfig()
 
     def render_simple(
         self,
-        headers: List[str],
-        rows: List[List[str]],
-        align_right: Optional[List[int]] = None,
+        headers: list[str],
+        rows: list[list[str]],
+        align_right: list[int] | None = None,
     ) -> str:
         """Render a simple aligned table without box characters.
 
@@ -937,7 +935,7 @@ class TableBuilder:
 
     def render_key_value(
         self,
-        items: List[Tuple[str, str]],
+        items: list[tuple[str, str]],
         separator: str = ":",
         indent: int = 3,
     ) -> str:
@@ -969,7 +967,7 @@ class TableBuilder:
 # Divider / Separator
 # ---------------------------------------------------------------------------
 
-def divider(char: str = "═", width: int = 23, label: Optional[str] = None) -> str:
+def divider(char: str = "═", width: int = 23, label: str | None = None) -> str:
     """Create a horizontal divider line.
 
     Args:
@@ -1094,25 +1092,25 @@ def health_display(score: float, locale: str = "sw") -> str:
 # Convenience: Quick chart functions
 # ---------------------------------------------------------------------------
 
-def quick_bar(data: Dict[str, float], currency: bool = True) -> str:
+def quick_bar(data: dict[str, float], currency: bool = True) -> str:
     """Quick horizontal bar chart. Returns formatted string."""
     chart = BarChart()
     return chart.render(data, currency=currency)
 
 
-def quick_sparkline(values: Sequence[float], label: Optional[str] = None) -> str:
+def quick_sparkline(values: Sequence[float], label: str | None = None) -> str:
     """Quick sparkline. Returns formatted string."""
     sl = Sparkline()
     return sl.render(values, label=label)
 
 
-def quick_progress(current: float, maximum: float, label: Optional[str] = None) -> str:
+def quick_progress(current: float, maximum: float, label: str | None = None) -> str:
     """Quick progress bar. Returns formatted string."""
     pb = ProgressBar()
     return pb.render(current, maximum, label=label)
 
 
-def quick_heatmap(monthly_data: Dict[str, float], locale: str = "sw") -> str:
+def quick_heatmap(monthly_data: dict[str, float], locale: str = "sw") -> str:
     """Quick monthly heatmap. Returns formatted string."""
     hm = Heatmap()
     return hm.render(monthly_data, locale=locale)
@@ -1124,7 +1122,7 @@ def quick_cashflow(income: float, expenses: float, locale: str = "sw") -> str:
     return cf.render(income, expenses, locale=locale)
 
 
-def quick_trend(values: Sequence[float], labels: Optional[Sequence[str]] = None) -> str:
+def quick_trend(values: Sequence[float], labels: Sequence[str] | None = None) -> str:
     """Quick trend line. Returns formatted string."""
     tl = TrendLine()
     return tl.render(values, labels=labels)
@@ -1142,7 +1140,7 @@ class WhatsAppCharts:
     alongside text reports via WhatsApp.
     """
 
-    def generate_weekly_sales_chart(self, report, language: str = "sw") -> Optional[bytes]:
+    def generate_weekly_sales_chart(self, report, language: str = "sw") -> bytes | None:
         """
         Generate a weekly sales bar chart as PNG bytes.
 
@@ -1156,8 +1154,9 @@ class WhatsAppCharts:
         try:
             import matplotlib
             matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
             from io import BytesIO
+
+            import matplotlib.pyplot as plt
 
             fig, ax = plt.subplots(figsize=(8, 4))
 
@@ -1198,7 +1197,7 @@ class WhatsAppCharts:
             logger.warning("weekly_chart_generation_error", error=str(e))
             return None
 
-    def generate_monthly_chart(self, metrics: Dict, language: str = "sw") -> Optional[bytes]:
+    def generate_monthly_chart(self, metrics: dict, language: str = "sw") -> bytes | None:
         """
         Generate a monthly summary chart as PNG bytes.
 
@@ -1214,8 +1213,9 @@ class WhatsAppCharts:
         try:
             import matplotlib
             matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
             from io import BytesIO
+
+            import matplotlib.pyplot as plt
 
             fig, ax = plt.subplots(figsize=(8, 4))
 

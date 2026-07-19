@@ -343,10 +343,7 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
         for pattern in SQL_INJECTION_PATTERNS:
             if pattern.search(value):
                 return True
-        for pattern in XSS_PATTERNS:
-            if pattern.search(value):
-                return True
-        return False
+        return any(pattern.search(value) for pattern in XSS_PATTERNS)
 
     def _get_max_size(self, path: str) -> int:
         """Get maximum request size for a path."""

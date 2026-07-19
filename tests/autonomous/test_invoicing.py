@@ -8,17 +8,17 @@ Tests cover:
 - Invoice numbering
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
-from app.agents.base import AgentEvent, EventType
-from app.autonomous.models.invoice import Invoice, InvoiceItem, InvoiceStatus
+import pytest
+
+from app.agents.base import EventType
 from app.autonomous.agents.invoicing_agent import (
-    InvoicingAgent,
     TIER_PRICING,
-    PAYMENT_TERMS_DAYS,
+    InvoicingAgent,
 )
+from app.autonomous.models.invoice import Invoice, InvoiceItem, InvoiceStatus
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ class TestInvoiceModel:
         """Test overdue detection."""
         invoice = Invoice(
             status=InvoiceStatus.SENT,
-            due_date=datetime.now(timezone.utc) - timedelta(days=5),
+            due_date=datetime.now(UTC) - timedelta(days=5),
         )
         assert invoice.is_overdue
         assert invoice.days_overdue == 5
@@ -62,7 +62,7 @@ class TestInvoiceModel:
         """Paid invoices are never overdue."""
         invoice = Invoice(
             status=InvoiceStatus.PAID,
-            due_date=datetime.now(timezone.utc) - timedelta(days=30),
+            due_date=datetime.now(UTC) - timedelta(days=30),
         )
         assert not invoice.is_overdue
 
@@ -193,7 +193,7 @@ class TestInvoicingAgent:
         )
         invoice_id = result["invoice_id"]
         invoice = agent._invoices[invoice_id]
-        invoice.due_date = datetime.now(timezone.utc) - timedelta(days=5)
+        invoice.due_date = datetime.now(UTC) - timedelta(days=5)
 
         # Check payments
         check_result = await agent._check_payments(events)

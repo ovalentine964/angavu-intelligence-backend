@@ -8,7 +8,6 @@ These run inside the worker process (app/worker.py).
 """
 
 import logging
-from typing import Any
 
 from app.services.task_queue import register_handler
 

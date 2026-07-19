@@ -14,7 +14,6 @@ import sys
 
 import numpy as np
 import pytest
-from scipy import stats
 
 # Direct module loading to avoid triggering app/__init__.py and
 # app/services/__init__.py which pull in sqlalchemy, pydantic-settings, etc.

@@ -23,12 +23,11 @@ Wired into: AnalysisAgent, TransactionProcessor
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
 from scipy import stats
-from scipy.optimize import minimize
 
 from app.skills.base import BaseSkill, SkillResult
 
@@ -88,10 +87,10 @@ class StatisticalEstimator(BaseSkill):
 
     async def _point_estimate(
         self,
-        data: List[float],
+        data: list[float],
         parameter: str = "mean",
         method: str = "mle",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute point estimates for population parameters.
 
@@ -153,10 +152,10 @@ class StatisticalEstimator(BaseSkill):
 
     async def _interval_estimate(
         self,
-        data: List[float],
+        data: list[float],
         confidence: float = 0.95,
         parameter: str = "mean",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute confidence intervals.
 
@@ -220,9 +219,9 @@ class StatisticalEstimator(BaseSkill):
 
     async def _mle(
         self,
-        data: List[float],
+        data: list[float],
         distribution: str = "normal",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Maximum Likelihood Estimation for various distributions.
 
@@ -309,11 +308,11 @@ class StatisticalEstimator(BaseSkill):
 
     async def _bayesian_estimate(
         self,
-        data: List[float],
+        data: list[float],
         prior_type: str = "conjugate",
         distribution: str = "normal",
-        prior_params: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
+        prior_params: dict[str, float] | None = None,
+    ) -> dict[str, Any]:
         """
         Bayesian estimation with conjugate priors.
 
@@ -401,9 +400,9 @@ class StatisticalEstimator(BaseSkill):
 
     async def _sufficient_statistics(
         self,
-        data: List[float],
+        data: list[float],
         distribution: str = "normal",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute sufficient statistics for common distributions.
 

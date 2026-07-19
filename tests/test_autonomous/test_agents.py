@@ -1,16 +1,14 @@
 """Tests for autonomous agents (Sales, Content, Operations)."""
 
-import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
 
-from app.agents.base import AgentEvent, AgentDecision, AgentResult, EventType
-from app.autonomous.agents.sales_agent import SalesAgent
+import pytest
+
+from app.agents.base import AgentDecision, EventType
 from app.autonomous.agents.content_agent import ContentAgent
 from app.autonomous.agents.operations_agent import OperationsAgent
-from app.autonomous.agents.base import AutonomousAgent
-from app.autonomous.monitoring import AgentMonitor
+from app.autonomous.agents.sales_agent import SalesAgent
 from app.autonomous.escalation import EscalationManager
+from app.autonomous.monitoring import AgentMonitor
 
 
 class TestSalesAgent:

@@ -24,19 +24,22 @@ from __future__ import annotations
 
 import asyncio
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, Optional, TypeVar
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
 
 logger = structlog.get_logger(__name__)
 
 T = TypeVar("T")
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     """Circuit breaker states."""
     CLOSED = "closed"         # Normal — requests pass through
     OPEN = "open"             # Tripped — fail fast
@@ -53,13 +56,13 @@ class CircuitStats:
     total_requests: int = 0
     total_failures: int = 0
     total_successes: int = 0
-    last_failure_time: Optional[float] = None
-    last_success_time: Optional[float] = None
+    last_failure_time: float | None = None
+    last_success_time: float | None = None
     last_state_change: float = field(default_factory=time.time)
     consecutive_failures: int = 0
     consecutive_successes: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "state": self.state.value,
@@ -146,15 +149,15 @@ class CircuitBreaker:
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._success_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._last_state_change = time.time()
-        self._half_open_semaphore: Optional[asyncio.Semaphore] = None
+        self._half_open_semaphore: asyncio.Semaphore | None = None
 
         # Stats
         self._total_requests = 0
         self._total_failures = 0
         self._total_successes = 0
-        self._last_success_time: Optional[float] = None
+        self._last_success_time: float | None = None
 
         # Governance hook (injected, feature-flagged)
         self._governance: Any = None  # CircuitBreakerGovernance | None
@@ -164,10 +167,9 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         """Get current state, auto-transitioning OPEN → HALF_OPEN if timeout elapsed."""
-        if self._state == CircuitState.OPEN:
-            if self._last_failure_time and \
+        if self._state == CircuitState.OPEN and self._last_failure_time and \
                (time.time() - self._last_failure_time) >= self.recovery_timeout:
-                self._transition(CircuitState.HALF_OPEN)
+            self._transition(CircuitState.HALF_OPEN)
         return self._state
 
     @property
@@ -295,10 +297,8 @@ class CircuitBreaker:
             raise
         finally:
             if current_state == CircuitState.HALF_OPEN and self._half_open_semaphore:
-                try:
+                with suppress(ValueError, RuntimeError):
                     self._half_open_semaphore.release()
-                except (ValueError, RuntimeError):
-                    pass
 
     def wrap(self, fn: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
         """
@@ -358,7 +358,7 @@ class CircuitBreakerRegistry:
     """
 
     def __init__(self):
-        self._breakers: Dict[str, CircuitBreaker] = {}
+        self._breakers: dict[str, CircuitBreaker] = {}
         self._logger = logger.bind(component="circuit_breaker_registry")
 
     def get_or_create(
@@ -381,11 +381,11 @@ class CircuitBreakerRegistry:
             self._logger.info("circuit_breaker_created", name=name)
         return self._breakers[name]
 
-    def get(self, name: str) -> Optional[CircuitBreaker]:
+    def get(self, name: str) -> CircuitBreaker | None:
         """Get a circuit breaker by name."""
         return self._breakers.get(name)
 
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get stats for all registered circuit breakers."""
         return {
             name: cb.get_stats().to_dict()
@@ -415,7 +415,7 @@ class CircuitBreakerRegistry:
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_registry: Optional[CircuitBreakerRegistry] = None
+_registry: CircuitBreakerRegistry | None = None
 
 
 def get_circuit_breaker_registry() -> CircuitBreakerRegistry:

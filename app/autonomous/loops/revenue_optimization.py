@@ -32,24 +32,20 @@ Architecture:
 
 from __future__ import annotations
 
-import math
 import time
 import uuid
-from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
+from app.autonomous.learning import LearningSystem, MetricType
 from app.autonomous.reflexion import (
-    ReflexionConfig,
-    ReflexionEngine,
     ReflexionResult,
     ReflexionStatus,
     create_reflexion_engine,
 )
-from app.autonomous.learning import LearningSystem, MetricType
 
 logger = structlog.get_logger(__name__)
 
@@ -100,7 +96,7 @@ class RevenueMetrics:
             return 0.0
         return self.ltv / self.cac
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "mrr": self.mrr,
             "arr": self.arr,
@@ -121,11 +117,11 @@ class PricingTier:
     """A pricing tier definition."""
     name: str = ""
     price: float = 0.0
-    features: List[str] = field(default_factory=list)
+    features: list[str] = field(default_factory=list)
     target_segment: str = ""
-    max_customers: Optional[int] = None
+    max_customers: int | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "price": self.price,
@@ -144,9 +140,9 @@ class OptimizationOpportunity:
     target_value: float = 0.0
     estimated_impact: float = 0.0  # Estimated revenue impact
     confidence: float = 0.0
-    strategy: Optional[PricingStrategy] = None
+    strategy: PricingStrategy | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "opportunity_id": self.opportunity_id,
             "goal": self.goal.value,
@@ -164,16 +160,16 @@ class ABTestConfig:
     """Configuration for a pricing A/B test."""
     test_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     name: str = ""
-    variant_a: Dict[str, Any] = field(default_factory=dict)  # Control
-    variant_b: Dict[str, Any] = field(default_factory=dict)  # Treatment
+    variant_a: dict[str, Any] = field(default_factory=dict)  # Control
+    variant_b: dict[str, Any] = field(default_factory=dict)  # Treatment
     metric: str = "conversion_rate"  # Primary metric to measure
     traffic_split: float = 0.5       # Fraction of traffic for variant B
     min_sample_size: int = 100
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
-    winner: Optional[str] = None  # "a" or "b"
+    ended_at: float | None = None
+    winner: str | None = None  # "a" or "b"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "test_id": self.test_id,
             "name": self.name,
@@ -189,13 +185,13 @@ class ABTestConfig:
 class OptimizationResult:
     """Result of a revenue optimization cycle."""
     cycle_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
-    metrics: Optional[RevenueMetrics] = None
-    opportunities: List[OptimizationOpportunity] = field(default_factory=list)
-    strategies_applied: List[Dict[str, Any]] = field(default_factory=list)
+    metrics: RevenueMetrics | None = None
+    opportunities: list[OptimizationOpportunity] = field(default_factory=list)
+    strategies_applied: list[dict[str, Any]] = field(default_factory=list)
     estimated_impact: float = 0.0
     timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "cycle_id": self.cycle_id,
             "metrics": self.metrics.to_dict() if self.metrics else None,
@@ -231,15 +227,15 @@ class RevenueAnalyzer:
     def analyze(
         self,
         metrics: RevenueMetrics,
-        historical: Optional[List[RevenueMetrics]] = None,
-        reflexion_context: Optional[Dict[str, Any]] = None,
-    ) -> List[OptimizationOpportunity]:
+        historical: list[RevenueMetrics] | None = None,
+        reflexion_context: dict[str, Any] | None = None,
+    ) -> list[OptimizationOpportunity]:
         """
         Analyze metrics and identify optimization opportunities.
 
         Returns opportunities sorted by estimated impact.
         """
-        opportunities: List[OptimizationOpportunity] = []
+        opportunities: list[OptimizationOpportunity] = []
 
         # 1. Churn analysis
         if metrics.churn_rate > self.BENCHMARKS["churn_rate_monthly"]:
@@ -357,9 +353,9 @@ class StrategyGenerator:
 
     def generate_strategies(
         self,
-        opportunities: List[OptimizationOpportunity],
+        opportunities: list[OptimizationOpportunity],
         current_metrics: RevenueMetrics,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Generate strategies for the top opportunities.
 
@@ -378,7 +374,7 @@ class StrategyGenerator:
         self,
         opp: OptimizationOpportunity,
         metrics: RevenueMetrics,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Generate a strategy for a specific opportunity."""
 
         if opp.goal == OptimizationGoal.REDUCE_CHURN:
@@ -481,9 +477,9 @@ class RevenueOptimizationExecutor:
 
     async def execute(
         self,
-        task: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Execute revenue optimization analysis."""
         start = time.time()
 
@@ -558,10 +554,10 @@ class RevenueOptimizationCritic:
 
     async def critique(
         self,
-        task: Dict[str, Any],
-        result: Dict[str, Any],
+        task: dict[str, Any],
+        result: dict[str, Any],
         attempt_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate optimization analysis quality."""
         if not result.get("success", False):
             return {
@@ -637,10 +633,10 @@ class RevenueOptimizationReviser:
 
     async def revise(
         self,
-        task: Dict[str, Any],
-        critique: Dict[str, Any],
+        task: dict[str, Any],
+        critique: dict[str, Any],
         previous_attempts: list,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a revised analysis task."""
         revised_task = dict(task)
         suggestions = critique.get("suggestions", [])
@@ -702,13 +698,13 @@ class RevenueOptimizationLoop:
         self,
         quality_threshold: float = 0.65,
         max_attempts: int = 2,
-        learning_system: Optional[LearningSystem] = None,
+        learning_system: LearningSystem | None = None,
         event_bus: Any = None,
     ):
         self._learning = learning_system or LearningSystem()
-        self._metrics_history: List[RevenueMetrics] = []
-        self._optimization_history: List[OptimizationResult] = []
-        self._applied_strategies: List[Dict[str, Any]] = []
+        self._metrics_history: list[RevenueMetrics] = []
+        self._optimization_history: list[OptimizationResult] = []
+        self._applied_strategies: list[dict[str, Any]] = []
 
         self._engine = create_reflexion_engine(
             executor=RevenueOptimizationExecutor(),
@@ -724,7 +720,7 @@ class RevenueOptimizationLoop:
     async def optimize(
         self,
         metrics: RevenueMetrics,
-        historical: Optional[List[RevenueMetrics]] = None,
+        historical: list[RevenueMetrics] | None = None,
     ) -> ReflexionResult:
         """
         Run a revenue optimization cycle.
@@ -791,11 +787,11 @@ class RevenueOptimizationLoop:
 
         return result
 
-    def get_optimization_history(self, n: int = 10) -> List[Dict[str, Any]]:
+    def get_optimization_history(self, n: int = 10) -> list[dict[str, Any]]:
         """Get recent optimization results."""
         return [r.to_dict() for r in self._optimization_history[-n:]]
 
-    def get_metrics_trend(self) -> Dict[str, Any]:
+    def get_metrics_trend(self) -> dict[str, Any]:
         """Get revenue metrics trend over time."""
         if not self._metrics_history:
             return {"data_points": 0}
@@ -825,7 +821,7 @@ class RevenueOptimizationLoop:
             },
         }
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get revenue optimization loop statistics."""
         return {
             "engine_stats": self._engine.get_stats(),

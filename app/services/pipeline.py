@@ -16,30 +16,20 @@ structured intelligence products for buyers. It runs in stages:
 """
 
 import hashlib
-import math
-import random
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.schemas.intelligence import (
-    AnonymizedMetric,
-    CreditSignal,
-    DemandPattern,
-    EconomicActivity,
-    MarketIntelligence,
-)
-from app.services.research.confidence_intervals import ConfidenceIntervalCalculator, BootstrapCI
-from app.services.research.hypothesis_testing import HypothesisTester
-from app.services.research.data_quality import DataValidator, DataQualityFramework
+from app.services.research.confidence_intervals import ConfidenceIntervalCalculator
+from app.services.research.data_quality import DataQualityFramework
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -109,7 +99,7 @@ class DataPipeline:
     # Stage 1: Cleaning & Normalization
     # =========================================================================
 
-    def normalize_product_name(self, raw_name: Optional[str]) -> Optional[str]:
+    def normalize_product_name(self, raw_name: str | None) -> str | None:
         """
         Normalize product names to standard English identifiers.
 
@@ -145,9 +135,9 @@ class DataPipeline:
     async def clean_transactions(
         self,
         user_id: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-    ) -> List[Dict[str, Any]]:
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Fetch and clean transactions for a user.
 
@@ -161,13 +151,13 @@ class DataPipeline:
         if start_date:
             query = query.where(
                 Transaction.timestamp >= datetime.combine(
-                    start_date, datetime.min.time(), tzinfo=timezone.utc
+                    start_date, datetime.min.time(), tzinfo=UTC
                 )
             )
         if end_date:
             query = query.where(
                 Transaction.timestamp <= datetime.combine(
-                    end_date, datetime.max.time(), tzinfo=timezone.utc
+                    end_date, datetime.max.time(), tzinfo=UTC
                 )
             )
         query = query.order_by(Transaction.timestamp)
@@ -216,7 +206,7 @@ class DataPipeline:
         user_id: str,
         period_start: date,
         period_end: date,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Aggregate transaction metrics for a single user over a period.
 
@@ -329,7 +319,7 @@ class DataPipeline:
         location_geohash: str,
         period_start: date,
         period_end: date,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Aggregate metrics for all users in a geographic market.
 
@@ -372,10 +362,10 @@ class DataPipeline:
             and_(
                 Transaction.user_id.in_(user_ids),
                 Transaction.timestamp >= datetime.combine(
-                    period_start, datetime.min.time(), tzinfo=timezone.utc
+                    period_start, datetime.min.time(), tzinfo=UTC
                 ),
                 Transaction.timestamp <= datetime.combine(
-                    period_end, datetime.max.time(), tzinfo=timezone.utc
+                    period_end, datetime.max.time(), tzinfo=UTC
                 ),
             )
         )
@@ -513,7 +503,7 @@ class DataPipeline:
         location_geohash: str,
         period_start: date,
         period_end: date,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Generate market-level intelligence for a geographic area.
 
@@ -562,14 +552,14 @@ class DataPipeline:
             },
             "category_breakdown": raw_metrics["category_breakdown"],
             "payment_methods": raw_metrics["payment_methods"],
-            "data_freshness": datetime.now(timezone.utc).isoformat(),
+            "data_freshness": datetime.now(UTC).isoformat(),
         }
 
     async def generate_credit_signal(
         self,
         user_id: str,
         lookback_days: int = 90,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Generate a credit scoring signal for a specific business.
 
@@ -664,7 +654,7 @@ class DataPipeline:
         self,
         user_id: str,
         weeks: int = 4,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute business trends over the specified number of weeks.
 
@@ -754,7 +744,7 @@ class DataPipeline:
         self,
         user_id: str,
         lookback_days: int = 30,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Detect anomalous transactions or patterns.
 

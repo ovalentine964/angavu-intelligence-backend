@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -34,11 +34,11 @@ class TaskRecord:
     success: bool
     duration_ms: float
     cost_usd: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
     escalated: bool = False
     timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "agent_name": self.agent_name,
@@ -64,17 +64,17 @@ class AgentMonitor:
     """
 
     def __init__(self, max_records: int = 10000):
-        self._records: List[TaskRecord] = []
+        self._records: list[TaskRecord] = []
         self._max_records = max_records
 
         # Per-agent aggregations
-        self._agent_tasks: Dict[str, int] = defaultdict(int)
-        self._agent_successes: Dict[str, int] = defaultdict(int)
-        self._agent_errors: Dict[str, int] = defaultdict(int)
-        self._agent_escalations: Dict[str, int] = defaultdict(int)
-        self._agent_costs: Dict[str, float] = defaultdict(float)
-        self._agent_durations: Dict[str, List[float]] = defaultdict(list)
-        self._agent_last_active: Dict[str, float] = {}
+        self._agent_tasks: dict[str, int] = defaultdict(int)
+        self._agent_successes: dict[str, int] = defaultdict(int)
+        self._agent_errors: dict[str, int] = defaultdict(int)
+        self._agent_escalations: dict[str, int] = defaultdict(int)
+        self._agent_costs: dict[str, float] = defaultdict(float)
+        self._agent_durations: dict[str, list[float]] = defaultdict(list)
+        self._agent_last_active: dict[str, float] = {}
 
         # Global counters
         self._total_tasks: int = 0
@@ -84,9 +84,9 @@ class AgentMonitor:
         self._total_cost: float = 0.0
 
         # Time-series data (hourly buckets)
-        self._hourly_tasks: Dict[str, int] = defaultdict(int)      # "YYYY-MM-DD HH" → count
-        self._hourly_errors: Dict[str, int] = defaultdict(int)
-        self._hourly_cost: Dict[str, float] = defaultdict(float)
+        self._hourly_tasks: dict[str, int] = defaultdict(int)      # "YYYY-MM-DD HH" → count
+        self._hourly_errors: dict[str, int] = defaultdict(int)
+        self._hourly_cost: dict[str, float] = defaultdict(float)
 
         self._logger = logger.bind(component="agent_monitor")
 
@@ -128,7 +128,7 @@ class AgentMonitor:
 
     # ── Global Metrics ──────────────────────────────────────────────
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get global performance metrics."""
         all_durations = [r.duration_ms for r in self._records]
         return {
@@ -151,7 +151,7 @@ class AgentMonitor:
             },
         }
 
-    def get_agent_metrics(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_metrics(self, agent_name: str) -> dict[str, Any]:
         """Get metrics for a specific agent."""
         tasks = self._agent_tasks.get(agent_name, 0)
         durations = self._agent_durations.get(agent_name, [])
@@ -183,7 +183,7 @@ class AgentMonitor:
             ),
         }
 
-    def get_hourly_series(self, hours: int = 24) -> List[Dict[str, Any]]:
+    def get_hourly_series(self, hours: int = 24) -> list[dict[str, Any]]:
         """Get hourly time-series data for charting."""
         series = []
         now = time.localtime()
@@ -198,11 +198,11 @@ class AgentMonitor:
             })
         return series
 
-    def get_recent_tasks(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_recent_tasks(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get most recent task records."""
         return [r.to_dict() for r in self._records[-limit:]]
 
-    def get_error_summary(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_error_summary(self, limit: int = 20) -> list[dict[str, Any]]:
         """Get recent errors with context."""
         errors = [r for r in self._records if not r.success]
         return [
@@ -223,7 +223,7 @@ class AgentMonitor:
         return round(numerator / denominator * 100, 2) if denominator else 0.0
 
     @staticmethod
-    def _calculate_percentiles(durations: List[float]) -> Dict[str, float]:
+    def _calculate_percentiles(durations: list[float]) -> dict[str, float]:
         if not durations:
             return {"p50": 0, "p95": 0, "p99": 0, "avg": 0, "min": 0, "max": 0}
         sorted_d = sorted(durations)

@@ -14,14 +14,14 @@ All error messages in Swahili where they reach workers directly.
 """
 
 from .api_validator import ApiValidator
-from .statistical_validator import StatisticalValidator
 from .intelligence_validator import IntelligenceValidator
-from .validation_result import ValidationResult, ValidationError
+from .statistical_validator import StatisticalValidator
+from .validation_result import ValidationError, ValidationResult
 
 __all__ = [
     "ApiValidator",
-    "StatisticalValidator",
     "IntelligenceValidator",
-    "ValidationResult",
+    "StatisticalValidator",
     "ValidationError",
+    "ValidationResult",
 ]

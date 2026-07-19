@@ -37,19 +37,17 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
+from app.autonomous.learning import LearningSystem, MetricType
 from app.autonomous.reflexion import (
     AdaptiveReviser,
-    ReflexionConfig,
-    ReflexionEngine,
     ReflexionResult,
     ReflexionStatus,
     create_reflexion_engine,
 )
-from app.autonomous.learning import LearningSystem, MetricType
 
 logger = structlog.get_logger(__name__)
 
@@ -96,11 +94,11 @@ class CustomerFeedback:
     customer_id: str = ""
     channel: FeedbackChannel = FeedbackChannel.WHATSAPP
     text: str = ""
-    rating: Optional[int] = None  # 1-5 stars
+    rating: int | None = None  # 1-5 stars
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "feedback_id": self.feedback_id,
             "customer_id": self.customer_id,
@@ -117,10 +115,10 @@ class SentimentAnalysis:
     sentiment: Sentiment = Sentiment.NEUTRAL
     score: float = 0.0  # -1.0 (very negative) to 1.0 (very positive)
     confidence: float = 0.0
-    key_phrases: List[str] = field(default_factory=list)
+    key_phrases: list[str] = field(default_factory=list)
     issue_category: IssueCategory = IssueCategory.GENERAL
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "sentiment": self.sentiment.value,
             "score": self.score,
@@ -139,10 +137,10 @@ class ImprovementAction:
     priority: str = "medium"  # low, medium, high, critical
     estimated_impact: float = 0.0  # 0.0-1.0
     applied: bool = False
-    applied_at: Optional[float] = None
-    measured_impact: Optional[float] = None
+    applied_at: float | None = None
+    measured_impact: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "action_id": self.action_id,
             "category": self.category.value,
@@ -164,9 +162,9 @@ class SatisfactionSnapshot:
     total_feedback: int = 0
     positive_pct: float = 0.0
     negative_pct: float = 0.0
-    top_issues: List[Dict[str, Any]] = field(default_factory=list)
+    top_issues: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "snapshot_id": self.snapshot_id,
             "timestamp": self.timestamp,
@@ -219,7 +217,7 @@ class SentimentAnalyzer:
         IssueCategory.TECHNICAL_ISSUE: ["bug", "crash", "error", "broken", "not working", "fix"],
     }
 
-    def analyze(self, text: str, rating: Optional[int] = None) -> SentimentAnalysis:
+    def analyze(self, text: str, rating: int | None = None) -> SentimentAnalysis:
         """Analyze sentiment of a feedback text."""
         words = set(re.findall(r'\b\w+\b', text.lower()))
 
@@ -300,9 +298,9 @@ class SatisfactionExecutor:
 
     async def execute(
         self,
-        task: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        task: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Process customer feedback."""
         start = time.time()
 
@@ -344,8 +342,8 @@ class SatisfactionExecutor:
     def _generate_actions(
         self,
         analysis: SentimentAnalysis,
-        reflexion: Dict[str, Any],
-    ) -> List[ImprovementAction]:
+        reflexion: dict[str, Any],
+    ) -> list[ImprovementAction]:
         """Generate improvement actions based on sentiment analysis."""
         actions = []
 
@@ -438,10 +436,10 @@ class SatisfactionCritic:
 
     async def critique(
         self,
-        task: Dict[str, Any],
-        result: Dict[str, Any],
+        task: dict[str, Any],
+        result: dict[str, Any],
         attempt_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate feedback processing quality."""
         if not result.get("success", False):
             return {
@@ -519,14 +517,14 @@ class CustomerSatisfactionLoop:
         self,
         quality_threshold: float = 0.65,
         max_attempts: int = 2,
-        learning_system: Optional[LearningSystem] = None,
+        learning_system: LearningSystem | None = None,
         event_bus: Any = None,
     ):
         self._learning = learning_system or LearningSystem()
-        self._feedback_history: List[CustomerFeedback] = []
-        self._sentiment_history: List[SentimentAnalysis] = []
-        self._actions: List[ImprovementAction] = []
-        self._snapshots: List[SatisfactionSnapshot] = []
+        self._feedback_history: list[CustomerFeedback] = []
+        self._sentiment_history: list[SentimentAnalysis] = []
+        self._actions: list[ImprovementAction] = []
+        self._snapshots: list[SatisfactionSnapshot] = []
 
         self._engine = create_reflexion_engine(
             executor=SatisfactionExecutor(),
@@ -633,7 +631,7 @@ class CustomerSatisfactionLoop:
         total = len(sentiments)
 
         # Issue frequency
-        issue_counts: Dict[str, int] = defaultdict(int)
+        issue_counts: dict[str, int] = defaultdict(int)
         for s in self._sentiment_history:
             issue_counts[s.issue_category.value] += 1
 
@@ -659,7 +657,7 @@ class CustomerSatisfactionLoop:
         self._snapshots.append(snapshot)
         return snapshot
 
-    def get_improvement_actions(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_improvement_actions(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get recent improvement actions."""
         sorted_actions = sorted(
             self._actions,
@@ -667,7 +665,7 @@ class CustomerSatisfactionLoop:
         )
         return [a.to_dict() for a in sorted_actions[:limit]]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get customer satisfaction loop statistics."""
         return {
             "engine_stats": self._engine.get_stats(),
@@ -678,16 +676,16 @@ class CustomerSatisfactionLoop:
             "learning_profile": self._learning.get_profile("CustomerSatisfactionLoop").to_dict(),
         }
 
-    def _get_sentiment_distribution(self) -> Dict[str, int]:
+    def _get_sentiment_distribution(self) -> dict[str, int]:
         """Get distribution of sentiment classifications."""
-        dist: Dict[str, int] = defaultdict(int)
+        dist: dict[str, int] = defaultdict(int)
         for s in self._sentiment_history:
             dist[s.sentiment.value] += 1
         return dict(dist)
 
-    def _get_issue_distribution(self) -> Dict[str, int]:
+    def _get_issue_distribution(self) -> dict[str, int]:
         """Get distribution of issue categories."""
-        dist: Dict[str, int] = defaultdict(int)
+        dist: dict[str, int] = defaultdict(int)
         for s in self._sentiment_history:
             dist[s.issue_category.value] += 1
         return dict(dist)

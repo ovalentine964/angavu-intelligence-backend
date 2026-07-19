@@ -15,13 +15,14 @@ DeerFlow uses reducers to handle:
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 
 def merge_messages(
-    existing: List[Dict[str, Any]],
-    new: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    existing: list[dict[str, Any]],
+    new: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Merge message lists, deduplicating by message_id.
 
@@ -43,9 +44,9 @@ def merge_messages(
 
 
 def merge_tool_results(
-    existing: List[Dict[str, Any]],
-    new: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    existing: list[dict[str, Any]],
+    new: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Merge tool call results, updating existing calls by call_id.
 
@@ -69,10 +70,10 @@ def merge_tool_results(
 
 
 def merge_metadata(
-    existing: Dict[str, Any],
-    new: Dict[str, Any],
+    existing: dict[str, Any],
+    new: dict[str, Any],
     strategy: str = "update",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Merge metadata dictionaries.
 
@@ -90,7 +91,7 @@ def merge_metadata(
     return {**existing, **new}
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge two dictionaries."""
     result = dict(base)
     for key, value in override.items():
@@ -102,9 +103,9 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
 
 
 def reduce_state(
-    current_state: Dict[str, Any],
-    updates: Dict[str, Any],
-) -> Dict[str, Any]:
+    current_state: dict[str, Any],
+    updates: dict[str, Any],
+) -> dict[str, Any]:
     """
     Apply state updates using appropriate reducers for each field.
 
@@ -155,7 +156,7 @@ class ReducerRegistry:
     """
 
     def __init__(self):
-        self._reducers: Dict[str, Callable] = {
+        self._reducers: dict[str, Callable] = {
             "messages": merge_messages,
             "tool_calls": merge_tool_results,
             "metadata": merge_metadata,
@@ -165,7 +166,7 @@ class ReducerRegistry:
         """Register a custom reducer for a field."""
         self._reducers[field] = reducer
 
-    def get(self, field: str) -> Optional[Callable]:
+    def get(self, field: str) -> Callable | None:
         """Get the reducer for a field."""
         return self._reducers.get(field)
 

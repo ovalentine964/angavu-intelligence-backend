@@ -8,7 +8,7 @@ Classes:
 Extracted from jamii_insights.py for reuse across intelligence products.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -48,7 +48,7 @@ class InequalityAnalyzer:
         mu = np.mean(sorted_inc)
         if mu <= 0:
             return 0.0
-        gini = (2 * np.sum((np.arange(1, n + 1) * sorted_inc)) / (n * n * mu)) - (n + 1) / n
+        gini = (2 * np.sum(np.arange(1, n + 1) * sorted_inc) / (n * n * mu)) - (n + 1) / n
         return round(float(max(0, min(1, gini))), 4)
 
     @staticmethod
@@ -116,7 +116,7 @@ class InequalityAnalyzer:
         return round(float(max(0, min(1, atkinson))), 4)
 
     @staticmethod
-    def lorenz_curve(incomes: np.ndarray) -> Dict[str, Any]:
+    def lorenz_curve(incomes: np.ndarray) -> dict[str, Any]:
         """
         Compute the Lorenz curve for income distribution.
 
@@ -156,7 +156,7 @@ class InequalityAnalyzer:
     @staticmethod
     def decompose_theil(
         incomes: np.ndarray, groups: np.ndarray
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Decompose Theil index into within-group and between-group components.
 
@@ -182,7 +182,7 @@ class InequalityAnalyzer:
 
         total_income = np.sum(incomes)
         between_theil = 0.0
-        within_contributions: Dict[str, Dict[str, float]] = {}
+        within_contributions: dict[str, dict[str, float]] = {}
 
         for g in unique_groups:
             mask = groups == g
@@ -264,8 +264,8 @@ class PovertyAnalyzer:
     def poverty_profile(
         incomes: np.ndarray,
         poverty_line: float,
-        groups: Optional[np.ndarray] = None,
-    ) -> Dict[str, Any]:
+        groups: np.ndarray | None = None,
+    ) -> dict[str, Any]:
         """
         Comprehensive poverty profile with FGT measures.
 
@@ -279,7 +279,7 @@ class PovertyAnalyzer:
         """
         incomes = np.asarray(incomes, dtype=float)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "fgt_0_headcount": PovertyAnalyzer.fgt_measure(incomes, poverty_line, alpha=0),
             "fgt_1_poverty_gap": PovertyAnalyzer.fgt_measure(incomes, poverty_line, alpha=1),
             "fgt_2_severity": PovertyAnalyzer.fgt_measure(incomes, poverty_line, alpha=2),
@@ -292,7 +292,7 @@ class PovertyAnalyzer:
         if groups is not None:
             groups = np.asarray(groups)
             unique_groups = np.unique(groups)
-            group_profiles: Dict[str, Dict[str, float]] = {}
+            group_profiles: dict[str, dict[str, float]] = {}
             for g in unique_groups:
                 mask = groups == g
                 g_incomes = incomes[mask]

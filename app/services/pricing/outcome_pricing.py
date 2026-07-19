@@ -36,9 +36,9 @@ Each product has:
 - Floor (minimum per period)
 """
 
-from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -246,7 +246,7 @@ class OutcomePricingEngine:
     def calculate_tax_base_pricing(
         incremental_tax_revenue_kes: float,
         collection_rate_pct: float = 100.0,
-        county: Optional[str] = None,
+        county: str | None = None,
     ) -> OutcomeCalculation:
         """
         Calculate Tax Base outcome-based pricing.
@@ -418,9 +418,9 @@ class OutcomePricingEngine:
     def calculate(
         cls,
         product: str,
-        client_id: Optional[str] = None,
+        client_id: str | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generic pricing calculator — routes to product-specific logic.
 
@@ -486,11 +486,11 @@ class OutcomePricingEngine:
             "tier": result.tier,
             "calculation_notes": result.calculation_notes,
             "pricing_model": "outcome_based",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
     @staticmethod
-    def get_pricing_config(product: str) -> Optional[Dict[str, Any]]:
+    def get_pricing_config(product: str) -> dict[str, Any] | None:
         """Get pricing configuration for a product."""
         config = PRICING_CONFIGS.get(product)
         if not config:
@@ -512,7 +512,7 @@ class OutcomePricingEngine:
         }
 
     @staticmethod
-    def get_all_pricing() -> Dict[str, Any]:
+    def get_all_pricing() -> dict[str, Any]:
         """Get all outcome-based pricing configurations."""
         return {
             "pricing_model": "outcome_based",

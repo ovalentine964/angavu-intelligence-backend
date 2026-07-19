@@ -37,9 +37,10 @@ import asyncio
 import json
 import time
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -82,7 +83,7 @@ class StreamMessage:
     """A message read from a Redis Stream."""
     id: str
     stream: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     delivery_count: int = 0
     timestamp: float = 0.0
 
@@ -170,10 +171,10 @@ class RedisStreamsProducer:
     async def publish(
         self,
         stream: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         max_length: int = MAX_STREAM_LENGTH,
         message_id: str = "*",
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Publish a message to a Redis Stream.
 
@@ -225,9 +226,9 @@ class RedisStreamsProducer:
     async def publish_batch(
         self,
         stream: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         max_length: int = MAX_STREAM_LENGTH,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Publish multiple messages to a stream in a pipeline.
 
@@ -298,7 +299,7 @@ class RedisStreamsConsumer:
     def __init__(
         self,
         group: str,
-        consumer_name: Optional[str] = None,
+        consumer_name: str | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
         block_timeout_ms: int = BLOCK_TIMEOUT_MS,
     ):
@@ -310,15 +311,15 @@ class RedisStreamsConsumer:
         self._redis = None
         self._connected = False
         self._running = False
-        self._consumer_task: Optional[asyncio.Task] = None
+        self._consumer_task: asyncio.Task | None = None
 
         # stream_name → handler_coroutine
-        self._handlers: Dict[str, Callable[[StreamMessage], Coroutine]] = {}
+        self._handlers: dict[str, Callable[[StreamMessage], Coroutine]] = {}
 
         # Metrics
         self._messages_processed = 0
         self._messages_failed = 0
-        self._last_message_time: Optional[float] = None
+        self._last_message_time: float | None = None
 
         self._logger = logger.bind(
             component="streams_consumer",
@@ -412,7 +413,7 @@ class RedisStreamsConsumer:
 
     async def _consume_loop(self) -> None:
         """Main consumer loop — reads from streams and dispatches to handlers."""
-        streams = {stream: ">" for stream in self._handlers.keys()}
+        streams = dict.fromkeys(self._handlers.keys(), ">")
 
         while self._running:
             try:
@@ -451,7 +452,7 @@ class RedisStreamsConsumer:
         self,
         stream_key: str,
         msg_id: str,
-        fields: Dict[str, str],
+        fields: dict[str, str],
         handler: Callable[[StreamMessage], Coroutine],
     ) -> None:
         """Process a single message and acknowledge it."""
@@ -561,7 +562,7 @@ class RedisStreamsConsumer:
         self,
         stream_key: str,
         msg_id: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         error: str,
     ) -> None:
         """Move a message to the dead letter stream."""
@@ -589,7 +590,7 @@ class RedisStreamsConsumer:
         except (ConnectionError, OSError, TimeoutError) as exc:
             self._logger.error("dead_letter_failed", error=str(exc))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return consumer statistics."""
         return {
             "group": self._group,
@@ -629,8 +630,8 @@ class RedisStreamsManager:
     """
 
     def __init__(self):
-        self._producers: List[RedisStreamsProducer] = []
-        self._consumers: List[RedisStreamsConsumer] = []
+        self._producers: list[RedisStreamsProducer] = []
+        self._consumers: list[RedisStreamsConsumer] = []
         self._logger = logger.bind(component="streams_manager")
 
     async def connect(self) -> None:
@@ -654,7 +655,7 @@ class RedisStreamsManager:
     def create_consumer(
         self,
         group: str,
-        consumer_name: Optional[str] = None,
+        consumer_name: str | None = None,
         **kwargs,
     ) -> RedisStreamsConsumer:
         """Create and register a new consumer."""
@@ -692,7 +693,7 @@ class RedisStreamsManager:
             self._logger.warning("stream_stats_failed", stream=stream, error=str(exc))
             return StreamStats(stream=stream)
 
-    def get_all_stats(self) -> Dict[str, Any]:
+    def get_all_stats(self) -> dict[str, Any]:
         """Get aggregate statistics for all producers and consumers."""
         return {
             "producers": [p.is_connected for p in self._producers],
@@ -704,7 +705,7 @@ class RedisStreamsManager:
 
 # ── Singleton ──────────────────────────────────────────────────────
 
-_streams_manager: Optional[RedisStreamsManager] = None
+_streams_manager: RedisStreamsManager | None = None
 
 
 def get_streams_manager() -> RedisStreamsManager:

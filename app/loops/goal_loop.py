@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
+from app.agents.base import AgentDecision, AgentResult
 from app.agents.loops.core import ReActAgent
 from app.loops.config import get_loop_config
 
@@ -88,10 +88,10 @@ class GoalLoopState:
     prediction_generated: bool = False
     nudge_sent: bool = False
 
-    goal: Optional[SavingsGoal] = None
-    prediction: Optional[GoalPrediction] = None
-    nudge: Optional[GoalNudge] = None
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    goal: SavingsGoal | None = None
+    prediction: GoalPrediction | None = None
+    nudge: GoalNudge | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def is_satisfied(self) -> bool:
         return self.progress_updated and self.prediction_generated and self.nudge_sent
@@ -105,7 +105,7 @@ class GoalLoopState:
             return "goal_not_met_yet"
         return "none"
 
-    def record_progress(self, phase: str, result: Dict[str, Any]) -> bool:
+    def record_progress(self, phase: str, result: dict[str, Any]) -> bool:
         changed = False
         if phase == "track" and not self.progress_updated:
             self.progress_updated = True
@@ -121,7 +121,7 @@ class GoalLoopState:
             changed = True
         return changed
 
-    def to_goal_state(self) -> Dict[str, Any]:
+    def to_goal_state(self) -> dict[str, Any]:
         return {
             "objective": f"Track goal {self.goal_id} for worker {self.worker_id}",
             "status": "active" if not self.is_satisfied() else "completed",
@@ -165,7 +165,7 @@ class GoalProgressLoop(ReActAgent):
             ],
         )
         self._config = get_loop_config("goal_progress")
-        self._active_states: Dict[str, GoalLoopState] = {}
+        self._active_states: dict[str, GoalLoopState] = {}
 
     def _get_or_create_state(self, goal_id: str, worker_id: str) -> GoalLoopState:
         if goal_id not in self._active_states:
@@ -175,7 +175,7 @@ class GoalProgressLoop(ReActAgent):
             )
         return self._active_states[goal_id]
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         event_data = context.get("event", {})
         payload = event_data.get("payload", {})
         goal_id = payload.get("goal_id", "unknown")
@@ -273,8 +273,8 @@ class GoalProgressLoop(ReActAgent):
             return AgentResult(success=False, error=str(exc), duration_ms=(time.time() - start) * 1000)
 
     async def _track_phase(
-        self, goal_id: str, worker_id: str, contribution_data: Dict[str, Any], state: GoalLoopState
-    ) -> Dict[str, Any]:
+        self, goal_id: str, worker_id: str, contribution_data: dict[str, Any], state: GoalLoopState
+    ) -> dict[str, Any]:
         """Record contribution and update goal progress."""
         amount = contribution_data.get("amount", 0)
         target = contribution_data.get("target_amount", 10000)
@@ -308,7 +308,7 @@ class GoalProgressLoop(ReActAgent):
 
     async def _predict_phase(
         self, goal_id: str, worker_id: str, state: GoalLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Predict goal completion date."""
         goal = state.goal
         if not goal:
@@ -332,7 +332,7 @@ class GoalProgressLoop(ReActAgent):
         weeks_remaining = remaining / weekly_avg if weekly_avg > 0 else float("inf")
 
         on_track = weeks_remaining <= 52  # Within a year
-        predicted_date = (datetime.now(timezone.utc) + timedelta(weeks=weeks_remaining)).isoformat()
+        predicted_date = (datetime.now(UTC) + timedelta(weeks=weeks_remaining)).isoformat()
 
         # Calculate adjustment needed to meet target in 26 weeks (6 months)
         target_weeks = 26
@@ -364,7 +364,7 @@ class GoalProgressLoop(ReActAgent):
 
     async def _nudge_phase(
         self, goal_id: str, worker_id: str, state: GoalLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate motivational nudge."""
         prediction = state.prediction
         goal = state.goal
@@ -415,7 +415,7 @@ class GoalProgressLoop(ReActAgent):
             },
         }
 
-    def get_state(self, goal_id: str) -> Optional[Dict[str, Any]]:
+    def get_state(self, goal_id: str) -> dict[str, Any] | None:
         state = self._active_states.get(goal_id)
         return state.to_goal_state() if state else None
 

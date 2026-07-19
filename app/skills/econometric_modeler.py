@@ -24,7 +24,7 @@ Wired into: IntelligenceGenerator, AnalysisAgent
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -91,11 +91,11 @@ class EconometricModeler(BaseSkill):
 
     async def _ols_regression(
         self,
-        X: List[List[float]],
-        y: List[float],
+        X: list[list[float]],
+        y: list[float],
         robust: bool = True,
-        variable_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        variable_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         OLS regression with optional robust (White) standard errors.
 
@@ -179,12 +179,12 @@ class EconometricModeler(BaseSkill):
 
     async def _iv_regression(
         self,
-        X: List[List[float]],
-        y: List[float],
-        Z: List[List[float]],
-        endogenous_indices: List[int],
-        variable_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        X: list[list[float]],
+        y: list[float],
+        Z: list[list[float]],
+        endogenous_indices: list[int],
+        variable_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Two-Stage Least Squares (2SLS) instrumental variable regression.
 
@@ -285,11 +285,11 @@ class EconometricModeler(BaseSkill):
 
     async def _panel_fixed_effects(
         self,
-        X: List[List[float]],
-        y: List[float],
-        groups: List[int],
-        variable_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        X: list[list[float]],
+        y: list[float],
+        groups: list[int],
+        variable_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Panel data fixed effects estimator.
 
@@ -343,11 +343,11 @@ class EconometricModeler(BaseSkill):
 
     async def _panel_random_effects(
         self,
-        X: List[List[float]],
-        y: List[float],
-        groups: List[int],
-        variable_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        X: list[list[float]],
+        y: list[float],
+        groups: list[int],
+        variable_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Panel data random effects estimator (GLS).
 
@@ -427,11 +427,11 @@ class EconometricModeler(BaseSkill):
 
     async def _hausman_test(
         self,
-        fe_coefficients: List[float],
-        re_coefficients: List[float],
-        fe_covariance: List[List[float]],
-        re_covariance: List[List[float]],
-    ) -> Dict[str, Any]:
+        fe_coefficients: list[float],
+        re_coefficients: list[float],
+        fe_covariance: list[list[float]],
+        re_covariance: list[list[float]],
+    ) -> dict[str, Any]:
         """
         Hausman test: Fixed Effects vs Random Effects.
 
@@ -471,12 +471,12 @@ class EconometricModeler(BaseSkill):
 
     async def _arima_model(
         self,
-        data: List[float],
+        data: list[float],
         p: int = 1,
         d: int = 0,
         q: int = 0,
         steps: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit ARIMA(p,d,q) and forecast.
 
@@ -505,11 +505,11 @@ class EconometricModeler(BaseSkill):
 
     async def _var_model(
         self,
-        data: List[List[float]],
-        variable_names: Optional[List[str]] = None,
+        data: list[list[float]],
+        variable_names: list[str] | None = None,
         p: int = 1,
         periods: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fit VAR(p) model.
 
@@ -539,9 +539,9 @@ class EconometricModeler(BaseSkill):
 
     async def _cointegration_test(
         self,
-        y: List[float],
-        x: List[float],
-    ) -> Dict[str, Any]:
+        y: list[float],
+        x: list[float],
+    ) -> dict[str, Any]:
         """
         Engle-Granger cointegration test.
 

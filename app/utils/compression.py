@@ -9,13 +9,13 @@ is extremely limited.
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import zstandard as zstd
 
 
 def compress_payload(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     level: int = 3,
 ) -> bytes:
     """
@@ -34,7 +34,7 @@ def compress_payload(
     return cctx.compress(json_bytes)
 
 
-def decompress_payload(compressed: bytes) -> Dict[str, Any]:
+def decompress_payload(compressed: bytes) -> dict[str, Any]:
     """
     Decompress a zstd-compressed payload back to a dictionary.
 
@@ -85,7 +85,7 @@ def decompress_to_string(compressed: bytes) -> str:
     return dctx.decompress(compressed).decode("utf-8")
 
 
-def estimate_compression_ratio(data: Dict[str, Any]) -> float:
+def estimate_compression_ratio(data: dict[str, Any]) -> float:
     """
     Estimate the compression ratio for a given payload.
 
@@ -111,7 +111,7 @@ def estimate_compression_ratio(data: Dict[str, Any]) -> float:
     return compressed_size / original_size
 
 
-def get_compression_level_for_network(network_type: Optional[str]) -> int:
+def get_compression_level_for_network(network_type: str | None) -> int:
     """
     Get recommended compression level based on network type.
 

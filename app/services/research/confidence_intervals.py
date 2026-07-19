@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -39,7 +39,7 @@ class ConfidenceInterval:
     n: int
     margin_of_error: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "point_estimate": round(self.point_estimate, 4),
             "lower": round(self.lower, 4),
@@ -74,7 +74,7 @@ class ConfidenceIntervalCalculator:
 
     @staticmethod
     def mean_ci(
-        values: List[float],
+        values: list[float],
         confidence: float = 0.95,
     ) -> ConfidenceInterval:
         """
@@ -159,8 +159,8 @@ class ConfidenceIntervalCalculator:
 
     @staticmethod
     def difference_ci(
-        values_a: List[float],
-        values_b: List[float],
+        values_a: list[float],
+        values_b: list[float],
         confidence: float = 0.95,
     ) -> ConfidenceInterval:
         """
@@ -223,11 +223,11 @@ class BootstrapCI:
 
     @staticmethod
     def compute(
-        values: List[float],
+        values: list[float],
         statistic: str = "mean",
         confidence: float = 0.95,
         n_bootstrap: int = 10000,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> ConfidenceInterval:
         """
         Bootstrap confidence interval.
@@ -286,11 +286,11 @@ class BootstrapCI:
 
     @staticmethod
     def compute_difference(
-        values_a: List[float],
-        values_b: List[float],
+        values_a: list[float],
+        values_b: list[float],
         confidence: float = 0.95,
         n_bootstrap: int = 10000,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> ConfidenceInterval:
         """Bootstrap CI for difference of means."""
         rng = np.random.default_rng(seed)

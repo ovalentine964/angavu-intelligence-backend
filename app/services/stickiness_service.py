@@ -15,12 +15,12 @@ Target metrics:
 """
 
 import random
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.gamification import (
@@ -30,7 +30,6 @@ from app.data.gamification import (
     SOCIAL_PROOF_TEMPLATES,
     VARIABLE_REWARDS,
     WISDOM_QUOTES,
-    get_badge_by_name,
     get_level_for_xp,
     get_next_level,
 )
@@ -60,7 +59,7 @@ async def get_user_engagement(
     Returns retention signals, activity summary, and streak info
     needed for the engagement dashboard.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # ── Activity in last 30 days ────────────────────────────────────────
@@ -158,7 +157,7 @@ async def get_streak_status(
     Returns streak count, protection shields available, and
     motivational message in Swahili.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     result = await db.execute(
@@ -227,7 +226,7 @@ async def record_activity(
     Called on every meaningful action (login, transaction, insight view).
     Returns updated streak and any newly earned badges.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # ── Update daily engagement ─────────────────────────────────────────
@@ -548,7 +547,7 @@ async def get_variable_reward(
     The surprise element is key to the Hook Model — users don't know
     what reward they'll get, creating anticipation.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Get user level for context
     level_result = await db.execute(
@@ -716,7 +715,7 @@ async def track_aha_moment(
         }
 
     moment = AHA_MOMENTS[action]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Check if already recorded
@@ -798,7 +797,7 @@ async def track_aha_moment(
 
 async def get_social_proof(
     db: AsyncSession,
-    user_id: Optional[UUID] = None,
+    user_id: UUID | None = None,
 ) -> dict[str, Any]:
     """
     Get anonymized social proof data.
@@ -807,7 +806,7 @@ async def get_social_proof(
     No negative comparisons, no exact rankings, no "you're behind" messages.
     """
     # Get aggregate stats (anonymized)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = today - timedelta(days=7)
 
@@ -1003,10 +1002,7 @@ async def _check_badge_eligibility(
             total = total_actions_result.scalar() or 0
             earned = total >= criteria["count"]
 
-        elif criteria["type"] == "first_savings":
-            earned = active_days >= 1  # Proxy
-
-        elif criteria["type"] == "first_goal":
+        elif criteria["type"] == "first_savings" or criteria["type"] == "first_goal":
             earned = active_days >= 1  # Proxy
 
         elif criteria["type"] == "account_age_days":
@@ -1017,7 +1013,7 @@ async def _check_badge_eligibility(
             )
             first_date = first_result.scalar()
             if first_date:
-                days_active = (datetime.now(timezone.utc) - first_date).days
+                days_active = (datetime.now(UTC) - first_date).days
                 earned = days_active >= criteria["days"]
 
         if earned:

@@ -12,17 +12,17 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.autonomous.lead import LeadDB
 from app.models.autonomous.invoice import InvoiceDB, InvoiceItemDB
-from app.models.autonomous.onboarding import OnboardingFlowDB, OnboardingStepDB
+from app.models.autonomous.lead import LeadDB
 from app.models.autonomous.metric import RevenueMetricDB
+from app.models.autonomous.onboarding import OnboardingFlowDB, OnboardingStepDB
 
 logger = structlog.get_logger(__name__)
 
@@ -35,7 +35,7 @@ class AutonomousRepository:
 
     # ── Leads ───────────────────────────────────────────────────────
 
-    async def create_lead(self, data: Dict[str, Any]) -> LeadDB:
+    async def create_lead(self, data: dict[str, Any]) -> LeadDB:
         """Create a new lead record."""
         lead = LeadDB(
             company_name=data.get("company_name", ""),
@@ -54,7 +54,7 @@ class AutonomousRepository:
         logger.info("lead_created_db", lead_id=lead.id)
         return lead
 
-    async def get_lead(self, lead_id: str) -> Optional[LeadDB]:
+    async def get_lead(self, lead_id: str) -> LeadDB | None:
         """Get a lead by ID."""
         result = await self._db.execute(
             select(LeadDB).where(LeadDB.id == lead_id)
@@ -63,10 +63,10 @@ class AutonomousRepository:
 
     async def list_leads(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[LeadDB]:
+    ) -> list[LeadDB]:
         """List leads with optional status filter."""
         query = select(LeadDB).order_by(desc(LeadDB.created_at))
         if status:
@@ -75,7 +75,7 @@ class AutonomousRepository:
         result = await self._db.execute(query)
         return list(result.scalars().all())
 
-    async def update_lead(self, lead_id: str, data: Dict[str, Any]) -> Optional[LeadDB]:
+    async def update_lead(self, lead_id: str, data: dict[str, Any]) -> LeadDB | None:
         """Update a lead record."""
         lead = await self.get_lead(lead_id)
         if not lead:
@@ -83,11 +83,11 @@ class AutonomousRepository:
         for key, value in data.items():
             if hasattr(lead, key):
                 setattr(lead, key, value)
-        lead.updated_at = datetime.now(timezone.utc)
+        lead.updated_at = datetime.now(UTC)
         await self._db.flush()
         return lead
 
-    async def count_leads(self, status: Optional[str] = None) -> int:
+    async def count_leads(self, status: str | None = None) -> int:
         """Count leads, optionally filtered by status."""
         query = select(func.count(LeadDB.id))
         if status:
@@ -97,7 +97,7 @@ class AutonomousRepository:
 
     # ── Invoices ────────────────────────────────────────────────────
 
-    async def create_invoice(self, data: Dict[str, Any]) -> InvoiceDB:
+    async def create_invoice(self, data: dict[str, Any]) -> InvoiceDB:
         """Create a new invoice with line items."""
         invoice = InvoiceDB(
             invoice_number=data.get("invoice_number", ""),
@@ -131,7 +131,7 @@ class AutonomousRepository:
         logger.info("invoice_created_db", invoice_id=invoice.id)
         return invoice
 
-    async def get_invoice(self, invoice_id: str) -> Optional[InvoiceDB]:
+    async def get_invoice(self, invoice_id: str) -> InvoiceDB | None:
         """Get an invoice by ID."""
         result = await self._db.execute(
             select(InvoiceDB).where(InvoiceDB.id == invoice_id)
@@ -140,10 +140,10 @@ class AutonomousRepository:
 
     async def list_invoices(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[InvoiceDB]:
+    ) -> list[InvoiceDB]:
         """List invoices with optional status filter."""
         query = select(InvoiceDB).order_by(desc(InvoiceDB.issued_at))
         if status:
@@ -154,13 +154,13 @@ class AutonomousRepository:
 
     async def mark_invoice_paid(
         self, invoice_id: str, payment_method: str = "", payment_reference: str = ""
-    ) -> Optional[InvoiceDB]:
+    ) -> InvoiceDB | None:
         """Mark an invoice as paid."""
         invoice = await self.get_invoice(invoice_id)
         if not invoice:
             return None
         invoice.status = "paid"
-        invoice.paid_at = datetime.now(timezone.utc)
+        invoice.paid_at = datetime.now(UTC)
         invoice.payment_method = payment_method
         invoice.payment_reference = payment_reference
         await self._db.flush()
@@ -180,7 +180,7 @@ class AutonomousRepository:
 
     # ── Onboarding ──────────────────────────────────────────────────
 
-    async def create_onboarding_flow(self, data: Dict[str, Any]) -> OnboardingFlowDB:
+    async def create_onboarding_flow(self, data: dict[str, Any]) -> OnboardingFlowDB:
         """Create a new onboarding flow with steps."""
         flow = OnboardingFlowDB(
             client_id=data.get("client_id", ""),
@@ -208,7 +208,7 @@ class AutonomousRepository:
         logger.info("onboarding_flow_created_db", flow_id=flow.id)
         return flow
 
-    async def get_onboarding_flow(self, flow_id: str) -> Optional[OnboardingFlowDB]:
+    async def get_onboarding_flow(self, flow_id: str) -> OnboardingFlowDB | None:
         """Get an onboarding flow by ID."""
         result = await self._db.execute(
             select(OnboardingFlowDB).where(OnboardingFlowDB.id == flow_id)
@@ -217,9 +217,9 @@ class AutonomousRepository:
 
     async def list_onboarding_flows(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
-    ) -> List[OnboardingFlowDB]:
+    ) -> list[OnboardingFlowDB]:
         """List onboarding flows."""
         query = select(OnboardingFlowDB).order_by(desc(OnboardingFlowDB.created_at))
         if status:
@@ -230,7 +230,7 @@ class AutonomousRepository:
 
     async def complete_onboarding_step(
         self, flow_id: str, step_name: str
-    ) -> Optional[OnboardingStepDB]:
+    ) -> OnboardingStepDB | None:
         """Mark an onboarding step as completed."""
         result = await self._db.execute(
             select(OnboardingStepDB).where(
@@ -244,7 +244,7 @@ class AutonomousRepository:
         if not step:
             return None
         step.status = "completed"
-        step.completed_at = datetime.now(timezone.utc)
+        step.completed_at = datetime.now(UTC)
         await self._db.flush()
 
         # Check if all steps are done → complete flow
@@ -253,14 +253,14 @@ class AutonomousRepository:
             all_done = all(s.status in ("completed", "skipped") for s in (flow.steps or []))
             if all_done:
                 flow.status = "completed"
-                flow.completed_at = datetime.now(timezone.utc)
+                flow.completed_at = datetime.now(UTC)
                 await self._db.flush()
 
         return step
 
     # ── Revenue Metrics ─────────────────────────────────────────────
 
-    async def record_metric(self, data: Dict[str, Any]) -> RevenueMetricDB:
+    async def record_metric(self, data: dict[str, Any]) -> RevenueMetricDB:
         """Record a revenue metric data point."""
         metric = RevenueMetricDB(
             metric_name=data.get("metric_name", ""),
@@ -275,10 +275,10 @@ class AutonomousRepository:
 
     async def get_metrics(
         self,
-        metric_name: Optional[str] = None,
-        period: Optional[str] = None,
+        metric_name: str | None = None,
+        period: str | None = None,
         limit: int = 100,
-    ) -> List[RevenueMetricDB]:
+    ) -> list[RevenueMetricDB]:
         """Get revenue metrics with optional filters."""
         query = select(RevenueMetricDB).order_by(desc(RevenueMetricDB.recorded_at))
         if metric_name:

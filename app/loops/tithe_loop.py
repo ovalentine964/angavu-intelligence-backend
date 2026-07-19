@@ -21,21 +21,15 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
-from app.agents.base import AgentDecision, AgentEvent, AgentResult, EventType
-from app.agents.loops.core import ReActAgent, ReActTrace
+from app.agents.base import AgentDecision, AgentResult
+from app.agents.loops.core import ReActAgent
 from app.loops.config import (
-    BiasharaLoopConfig,
-    EvaluationConfig,
-    EvaluationMode,
-    LoopPhaseConfig,
-    LoopType,
     get_loop_config,
-    register_loop_config,
 )
 
 logger = structlog.get_logger(__name__)
@@ -55,11 +49,11 @@ class TithePayment:
     payment_date: str = ""
     payment_method: str = "mpesa"
     is_missed: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.payment_date:
-            self.payment_date = datetime.now(timezone.utc).isoformat()
+            self.payment_date = datetime.now(UTC).isoformat()
 
 
 @dataclass
@@ -72,11 +66,11 @@ class TitheAnalysis:
     longest_streak_weeks: int = 0
     average_amount: float = 0.0
     consistency_score: float = 0.0  # 0.0 – 1.0
-    last_payment_date: Optional[str] = None
+    last_payment_date: str | None = None
     trend: str = "stable"  # improving | stable | declining
     days_since_last_payment: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "worker_id": self.worker_id,
             "total_payments": self.total_payments,
@@ -98,7 +92,7 @@ class EncouragementMessage:
     message_type: str  # streak_celebration | gentle_reminder | milestone | re_engage
     message_text: str
     language: str = "sw"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -132,14 +126,14 @@ class TitheLoopState:
     message_sent: bool = False
 
     # Data
-    latest_payment: Optional[TithePayment] = None
-    analysis: Optional[TitheAnalysis] = None
-    encouragement: Optional[EncouragementMessage] = None
+    latest_payment: TithePayment | None = None
+    analysis: TitheAnalysis | None = None
+    encouragement: EncouragementMessage | None = None
 
     # Evidence tracking (for DeerFlow GoalEvaluation)
-    evidence: Dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
-    def to_goal_state(self) -> Dict[str, Any]:
+    def to_goal_state(self) -> dict[str, Any]:
         """Convert to DeerFlow GoalState format."""
         return {
             "objective": self.goal_objective,
@@ -169,7 +163,7 @@ class TitheLoopState:
             return "goal_not_met_yet"
         return "none"
 
-    def record_progress(self, phase: str, result: Dict[str, Any]) -> bool:
+    def record_progress(self, phase: str, result: dict[str, Any]) -> bool:
         """Record phase completion. Returns True if new progress was made."""
         old_satisfied = self.is_satisfied()
 
@@ -227,7 +221,7 @@ class TitheLoop(ReActAgent):
             ],
         )
         self._config = get_loop_config("tithe_tracking")
-        self._active_states: Dict[str, TitheLoopState] = {}
+        self._active_states: dict[str, TitheLoopState] = {}
 
     def _get_or_create_state(self, worker_id: str) -> TitheLoopState:
         """Get or create loop state for a worker."""
@@ -238,7 +232,7 @@ class TitheLoop(ReActAgent):
             )
         return self._active_states[worker_id]
 
-    async def _think_reasoning(self, context: Dict[str, Any]) -> AgentDecision:
+    async def _think_reasoning(self, context: dict[str, Any]) -> AgentDecision:
         """
         ReAct reasoning for tithe loop.
 
@@ -383,8 +377,8 @@ class TitheLoop(ReActAgent):
             )
 
     async def _record_phase(
-        self, worker_id: str, payment_data: Dict[str, Any], state: TitheLoopState
-    ) -> Dict[str, Any]:
+        self, worker_id: str, payment_data: dict[str, Any], state: TitheLoopState
+    ) -> dict[str, Any]:
         """Record a tithe payment."""
         payment = TithePayment(
             worker_id=worker_id,
@@ -424,7 +418,7 @@ class TitheLoop(ReActAgent):
 
     async def _analyze_phase(
         self, worker_id: str, state: TitheLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze tithe patterns and consistency."""
         # In production, this would query the database
         # For now, use memory and the latest payment
@@ -474,7 +468,7 @@ class TitheLoop(ReActAgent):
 
     async def _encourage_phase(
         self, worker_id: str, state: TitheLoopState
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate encouragement message based on analysis."""
         analysis = state.analysis
         if not analysis:
@@ -540,7 +534,7 @@ class TitheLoop(ReActAgent):
             },
         }
 
-    def get_state(self, worker_id: str) -> Optional[Dict[str, Any]]:
+    def get_state(self, worker_id: str) -> dict[str, Any] | None:
         """Get current loop state for a worker (for debugging/API)."""
         state = self._active_states.get(worker_id)
         return state.to_goal_state() if state else None

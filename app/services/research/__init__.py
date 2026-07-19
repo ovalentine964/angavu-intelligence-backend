@@ -10,44 +10,44 @@ Grounded in Valentine's Economics & Statistics degree:
 - STA 245: Social & Economic Statistics for National Planning → Official statistics standards
 """
 
+from app.services.research.confidence_intervals import (
+    BootstrapCI,
+    ConfidenceIntervalCalculator,
+)
 from app.services.research.data_quality import (
     DataQualityFramework,
-    SPCChart,
-    OutlierDetector,
     DataValidator,
+    OutlierDetector,
+    SPCChart,
+)
+from app.services.research.experimental_design import (
+    ABTestFramework,
+    ExperimentDesigner,
+    PowerAnalyzer,
 )
 from app.services.research.hypothesis_testing import (
     HypothesisTester,
     MultipleTestingCorrection,
     SignificanceReport,
 )
-from app.services.research.experimental_design import (
-    ExperimentDesigner,
-    ABTestFramework,
-    PowerAnalyzer,
-)
-from app.services.research.confidence_intervals import (
-    ConfidenceIntervalCalculator,
-    BootstrapCI,
-)
 from app.services.research.sampling import (
-    SamplingEngine,
     SampleSizeCalculator,
+    SamplingEngine,
 )
 
 __all__ = [
+    "ABTestFramework",
+    "BootstrapCI",
+    "ConfidenceIntervalCalculator",
     "DataQualityFramework",
-    "SPCChart",
-    "OutlierDetector",
     "DataValidator",
+    "ExperimentDesigner",
     "HypothesisTester",
     "MultipleTestingCorrection",
-    "SignificanceReport",
-    "ExperimentDesigner",
-    "ABTestFramework",
+    "OutlierDetector",
     "PowerAnalyzer",
-    "ConfidenceIntervalCalculator",
-    "BootstrapCI",
-    "SamplingEngine",
+    "SPCChart",
     "SampleSizeCalculator",
+    "SamplingEngine",
+    "SignificanceReport",
 ]

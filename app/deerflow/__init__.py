@@ -9,15 +9,15 @@ Provides:
 """
 
 from app.deerflow.integration import (
+    BiasharaAgentFactory,
     create_biashara_agent,
     create_biashara_lead_agent,
     get_deerflow_tools,
-    BiasharaAgentFactory,
 )
 
 __all__ = [
+    "BiasharaAgentFactory",
     "create_biashara_agent",
     "create_biashara_lead_agent",
     "get_deerflow_tools",
-    "BiasharaAgentFactory",
 ]

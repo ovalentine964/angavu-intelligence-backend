@@ -16,27 +16,14 @@ All classes are re-exported here for convenience:
 """
 
 from app.services.statistical.bayesian import BayesianUpdater, KernelDensityEstimator
+from app.services.statistical.clustering import ClusterAnalyzer
+from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
 from app.services.statistical.hypothesis import (
     BootstrapInference,
     DistributionFitter,
     HypothesisTester,
 )
-from app.services.statistical.multivariate import (
-    DiscriminantAnalyzer,
-    FactorAnalyzer,
-    MANOVA,
-    PCAAnalyzer,
-)
-from app.services.statistical.clustering import ClusterAnalyzer
-from app.services.statistical.simulation import MCMCSampler, MonteCarloEngine
 from app.services.statistical.inequality import InequalityAnalyzer, PovertyAnalyzer
-from app.services.statistical.frontier import DEAAnalyzer, SFAAnalyzer
-from app.services.statistical.survival import (
-    CoxModelResult,
-    KaplanMeierEstimator,
-    SurvivalAnalysisService,
-    SurvivalPrediction,
-)
 from app.services.statistical.kalman import (
     EconomicIndicatorSmoother,
     GDPNowcastingKalmanFilter,
@@ -45,6 +32,19 @@ from app.services.statistical.kalman import (
     KalmanState,
     create_gdp_nowcasting_filter,
     create_indicator_smoother,
+)
+from app.services.statistical.multivariate import (
+    MANOVA,
+    DiscriminantAnalyzer,
+    FactorAnalyzer,
+    PCAAnalyzer,
+)
+from app.services.statistical.simulation import MCMCSampler, MonteCarloEngine
+from app.services.statistical.survival import (
+    CoxModelResult,
+    KaplanMeierEstimator,
+    SurvivalAnalysisService,
+    SurvivalPrediction,
 )
 
 __all__ = [

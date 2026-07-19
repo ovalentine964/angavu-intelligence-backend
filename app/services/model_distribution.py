@@ -28,10 +28,9 @@ Delta update logic:
 import gzip
 import hashlib
 import json
-import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -39,11 +38,10 @@ from app.schemas.dialect_dictionary import (
     DeltaUpdatePayload,
     DialectModelVersion,
     FullModelPayload,
-    ModelDistributionResponse,
     WordEntry,
 )
-from app.services.language_aggregator import get_language_aggregator
 from app.services.dialect_dictionary import get_dialect_dictionary
+from app.services.language_aggregator import get_language_aggregator
 
 logger = structlog.get_logger(__name__)
 
@@ -69,7 +67,7 @@ MIN_CONFIDENCE_FOR_DISTRIBUTION = 0.3
 # ════════════════════════════════════════════════════════════════════
 
 
-def _parse_version(version: str) -> Tuple[int, int, int]:
+def _parse_version(version: str) -> tuple[int, int, int]:
     """Parse 'MAJOR.MINOR.PATCH' into (major, minor, patch)."""
     try:
         parts = version.lstrip("v").split(".")
@@ -107,15 +105,15 @@ class _ModelState:
 
     def __init__(self):
         # {dialect: {version: snapshot_of_words}}
-        self.version_snapshots: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+        self.version_snapshots: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         # {dialect: current_version}
-        self.current_versions: Dict[str, str] = {}
+        self.current_versions: dict[str, str] = {}
         # {dialect: {version: checksum}}
-        self.checksums: Dict[str, Dict[str, str]] = defaultdict(dict)
+        self.checksums: dict[str, dict[str, str]] = defaultdict(dict)
         # {dialect: {version: created_at}}
-        self.created_at: Dict[str, Dict[str, str]] = defaultdict(dict)
+        self.created_at: dict[str, dict[str, str]] = defaultdict(dict)
         # {dialect: {version: word_count}}
-        self.word_counts: Dict[str, Dict[str, int]] = defaultdict(dict)
+        self.word_counts: dict[str, dict[str, int]] = defaultdict(dict)
 
 
 _model_state = _ModelState()
@@ -138,7 +136,7 @@ class ModelDistributionService:
         self._aggregator = get_language_aggregator()
         self._dict = get_dialect_dictionary()
 
-    async def publish_dialect_model(self, dialect: str) -> Optional[DialectModelVersion]:
+    async def publish_dialect_model(self, dialect: str) -> DialectModelVersion | None:
         """
         Publish a new version of a dialect model.
 
@@ -205,7 +203,7 @@ class ModelDistributionService:
 
         new_version = _format_version(major, minor, patch)
         checksum = _compute_checksum(current_words)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Store snapshot
         self._state.version_snapshots[dialect][new_version] = current_words
@@ -237,7 +235,7 @@ class ModelDistributionService:
         self,
         dialect: str,
         client_version: str,
-    ) -> Optional[DeltaUpdatePayload]:
+    ) -> DeltaUpdatePayload | None:
         """
         Compute a delta update between client's version and server's latest.
 
@@ -357,7 +355,7 @@ class ModelDistributionService:
 
         return delta
 
-    async def get_full_model(self, dialect: str) -> Optional[FullModelPayload]:
+    async def get_full_model(self, dialect: str) -> FullModelPayload | None:
         """
         Get the full dialect model (for fresh installs or version mismatches).
 
@@ -410,7 +408,7 @@ class ModelDistributionService:
         self,
         dialect: str,
         client_version: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Lightweight version check — returns whether an update is available.
 
@@ -439,7 +437,7 @@ class ModelDistributionService:
             "delta_url": f"/api/v1/dialect/model/{dialect}/delta?from={client_version}" if update_available else None,
         }
 
-    async def list_models(self) -> List[DialectModelVersion]:
+    async def list_models(self) -> list[DialectModelVersion]:
         """List all published dialect models with their latest versions."""
         models = []
         for dialect, version in self._state.current_versions.items():
@@ -452,7 +450,7 @@ class ModelDistributionService:
             ))
         return models
 
-    async def get_version_history(self, dialect: str) -> List[Dict[str, Any]]:
+    async def get_version_history(self, dialect: str) -> list[dict[str, Any]]:
         """Get version history for a dialect model."""
         dialect = dialect.lower().strip()
         history = []
@@ -470,7 +468,7 @@ class ModelDistributionService:
 
         return history
 
-    async def auto_publish_all(self) -> Dict[str, Any]:
+    async def auto_publish_all(self) -> dict[str, Any]:
         """
         Auto-publish models for all dialects with new data.
 
@@ -493,12 +491,12 @@ class ModelDistributionService:
             "status": "ok",
             "dialects_published": len(published),
             "published": published,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
 
 # Module-level singleton
-_distribution_service: Optional[ModelDistributionService] = None
+_distribution_service: ModelDistributionService | None = None
 
 
 def get_model_distribution() -> ModelDistributionService:

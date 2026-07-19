@@ -31,20 +31,16 @@ Academic references:
     - Dwork & Roth (2014) "Algorithmic Foundations of DP"
 """
 
-import hashlib
 import math
 import secrets
-import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
 from app.services.dialect_dictionary import (
     K_ANONYMITY_MIN,
-    _DictionaryState,
-    _state as dict_state,
     get_dialect_dictionary,
 )
 
@@ -127,8 +123,8 @@ def _edit_distance(s1: str, s2: str) -> int:
 
 
 def _cluster_pronunciations(
-    words: List[Tuple[str, str, int]],
-) -> List[Dict[str, Any]]:
+    words: list[tuple[str, str, int]],
+) -> list[dict[str, Any]]:
     """
     Cluster words by pronunciation similarity.
 
@@ -146,7 +142,7 @@ def _cluster_pronunciations(
 
     # Sort by frequency (descending) — most common word becomes canonical
     sorted_words = sorted(words, key=lambda x: -x[2])
-    clusters: List[Dict[str, Any]] = []
+    clusters: list[dict[str, Any]] = []
     assigned = set()
 
     for i, (word, ipa, freq) in enumerate(sorted_words):
@@ -193,8 +189,8 @@ def _cluster_pronunciations(
 
 
 def _detect_cognates(
-    dialect_words: Dict[str, List[Tuple[str, int]]],
-) -> List[Dict[str, Any]]:
+    dialect_words: dict[str, list[tuple[str, int]]],
+) -> list[dict[str, Any]]:
     """
     Detect cognate words across dialects.
 
@@ -211,7 +207,7 @@ def _detect_cognates(
         List of cognate groups
     """
     # Build word → dialect mapping
-    word_dialects: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    word_dialects: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for dialect, words in dialect_words.items():
         for word, freq in words:
             word_dialects[word][dialect] = freq
@@ -257,12 +253,12 @@ class LanguageAggregator:
     def __init__(self):
         self._dict = get_dialect_dictionary()
         self._sigma = _compute_noise_scale(DP_EPSILON, DP_DELTA, DP_SENSITIVITY)
-        self._last_aggregation_at: Optional[str] = None
+        self._last_aggregation_at: str | None = None
         self._aggregation_count: int = 0
         # Cached aggregation results per dialect
-        self._cached_dialect_summaries: Dict[str, Dict[str, Any]] = {}
+        self._cached_dialect_summaries: dict[str, dict[str, Any]] = {}
 
-    async def aggregate_dialect(self, dialect: str) -> Dict[str, Any]:
+    async def aggregate_dialect(self, dialect: str) -> dict[str, Any]:
         """
         Run aggregation for a single dialect.
 
@@ -318,7 +314,7 @@ class LanguageAggregator:
         pronunciation_clusters = _cluster_pronunciations(pron_tuples)
 
         # Region breakdown
-        region_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+        region_stats: dict[str, dict[str, Any]] = defaultdict(lambda: {
             "word_count": 0, "workers": set(), "top_words": [],
         })
         for w in shared_words:
@@ -345,7 +341,7 @@ class LanguageAggregator:
             "top_words": dp_words[:50],
             "pronunciation_clusters": len(pronunciation_clusters),
             "regions": region_summary,
-            "aggregated_at": datetime.now(timezone.utc).isoformat(),
+            "aggregated_at": datetime.now(UTC).isoformat(),
         }
 
         # Cache
@@ -363,7 +359,7 @@ class LanguageAggregator:
 
         return result
 
-    async def aggregate_all(self) -> Dict[str, Any]:
+    async def aggregate_all(self) -> dict[str, Any]:
         """
         Run aggregation across all dialects.
 
@@ -379,7 +375,7 @@ class LanguageAggregator:
             results[dialect] = await self.aggregate_dialect(dialect)
 
         # Cross-dialect cognate detection
-        dialect_words_map: Dict[str, List[Tuple[str, int]]] = {}
+        dialect_words_map: dict[str, list[tuple[str, int]]] = {}
         for dialect, result in results.items():
             if result.get("top_words"):
                 dialect_words_map[dialect] = [
@@ -394,14 +390,14 @@ class LanguageAggregator:
             "results": results,
             "cross_dialect_cognates": len(cognates),
             "top_cognates": cognates[:20],
-            "aggregated_at": datetime.now(timezone.utc).isoformat(),
+            "aggregated_at": datetime.now(UTC).isoformat(),
         }
 
     async def get_dialect_patterns(
         self,
         dialect: str,
-        pattern_type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        pattern_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get aggregated dialect patterns (pronunciation, grammar, vocabulary).
 
@@ -435,7 +431,7 @@ class LanguageAggregator:
         patterns.sort(key=lambda p: (-p["confidence"], -p["frequency"]))
         return patterns[:500]
 
-    async def get_region_summary(self) -> Dict[str, Any]:
+    async def get_region_summary(self) -> dict[str, Any]:
         """
         Get aggregated dialect data organized by geographic region.
 
@@ -444,7 +440,7 @@ class LanguageAggregator:
         all_dialects = await self._dict.get_all_dialects()
 
         # Build region → dialect mapping
-        region_data: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+        region_data: dict[str, dict[str, Any]] = defaultdict(lambda: {
             "dialects": [],
             "total_words": 0,
             "total_workers": 0,
@@ -460,7 +456,7 @@ class LanguageAggregator:
 
         return dict(region_data)
 
-    async def get_aggregation_status(self) -> Dict[str, Any]:
+    async def get_aggregation_status(self) -> dict[str, Any]:
         """Get overall aggregation system status."""
         dict_stats = await self._dict.get_stats()
         return {
@@ -482,7 +478,7 @@ class LanguageAggregator:
 
 
 # Module-level singleton
-_aggregator: Optional[LanguageAggregator] = None
+_aggregator: LanguageAggregator | None = None
 
 
 def get_language_aggregator() -> LanguageAggregator:

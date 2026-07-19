@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ContentType(str, Enum):
@@ -47,14 +47,14 @@ class ContentStatus(str, Enum):
 class SEOMetadata:
     """SEO optimization metadata for a content piece."""
     target_keyword: str = ""
-    secondary_keywords: List[str] = field(default_factory=list)
+    secondary_keywords: list[str] = field(default_factory=list)
     meta_title: str = ""
     meta_description: str = ""
-    suggested_headings: List[str] = field(default_factory=list)
-    internal_links: List[str] = field(default_factory=list)
+    suggested_headings: list[str] = field(default_factory=list)
+    internal_links: list[str] = field(default_factory=list)
     readability_score: float = 0.0  # 0-100
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "target_keyword": self.target_keyword,
             "secondary_keywords": self.secondary_keywords,
@@ -95,16 +95,16 @@ class ContentPiece:
     author: str = "ai_agent"
     status: ContentStatus = ContentStatus.PLANNED
     seo: SEOMetadata = field(default_factory=SEOMetadata)
-    target_channels: List[str] = field(default_factory=list)
-    scheduled_at: Optional[datetime] = None
-    published_at: Optional[datetime] = None
+    target_channels: list[str] = field(default_factory=list)
+    scheduled_at: datetime | None = None
+    published_at: datetime | None = None
     published_url: str = ""
-    engagement_metrics: Dict[str, Any] = field(default_factory=dict)
-    tags: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    engagement_metrics: dict[str, Any] = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "content_id": self.content_id,
             "content_type": self.content_type.value,
@@ -122,7 +122,7 @@ class ContentPiece:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ContentPiece:
+    def from_dict(cls, data: dict[str, Any]) -> ContentPiece:
         seo_data = data.get("seo", {})
         seo = SEOMetadata(
             target_keyword=seo_data.get("target_keyword", ""),
@@ -157,12 +157,12 @@ class ContentCalendar:
 
     Plans content across channels for a given week.
     """
-    week_start: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    planned_pieces: List[ContentPiece] = field(default_factory=list)
-    themes: List[str] = field(default_factory=list)
-    target_channels: List[str] = field(default_factory=lambda: ["blog", "twitter", "linkedin", "newsletter"])
+    week_start: datetime = field(default_factory=lambda: datetime.now(UTC))
+    planned_pieces: list[ContentPiece] = field(default_factory=list)
+    themes: list[str] = field(default_factory=list)
+    target_channels: list[str] = field(default_factory=lambda: ["blog", "twitter", "linkedin", "newsletter"])
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "week_start": self.week_start.isoformat(),
             "planned_count": len(self.planned_pieces),

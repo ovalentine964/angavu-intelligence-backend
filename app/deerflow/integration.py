@@ -31,12 +31,9 @@ Key Design Decisions:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any
 
 import yaml
-
-if TYPE_CHECKING:
-    from langchain_core.tools import BaseTool
 
 from app.biashara_tools import get_biashara_tools
 
@@ -50,13 +47,13 @@ logger = logging.getLogger(__name__)
 try:
     from deerflow.agents.factory import create_deerflow_agent
     from deerflow.agents.features import RuntimeFeatures
-    from deerflow.agents.thread_state import ThreadState
     from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
     from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
     from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
     from deerflow.agents.middlewares.summarization_middleware import DeerFlowSummarizationMiddleware
     from deerflow.agents.middlewares.title_middleware import TitleMiddleware
     from deerflow.agents.middlewares.todo_middleware import TodoMiddleware
+    from deerflow.agents.thread_state import ThreadState
     from deerflow.models import create_chat_model
     DEERFLOW_AVAILABLE = True
 except ImportError:
@@ -75,7 +72,7 @@ BIASHARA_CONFIG_PATH = "config/biashara_agents.yaml"
 def _load_biashara_config() -> dict:
     """Load Angavu agent configuration from YAML."""
     try:
-        with open(BIASHARA_CONFIG_PATH, "r") as f:
+        with open(BIASHARA_CONFIG_PATH) as f:
             return yaml.safe_load(f) or {}
     except FileNotFoundError:
         logger.warning(f"Config not found at {BIASHARA_CONFIG_PATH}, using defaults")

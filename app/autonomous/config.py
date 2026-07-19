@@ -15,11 +15,10 @@ Features:
 from __future__ import annotations
 
 import hashlib
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 import yaml
@@ -44,7 +43,7 @@ class EscalationConfig:
     confidence_threshold: float = 0.6  # below this → escalate
     cost_threshold_usd: float = 10.0   # per-task cost ceiling
     time_threshold_seconds: int = 300  # task timeout → escalate
-    channels: List[str] = field(default_factory=lambda: ["telegram", "email"])
+    channels: list[str] = field(default_factory=lambda: ["telegram", "email"])
 
 
 @dataclass
@@ -72,12 +71,12 @@ class AgentConfig:
     escalation: EscalationConfig = field(default_factory=EscalationConfig)
 
     # Tools this agent can use
-    tools: List[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
 
     # Custom parameters
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "role": self.role.value,
@@ -111,9 +110,9 @@ class AgentConfigManager:
         all_configs = manager.load_all()
     """
 
-    def __init__(self, template_dir: Optional[Path] = None):
+    def __init__(self, template_dir: Path | None = None):
         self._template_dir = template_dir or _TEMPLATE_DIR
-        self._configs: Dict[str, AgentConfig] = {}
+        self._configs: dict[str, AgentConfig] = {}
         self._logger = logger.bind(component="config_manager")
 
     def load(self, agent_name: str) -> AgentConfig:
@@ -141,7 +140,7 @@ class AgentConfigManager:
             self._logger.error("config_load_failed", agent=agent_name, error=str(exc))
             return self._default_config(agent_name)
 
-    def load_all(self) -> Dict[str, AgentConfig]:
+    def load_all(self) -> dict[str, AgentConfig]:
         """Load all agent configurations from the template directory."""
         configs = {}
         if not self._template_dir.exists():
@@ -169,7 +168,7 @@ class AgentConfigManager:
             return ""
         return hashlib.sha256(config.system_prompt.encode()).hexdigest()[:16]
 
-    def _parse_config(self, agent_name: str, raw: Dict[str, Any]) -> AgentConfig:
+    def _parse_config(self, agent_name: str, raw: dict[str, Any]) -> AgentConfig:
         """Parse raw YAML dict into AgentConfig."""
         escalation_raw = raw.get("escalation", {})
         escalation = EscalationConfig(

@@ -22,8 +22,8 @@ Configuration:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import structlog
@@ -64,7 +64,7 @@ class WhatsAppDelivery:
 
     def __init__(self, openwa_url: str = OPENWA_URL):
         self.openwa_url = openwa_url.rstrip("/")
-        self._last_send_time: Dict[str, float] = {}
+        self._last_send_time: dict[str, float] = {}
         self._send_count: int = 0
         self._window_start: float = 0
         # Check if WhatsApp is enabled via settings
@@ -285,7 +285,7 @@ class WhatsAppDelivery:
         Returns:
             True if report was delivered successfully
         """
-        from app.services.intelligence_delivery import format_currency_kes, get_greeting
+        from app.services.intelligence_delivery import get_greeting
 
         greeting = get_greeting(language)
 
@@ -336,7 +336,7 @@ class WhatsAppDelivery:
         """
         return await self.send_message(phone, alert_message)
 
-    async def check_openwa_status(self) -> Dict[str, Any]:
+    async def check_openwa_status(self) -> dict[str, Any]:
         """
         Check if the OpenWA service is running and connected.
 
@@ -371,7 +371,7 @@ class WhatsAppDelivery:
         lines = [
             f"🌆 {greeting} {workerName}!",
             "",
-            f"📊 Muhtasari wa leo ({datetime.now(timezone.utc).strftime('%d/%m/%Y')}):",
+            f"📊 Muhtasari wa leo ({datetime.now(UTC).strftime('%d/%m/%Y')}):",
             "",
             f"💰 Mauzo: {format_currency_kes(sales, 'sw')}",
             f"📈 Faida: {format_currency_kes(profit, 'sw')}",
@@ -406,7 +406,7 @@ class WhatsAppDelivery:
         lines = [
             f"🌆 {greeting} {worker_name}!",
             "",
-            f"📊 Today's summary ({datetime.now(timezone.utc).strftime('%d/%m/%Y')}):",
+            f"📊 Today's summary ({datetime.now(UTC).strftime('%d/%m/%Y')}):",
             "",
             f"💰 Sales: {format_currency_kes(sales, 'en')}",
             f"📈 Profit: {format_currency_kes(profit, 'en')}",
@@ -426,7 +426,7 @@ class WhatsAppDelivery:
 
         return "\n".join(lines)
 
-    def _normalize_phone(self, phone: str) -> Optional[str]:
+    def _normalize_phone(self, phone: str) -> str | None:
         """
         Normalize phone number to digits-only format.
         Handles: 0712345678, +254712345678, 254712345678, 712345678

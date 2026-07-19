@@ -21,9 +21,9 @@ Usage:
 
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -52,15 +52,15 @@ class ModelRegistry:
 
     def __init__(self):
         # {model_name: {version: ModelEntry}}
-        self._models: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+        self._models: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         # {model_name: champion_version}
-        self._champions: Dict[str, str] = {}
+        self._champions: dict[str, str] = {}
         # {model_name: [version_history]}
-        self._history: Dict[str, List[str]] = defaultdict(list)
+        self._history: dict[str, list[str]] = defaultdict(list)
         # {ab_test_id: ABTestConfig}
-        self._ab_tests: Dict[str, Dict[str, Any]] = {}
+        self._ab_tests: dict[str, dict[str, Any]] = {}
         # {model_name: {version: PerformanceMetrics}}
-        self._metrics: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(dict)
+        self._metrics: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
 
     def register_model(
         self,
@@ -72,7 +72,7 @@ class ModelRegistry:
         changelog: str = "",
         training_data_points: int = 0,
         federated_rounds: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Register a new model version.
 
@@ -98,7 +98,7 @@ class ModelRegistry:
             "ab_test_id": None,
             "target_business_types": None,
             "target_regions": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "deployed_at": None,
             "deprecated_at": None,
         }
@@ -115,9 +115,9 @@ class ModelRegistry:
         model_name: str,
         version: str,
         traffic_pct: float = 100.0,
-        target_business_types: Optional[List[str]] = None,
-        target_regions: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        target_business_types: list[str] | None = None,
+        target_regions: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Deploy a model version to receive traffic.
 
@@ -138,7 +138,7 @@ class ModelRegistry:
 
         entry["status"] = ModelStatus.ACTIVE.value
         entry["traffic_pct"] = min(100.0, max(0.0, traffic_pct))
-        entry["deployed_at"] = datetime.now(timezone.utc).isoformat()
+        entry["deployed_at"] = datetime.now(UTC).isoformat()
         entry["target_business_types"] = target_business_types
         entry["target_regions"] = target_regions
 
@@ -160,7 +160,7 @@ class ModelRegistry:
             "traffic_pct": entry["traffic_pct"],
         }
 
-    def promote(self, model_name: str, version: str) -> Dict[str, Any]:
+    def promote(self, model_name: str, version: str) -> dict[str, Any]:
         """
         Promote a model to champion (100% traffic).
 
@@ -185,7 +185,7 @@ class ModelRegistry:
             "message": f"{model_name}:{version} is now champion (100% traffic)",
         }
 
-    def rollback(self, model_name: str) -> Dict[str, Any]:
+    def rollback(self, model_name: str) -> dict[str, Any]:
         """
         Rollback a model to the previous active version.
 
@@ -221,7 +221,7 @@ class ModelRegistry:
         self._models[model_name][current_version]["status"] = ModelStatus.ROLLED_BACK.value
         self._models[model_name][current_version]["traffic_pct"] = 0.0
         self._models[model_name][current_version]["deprecated_at"] = (
-            datetime.now(timezone.utc).isoformat()
+            datetime.now(UTC).isoformat()
         )
 
         # Restore previous
@@ -249,7 +249,7 @@ class ModelRegistry:
         challenger_version: str,
         traffic_split: float = 50.0,
         description: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Start an A/B test between two model versions.
 
@@ -282,7 +282,7 @@ class ModelRegistry:
             "challenger": challenger_version,
             "traffic_split": traffic_split,
             "description": description,
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_at": datetime.now(UTC).isoformat(),
             "ended_at": None,
             "status": "running",
         }
@@ -307,14 +307,14 @@ class ModelRegistry:
     def end_ab_test(
         self,
         test_id: str,
-        winner: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        winner: str | None = None,
+    ) -> dict[str, Any]:
         """End an A/B test. If winner is specified, promote it."""
         if test_id not in self._ab_tests:
             return {"status": "error", "message": f"A/B test {test_id} not found"}
 
         test = self._ab_tests[test_id]
-        test["ended_at"] = datetime.now(timezone.utc).isoformat()
+        test["ended_at"] = datetime.now(UTC).isoformat()
         test["status"] = "completed"
 
         if winner:
@@ -327,8 +327,8 @@ class ModelRegistry:
         self,
         model_name: str,
         version: str,
-        metrics: Dict[str, float],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
         """
         Record performance metrics for a model version.
 
@@ -349,7 +349,7 @@ class ModelRegistry:
 
         self._metrics[model_name][version].update(metrics)
         self._metrics[model_name][version]["updated_at"] = (
-            datetime.now(timezone.utc).isoformat()
+            datetime.now(UTC).isoformat()
         )
 
         # Update entry with latest metrics
@@ -361,7 +361,7 @@ class ModelRegistry:
 
         return {"status": "recorded", "model": model_name, "version": version}
 
-    def get_model(self, model_name: str, version: str) -> Optional[Dict[str, Any]]:
+    def get_model(self, model_name: str, version: str) -> dict[str, Any] | None:
         """Get details of a specific model version."""
         if model_name in self._models and version in self._models[model_name]:
             entry = dict(self._models[model_name][version])
@@ -369,7 +369,7 @@ class ModelRegistry:
             return entry
         return None
 
-    def get_champion(self, model_name: str) -> Optional[Dict[str, Any]]:
+    def get_champion(self, model_name: str) -> dict[str, Any] | None:
         """Get the current champion model for a given model name."""
         version = self._champions.get(model_name)
         if version:
@@ -378,10 +378,10 @@ class ModelRegistry:
 
     def list_models(
         self,
-        model_name: Optional[str] = None,
-        status: Optional[str] = None,
-        dialect: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        model_name: str | None = None,
+        status: str | None = None,
+        dialect: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List all registered models with optional filters."""
         results = []
         names = [model_name] if model_name else list(self._models.keys())
@@ -398,7 +398,7 @@ class ModelRegistry:
 
         return sorted(results, key=lambda x: x.get("created_at", ""), reverse=True)
 
-    def get_ab_tests(self, model_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_ab_tests(self, model_name: str | None = None) -> list[dict[str, Any]]:
         """List A/B tests, optionally filtered by model name."""
         tests = list(self._ab_tests.values())
         if model_name:
@@ -408,8 +408,8 @@ class ModelRegistry:
     def get_model_performance(
         self,
         model_name: str,
-        version: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        version: str | None = None,
+    ) -> dict[str, Any]:
         """
         Get performance metrics for a model, optionally comparing versions.
         """
@@ -430,7 +430,7 @@ class ModelRegistry:
             },
         }
 
-    def get_registry_summary(self) -> Dict[str, Any]:
+    def get_registry_summary(self) -> dict[str, Any]:
         """Get a summary of the entire model registry."""
         total_models = sum(len(versions) for versions in self._models.values())
         active_models = sum(
@@ -470,7 +470,7 @@ class ModelRegistry:
             self._models[model_name][old_champion]["status"] = ModelStatus.DEPRECATED.value
             self._models[model_name][old_champion]["traffic_pct"] = 0.0
             self._models[model_name][old_champion]["deprecated_at"] = (
-                datetime.now(timezone.utc).isoformat()
+                datetime.now(UTC).isoformat()
             )
 
         # Promote new champion
@@ -479,4 +479,4 @@ class ModelRegistry:
         entry["is_champion"] = True
         entry["status"] = ModelStatus.ACTIVE.value
         entry["traffic_pct"] = 100.0
-        entry["deployed_at"] = datetime.now(timezone.utc).isoformat()
+        entry["deployed_at"] = datetime.now(UTC).isoformat()

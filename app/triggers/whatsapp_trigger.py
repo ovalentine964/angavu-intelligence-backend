@@ -13,7 +13,7 @@ Flow:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -119,7 +119,7 @@ class WhatsAppTrigger(BaseTrigger):
         self,
         response: TriggerResponse,
         user_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         Send a response back via WhatsApp (OpenWA API).
@@ -261,7 +261,7 @@ class WhatsAppTrigger(BaseTrigger):
              lambda m, t: self._extract_transaction(t)),
         ]
 
-    def _extract_transaction(self, text: str) -> Dict[str, Any]:
+    def _extract_transaction(self, text: str) -> dict[str, Any]:
         """Extract transaction details from text."""
         data = {}
 
@@ -280,7 +280,7 @@ class WhatsAppTrigger(BaseTrigger):
 
         return data
 
-    def _extract_timeframe(self, text: str) -> Dict[str, Any]:
+    def _extract_timeframe(self, text: str) -> dict[str, Any]:
         """Extract timeframe from text."""
         text_lower = text.lower()
         if any(w in text_lower for w in ["leo", "today"]):

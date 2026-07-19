@@ -1,9 +1,11 @@
 """Tests for agent configuration management."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from app.autonomous.config import AgentConfigManager, AgentConfig, AgentRole, EscalationConfig
+
+import pytest
+
+from app.autonomous.config import AgentConfig, AgentConfigManager, AgentRole
 
 
 class TestAgentRole:

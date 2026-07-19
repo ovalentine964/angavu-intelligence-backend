@@ -23,7 +23,7 @@ Wired into: WorkerClassifier, ReportGenerator
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -88,11 +88,11 @@ class WorkerSegmenter(BaseSkill):
 
     async def _pca(
         self,
-        X: List[List[float]],
+        X: list[list[float]],
         n_components: int = 3,
-        feature_names: Optional[List[str]] = None,
+        feature_names: list[str] | None = None,
         standardize: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Principal Component Analysis for dimensionality reduction.
 
@@ -129,11 +129,11 @@ class WorkerSegmenter(BaseSkill):
 
     async def _factor_analysis(
         self,
-        X: List[List[float]],
+        X: list[list[float]],
         n_factors: int = 3,
-        feature_names: Optional[List[str]] = None,
-        factor_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        feature_names: list[str] | None = None,
+        factor_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Factor Analysis for latent variable extraction.
 
@@ -172,11 +172,11 @@ class WorkerSegmenter(BaseSkill):
 
     async def _cluster_segment(
         self,
-        X: List[List[float]],
-        feature_names: Optional[List[str]] = None,
+        X: list[list[float]],
+        feature_names: list[str] | None = None,
         max_k: int = 8,
         seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Market/worker segmentation using K-means clustering.
 
@@ -205,9 +205,9 @@ class WorkerSegmenter(BaseSkill):
 
     async def _elbow_method(
         self,
-        X: List[List[float]],
+        X: list[list[float]],
         max_k: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Elbow method for optimal cluster count selection.
         """
@@ -221,10 +221,10 @@ class WorkerSegmenter(BaseSkill):
 
     async def _lda_classify(
         self,
-        X_train: List[List[float]],
-        y_train: List[int],
-        X_test: List[List[float]],
-    ) -> Dict[str, Any]:
+        X_train: list[list[float]],
+        y_train: list[int],
+        X_test: list[list[float]],
+    ) -> dict[str, Any]:
         """
         Fisher's Linear Discriminant Analysis for classification.
 
@@ -249,9 +249,9 @@ class WorkerSegmenter(BaseSkill):
 
     async def _manova_test(
         self,
-        X: List[List[float]],
-        groups: List[int],
-    ) -> Dict[str, Any]:
+        X: list[list[float]],
+        groups: list[int],
+    ) -> dict[str, Any]:
         """
         MANOVA test for group mean differences across multiple variables.
         """
@@ -267,10 +267,10 @@ class WorkerSegmenter(BaseSkill):
 
     async def _profile_segments(
         self,
-        X: List[List[float]],
-        labels: List[int],
-        feature_names: List[str],
-    ) -> Dict[str, Any]:
+        X: list[list[float]],
+        labels: list[int],
+        feature_names: list[str],
+    ) -> dict[str, Any]:
         """
         Generate interpretable profiles for each segment.
 

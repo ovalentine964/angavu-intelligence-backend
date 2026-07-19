@@ -12,7 +12,7 @@ ClickHouse is 30-200x faster than PostgreSQL for these queries.
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import clickhouse_connect
 from clickhouse_connect.driver.asyncclient import AsyncClient
@@ -45,7 +45,7 @@ _SCHEMA_CANDIDATES = [
 settings = get_settings()
 
 # Module-level singleton
-_client: Optional[AsyncClient] = None
+_client: AsyncClient | None = None
 
 
 async def get_clickhouse() -> AsyncClient:

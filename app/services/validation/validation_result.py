@@ -10,12 +10,12 @@ In financial software, every validation result must:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def parse_date(value: Any) -> Optional[datetime]:
+def parse_date(value: Any) -> datetime | None:
     """Parse various date formats into a timezone-aware UTC datetime.
 
     Accepts:
@@ -27,12 +27,12 @@ def parse_date(value: Any) -> Optional[datetime]:
     """
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
     if isinstance(value, (int, float)):
         try:
-            return datetime.fromtimestamp(value, tz=timezone.utc)
+            return datetime.fromtimestamp(value, tz=UTC)
         except (OSError, ValueError):
             return None
 
@@ -47,7 +47,7 @@ def parse_date(value: Any) -> Optional[datetime]:
             try:
                 dt = datetime.strptime(value, fmt)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 return dt
             except ValueError:
                 continue
@@ -117,7 +117,7 @@ class ValidationError:
     value: Any = None         # The invalid value (sanitized)
     details: str = ""         # Technical details for logging
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize for API response."""
         result = {
             "code": self.code.value,
@@ -141,8 +141,8 @@ class ValidationResult:
     """
     is_valid: bool
     value: Any                             # The validated (or corrected) value
-    errors: List[ValidationError] = field(default_factory=list)
-    warnings: List[ValidationError] = field(default_factory=list)
+    errors: list[ValidationError] = field(default_factory=list)
+    warnings: list[ValidationError] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -160,22 +160,22 @@ class ValidationResult:
         """Get the safe value regardless of validation state."""
         return self.value
 
-    def get_messages(self) -> List[str]:
+    def get_messages(self) -> list[str]:
         """Get all error/warning messages."""
         return [e.message for e in self.errors + self.warnings]
 
-    def get_messages_sw(self) -> List[str]:
+    def get_messages_sw(self) -> list[str]:
         """Get Swahili messages for worker-facing display."""
         msgs = []
         for e in self.errors + self.warnings:
             msgs.append(e.message_sw or e.message)
         return msgs
 
-    def get_error_codes(self) -> List[str]:
+    def get_error_codes(self) -> list[str]:
         """Get machine-readable error codes."""
         return [e.code.value for e in self.errors]
 
-    def to_api_response(self) -> Dict[str, Any]:
+    def to_api_response(self) -> dict[str, Any]:
         """Format for API error response."""
         if self.is_valid:
             return {"valid": True, "value": self.value}

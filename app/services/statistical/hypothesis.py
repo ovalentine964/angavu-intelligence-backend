@@ -9,7 +9,8 @@ Classes:
 Decomposed from statistical_foundation.py for maintainability.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -31,7 +32,7 @@ class BootstrapInference:
         n_bootstrap: int = 10000,
         confidence: float = 0.95,
         seed: int = 42,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Bootstrap percentile confidence interval.
 
@@ -101,7 +102,7 @@ class HypothesisTester:
         sample2: np.ndarray,
         test_type: str = "auto",
         alternative: str = "two-sided",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Two-sample hypothesis test with automatic selection.
 
@@ -131,7 +132,7 @@ class HypothesisTester:
         else:
             raise ValueError(f"Unknown test type: {test_type}")
 
-        cohens_d: Optional[float] = None
+        cohens_d: float | None = None
         if test_type == "ttest":
             pooled_std: float = float(np.sqrt(
                 ((n1 - 1) * np.var(sample1, ddof=1) + (n2 - 1) * np.var(sample2, ddof=1))
@@ -172,8 +173,8 @@ class DistributionFitter:
 
     @classmethod
     def fit_best_distribution(
-        cls, data: np.ndarray, candidates: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        cls, data: np.ndarray, candidates: list[str] | None = None
+    ) -> dict[str, Any]:
         """
         Fit multiple distributions and select the best one by AIC.
 
@@ -182,7 +183,7 @@ class DistributionFitter:
         if candidates is None:
             candidates = list(cls.DISTRIBUTIONS.keys())
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for dist_name in candidates:
             if dist_name not in cls.DISTRIBUTIONS:
                 continue
@@ -219,4 +220,4 @@ class DistributionFitter:
         }
 
 
-__all__ = ["HypothesisTester", "BootstrapInference", "DistributionFitter"]
+__all__ = ["BootstrapInference", "DistributionFitter", "HypothesisTester"]

@@ -16,19 +16,18 @@ Flow:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
-from app.channels.registry import ChannelRegistry
-from app.channels.session_sync import SessionSync
 from app.channels.adapters.base import (
-    BaseChannelAdapter,
     ChannelResponse,
     ChannelType,
     UnifiedMessage,
 )
+from app.channels.registry import ChannelRegistry
+from app.channels.session_sync import SessionSync
 
 logger = structlog.get_logger(__name__)
 
@@ -79,7 +78,7 @@ class MultiChannelGateway:
             7. Return response through source channel
         """
         request_id = str(uuid.uuid4())
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         logger.info(
             "gateway_message_received",
@@ -156,7 +155,7 @@ class MultiChannelGateway:
 
         # Step 7: Build response
         elapsed_ms = int(
-            (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+            (datetime.now(UTC) - start_time).total_seconds() * 1000
         )
 
         return ChannelResponse(
@@ -177,7 +176,7 @@ class MultiChannelGateway:
         self,
         worker_id: str,
         content: str,
-        preferred_channel: Optional[ChannelType] = None,
+        preferred_channel: ChannelType | None = None,
     ) -> bool:
         """
         Send a proactive message to a worker on their preferred channel.
@@ -275,7 +274,7 @@ class MultiChannelGateway:
             "Tunafanya kazi kujibu."
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get gateway statistics."""
         return {
             "registered_channels": self.registry.registered_channels,

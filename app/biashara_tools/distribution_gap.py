@@ -12,9 +12,8 @@ DeerFlow agents invoke this tool when users ask about:
 - Distribution network optimization
 """
 
-import json
 import asyncio
-from typing import Optional
+import json
 
 from langchain.tools import tool
 
@@ -22,7 +21,7 @@ from langchain.tools import tool
 @tool("distribution_gap", parse_docstring=True)
 def distribution_gap_tool(
     product_category: str,
-    region: Optional[str] = None,
+    region: str | None = None,
     tier: str = "standard",
 ) -> str:
     """Analyze distribution gaps and identify underserved markets for FMCG products.

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class OnboardingStatus(str, Enum):
@@ -49,11 +49,11 @@ class OnboardingStep:
     status: StepStatus = StepStatus.PENDING
     assigned_to: str = ""           # team member or "auto"
     due_days: int = 3               # days after onboarding start
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     notes: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "step_id": self.step_id,
             "name": self.name,
@@ -95,13 +95,13 @@ class OnboardingFlow:
     client_name: str = ""
     product_tier: str = "standard"  # standard | professional | enterprise
     status: OnboardingStatus = OnboardingStatus.CREATED
-    steps: List[OnboardingStep] = field(default_factory=list)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    target_completion: Optional[datetime] = None
+    steps: list[OnboardingStep] = field(default_factory=list)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    target_completion: datetime | None = None
     satisfaction_score: float = 0.0
     feedback: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def progress_pct(self) -> float:
@@ -112,7 +112,7 @@ class OnboardingFlow:
         return round(done / len(self.steps) * 100, 1)
 
     @property
-    def current_step(self) -> Optional[OnboardingStep]:
+    def current_step(self) -> OnboardingStep | None:
         """Get the first incomplete step."""
         for step in sorted(self.steps, key=lambda s: s.order):
             if step.status in (StepStatus.PENDING, StepStatus.IN_PROGRESS):
@@ -128,12 +128,12 @@ class OnboardingFlow:
         if not completed_steps:
             # No steps completed yet — check if started > 7 days ago
             if self.started_at:
-                return (datetime.now(timezone.utc) - self.started_at).days > 7
+                return (datetime.now(UTC) - self.started_at).days > 7
             return False
         last_activity = max(s.completed_at for s in completed_steps)
-        return (datetime.now(timezone.utc) - last_activity).days > 7
+        return (datetime.now(UTC) - last_activity).days > 7
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "flow_id": self.flow_id,
             "client_id": self.client_id,
@@ -148,7 +148,7 @@ class OnboardingFlow:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> OnboardingFlow:
+    def from_dict(cls, data: dict[str, Any]) -> OnboardingFlow:
         """Reconstruct from dictionary."""
         steps = [
             OnboardingStep(
@@ -184,7 +184,7 @@ class OnboardingFlow:
         )
 
 
-def create_default_onboarding_steps(product_tier: str = "standard") -> List[OnboardingStep]:
+def create_default_onboarding_steps(product_tier: str = "standard") -> list[OnboardingStep]:
     """
     Generate default onboarding steps based on product tier.
 

@@ -12,7 +12,6 @@ Usage:
 import asyncio
 import logging
 import os
-import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

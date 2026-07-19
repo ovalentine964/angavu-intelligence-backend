@@ -23,7 +23,7 @@ Wired into: AnalysisAgent
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -89,10 +89,10 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _mann_whitney(
         self,
-        sample1: List[float],
-        sample2: List[float],
+        sample1: list[float],
+        sample2: list[float],
         alternative: str = "two-sided",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Mann-Whitney U test (Wilcoxon rank-sum test).
 
@@ -152,9 +152,9 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _kruskal_wallis(
         self,
-        samples: List[List[float]],
-        group_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        samples: list[list[float]],
+        group_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Kruskal-Wallis H test.
 
@@ -184,7 +184,7 @@ class NonparametricAnalyzer(BaseSkill):
 
         # Effect size (epsilon-squared)
         N = sum(len(a) for a in arrays)
-        epsilon_sq = (stat - k + 1) / (N - k) if N > k else 0
+        epsilon_sq = (stat - k + 1) / (N - k) if k < N else 0
 
         # Pairwise Mann-Whitney (post-hoc)
         if group_names is None:
@@ -230,9 +230,9 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _kolmogorov_smirnov(
         self,
-        sample1: List[float],
-        sample2: List[float],
-    ) -> Dict[str, Any]:
+        sample1: list[float],
+        sample2: list[float],
+    ) -> dict[str, Any]:
         """
         Kolmogorov-Smirnov two-sample test.
 
@@ -280,10 +280,10 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _wilcoxon(
         self,
-        sample1: List[float],
-        sample2: List[float],
+        sample1: list[float],
+        sample2: list[float],
         alternative: str = "two-sided",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Wilcoxon signed-rank test for paired samples.
 
@@ -331,11 +331,11 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _bootstrap_ci(
         self,
-        data: List[float],
+        data: list[float],
         statistic: str = "mean",
         n_bootstrap: int = 10000,
         confidence: float = 0.95,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Bootstrap confidence interval.
 
@@ -374,9 +374,9 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _kde(
         self,
-        data: List[float],
+        data: list[float],
         n_points: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Kernel Density Estimation.
 
@@ -406,10 +406,10 @@ class NonparametricAnalyzer(BaseSkill):
 
     async def _auto_test(
         self,
-        sample1: List[float],
-        sample2: Optional[List[float]] = None,
+        sample1: list[float],
+        sample2: list[float] | None = None,
         paired: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Automatically select and run the appropriate non-parametric test.
 

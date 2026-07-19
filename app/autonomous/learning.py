@@ -22,15 +22,13 @@ Architecture:
 
 from __future__ import annotations
 
-import json
 import statistics
 import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -72,9 +70,9 @@ class PerformanceRecord:
     metric_type: MetricType = MetricType.SUCCESS_RATE
     value: float = 0.0
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "record_id": self.record_id,
             "agent_name": self.agent_name,
@@ -94,11 +92,11 @@ class DetectedPattern:
     agent_name: str = ""
     description: str = ""
     confidence: float = 0.0
-    evidence: List[Dict[str, Any]] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
     recommendation: str = ""
     detected_at: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pattern_id": self.pattern_id,
             "pattern_type": self.pattern_type.value,
@@ -122,10 +120,10 @@ class PromptAdjustment:
     new_value: Any = None
     reason: str = ""
     applied: bool = False
-    applied_at: Optional[float] = None
-    impact_score: Optional[float] = None  # Measured after application
+    applied_at: float | None = None
+    impact_score: float | None = None  # Measured after application
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "adjustment_id": self.adjustment_id,
             "agent_name": self.agent_name,
@@ -149,8 +147,8 @@ class AgentLearningProfile:
     avg_duration_ms: float = 0.0
     recent_success_rate: float = 0.0  # Last 20 executions
     trend: str = "stable"  # "improving", "degrading", "stable"
-    patterns: List[DetectedPattern] = field(default_factory=list)
-    adjustments: List[PromptAdjustment] = field(default_factory=list)
+    patterns: list[DetectedPattern] = field(default_factory=list)
+    adjustments: list[PromptAdjustment] = field(default_factory=list)
     last_updated: float = field(default_factory=time.time)
 
     @property
@@ -159,7 +157,7 @@ class AgentLearningProfile:
             return 0.0
         return self.total_successes / self.total_executions
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "total_executions": self.total_executions,
@@ -187,8 +185,8 @@ class PerformanceTracker:
     Provides aggregation and trend analysis.
     """
 
-    def __init__(self, persist_path: Optional[str] = None, max_records: int = 10_000):
-        self._records: List[PerformanceRecord] = []
+    def __init__(self, persist_path: str | None = None, max_records: int = 10_000):
+        self._records: list[PerformanceRecord] = []
         self._persist_path = persist_path
         self._max_records = max_records
         self._logger = logger.bind(component="performance_tracker")
@@ -199,7 +197,7 @@ class PerformanceTracker:
         task_name: str,
         metric_type: MetricType,
         value: float,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> PerformanceRecord:
         """Record a performance measurement."""
         rec = PerformanceRecord(
@@ -225,11 +223,11 @@ class PerformanceTracker:
 
     def get_records(
         self,
-        agent_name: Optional[str] = None,
-        metric_type: Optional[MetricType] = None,
-        since: Optional[float] = None,
+        agent_name: str | None = None,
+        metric_type: MetricType | None = None,
+        since: float | None = None,
         limit: int = 100,
-    ) -> List[PerformanceRecord]:
+    ) -> list[PerformanceRecord]:
         """Query performance records with filters."""
         results = self._records
         if agent_name:
@@ -240,17 +238,17 @@ class PerformanceTracker:
             results = [r for r in results if r.timestamp >= since]
         return results[-limit:]
 
-    def get_agent_stats(self, agent_name: str) -> Dict[str, Any]:
+    def get_agent_stats(self, agent_name: str) -> dict[str, Any]:
         """Get aggregated stats for an agent."""
         records = [r for r in self._records if r.agent_name == agent_name]
         if not records:
             return {"agent_name": agent_name, "record_count": 0}
 
-        by_metric: Dict[str, List[float]] = defaultdict(list)
+        by_metric: dict[str, list[float]] = defaultdict(list)
         for r in records:
             by_metric[r.metric_type.value].append(r.value)
 
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "agent_name": agent_name,
             "record_count": len(records),
         }
@@ -314,7 +312,7 @@ class FailureAnalyzer:
     """
 
     def __init__(self):
-        self._errors: List[Dict[str, Any]] = []
+        self._errors: list[dict[str, Any]] = []
         self._max_errors = 5000
         self._logger = logger.bind(component="failure_analyzer")
 
@@ -323,7 +321,7 @@ class FailureAnalyzer:
         agent_name: str,
         task_name: str,
         error: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record an error for pattern analysis."""
         self._errors.append({
@@ -337,7 +335,7 @@ class FailureAnalyzer:
         if len(self._errors) > self._max_errors:
             self._errors = self._errors[-self._max_errors:]
 
-    def analyze(self, agent_name: Optional[str] = None) -> List[DetectedPattern]:
+    def analyze(self, agent_name: str | None = None) -> list[DetectedPattern]:
         """
         Analyze errors and detect patterns.
 
@@ -347,7 +345,7 @@ class FailureAnalyzer:
         if agent_name:
             errors = [e for e in errors if e["agent_name"] == agent_name]
 
-        patterns: List[DetectedPattern] = []
+        patterns: list[DetectedPattern] = []
 
         # 1. Recurring errors (same error hash appearing 3+ times)
         patterns.extend(self._find_recurring_errors(errors))
@@ -361,17 +359,17 @@ class FailureAnalyzer:
         patterns.sort(key=lambda p: p.confidence, reverse=True)
         return patterns
 
-    def _find_recurring_errors(self, errors: List[Dict]) -> List[DetectedPattern]:
+    def _find_recurring_errors(self, errors: list[dict]) -> list[DetectedPattern]:
         """Find errors that recur frequently."""
         patterns = []
-        hash_counts: Dict[int, List[Dict]] = defaultdict(list)
+        hash_counts: dict[int, list[dict]] = defaultdict(list)
         for e in errors:
             hash_counts[e["error_hash"]].append(e)
 
         for error_hash, occurrences in hash_counts.items():
             if len(occurrences) >= 3:
                 # Group by agent
-                by_agent: Dict[str, int] = defaultdict(int)
+                by_agent: dict[str, int] = defaultdict(int)
                 for o in occurrences:
                     by_agent[o["agent_name"]] += 1
 
@@ -387,10 +385,10 @@ class FailureAnalyzer:
                         ))
         return patterns
 
-    def _find_high_failure_tasks(self, errors: List[Dict]) -> List[DetectedPattern]:
+    def _find_high_failure_tasks(self, errors: list[dict]) -> list[DetectedPattern]:
         """Find tasks with abnormally high failure rates."""
         patterns = []
-        task_attempts: Dict[str, Dict[str, int]] = defaultdict(lambda: {"total": 0, "errors": 0})
+        task_attempts: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "errors": 0})
 
         for e in errors:
             key = f"{e['agent_name']}:{e['task_name']}"
@@ -408,7 +406,7 @@ class FailureAnalyzer:
                 ))
         return patterns
 
-    def _detect_degradation(self, errors: List[Dict]) -> List[DetectedPattern]:
+    def _detect_degradation(self, errors: list[dict]) -> list[DetectedPattern]:
         """Detect if error rate is increasing over time."""
         patterns = []
         if len(errors) < 10:
@@ -427,7 +425,7 @@ class FailureAnalyzer:
 
             if recent_rate > older_rate * 1.5 and len(recent_errors) >= 3:
                 # Group by agent
-                by_agent: Dict[str, int] = defaultdict(int)
+                by_agent: dict[str, int] = defaultdict(int)
                 for e in recent_errors:
                     by_agent[e["agent_name"]] += 1
 
@@ -459,20 +457,20 @@ class PromptOptimizer:
     """
 
     def __init__(self):
-        self._adjustments: List[PromptAdjustment] = []
+        self._adjustments: list[PromptAdjustment] = []
         self._logger = logger.bind(component="prompt_optimizer")
 
     def generate_adjustments(
         self,
         profile: AgentLearningProfile,
-        patterns: List[DetectedPattern],
-    ) -> List[PromptAdjustment]:
+        patterns: list[DetectedPattern],
+    ) -> list[PromptAdjustment]:
         """
         Generate prompt/strategy adjustments based on learning data.
 
         Returns a list of recommended adjustments (not yet applied).
         """
-        adjustments: List[PromptAdjustment] = []
+        adjustments: list[PromptAdjustment] = []
 
         # 1. Low success rate → error handling prompt
         if profile.success_rate < 0.6 and profile.total_executions >= 5:
@@ -537,9 +535,9 @@ class PromptOptimizer:
 
     def get_adjustments(
         self,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         applied_only: bool = False,
-    ) -> List[PromptAdjustment]:
+    ) -> list[PromptAdjustment]:
         """Get adjustments with optional filters."""
         results = self._adjustments
         if agent_name:
@@ -577,7 +575,7 @@ class LearningSystem:
         self.analyzer = FailureAnalyzer()
         self.optimizer = PromptOptimizer()
         self._event_bus = event_bus
-        self._profiles: Dict[str, AgentLearningProfile] = {}
+        self._profiles: dict[str, AgentLearningProfile] = {}
         self._logger = logger.bind(component="learning_system")
 
     def record_success(
@@ -586,7 +584,7 @@ class LearningSystem:
         task_name: str,
         quality_score: float = 1.0,
         duration_ms: float = 0.0,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a successful execution."""
         self.tracker.record(
@@ -606,7 +604,7 @@ class LearningSystem:
         agent_name: str,
         task_name: str,
         error: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a failed execution."""
         self.tracker.record(
@@ -621,7 +619,7 @@ class LearningSystem:
         task_name: str,
         metric_type: MetricType,
         value: float,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a custom metric."""
         self.tracker.record(agent_name, task_name, metric_type, value, metadata)
@@ -633,17 +631,17 @@ class LearningSystem:
             self._update_profile(agent_name)
         return self._profiles.get(agent_name, AgentLearningProfile(agent_name=agent_name))
 
-    def detect_patterns(self, agent_name: Optional[str] = None) -> List[DetectedPattern]:
+    def detect_patterns(self, agent_name: str | None = None) -> list[DetectedPattern]:
         """Detect patterns in agent performance."""
         return self.analyzer.analyze(agent_name)
 
-    def suggest_adjustments(self, agent_name: str) -> List[PromptAdjustment]:
+    def suggest_adjustments(self, agent_name: str) -> list[PromptAdjustment]:
         """Suggest prompt/strategy adjustments for an agent."""
         profile = self.get_profile(agent_name)
         patterns = self.detect_patterns(agent_name)
         return self.optimizer.generate_adjustments(profile, patterns)
 
-    def get_all_profiles(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_profiles(self) -> dict[str, dict[str, Any]]:
         """Get all agent profiles."""
         # Refresh all profiles
         agent_names = set(r.agent_name for r in self.tracker._records)
@@ -651,7 +649,7 @@ class LearningSystem:
             self._update_profile(name)
         return {name: p.to_dict() for name, p in self._profiles.items()}
 
-    def get_system_stats(self) -> Dict[str, Any]:
+    def get_system_stats(self) -> dict[str, Any]:
         """Get system-wide learning statistics."""
         all_patterns = self.detect_patterns()
         return {

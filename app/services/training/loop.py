@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -77,8 +77,8 @@ class TrainingSignal:
     input_data: Any = None
     expected_output: Any = None
     actual_output: Any = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    captured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = field(default_factory=dict)
+    captured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     quality_score: float = 0.0  # 0-1, assigned by Data Curator
 
 
@@ -87,11 +87,11 @@ class CuratedDataset:
     """A curated, validated dataset ready for training."""
     dataset_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     model_type: ModelType = ModelType.INTENT_CLASSIFIER
-    signals: List[TrainingSignal] = field(default_factory=list)
+    signals: list[TrainingSignal] = field(default_factory=list)
     avg_quality_score: float = 0.0
-    class_distribution: Dict[str, int] = field(default_factory=dict)
+    class_distribution: dict[str, int] = field(default_factory=dict)
     is_valid: bool = False  # Must have avg_quality_score >= 0.7
-    curated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    curated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -101,10 +101,10 @@ class TrainingResult:
     model_type: ModelType = ModelType.INTENT_CLASSIFIER
     model_artifact_id: str = ""  # Reference to stored model checkpoint
     base_model_id: str = ""  # What it was trained from
-    training_config: Dict[str, Any] = field(default_factory=dict)
-    metrics: Dict[str, float] = field(default_factory=dict)  # loss, accuracy, etc.
+    training_config: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float] = field(default_factory=dict)  # loss, accuracy, etc.
     training_duration_seconds: float = 0.0
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
 
 @dataclass
@@ -113,13 +113,13 @@ class EvaluationResult:
     evaluation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     candidate_model_id: str = ""
     baseline_model_id: str = ""
-    metrics: Dict[str, float] = field(default_factory=dict)
-    improvement_metrics: Dict[str, float] = field(default_factory=dict)
+    metrics: dict[str, float] = field(default_factory=dict)
+    improvement_metrics: dict[str, float] = field(default_factory=dict)
     p_value: float = 1.0  # Statistical significance
     is_significant: bool = False  # p < 0.05
-    resource_impact: Dict[str, float] = field(default_factory=dict)  # latency, memory
+    resource_impact: dict[str, float] = field(default_factory=dict)  # latency, memory
     report: str = ""
-    evaluated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -128,14 +128,14 @@ class ExperimentResult:
     experiment_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     candidate_model_id: str = ""
     control_model_id: str = ""
-    treatment_metrics: Dict[str, float] = field(default_factory=dict)
-    control_metrics: Dict[str, float] = field(default_factory=dict)
+    treatment_metrics: dict[str, float] = field(default_factory=dict)
+    control_metrics: dict[str, float] = field(default_factory=dict)
     is_winner: bool = False
     is_regression: bool = False
     is_inconclusive: bool = True
     duration_hours: float = 0.0
     sample_size: int = 0
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
 
 @dataclass
@@ -148,7 +148,7 @@ class DeploymentResult:
     traffic_percentage: float = 0.0
     is_deployed: bool = False
     rollback_available: bool = True
-    deployed_at: Optional[datetime] = None
+    deployed_at: datetime | None = None
 
 
 @dataclass
@@ -157,13 +157,13 @@ class QualityReport:
     report_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     model_type: ModelType = ModelType.INTENT_CLASSIFIER
     model_id: str = ""
-    kpis: Dict[str, float] = field(default_factory=dict)
+    kpis: dict[str, float] = field(default_factory=dict)
     drift_detected: bool = False
     drift_type: str = ""  # data_drift, concept_drift, none
     control_chart_status: str = ""  # in_control, warning, out_of_control
     retraining_recommended: bool = False
     report_text: str = ""
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -172,15 +172,15 @@ class TrainingCycleSummary:
     cycle_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     model_type: ModelType = ModelType.INTENT_CLASSIFIER
     status: CycleStatus = CycleStatus.PENDING
-    phases_completed: List[TrainingPhase] = field(default_factory=list)
-    current_phase: Optional[TrainingPhase] = None
+    phases_completed: list[TrainingPhase] = field(default_factory=list)
+    current_phase: TrainingPhase | None = None
     signals_collected: int = 0
     dataset_quality: float = 0.0
     improvement_achieved: bool = False
     deployed: bool = False
-    error: Optional[str] = None
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = None
+    error: str | None = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -200,7 +200,7 @@ class DataCollectorAgent:
         - Batches data for efficient upload
     """
 
-    async def collect(self, model_type: str) -> List[TrainingSignal]:
+    async def collect(self, model_type: str) -> list[TrainingSignal]:
         """
         Collect training signals for a given model type.
 
@@ -233,7 +233,7 @@ class DataCuratorAgent:
 
     MIN_QUALITY_SCORE = 0.7
 
-    async def validate(self, signals: List[TrainingSignal]) -> CuratedDataset:
+    async def validate(self, signals: list[TrainingSignal]) -> CuratedDataset:
         """
         Validate, clean, and score training signals.
 
@@ -318,7 +318,7 @@ class ModelEvaluatorAgent:
     async def evaluate(
         self,
         candidate: TrainingResult,
-        baseline_id: Optional[str] = None,
+        baseline_id: str | None = None,
     ) -> EvaluationResult:
         """
         Evaluate candidate model against baseline.
@@ -362,7 +362,7 @@ class ExperimentRunnerAgent:
     async def run_ab_test(
         self,
         candidate: TrainingResult,
-        control_model_id: Optional[str] = None,
+        control_model_id: str | None = None,
         duration_hours: float = 48.0,
     ) -> ExperimentResult:
         """
@@ -416,7 +416,7 @@ class ModelDeployerAgent:
     async def deploy(
         self,
         model: TrainingResult,
-        experiment: Optional[ExperimentResult] = None,
+        experiment: ExperimentResult | None = None,
     ) -> DeploymentResult:
         """
         Deploy model via staged rollout.
@@ -509,8 +509,8 @@ class FeedbackProcessorAgent:
         self,
         worker_id: str,
         feedback_type: str,
-        feedback_data: Dict[str, Any],
-    ) -> List[TrainingSignal]:
+        feedback_data: dict[str, Any],
+    ) -> list[TrainingSignal]:
         """
         Process worker feedback into training signals.
 
@@ -604,7 +604,7 @@ class TrainingLoop:
             if not signals:
                 logger.info("training_loop.no_signals", cycle_id=cycle.cycle_id)
                 cycle.status = CycleStatus.COMPLETED
-                cycle.completed_at = datetime.now(timezone.utc)
+                cycle.completed_at = datetime.now(UTC)
                 return cycle
 
             # ── Phase 2: Data Pipeline ───────────────────────────────
@@ -620,7 +620,7 @@ class TrainingLoop:
                     avg_quality=curated.avg_quality_score,
                 )
                 cycle.status = CycleStatus.COMPLETED
-                cycle.completed_at = datetime.now(timezone.utc)
+                cycle.completed_at = datetime.now(UTC)
                 return cycle
 
             # ── Phase 3: Training ────────────────────────────────────
@@ -640,7 +640,7 @@ class TrainingLoop:
                     p_value=improvement.p_value,
                 )
                 cycle.status = CycleStatus.COMPLETED
-                cycle.completed_at = datetime.now(timezone.utc)
+                cycle.completed_at = datetime.now(UTC)
                 return cycle
 
             # ── Phase 5: Experiment ──────────────────────────────────
@@ -681,7 +681,7 @@ class TrainingLoop:
             cycle.status = CycleStatus.FAILED
             cycle.error = str(exc)
 
-        cycle.completed_at = datetime.now(timezone.utc)
+        cycle.completed_at = datetime.now(UTC)
 
         logger.info(
             "training_loop.cycle_completed",
@@ -698,8 +698,8 @@ class TrainingLoop:
         self,
         worker_id: str,
         feedback_type: str,
-        feedback_data: Dict[str, Any],
-    ) -> List[TrainingSignal]:
+        feedback_data: dict[str, Any],
+    ) -> list[TrainingSignal]:
         """
         Collect worker feedback for the next training cycle.
 
@@ -712,7 +712,7 @@ class TrainingLoop:
             feedback_data=feedback_data,
         )
 
-    async def get_cycle_status(self, cycle_id: str) -> Optional[TrainingCycleSummary]:
+    async def get_cycle_status(self, cycle_id: str) -> TrainingCycleSummary | None:
         """Get status of a training cycle by ID."""
         raise NotImplementedError(
             f"TrainingLoop.get_cycle_status() not wired to cycle persistence (database/cache). "

@@ -23,11 +23,11 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -80,12 +80,12 @@ class WorkerFeedback:
     feedback_type: FeedbackType = FeedbackType.FEATURE_REQUEST
     raw_text: str = ""  # What the worker said
     structured_intent: str = ""  # Parsed intent
-    context: Dict[str, Any] = field(default_factory=dict)  # Business type, region, etc.
+    context: dict[str, Any] = field(default_factory=dict)  # Business type, region, etc.
     sentiment_score: float = 0.0  # -1 to 1
     urgency_score: float = 0.0  # 0 to 1
     status: FeedbackStatus = FeedbackStatus.COLLECTED
-    cluster_id: Optional[str] = None  # Grouped with similar feedback
-    collected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    cluster_id: str | None = None  # Grouped with similar feedback
+    collected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -93,14 +93,14 @@ class FeedbackCluster:
     """A cluster of similar feedback requests."""
     cluster_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     theme: str = ""  # Human-readable theme
-    feedback_ids: List[str] = field(default_factory=list)
+    feedback_ids: list[str] = field(default_factory=list)
     worker_count: int = 0  # Unique workers who requested this
     avg_urgency: float = 0.0
-    sample_feedback: List[str] = field(default_factory=list)  # Representative quotes
-    business_types: Dict[str, int] = field(default_factory=dict)  # Distribution
-    regions: Dict[str, int] = field(default_factory=dict)
-    first_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    sample_feedback: list[str] = field(default_factory=list)  # Representative quotes
+    business_types: dict[str, int] = field(default_factory=dict)  # Distribution
+    regions: dict[str, int] = field(default_factory=dict)
+    first_seen: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_seen: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -111,12 +111,12 @@ class FeatureSpec:
     title: str = ""
     description: str = ""
     user_story: str = ""  # "As a [worker], I want [feature] so that [benefit]"
-    acceptance_criteria: List[str] = field(default_factory=list)
+    acceptance_criteria: list[str] = field(default_factory=list)
     priority: FeaturePriority = FeaturePriority.MEDIUM
     estimated_impact: float = 0.0  # 0-1, estimated worker satisfaction lift
     affected_worker_count: int = 0
     voice_interaction_design: str = ""  # How it works via voice
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -124,7 +124,7 @@ class FeatureAdoption:
     """Tracks adoption and impact of a deployed feature."""
     feature_id: str = ""
     feature_title: str = ""
-    deployed_at: Optional[datetime] = None
+    deployed_at: datetime | None = None
     total_workers_eligible: int = 0
     workers_using: int = 0
     adoption_rate: float = 0.0  # workers_using / total_workers_eligible
@@ -133,7 +133,7 @@ class FeatureAdoption:
     retention_impact: float = 0.0  # Change in worker retention
     feedback_volume: int = 0  # Post-deployment feedback
     positive_feedback_ratio: float = 0.0
-    measured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    measured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -144,9 +144,9 @@ class EvolutionReport:
     features_in_development: int = 0
     features_deployed: int = 0
     avg_adoption_rate: float = 0.0
-    top_requested_themes: List[Dict[str, Any]] = field(default_factory=list)
+    top_requested_themes: list[dict[str, Any]] = field(default_factory=list)
     feedback_velocity: float = 0.0  # Feedback per day (7-day avg)
-    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -180,10 +180,10 @@ class SelfEvolutionService:
     def __init__(self) -> None:
         # In-memory stores — these should be backed by database in production.
         # Use persist_* methods to flush to database when available.
-        self._feedback: Dict[str, WorkerFeedback] = {}
-        self._clusters: Dict[str, FeedbackCluster] = {}
-        self._specs: Dict[str, FeatureSpec] = {}
-        self._adoptions: Dict[str, FeatureAdoption] = {}
+        self._feedback: dict[str, WorkerFeedback] = {}
+        self._clusters: dict[str, FeedbackCluster] = {}
+        self._specs: dict[str, FeatureSpec] = {}
+        self._adoptions: dict[str, FeatureAdoption] = {}
         self._db_session: Any = None  # Injected via set_db_session()
 
     def set_db_session(self, session: Any) -> None:
@@ -221,8 +221,8 @@ class SelfEvolutionService:
         self,
         worker_id: str,
         feedback: str,
-        feedback_type: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
+        feedback_type: str | None = None,
+        context: dict[str, Any] | None = None,
     ) -> WorkerFeedback:
         """
         Collect worker feedback for feature requests.
@@ -289,8 +289,8 @@ class SelfEvolutionService:
 
     async def collect_batch_feedback(
         self,
-        feedback_items: List[Dict[str, Any]],
-    ) -> List[WorkerFeedback]:
+        feedback_items: list[dict[str, Any]],
+    ) -> list[WorkerFeedback]:
         """
         Collect multiple feedback items in batch.
 
@@ -313,7 +313,7 @@ class SelfEvolutionService:
 
     # ── Feedback Analysis ─────────────────────────────────────────
 
-    async def analyze_feedback_trends(self) -> Dict[str, Any]:
+    async def analyze_feedback_trends(self) -> dict[str, Any]:
         """
         Analyze feedback trends to identify most-requested features.
 
@@ -411,7 +411,7 @@ class SelfEvolutionService:
 
     # ── Feature Spec Generation ───────────────────────────────────
 
-    async def generate_feature_spec(self, feedback_cluster: Dict[str, Any]) -> FeatureSpec:
+    async def generate_feature_spec(self, feedback_cluster: dict[str, Any]) -> FeatureSpec:
         """
         Generate feature specification from feedback cluster.
 
@@ -510,9 +510,9 @@ class SelfEvolutionService:
 
     def evaluate_quality(
         self,
-        feedbacks: Optional[List[WorkerFeedback]] = None,
-        adoptions: Optional[Dict[str, FeatureAdoption]] = None,
-    ) -> Dict[str, Any]:
+        feedbacks: list[WorkerFeedback] | None = None,
+        adoptions: dict[str, FeatureAdoption] | None = None,
+    ) -> dict[str, Any]:
         """Evaluate overall evolution quality using real metrics.
 
         Replaces the previous hardcoded 0.5-0.7 judge scores with a
@@ -545,7 +545,7 @@ class SelfEvolutionService:
                 "diagnostics": "no_feedback_available",
             }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # ── Component 1: Weighted feedback sentiment (0-1) ──
         # Newer feedback gets more weight (half-life = 30 days)
@@ -599,7 +599,7 @@ class SelfEvolutionService:
             urgency_resolution = 1.0  # No urgent items = perfect score
 
         # ── Component 5: Feedback type diversity (Shannon entropy) ──
-        type_counts: Dict[str, int] = Counter(fb.feedback_type.value for fb in feedbacks)
+        type_counts: dict[str, int] = Counter(fb.feedback_type.value for fb in feedbacks)
         total = sum(type_counts.values())
         entropy = 0.0
         for count in type_counts.values():
@@ -644,7 +644,7 @@ class SelfEvolutionService:
             },
         }
 
-    async def track_adoption(self, feature_id: str) -> Dict[str, Any]:
+    async def track_adoption(self, feature_id: str) -> dict[str, Any]:
         """
         Track feature adoption and impact.
 
@@ -735,7 +735,7 @@ class SelfEvolutionService:
     def _classify_feedback(
         self,
         text: str,
-        explicit_type: Optional[str] = None,
+        explicit_type: str | None = None,
     ) -> FeedbackType:
         """Classify feedback type from text."""
         if explicit_type:
@@ -869,7 +869,7 @@ class SelfEvolutionService:
         intent_lower = feedback.structured_intent.lower()
 
         # Simple keyword matching for now
-        best_cluster: Optional[FeedbackCluster] = None
+        best_cluster: FeedbackCluster | None = None
         best_score = 0.0
 
         for cluster in self._clusters.values():
@@ -895,7 +895,7 @@ class SelfEvolutionService:
                 for fid in best_cluster.feedback_ids
                 if fid in self._feedback
             ))
-            best_cluster.last_seen = datetime.now(timezone.utc)
+            best_cluster.last_seen = datetime.now(UTC)
             if len(best_cluster.sample_feedback) < 5:
                 best_cluster.sample_feedback.append(feedback.raw_text[:200])
             # Update urgency average

@@ -21,16 +21,13 @@ are human-readable, not machine-translated — they use the vocabulary
 and patterns familiar to Kenyan informal workers.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Inventory, Transaction
-from app.models.user import User
-from app.schemas.sync import AlertItem, DailyBriefing, IntelligenceUpdate
 
 logger = structlog.get_logger(__name__)
 
@@ -146,7 +143,7 @@ def format_currency_kes(amount: float, language: str = "sw") -> str:
 
 def get_greeting(language: str = "sw") -> str:
     """Get time-appropriate greeting in local language."""
-    hour = datetime.now(timezone.utc).hour  # Would adjust for EAT in production
+    hour = datetime.now(UTC).hour  # Would adjust for EAT in production
     if hour < 12:
         return t("good_morning", language)
     elif hour < 17:
@@ -178,8 +175,8 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str = "sw",
-        since: Optional[datetime] = None,
-    ) -> Dict:
+        since: datetime | None = None,
+    ) -> dict:
         """
         Get complete intelligence update for a worker.
 
@@ -221,7 +218,7 @@ class IntelligenceDelivery:
             "alama_score": None,  # Would come from Alama Score service
             "alama_score_band": None,
             "market_insights": market_insights,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
 
         logger.info(
@@ -237,7 +234,7 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str = "sw",
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """
         Generate daily briefing: profit, alerts, recommendations.
 
@@ -251,12 +248,12 @@ class IntelligenceDelivery:
         Returns:
             DailyBriefing dictionary or None if no data
         """
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         today_start = datetime.combine(today, datetime.min.time()).replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         )
         today_end = datetime.combine(today, datetime.max.time()).replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         )
 
         # Query today's transactions for this worker
@@ -346,7 +343,7 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str = "sw",
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Get urgent alerts for a worker.
 
@@ -392,7 +389,7 @@ class IntelligenceDelivery:
     async def get_intelligence_freshness(
         self,
         worker_id_hash: str,
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """
         Get the timestamp of the most recent intelligence update.
 
@@ -417,7 +414,7 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Check inventory levels and generate restock alerts."""
         alerts = []
 
@@ -448,9 +445,9 @@ class IntelligenceDelivery:
                     "current_stock": item.current_stock,
                     "restock_threshold": item.restock_threshold,
                 },
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
                 "expires_at": (
-                    datetime.now(timezone.utc) + timedelta(hours=24)
+                    datetime.now(UTC) + timedelta(hours=24)
                 ).isoformat(),
             })
 
@@ -460,16 +457,16 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Detect unusual demand spikes by comparing today's volume
         to the 7-day average.
         """
         alerts = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = now.date()
         today_start = datetime.combine(today, datetime.min.time()).replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         )
         week_ago = today_start - timedelta(days=7)
 
@@ -531,9 +528,9 @@ class IntelligenceDelivery:
                     ),
                     "action_label": t("check_prices", language),
                     "action_payload": {"item": item, "today": today_count, "avg": round(avg, 1)},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                     "expires_at": (
-                        datetime.now(timezone.utc) + timedelta(hours=12)
+                        datetime.now(UTC) + timedelta(hours=12)
                     ).isoformat(),
                 })
 
@@ -546,7 +543,7 @@ class IntelligenceDelivery:
         profit: float,
         revenue: float,
         language: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate actionable recommendations based on today's data."""
         recommendations = []
 
@@ -590,7 +587,7 @@ class IntelligenceDelivery:
         self,
         worker_id_hash: str,
         language: str,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """
         Get relevant market insights for the worker's area and products.
 
@@ -607,7 +604,7 @@ class IntelligenceDelivery:
                 and_(
                     Transaction.user_id == worker_id_hash[:32],
                     Transaction.transaction_type == "SALE",
-                    Transaction.timestamp >= datetime.now(timezone.utc) - timedelta(days=30),
+                    Transaction.timestamp >= datetime.now(UTC) - timedelta(days=30),
                     Transaction.item.isnot(None),
                 )
             ).group_by(Transaction.item).order_by(
@@ -632,7 +629,7 @@ class IntelligenceDelivery:
             "period": "last_30_days",
         }
 
-    def _get_seasonal_tip(self, language: str) -> Optional[Dict]:
+    def _get_seasonal_tip(self, language: str) -> dict | None:
         """
         Generate seasonal business tips based on the current month.
 
@@ -644,7 +641,7 @@ class IntelligenceDelivery:
         - Sep-Oct: Short rains (rain gear)
         - Nov-Dec: Holiday season (gifts, food, decorations)
         """
-        month = datetime.now(timezone.utc).month
+        month = datetime.now(UTC).month
 
         seasonal_tips = {
             1: ("Bidhaa za shule zinahitajika sasa", "School supplies are in demand"),
@@ -675,6 +672,6 @@ class IntelligenceDelivery:
             "message": message,
             "action_label": None,
             "action_payload": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "expires_at": None,
         }

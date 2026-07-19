@@ -12,9 +12,9 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ChannelType(str, Enum):
@@ -42,10 +42,10 @@ class UnifiedMessage:
     worker_id: str
     content: str
     timestamp: str
-    language: Optional[str] = None
+    language: str | None = None
     content_type: str = "text"  # text, audio, image, location
-    media_url: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    media_url: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def create(
@@ -53,7 +53,7 @@ class UnifiedMessage:
         channel: ChannelType,
         worker_id: str,
         content: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         content_type: str = "text",
         **kwargs: Any,
     ) -> UnifiedMessage:
@@ -63,7 +63,7 @@ class UnifiedMessage:
             channel=channel,
             worker_id=worker_id,
             content=content,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             language=language,
             content_type=content_type,
             **kwargs,
@@ -75,11 +75,11 @@ class ChannelResponse:
     """Response from the gateway to be delivered through a channel adapter."""
 
     success: bool
-    content: Optional[str] = None
-    channel: Optional[ChannelType] = None
-    session_id: Optional[str] = None
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    content: str | None = None
+    channel: ChannelType | None = None
+    session_id: str | None = None
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseChannelAdapter(ABC):
@@ -111,7 +111,7 @@ class BaseChannelAdapter(ABC):
 
     @abstractmethod
     async def parse_raw_message(
-        self, raw_data: Dict[str, Any]
+        self, raw_data: dict[str, Any]
     ) -> UnifiedMessage:
         """Convert channel-specific raw data into a UnifiedMessage."""
         ...
@@ -127,7 +127,7 @@ class BaseChannelAdapter(ABC):
         """Send a message through this channel. Returns True on success."""
         ...
 
-    async def resolve_worker_id(self, channel_user_id: str) -> Optional[str]:
+    async def resolve_worker_id(self, channel_user_id: str) -> str | None:
         """
         Resolve a channel-specific user ID to a canonical worker ID.
         Override in adapters that have a mapping (e.g., phone → UUID).

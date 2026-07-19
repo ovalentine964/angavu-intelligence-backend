@@ -9,10 +9,10 @@ Implements frontier methods for measuring productive efficiency of
 decision-making units (DMUs) such as businesses, sectors, or regions.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-from scipy import stats, optimize
+from scipy import optimize, stats
 
 
 class DEAAnalyzer:
@@ -35,8 +35,8 @@ class DEAAnalyzer:
     def input_oriented_bcc(
         inputs: np.ndarray,
         outputs: np.ndarray,
-        dmu_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        dmu_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Input-oriented BCC (variable returns to scale) DEA model.
 
@@ -59,8 +59,8 @@ class DEAAnalyzer:
         if dmu_names is None:
             dmu_names = [f"DMU_{i}" for i in range(n)]
 
-        efficiencies: List[float] = []
-        benchmarks: List[Dict[str, Any]] = []
+        efficiencies: list[float] = []
+        benchmarks: list[dict[str, Any]] = []
 
         for i in range(n):
             try:
@@ -168,8 +168,8 @@ class DEAAnalyzer:
     def output_oriented_bcc(
         inputs: np.ndarray,
         outputs: np.ndarray,
-        dmu_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        dmu_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Output-oriented BCC DEA model.
 
@@ -210,7 +210,7 @@ class DEAAnalyzer:
         outputs_t0: np.ndarray,
         inputs_t1: np.ndarray,
         outputs_t1: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Malmquist productivity index for measuring productivity change.
 
@@ -270,7 +270,7 @@ class SFAAnalyzer:
     def half_normal_frontier(
         log_output: np.ndarray,
         log_inputs: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Estimate production frontier with half-normal inefficiency.
 
@@ -392,8 +392,8 @@ class SFAAnalyzer:
     def cobb_douglas_frontier(
         output: np.ndarray,
         inputs: np.ndarray,
-        input_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        input_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Cobb-Douglas stochastic production frontier.
 
@@ -425,7 +425,7 @@ class SFAAnalyzer:
         # Add input names and elasticity interpretation
         if input_names is not None and "coefficients" in result:
             betas = result["coefficients"]
-            elasticities: Dict[str, float] = {}
+            elasticities: dict[str, float] = {}
             for i, name in enumerate(input_names):
                 if i + 1 < len(betas):
                     elasticities[name] = round(float(betas[i + 1]), 4)
@@ -439,8 +439,8 @@ class SFAAnalyzer:
     def translog_frontier(
         output: np.ndarray,
         inputs: np.ndarray,
-        input_names: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        input_names: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Translog stochastic production frontier.
 

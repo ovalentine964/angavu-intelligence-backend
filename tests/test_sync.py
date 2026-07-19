@@ -11,18 +11,16 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
+from app.db.database import Base, async_session_factory, engine
 from app.main import app
-from app.db.database import get_db, async_session_factory, Base, engine
 from app.models.user import User
-from app.models.transaction import Transaction
 from app.utils.crypto import encrypt_value, hash_phone
-
 
 # =========================================================================
 # Fixtures
@@ -100,7 +98,7 @@ async def test_health_endpoint(client):
 async def test_sync_success(client, test_user, auth_headers):
     """Test successful sync with valid transactions."""
     user_id, _ = test_user
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     payload = {
         "device_id": "test-device-001",
@@ -185,7 +183,7 @@ async def test_sync_success(client, test_user, auth_headers):
 async def test_sync_duplicate_detection(client, test_user, auth_headers):
     """Test that duplicate transactions are detected and rejected."""
     user_id, _ = test_user
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     payload = {
         "device_id": "test-device-001",
@@ -220,7 +218,7 @@ async def test_sync_duplicate_detection(client, test_user, auth_headers):
 async def test_sync_invalid_transaction(client, test_user, auth_headers):
     """Test that invalid transactions are rejected."""
     user_id, _ = test_user
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     payload = {
         "device_id": "test-device-001",
@@ -250,7 +248,7 @@ async def test_sync_invalid_transaction(client, test_user, auth_headers):
 async def test_sync_user_mismatch(client, test_user, auth_headers):
     """Test that sync rejects requests with mismatched user IDs."""
     user_id, _ = test_user
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     payload = {
         "device_id": "test-device-001",

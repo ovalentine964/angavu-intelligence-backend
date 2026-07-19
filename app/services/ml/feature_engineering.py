@@ -17,8 +17,8 @@ gaps in their transaction records).
 """
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import structlog
@@ -40,9 +40,9 @@ class FeatureEngineer:
 
     @staticmethod
     def rfm_features(
-        transactions: List[Any],
-        reference_date: Optional[datetime] = None,
-    ) -> Dict[str, float]:
+        transactions: list[Any],
+        reference_date: datetime | None = None,
+    ) -> dict[str, float]:
         """
         Compute RFM (Recency, Frequency, Monetary) features.
 
@@ -68,7 +68,7 @@ class FeatureEngineer:
             }
 
         if reference_date is None:
-            reference_date = datetime.now(timezone.utc)
+            reference_date = datetime.now(UTC)
 
         sales = [t for t in transactions if t.transaction_type == "SALE"]
         if not sales:
@@ -116,7 +116,7 @@ class FeatureEngineer:
     # ─────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def temporal_features(transactions: List[Any]) -> Dict[str, float]:
+    def temporal_features(transactions: list[Any]) -> dict[str, float]:
         """
         Extract temporal patterns from transaction data.
 
@@ -189,11 +189,11 @@ class FeatureEngineer:
         # Gap analysis (consecutive inactive days)
         if len(active_dates) >= 2:
             sorted_dates = sorted(active_dates)
-            date_objects = [datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc) for d in sorted_dates]
+            date_objects = [datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=UTC) for d in sorted_dates]
             gaps = [(date_objects[i+1] - date_objects[i]).days for i in range(len(date_objects)-1)]
             max_gap = max(gaps) if gaps else 0
             avg_gap = float(np.mean(gaps)) if gaps else 0
-            days_since_last = (datetime.now(timezone.utc) - date_objects[-1]).days
+            days_since_last = (datetime.now(UTC) - date_objects[-1]).days
             if hasattr(days_since_last, 'total_seconds'):
                 days_since_last = days_since_last.days
         else:
@@ -204,7 +204,7 @@ class FeatureEngineer:
         # Active days ratio (over last 90 days)
         if transactions:
             earliest = min(t.timestamp for t in transactions)
-            span_days = max((datetime.now(timezone.utc) - earliest).days, 1)
+            span_days = max((datetime.now(UTC) - earliest).days, 1)
             active_ratio = len(active_dates) / min(span_days, 90)
         else:
             active_ratio = 0.0
@@ -228,7 +228,7 @@ class FeatureEngineer:
     # ─────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def product_mix_features(transactions: List[Any]) -> Dict[str, float]:
+    def product_mix_features(transactions: list[Any]) -> dict[str, float]:
         """
         Extract product mix and business profile features.
 
@@ -258,10 +258,10 @@ class FeatureEngineer:
             sales = transactions
 
         # Category distribution
-        cat_amounts: Dict[str, float] = defaultdict(float)
-        item_prices: List[float] = []
-        quantities: List[float] = []
-        profits: List[float] = []
+        cat_amounts: dict[str, float] = defaultdict(float)
+        item_prices: list[float] = []
+        quantities: list[float] = []
+        profits: list[float] = []
 
         for t in sales:
             cat = t.item_category or "other"
@@ -307,7 +307,7 @@ class FeatureEngineer:
     # ─────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def location_features(transactions: List[Any]) -> Dict[str, float]:
+    def location_features(transactions: list[Any]) -> dict[str, float]:
         """
         Extract location-based features from geohash data.
 
@@ -325,7 +325,7 @@ class FeatureEngineer:
                 "loc_has_geohash": 0.0,
             }
 
-        geohashes: Dict[str, int] = defaultdict(int)
+        geohashes: dict[str, int] = defaultdict(int)
         has_location = 0
 
         for t in transactions:
@@ -359,9 +359,9 @@ class FeatureEngineer:
 
     @staticmethod
     def derived_features(
-        transactions: List[Any],
-        windows: List[int] = [7, 14, 30],
-    ) -> Dict[str, float]:
+        transactions: list[Any],
+        windows: list[int] = [7, 14, 30],
+    ) -> dict[str, float]:
         """
         Compute derived and rolling-window features.
 
@@ -391,8 +391,8 @@ class FeatureEngineer:
             sales = transactions
 
         # Daily aggregation
-        daily_rev: Dict[str, float] = defaultdict(float)
-        daily_count: Dict[str, int] = defaultdict(int)
+        daily_rev: dict[str, float] = defaultdict(float)
+        daily_count: dict[str, int] = defaultdict(int)
         for t in sales:
             day = t.timestamp.strftime("%Y-%m-%d")
             daily_rev[day] += t.amount
@@ -447,7 +447,7 @@ class FeatureEngineer:
     # ─────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def churn_features(transactions: List[Any]) -> Dict[str, float]:
+    def churn_features(transactions: list[Any]) -> dict[str, float]:
         """
         Compute features specifically designed for churn prediction.
 
@@ -472,7 +472,7 @@ class FeatureEngineer:
             }
 
         sorted_txns = sorted(transactions, key=lambda t: t.timestamp)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Days since last transaction
         last_ts = sorted_txns[-1].timestamp
@@ -496,7 +496,7 @@ class FeatureEngineer:
         rev_decline = 1.0 - (second_rev / max(first_rev, 1)) if first_rev > 0 else 0.0
 
         # Short session ratio (single-txn days)
-        daily_counts: Dict[str, int] = defaultdict(int)
+        daily_counts: dict[str, int] = defaultdict(int)
         for t in sorted_txns:
             daily_counts[t.timestamp.strftime("%Y-%m-%d")] += 1
         short_sessions = sum(1 for c in daily_counts.values() if c == 1)
@@ -530,9 +530,9 @@ class FeatureEngineer:
 
     @staticmethod
     def anomaly_features(
-        transactions: List[Any],
+        transactions: list[Any],
         lookback_days: int = 30,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Compute features for anomaly detection on individual transactions.
 
@@ -556,7 +556,7 @@ class FeatureEngineer:
                 "anomaly_hour_concentration": 0.0,
             }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cutoff = now - timedelta(days=lookback_days)
         recent = [t for t in transactions if t.timestamp >= cutoff]
         if not recent:
@@ -566,7 +566,7 @@ class FeatureEngineer:
         items = set(t.item for t in recent if t.item)
 
         # Hour concentration (what fraction happen in the most common hour)
-        hour_counts: Dict[int, int] = defaultdict(int)
+        hour_counts: dict[int, int] = defaultdict(int)
         for t in recent:
             hour_counts[t.timestamp.hour] += 1
         if hour_counts:
@@ -592,9 +592,9 @@ class FeatureEngineer:
     @classmethod
     def extract_all_features(
         cls,
-        transactions: List[Any],
-        reference_date: Optional[datetime] = None,
-    ) -> Dict[str, float]:
+        transactions: list[Any],
+        reference_date: datetime | None = None,
+    ) -> dict[str, float]:
         """
         Extract all feature groups into a single flat feature dict.
 
@@ -624,8 +624,8 @@ class FeatureEngineer:
     def extract_transaction_features(
         cls,
         transaction: Any,
-        user_history: List[Any],
-    ) -> Dict[str, float]:
+        user_history: list[Any],
+    ) -> dict[str, float]:
         """
         Extract features for a single transaction (for anomaly detection).
 
@@ -677,9 +677,9 @@ class FeatureEngineer:
 
     @staticmethod
     def features_to_array(
-        features: Dict[str, float],
-        feature_order: Optional[List[str]] = None,
-    ) -> Tuple[np.ndarray, List[str]]:
+        features: dict[str, float],
+        feature_order: list[str] | None = None,
+    ) -> tuple[np.ndarray, list[str]]:
         """
         Convert feature dict to numpy array with consistent ordering.
 

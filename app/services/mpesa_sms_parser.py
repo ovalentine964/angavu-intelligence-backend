@@ -45,7 +45,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import structlog
 
@@ -92,12 +92,12 @@ class MpesaTransaction:
     merchant_name: str = ""                     # Business name for pay bill/till
     transaction_cost: float = 0.0               # M-Pesa fee
     balance_after: float = 0.0                  # M-Pesa balance after transaction
-    timestamp: Optional[datetime] = None        # Transaction datetime
+    timestamp: datetime | None = None        # Transaction datetime
     raw_sms: str = ""                           # Original SMS text
     confidence: float = 1.0                     # Parser confidence (0-1)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for pipeline consumption."""
         return {
             "transaction_id": self.transaction_id,
@@ -136,7 +136,7 @@ _ACCOUNT_RE = r"Account\s+(?:number\s+)?(\d{5,20})"
 
 # ── Pattern matchers for each SMS type ──
 
-_PATTERNS: List[Tuple[str, MpesaTransactionType, TransactionDirection, List[str]]] = [
+_PATTERNS: list[tuple[str, MpesaTransactionType, TransactionDirection, list[str]]] = [
     # STK Push / Lipa Na M-Pesa Online
     (
         r"Confirmed\.\s*.*?" + _AMOUNT_RE + r"\s+sent to\s+(.+?)\s+on\s+",
@@ -229,7 +229,7 @@ def _parse_amount(amount_str: str) -> float:
         return 0.0
 
 
-def _parse_datetime(date_str: str, time_str: str) -> Optional[datetime]:
+def _parse_datetime(date_str: str, time_str: str) -> datetime | None:
     """
     Parse M-Pesa date+time strings into datetime.
 
@@ -284,7 +284,7 @@ def _extract_cost(sms: str) -> float:
     return _parse_amount(match.group(1)) if match else 0.0
 
 
-def _extract_datetime(sms: str) -> Optional[datetime]:
+def _extract_datetime(sms: str) -> datetime | None:
     """Extract transaction datetime from SMS."""
     date_match = re.search(r"on\s+" + _DATE_RE, sms)
     time_match = re.search(_TIME_RE, sms)
@@ -425,7 +425,7 @@ def _classify_transaction(txn: MpesaTransaction) -> None:
     txn.metadata["item_category"] = item_category
 
 
-def parse_mpesa_sms_batch(sms_list: List[str]) -> List[MpesaTransaction]:
+def parse_mpesa_sms_batch(sms_list: list[str]) -> list[MpesaTransaction]:
     """
     Parse a batch of M-Pesa SMS messages.
 
@@ -453,10 +453,10 @@ def parse_mpesa_sms_batch(sms_list: List[str]) -> List[MpesaTransaction]:
 
 
 def extract_mpesa_transactions_from_device(
-    sms_list: List[str],
+    sms_list: list[str],
     user_id: str = "",
     device_id: str = "",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Parse M-Pesa SMS and format for the BiasharaSync pipeline.
 

@@ -16,7 +16,7 @@ from app.channels.registry import ChannelRegistry
 from app.channels.session_sync import SessionSync
 
 __all__ = [
-    "MultiChannelGateway",
     "ChannelRegistry",
+    "MultiChannelGateway",
     "SessionSync",
 ]

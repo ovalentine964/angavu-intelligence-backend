@@ -17,7 +17,8 @@ While NumPy/SciPy handle the computation, this module:
 4. Serves as the mathematical reference for the codebase
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import structlog
@@ -35,7 +36,7 @@ class AlgebraFoundations:
     """
 
     @staticmethod
-    def solve_linear_system(A: np.ndarray, b: np.ndarray) -> Dict[str, Any]:
+    def solve_linear_system(A: np.ndarray, b: np.ndarray) -> dict[str, Any]:
         """
         Solve Ax = b using Gaussian elimination with partial pivoting.
 
@@ -73,7 +74,7 @@ class AlgebraFoundations:
         }
 
     @staticmethod
-    def matrix_operations(A: np.ndarray, B: np.ndarray) -> Dict[str, Any]:
+    def matrix_operations(A: np.ndarray, B: np.ndarray) -> dict[str, Any]:
         """
         Basic matrix operations: multiplication, transpose, inverse.
 
@@ -110,8 +111,8 @@ class AlgebraFoundations:
 
     @staticmethod
     def sequence_operations(
-        terms: List[float],
-    ) -> Dict[str, Any]:
+        terms: list[float],
+    ) -> dict[str, Any]:
         """
         Analyze sequences: arithmetic, geometric, convergence.
 
@@ -165,7 +166,7 @@ class DifferentialCalculus:
         f: Callable,
         x: float,
         h: float = 1e-8,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Numerical differentiation using central difference.
 
@@ -200,9 +201,9 @@ class DifferentialCalculus:
     @staticmethod
     def find_critical_points(
         f: Callable,
-        interval: Tuple[float, float],
+        interval: tuple[float, float],
         n_grid: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find critical points where f'(x) = 0.
 
@@ -275,7 +276,7 @@ class IntegralCalculus:
         a: float,
         b: float,
         method: str = "simpson",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Numerical integration using quadrature.
 
@@ -335,7 +336,7 @@ class IntegralCalculus:
         equilibrium_price: float,
         equilibrium_quantity: float,
         max_price: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute consumer surplus using integration.
 
@@ -368,7 +369,7 @@ class IntegralCalculus:
     @staticmethod
     def lorenz_area(
         income_shares: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute area under Lorenz curve (for Gini coefficient).
 

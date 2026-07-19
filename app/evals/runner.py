@@ -23,7 +23,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -37,9 +37,9 @@ logger = structlog.get_logger(__name__)
 class EvalReport:
     """Full evaluation report across all categories."""
     model: str
-    suites: Dict[str, EvalSuite] = field(default_factory=dict)
+    suites: dict[str, EvalSuite] = field(default_factory=dict)
     started_at: float = field(default_factory=time.time)
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
 
     @property
     def weighted_score(self) -> float:
@@ -65,7 +65,7 @@ class EvalReport:
     def overall_pass_rate(self) -> float:
         return self.total_passed / max(self.total_tasks, 1)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "model": self.model,
             "weighted_score": round(self.weighted_score, 4),
@@ -117,15 +117,15 @@ class EvalRunner:
         regressions = runner.detect_regressions(report, baseline)
     """
 
-    def __init__(self, harness: EvalHarness, reports_dir: Optional[Path] = None):
+    def __init__(self, harness: EvalHarness, reports_dir: Path | None = None):
         self._harness = harness
         self._reports_dir = reports_dir or Path(__file__).parent / "reports"
         self._logger = logger.bind(component="eval_runner")
 
     async def run_all(
         self,
-        categories: Optional[List[str]] = None,
-        max_tasks_per_category: Optional[int] = None,
+        categories: list[str] | None = None,
+        max_tasks_per_category: int | None = None,
     ) -> EvalReport:
         """Run all eval categories and produce a report."""
         target_categories = categories or list(EVAL_CATEGORIES.keys())
@@ -157,9 +157,9 @@ class EvalRunner:
 
     async def compare_models(
         self,
-        model_names: List[str],
-        categories: Optional[List[str]] = None,
-    ) -> Dict[str, EvalReport]:
+        model_names: list[str],
+        categories: list[str] | None = None,
+    ) -> dict[str, EvalReport]:
         """
         Compare multiple models on the same eval suite.
 
@@ -179,7 +179,7 @@ class EvalRunner:
         current: EvalReport,
         baseline: EvalReport,
         threshold: float = 0.05,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Detect score regressions between current and baseline reports.
 

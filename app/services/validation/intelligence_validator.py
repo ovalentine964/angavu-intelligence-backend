@@ -18,8 +18,8 @@ Per SECURITY_ARCHITECTURE.md and intelligence product standards.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -141,14 +141,14 @@ class IntelligenceValidator:
         dt = self._parse_date(data_date)
         if dt is None:
             return ValidationResult.invalid(
-                value=datetime.now(timezone.utc),
+                value=datetime.now(UTC),
                 code=ErrorCode.DATE_INVALID,
                 message=f"Invalid date for {field_name}",
                 message_sw="Tarehe si sahihi",
                 field=field_name,
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         age_days = (now - dt).days
 
         if age_days > self.MAX_DATA_AGE_DAYS_CRITICAL:
@@ -299,7 +299,7 @@ class IntelligenceValidator:
 
     def validate_insight(
         self,
-        insight: Dict[str, Any],
+        insight: dict[str, Any],
         field_name: str = "insight",
     ) -> ValidationResult:
         """
@@ -357,7 +357,7 @@ class IntelligenceValidator:
 
     def validate_report(
         self,
-        report: Dict[str, Any],
+        report: dict[str, Any],
     ) -> ValidationResult:
         """
         Validate a complete intelligence report before delivery.
@@ -434,6 +434,6 @@ class IntelligenceValidator:
     # HELPERS
     # =====================================================================
 
-    def _parse_date(self, value: Any) -> Optional[datetime]:
+    def _parse_date(self, value: Any) -> datetime | None:
         """Parse various date formats into datetime. Delegates to shared utility."""
         return parse_date(value)

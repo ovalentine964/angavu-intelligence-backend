@@ -16,7 +16,6 @@ Capacity: 1,000+ metric tonnes/day refining
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -28,7 +27,7 @@ class ProductLine:
     price_segment: str  # economy, mid, premium
     target_demographic: str
     informal_channel_relevance: str  # high, medium, low
-    key_competitors: List[str] = field(default_factory=list)
+    key_competitors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -36,11 +35,11 @@ class RegionProfile:
     """Regional profile for distribution analysis."""
 
     name: str
-    counties: List[str]
+    counties: list[str]
     population_estimate: int
     informal_market_density: str  # high, medium, low
-    key_distributor_hubs: List[str] = field(default_factory=list)
-    dominant_competitors: List[str] = field(default_factory=list)
+    key_distributor_hubs: list[str] = field(default_factory=list)
+    dominant_competitors: list[str] = field(default_factory=list)
     penetration_opportunity: str = "medium"  # low, medium, high
 
 
@@ -62,7 +61,7 @@ class PwaniOilTemplate:
 
     # ── Product Portfolio ───────────────────────────────────────────────────
 
-    PRODUCTS: Dict[str, List[str]] = {
+    PRODUCTS: dict[str, list[str]] = {
         "cooking_oils": [
             "Fresh Fri",       # Premium cooking oil
             "Salit",           # Refined fortified vegetable oil
@@ -87,7 +86,7 @@ class PwaniOilTemplate:
     }
 
     # Detailed product line profiles
-    PRODUCT_LINES: Dict[str, ProductLine] = {
+    PRODUCT_LINES: dict[str, ProductLine] = {
         "fresh_fri": ProductLine(
             name="Fresh Fri",
             category="cooking_oils",
@@ -172,7 +171,7 @@ class PwaniOilTemplate:
 
     # ── Regional Profiles ───────────────────────────────────────────────────
 
-    REGIONS: Dict[str, RegionProfile] = {
+    REGIONS: dict[str, RegionProfile] = {
         "coast": RegionProfile(
             name="Coast",
             counties=["Mombasa", "Kilifi", "Kwale", "Taita-Taveta", "Lamu", "Tana River"],
@@ -329,7 +328,7 @@ class PwaniOilTemplate:
     }
 
     @classmethod
-    def get_all_products_flat(cls) -> List[str]:
+    def get_all_products_flat(cls) -> list[str]:
         """Return all product names as a flat list."""
         products = []
         for category_products in cls.PRODUCTS.values():
@@ -337,12 +336,12 @@ class PwaniOilTemplate:
         return products
 
     @classmethod
-    def get_products_by_category(cls, category: str) -> List[str]:
+    def get_products_by_category(cls, category: str) -> list[str]:
         """Return products for a specific category."""
         return cls.PRODUCTS.get(category, [])
 
     @classmethod
-    def get_high_informal_channel_products(cls) -> List[ProductLine]:
+    def get_high_informal_channel_products(cls) -> list[ProductLine]:
         """Return products with high informal channel relevance."""
         return [
             p for p in cls.PRODUCT_LINES.values()
@@ -350,12 +349,12 @@ class PwaniOilTemplate:
         ]
 
     @classmethod
-    def get_region_profile(cls, region: str) -> Optional[RegionProfile]:
+    def get_region_profile(cls, region: str) -> RegionProfile | None:
         """Return profile for a specific region."""
         return cls.REGIONS.get(region.lower())
 
     @classmethod
-    def get_expansion_priorities(cls) -> List[Dict]:
+    def get_expansion_priorities(cls) -> list[dict]:
         """
         Return regions ranked by expansion opportunity.
 

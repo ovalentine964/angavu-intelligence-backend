@@ -1,13 +1,12 @@
 """Tests for the autonomous orchestrator."""
 
-import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
 
-from app.autonomous.orchestrator import AutonomousOrchestrator, ScheduledTask
+import pytest
+
+from app.autonomous.config import AgentConfigManager
 from app.autonomous.escalation import EscalationManager
 from app.autonomous.monitoring import AgentMonitor
-from app.autonomous.config import AgentConfigManager
+from app.autonomous.orchestrator import AutonomousOrchestrator, ScheduledTask
 
 
 class MockEventBus:

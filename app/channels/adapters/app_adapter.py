@@ -7,7 +7,7 @@ The app sends structured JSON payloads to the gateway API.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -30,7 +30,7 @@ class AppAdapter(BaseChannelAdapter):
       (content is ASR transcript, media_url is audio file)
     """
 
-    def __init__(self, app_secret: Optional[str] = None):
+    def __init__(self, app_secret: str | None = None):
         self._app_secret = app_secret
         self._initialized = False
 
@@ -49,7 +49,7 @@ class AppAdapter(BaseChannelAdapter):
         logger.info("app_adapter_shutdown")
 
     async def parse_raw_message(
-        self, raw_data: Dict[str, Any]
+        self, raw_data: dict[str, Any]
     ) -> UnifiedMessage:
         """
         Parse app payload into UnifiedMessage.
@@ -108,7 +108,7 @@ class AppAdapter(BaseChannelAdapter):
         # For push notifications, integrate with Firebase Cloud Messaging.
         return True
 
-    async def resolve_worker_id(self, channel_user_id: str) -> Optional[str]:
+    async def resolve_worker_id(self, channel_user_id: str) -> str | None:
         """
         App users are already identified by their UUID.
         No resolution needed.

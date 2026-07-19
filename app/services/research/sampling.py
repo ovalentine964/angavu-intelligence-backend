@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import structlog
@@ -38,11 +38,11 @@ class SampleSizeResult:
     confidence_level: float
     margin_of_error: float
     expected_proportion: float
-    population_size: Optional[int]
+    population_size: int | None
     design_effect: float
     method: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "required_n": self.required_n,
             "adjusted_n": self.adjusted_n,
@@ -59,12 +59,12 @@ class SampleSizeResult:
 class SamplingPlan:
     """A complete sampling plan."""
     method: str
-    strata: Optional[Dict[str, List[str]]]
+    strata: dict[str, list[str]] | None
     sample_size: int
-    allocation: Dict[str, int]     # Per-stratum sample sizes
+    allocation: dict[str, int]     # Per-stratum sample sizes
     description: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "method": self.method,
             "strata": self.strata,
@@ -93,7 +93,7 @@ class SampleSizeCalculator:
         confidence: float = 0.95,
         margin_of_error: float = 0.05,
         expected_proportion: float = 0.5,
-        population_size: Optional[int] = None,
+        population_size: int | None = None,
         design_effect: float = 1.0,
     ) -> SampleSizeResult:
         """
@@ -141,7 +141,7 @@ class SampleSizeCalculator:
         confidence: float = 0.95,
         margin_of_error: float = 0.05,
         std_dev: float = 1.0,
-        population_size: Optional[int] = None,
+        population_size: int | None = None,
         design_effect: float = 1.0,
     ) -> SampleSizeResult:
         """
@@ -227,19 +227,19 @@ class SamplingEngine:
     def simple_random(
         population_size: int,
         sample_size: int,
-        seed: Optional[int] = None,
-    ) -> List[int]:
+        seed: int | None = None,
+    ) -> list[int]:
         """Simple random sampling without replacement."""
         rng = np.random.default_rng(seed)
         return sorted(rng.choice(population_size, size=sample_size, replace=False).tolist())
 
     @staticmethod
     def stratified(
-        strata: Dict[str, int],
+        strata: dict[str, int],
         total_sample_size: int,
         allocation: str = "proportional",
-        seed: Optional[int] = None,
-    ) -> Dict[str, List[int]]:
+        seed: int | None = None,
+    ) -> dict[str, list[int]]:
         """
         Stratified sampling.
 
@@ -275,11 +275,11 @@ class SamplingEngine:
 
     @staticmethod
     def cluster(
-        clusters: Dict[str, int],
+        clusters: dict[str, int],
         n_clusters_to_sample: int,
         sample_per_cluster: int,
-        seed: Optional[int] = None,
-    ) -> Dict[str, List[int]]:
+        seed: int | None = None,
+    ) -> dict[str, list[int]]:
         """
         Cluster sampling.
 
@@ -301,7 +301,7 @@ class SamplingEngine:
 
     @staticmethod
     def compute_design_effect(
-        cluster_sizes: List[float],
+        cluster_sizes: list[float],
         intra_class_correlation: float = 0.05,
     ) -> float:
         """
@@ -323,7 +323,7 @@ class SamplingEngine:
 
     @staticmethod
     def create_sampling_plan(
-        market_segments: Dict[str, int],
+        market_segments: dict[str, int],
         total_budget: int,
         confidence: float = 0.95,
         margin_of_error: float = 0.05,

@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class LeadStatus(str, Enum):
@@ -79,7 +79,7 @@ class LeadScore:
         )
         return self.composite
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "company_size": round(self.company_size, 1),
             "industry_fit": round(self.industry_fit, 1),
@@ -127,14 +127,14 @@ class Lead:
     status: LeadStatus = LeadStatus.NEW
     score: LeadScore = field(default_factory=LeadScore)
     notes: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     assigned_to: str = ""           # "valentine" for escalated leads
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    qualified_at: Optional[datetime] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    qualified_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "lead_id": self.lead_id,
             "company_name": self.company_name,
@@ -153,7 +153,7 @@ class Lead:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Lead:
+    def from_dict(cls, data: dict[str, Any]) -> Lead:
         """Reconstruct a Lead from a dictionary."""
         score_data = data.get("score", {})
         score = LeadScore(

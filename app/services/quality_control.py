@@ -20,9 +20,7 @@ Key Applications:
 This module is wired into DataPipeline for quality monitoring.
 """
 
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import structlog
@@ -58,9 +56,9 @@ class SPCChart:
 
     @staticmethod
     def xbar_chart(
-        subgroups: List[np.ndarray],
-        sigma_known: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        subgroups: list[np.ndarray],
+        sigma_known: float | None = None,
+    ) -> dict[str, Any]:
         """
         X-bar control chart for monitoring process mean.
 
@@ -133,7 +131,7 @@ class SPCChart:
         }
 
     @staticmethod
-    def r_chart(subgroups: List[np.ndarray]) -> Dict[str, Any]:
+    def r_chart(subgroups: list[np.ndarray]) -> dict[str, Any]:
         """
         R control chart for monitoring process variability.
 
@@ -182,7 +180,7 @@ class SPCChart:
     def p_chart(
         defect_counts: np.ndarray,
         sample_sizes: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         p control chart for proportion nonconforming.
 
@@ -229,7 +227,7 @@ class SPCChart:
         sigma: float,
         k: float = 0.5,
         h: float = 5.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         CUSUM (Cumulative Sum) chart for detecting small persistent shifts.
 
@@ -281,7 +279,7 @@ class SPCChart:
         data: np.ndarray,
         usl: float,
         lsl: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process capability indices.
 
@@ -344,7 +342,7 @@ class SPCChart:
         }
 
     @staticmethod
-    def _detect_runs(data: np.ndarray, center: float) -> List[Dict[str, Any]]:
+    def _detect_runs(data: np.ndarray, center: float) -> list[dict[str, Any]]:
         """Detect runs (8+ consecutive points on one side of center)."""
         runs = []
         current_side = None
@@ -392,7 +390,7 @@ class DataQualityMonitor:
     def monitor_transaction_quality(
         daily_volumes: np.ndarray,
         daily_completeness: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Monitor transaction data quality using SPC.
 

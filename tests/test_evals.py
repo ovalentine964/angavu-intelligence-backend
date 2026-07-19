@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 # Ensure app package is importable
 import sys
 import types
+from pathlib import Path
+
+import pytest
 
 if "app.agents" not in sys.modules:
     _agents_pkg = types.ModuleType("app.agents")
@@ -42,7 +42,6 @@ from app.evals.harness import (
     heuristic_scorer,
 )
 from app.evals.runner import EvalReport, EvalRunner
-
 
 # ════════════════════════════════════════════════════════════════════
 # Category Tests

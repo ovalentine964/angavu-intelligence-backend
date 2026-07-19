@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class LoopType(str, Enum):
@@ -40,7 +40,7 @@ class LoopPhaseConfig:
     """Configuration for a single phase within a loop."""
     name: str
     description: str
-    agent_name: Optional[str] = None  # Which agent handles this phase
+    agent_name: str | None = None  # Which agent handles this phase
     timeout_seconds: float = 30.0
     retry_count: int = 1
     required: bool = True
@@ -53,7 +53,7 @@ class EvaluationConfig:
     threshold: float = 0.7  # For THRESHOLD mode
     max_continuations: int = 8  # DeerFlow DEFAULT_MAX_GOAL_CONTINUATIONS
     max_no_progress: int = 2   # DeerFlow DEFAULT_MAX_NO_PROGRESS_CONTINUATIONS
-    evidence_fields: List[str] = field(default_factory=list)  # Fields to check for evidence
+    evidence_fields: list[str] = field(default_factory=list)  # Fields to check for evidence
 
 
 @dataclass
@@ -70,9 +70,9 @@ class BiasharaLoopConfig:
     feature_name: str
     description: str
     loop_type: LoopType
-    phases: List[LoopPhaseConfig]
+    phases: list[LoopPhaseConfig]
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
 
     def to_goal_objective(self) -> str:
@@ -85,7 +85,7 @@ class BiasharaLoopConfig:
 # Global Registry
 # ════════════════════════════════════════════════════════════════════
 
-_loop_configs: Dict[str, BiasharaLoopConfig] = {}
+_loop_configs: dict[str, BiasharaLoopConfig] = {}
 
 
 def register_loop_config(config: BiasharaLoopConfig) -> None:
@@ -93,17 +93,17 @@ def register_loop_config(config: BiasharaLoopConfig) -> None:
     _loop_configs[config.feature_name] = config
 
 
-def get_loop_config(feature_name: str) -> Optional[BiasharaLoopConfig]:
+def get_loop_config(feature_name: str) -> BiasharaLoopConfig | None:
     """Get a registered loop configuration by feature name."""
     return _loop_configs.get(feature_name)
 
 
-def get_all_loop_configs() -> Dict[str, BiasharaLoopConfig]:
+def get_all_loop_configs() -> dict[str, BiasharaLoopConfig]:
     """Get all registered loop configurations."""
     return dict(_loop_configs)
 
 
-def get_enabled_loop_configs() -> Dict[str, BiasharaLoopConfig]:
+def get_enabled_loop_configs() -> dict[str, BiasharaLoopConfig]:
     """Get only enabled loop configurations."""
     return {k: v for k, v in _loop_configs.items() if v.enabled}
 

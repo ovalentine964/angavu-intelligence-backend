@@ -11,8 +11,7 @@ BSc Economics & Statistics (Masinde Muliro University, 42 units,
 
 from __future__ import annotations
 
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
@@ -34,8 +33,8 @@ class SkillRegistry:
     """
 
     def __init__(self):
-        self._skills: Dict[str, BaseSkill] = {}
-        self._agent_skills: Dict[str, List[str]] = {}  # agent → [skill_names]
+        self._skills: dict[str, BaseSkill] = {}
+        self._agent_skills: dict[str, list[str]] = {}  # agent → [skill_names]
         self._logger = logger.bind(component="SkillRegistry")
 
     def register(self, skill: BaseSkill) -> None:
@@ -56,15 +55,15 @@ class SkillRegistry:
             agents=skill.agent_bindings,
         )
 
-    def get(self, name: str) -> Optional[BaseSkill]:
+    def get(self, name: str) -> BaseSkill | None:
         """Get a skill by name."""
         return self._skills.get(name)
 
-    def list_all(self) -> List[Dict[str, Any]]:
+    def list_all(self) -> list[dict[str, Any]]:
         """List all registered skills with metadata."""
         return [skill.get_info() for skill in self._skills.values()]
 
-    def list_for_agent(self, agent_name: str) -> List[Dict[str, Any]]:
+    def list_for_agent(self, agent_name: str) -> list[dict[str, Any]]:
         """List skills available to a specific agent."""
         skill_names = self._agent_skills.get(agent_name, [])
         return [
@@ -73,7 +72,7 @@ class SkillRegistry:
             if name in self._skills
         ]
 
-    def get_skills_for_agent(self, agent_name: str) -> List[BaseSkill]:
+    def get_skills_for_agent(self, agent_name: str) -> list[BaseSkill]:
         """Get skill instances for an agent."""
         skill_names = self._agent_skills.get(agent_name, [])
         return [
@@ -106,7 +105,7 @@ class SkillRegistry:
 
         return await skill.safe_execute(action=action, **kwargs)
 
-    def get_metrics(self, skill_name: Optional[str] = None) -> Dict[str, Any]:
+    def get_metrics(self, skill_name: str | None = None) -> dict[str, Any]:
         """Get metrics for one or all skills."""
         if skill_name:
             skill = self._skills.get(skill_name)
@@ -119,7 +118,7 @@ class SkillRegistry:
             for name, skill in self._skills.items()
         }
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get registry summary statistics."""
         total_calls = sum(s.metrics.total_calls for s in self._skills.values())
         total_success = sum(s.metrics.successful_calls for s in self._skills.values())
@@ -148,7 +147,7 @@ class SkillRegistry:
 
 # ── Singleton ───────────────────────────────────────────────────────
 
-_registry: Optional[SkillRegistry] = None
+_registry: SkillRegistry | None = None
 
 
 def get_skill_registry() -> SkillRegistry:
@@ -162,12 +161,12 @@ def get_skill_registry() -> SkillRegistry:
 
 def _register_default_skills(registry: SkillRegistry) -> None:
     """Register all default skills from degree course units."""
-    from app.skills.microfinance_analyzer import MicrofinanceAnalyzer
-    from app.skills.time_series_forecaster import TimeSeriesForecasterSkill
-    from app.skills.statistical_estimator import StatisticalEstimator
     from app.skills.econometric_modeler import EconometricModeler
-    from app.skills.worker_segmenter import WorkerSegmenter
+    from app.skills.microfinance_analyzer import MicrofinanceAnalyzer
     from app.skills.nonparametric_analyzer import NonparametricAnalyzer
+    from app.skills.statistical_estimator import StatisticalEstimator
+    from app.skills.time_series_forecaster import TimeSeriesForecasterSkill
+    from app.skills.worker_segmenter import WorkerSegmenter
 
     skills = [
         MicrofinanceAnalyzer(),       # ECO 206

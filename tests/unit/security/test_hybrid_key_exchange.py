@@ -15,10 +15,10 @@ except ImportError:
 from cryptography.hazmat.primitives.asymmetric import x25519
 
 from app.security.pqc.hybrid_key_exchange import (
-    HybridKeyExchange,
-    HybridKeyExchangeResult,
     HYBRID_ALGORITHM_ID,
     HYBRID_SHARED_SECRET_SIZE,
+    HybridKeyExchange,
+    HybridKeyExchangeResult,
 )
 
 pytestmark = pytest.mark.skipif(not _HAS_OQS, reason="liboqs not installed")
@@ -97,7 +97,6 @@ class TestHybridKeyExchange:
 
         # The server-side combines real X25519 DH + ML-KEM via HKDF
         # The client result used a placeholder; recombine with real DH
-        from app.security.pqc.hybrid_key_exchange import HybridKeyExchange as _Kex
         real_client_secret = client_kex._combine_secrets(
             client_real_secret,
             provider.encapsulate(kem_kp.public_key).shared_secret,

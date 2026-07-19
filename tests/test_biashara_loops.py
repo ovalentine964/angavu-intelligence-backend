@@ -14,13 +14,11 @@ DeerFlow's goal system patterns:
 
 from __future__ import annotations
 
-import asyncio
-import pytest
-import time
-from unittest.mock import AsyncMock, MagicMock
-
 import sys
+import time
 import types
+
+import pytest
 
 # Avoid triggering full app.agents.__init__ import chain which pulls in
 # services with pre-existing issues. Stub out the package init.
@@ -38,19 +36,16 @@ if "app.agents.loops" not in sys.modules:
     _loops_pkg.__path__ = []
     sys.modules["app.agents.loops"] = _loops_pkg
 
-from app.agents.base import AgentEvent, AgentResult, EventType
+# Restore the loops package module with core's exports
+import app.agents.loops.core as _core_mod
+from app.agents.base import AgentEvent, EventType
 from app.agents.loops.core import (
-    Critique,
     EventStore,
     ExecutionPlan,
     PlanStep,
     ReActTrace,
-    SupervisedExecution,
-    SupervisionPolicy,
 )
 
-# Restore the loops package module with core's exports
-import app.agents.loops.core as _core_mod
 sys.modules["app.agents.loops"].core = _core_mod
 for name in ["Critique", "EventStore", "ExecutionPlan", "PlanStep",
              "ReActTrace", "SupervisedExecution", "SupervisionPolicy",
@@ -60,7 +55,6 @@ for name in ["Critique", "EventStore", "ExecutionPlan", "PlanStep",
         setattr(sys.modules["app.agents.loops"], name, getattr(_core_mod, name))
 from app.loops.config import (
     BiasharaLoopConfig,
-    EvaluationConfig,
     EvaluationMode,
     LoopPhaseConfig,
     LoopType,
@@ -69,32 +63,23 @@ from app.loops.config import (
     get_loop_config,
     register_loop_config,
 )
-from app.loops.tithe_loop import (
-    TitheAnalysis,
-    TitheLoop,
-    TitheLoopState,
-    TithePayment,
-)
 from app.loops.goal_loop import (
     GoalLoopState,
-    GoalPrediction,
     GoalProgressLoop,
-    SavingsGoal,
-)
-from app.loops.loan_loop import (
-    Loan,
-    LoanAlert,
-    LoanLoop,
-    LoanLoopState,
-    VerificationResult,
 )
 from app.loops.intelligence_loop import (
     IntelligenceLoop,
     IntelligenceLoopState,
-    IntelligenceProduct,
-    IntelligenceRequest,
 )
-
+from app.loops.loan_loop import (
+    Loan,
+    LoanLoop,
+    LoanLoopState,
+)
+from app.loops.tithe_loop import (
+    TitheLoop,
+    TitheLoopState,
+)
 
 # ════════════════════════════════════════════════════════════════════
 # Config Tests
@@ -690,10 +675,10 @@ class TestDeerFlowIntegration:
 
     def test_continuation_limits_match_deerflow(self):
         """Continuation limits should align with DeerFlow defaults."""
-        from app.loops.tithe_loop import TitheLoopState
         from app.loops.goal_loop import GoalLoopState
-        from app.loops.loan_loop import LoanLoopState
         from app.loops.intelligence_loop import IntelligenceLoopState
+        from app.loops.loan_loop import LoanLoopState
+        from app.loops.tithe_loop import TitheLoopState
 
         # All states should have reasonable continuation limits
         for state_cls in [TitheLoopState, GoalLoopState, LoanLoopState, IntelligenceLoopState]:
