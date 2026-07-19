@@ -8,6 +8,7 @@ Decision cascade:
 4. Complex query + connected? → cloud (better quality)
 5. Cloud fails? → on-device (graceful fallback)
 """
+
 from __future__ import annotations
 
 import time
@@ -29,6 +30,7 @@ logger = structlog.get_logger(__name__)
 
 class RoutingDecision(StrEnum):
     """Where the query was routed."""
+
     ON_DEVICE = "on_device"
     CLOUD = "cloud"
     CACHED = "cached"
@@ -38,6 +40,7 @@ class RoutingDecision(StrEnum):
 @dataclass
 class HybridResponse:
     """Response from the hybrid router."""
+
     text: str
     decision: RoutingDecision
     complexity: QueryComplexity

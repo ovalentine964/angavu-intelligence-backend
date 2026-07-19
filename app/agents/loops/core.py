@@ -59,6 +59,7 @@ class BudgetGuard:
             break
         guard.record(iteration_tokens, iteration_cost)
     """
+
     max_iterations: int = 5
     max_tokens_per_cycle: int = 5000
     max_cost_per_cycle_usd: float = 0.05
@@ -82,6 +83,7 @@ class BudgetGuard:
 
         # Daily tracking with auto-reset
         import datetime
+
         today = datetime.date.today().isoformat()
         if today != self._day_key:
             self._day_tokens = 0
@@ -96,16 +98,22 @@ class BudgetGuard:
             self._exhausted_reason = f"max_iterations ({self._iterations}/{self.max_iterations})"
             return True
         if self._cycle_tokens >= self.max_tokens_per_cycle:
-            self._exhausted_reason = f"max_tokens_per_cycle ({self._cycle_tokens}/{self.max_tokens_per_cycle})"
+            self._exhausted_reason = (
+                f"max_tokens_per_cycle ({self._cycle_tokens}/{self.max_tokens_per_cycle})"
+            )
             return True
         if self._cycle_cost_usd >= self.max_cost_per_cycle_usd:
             self._exhausted_reason = f"max_cost_per_cycle (${self._cycle_cost_usd:.6f}/${self.max_cost_per_cycle_usd:.6f})"
             return True
         if self._day_tokens >= self.max_tokens_per_day:
-            self._exhausted_reason = f"max_tokens_per_day ({self._day_tokens}/{self.max_tokens_per_day})"
+            self._exhausted_reason = (
+                f"max_tokens_per_day ({self._day_tokens}/{self.max_tokens_per_day})"
+            )
             return True
         if self._day_cost_usd >= self.max_cost_per_day_usd:
-            self._exhausted_reason = f"max_cost_per_day (${self._day_cost_usd:.6f}/${self.max_cost_per_day_usd:.6f})"
+            self._exhausted_reason = (
+                f"max_cost_per_day (${self._day_cost_usd:.6f}/${self.max_cost_per_day_usd:.6f})"
+            )
             return True
         return False
 
@@ -136,12 +144,13 @@ class BudgetGuard:
 @dataclass
 class ReasoningStep:
     """A single step in a ReAct reasoning trace."""
+
     step_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     timestamp: float = field(default_factory=time.time)
-    phase: str = ""          # "think" | "act" | "observe" | "reflect"
-    reasoning: str = ""      # What the agent is thinking
-    action: str = ""         # What action was taken
-    observation: str = ""    # What was observed
+    phase: str = ""  # "think" | "act" | "observe" | "reflect"
+    reasoning: str = ""  # What the agent is thinking
+    action: str = ""  # What action was taken
+    observation: str = ""  # What was observed
     confidence: float = 1.0  # Confidence in this step
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -161,6 +170,7 @@ class ReasoningStep:
 @dataclass
 class ReActTrace:
     """Full trace of a ReAct loop execution."""
+
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     agent_name: str = ""
     task: str = ""
@@ -236,7 +246,7 @@ class ReActAgent(BiasharaAgent):
         # Store trace
         self._trace_history.append(trace)
         if len(self._trace_history) > self._max_trace_history:
-            self._trace_history = self._trace_history[-self._max_trace_history:]
+            self._trace_history = self._trace_history[-self._max_trace_history :]
 
         self._current_trace = None
         return result
@@ -352,11 +362,12 @@ class ReActAgent(BiasharaAgent):
 @dataclass
 class Critique:
     """Result of a self-critique evaluation."""
-    score: float = 0.0           # 0.0 - 1.0 quality score
+
+    score: float = 0.0  # 0.0 - 1.0 quality score
     issues: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
-    should_retry: bool = False   # Whether a retry is warranted
-    revision_plan: str = ""      # How to improve on retry
+    should_retry: bool = False  # Whether a retry is warranted
+    revision_plan: str = ""  # How to improve on retry
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -469,18 +480,26 @@ class ReflexionAgent(ReActAgent):
                 # Estimate tokens from result data if available
                 tokens = 0
                 cost = 0.0
-                if last_result and hasattr(last_result, 'data') and isinstance(last_result.data, dict):
-                    tokens = last_result.data.get('input_tokens', 0) + last_result.data.get('output_tokens', 0)
-                    cost = last_result.data.get('cost_usd', 0.0)
+                if (
+                    last_result
+                    and hasattr(last_result, "data")
+                    and isinstance(last_result.data, dict)
+                ):
+                    tokens = last_result.data.get("input_tokens", 0) + last_result.data.get(
+                        "output_tokens", 0
+                    )
+                    cost = last_result.data.get("cost_usd", 0.0)
                 self._budget_guard.record(tokens=tokens, cost_usd=cost)
 
         # Store the full Reflexion trace
         if self._current_trace:
-            self._current_trace.steps.append(ReasoningStep(
-                phase="reflexion",
-                reasoning=f"Completed {attempt} attempt(s). Critiques: {[c.score for c in critiques]}",
-                metadata={"critiques": [c.to_dict() for c in critiques]},
-            ))
+            self._current_trace.steps.append(
+                ReasoningStep(
+                    phase="reflexion",
+                    reasoning=f"Completed {attempt} attempt(s). Critiques: {[c.score for c in critiques]}",
+                    metadata={"critiques": [c.to_dict() for c in critiques]},
+                )
+            )
 
         return last_result
 
@@ -529,9 +548,7 @@ class ReflexionAgent(ReActAgent):
             revision_plan="; ".join(suggestions) if suggestions else "No changes needed",
         )
 
-    def _inject_critique_context(
-        self, event: AgentEvent, critiques: list[Critique]
-    ) -> AgentEvent:
+    def _inject_critique_context(self, event: AgentEvent, critiques: list[Critique]) -> AgentEvent:
         """
         Inject critique feedback into the event for the next attempt.
 
@@ -572,6 +589,7 @@ class ReflexionAgent(ReActAgent):
 @dataclass
 class PlanStep:
     """A single step in an execution plan."""
+
     step_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
     description: str = ""
     action: str = ""
@@ -597,6 +615,7 @@ class PlanStep:
 @dataclass
 class ExecutionPlan:
     """A plan for executing a complex multi-step task."""
+
     plan_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     goal: str = ""
     steps: list[PlanStep] = field(default_factory=list)
@@ -625,7 +644,9 @@ class ExecutionPlan:
                 return s
         return None
 
-    def mark_step(self, step_id: str, status: str, result: Any = None, error: str | None = None) -> None:
+    def mark_step(
+        self, step_id: str, status: str, result: Any = None, error: str | None = None
+    ) -> None:
         step = self._get_step(step_id)
         if step:
             step.status = status
@@ -778,7 +799,10 @@ class PlanExecuteAgent(ReflexionAgent):
                     self._current_plan.mark_step(step_id, "failed", error=step_result.get("error"))
 
                 # Check if plan needs revision
-                if self._current_plan.has_failures() and self._current_plan.replan_count < self._max_replans:
+                if (
+                    self._current_plan.has_failures()
+                    and self._current_plan.replan_count < self._max_replans
+                ):
                     # Trigger replan on next think cycle
                     self._current_plan.status = "replanned"
                     self._current_plan.replan_count += 1
@@ -834,9 +858,7 @@ class PlanExecuteAgent(ReflexionAgent):
             ],
         )
 
-    async def _execute_plan_step(
-        self, action: str, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _execute_plan_step(self, action: str, parameters: dict[str, Any]) -> dict[str, Any]:
         """
         Execute a single plan step.
 
@@ -882,7 +904,8 @@ class PlanExecuteAgent(ReflexionAgent):
 @dataclass
 class StoredEvent:
     """An event stored in the event store with full audit metadata."""
-    sequence: int = 0                # Global sequence number
+
+    sequence: int = 0  # Global sequence number
     event_type: str = ""
     source: str = ""
     payload: dict[str, Any] = field(default_factory=dict)
@@ -971,7 +994,7 @@ class EventStore:
 
         # Trim to max size
         if len(self._events) > self._max_events:
-            self._events = self._events[-self._max_events:]
+            self._events = self._events[-self._max_events :]
 
         self._logger.debug(
             "event_stored",
@@ -1009,21 +1032,15 @@ class EventStore:
 
         return results[-limit:]
 
-    def get_aggregate_events(
-        self, aggregate_id: str, since_version: int = 0
-    ) -> list[StoredEvent]:
+    def get_aggregate_events(self, aggregate_id: str, since_version: int = 0) -> list[StoredEvent]:
         """Get all events for a specific aggregate (for state reconstruction)."""
         return [
-            e for e in self._events
-            if e.aggregate_id == aggregate_id and e.version > since_version
+            e for e in self._events if e.aggregate_id == aggregate_id and e.version > since_version
         ]
 
     def get_correlated_events(self, correlation_id: str) -> list[StoredEvent]:
         """Get all events sharing a correlation ID (for request tracing)."""
-        return [
-            e for e in self._events
-            if e.correlation_id == correlation_id
-        ]
+        return [e for e in self._events if e.correlation_id == correlation_id]
 
     def replay(
         self,
@@ -1130,9 +1147,7 @@ class EventSourcedAgent(PlanExecuteAgent):
 
         return result
 
-    def get_audit_trail(
-        self, since_sequence: int = 0, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    def get_audit_trail(self, since_sequence: int = 0, limit: int = 50) -> list[dict[str, Any]]:
         """Get the audit trail for this agent."""
         if not self._event_store:
             return []
@@ -1149,15 +1164,17 @@ class EventSourcedAgent(PlanExecuteAgent):
 
 class SupervisionPolicy(StrEnum):
     """How the supervisor handles agent failures."""
-    RETRY = "retry"              # Retry the same agent
-    FALLBACK = "fallback"        # Try a fallback agent
-    ESCALATE = "escalate"        # Escalate to human or higher-level agent
-    SKIP = "skip"                # Skip and continue
+
+    RETRY = "retry"  # Retry the same agent
+    FALLBACK = "fallback"  # Try a fallback agent
+    ESCALATE = "escalate"  # Escalate to human or higher-level agent
+    SKIP = "skip"  # Skip and continue
 
 
 @dataclass
 class SupervisionDecision:
     """A supervisor's decision about how to handle an agent result."""
+
     policy: SupervisionPolicy = SupervisionPolicy.RETRY
     target_agent: str | None = None  # For FALLBACK: which agent to try
     reason: str = ""
@@ -1175,6 +1192,7 @@ class SupervisionDecision:
 @dataclass
 class SupervisedExecution:
     """Record of a supervised execution."""
+
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     original_agent: str = ""
     actual_agent: str = ""  # May differ if fallback was used
@@ -1364,7 +1382,11 @@ class SupervisorAgent(EventSourcedAgent):
 
             elif decision.policy == SupervisionPolicy.ESCALATE:
                 execution.ended_at = time.time()
-                execution.result = {"success": False, "error": "escalated", "original_error": result.error}
+                execution.result = {
+                    "success": False,
+                    "error": "escalated",
+                    "original_error": result.error,
+                }
                 self._execution_history.append(execution)
                 return AgentResult(
                     success=False,
@@ -1441,7 +1463,7 @@ class SupervisorAgent(EventSourcedAgent):
 
         # Give up
         return SupervisionDecision(
-            policy= SupervisionPolicy.SKIP,
+            policy=SupervisionPolicy.SKIP,
             reason="Max attempts exhausted",
         )
 
@@ -1540,12 +1562,14 @@ class SupervisorAgent(EventSourcedAgent):
         successes = sum(1 for e in self._execution_history if e.success)
 
         fallback_count = sum(
-            1 for e in self._execution_history
+            1
+            for e in self._execution_history
             for d in e.supervision_decisions
             if d.policy == SupervisionPolicy.FALLBACK
         )
         retry_count = sum(
-            1 for e in self._execution_history
+            1
+            for e in self._execution_history
             for d in e.supervision_decisions
             if d.policy == SupervisionPolicy.RETRY
         )

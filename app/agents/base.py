@@ -162,6 +162,7 @@ class EventType(StrEnum):
 
 class AgentStatus(StrEnum):
     """Agent lifecycle states."""
+
     IDLE = "idle"
     OBSERVING = "observing"
     THINKING = "thinking"
@@ -178,8 +179,9 @@ class AgentEvent:
     Every event has a type, a source agent, a payload, and metadata
     for tracing and observability.
     """
+
     event_type: EventType
-    source: str                          # agent name that produced this
+    source: str  # agent name that produced this
     payload: dict[str, Any]
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     timestamp: float = field(default_factory=time.time)
@@ -220,10 +222,11 @@ class AgentDecision:
     Contains the action to take, confidence level, and reasoning
     for observability / explainability.
     """
-    action: str                          # what to do (e.g. "process_batch", "generate_report")
+
+    action: str  # what to do (e.g. "process_batch", "generate_report")
     parameters: dict[str, Any] = field(default_factory=dict)
-    confidence: float = 1.0              # 0.0 – 1.0
-    reasoning: str = ""                  # human-readable explanation
+    confidence: float = 1.0  # 0.0 – 1.0
+    reasoning: str = ""  # human-readable explanation
     decision_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
 
@@ -235,6 +238,7 @@ class AgentResult:
     Wraps the raw result with success/failure status, timing,
     and any events to publish downstream.
     """
+
     success: bool
     data: Any = None
     error: str | None = None
@@ -251,10 +255,11 @@ class AgentMessage:
 
     Unlike events (broadcast), messages are point-to-point.
     """
+
     sender: str
     recipient: str
     content: dict[str, Any]
-    message_type: str = "request"        # request | response | notification
+    message_type: str = "request"  # request | response | notification
     correlation_id: str | None = None
     message_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
@@ -288,7 +293,7 @@ class AgentMemory:
         """Add an item to short-term memory."""
         self._short_term.append({**item, "_ts": time.time()})
         if len(self._short_term) > self._max_short_term:
-            self._short_term = self._short_term[-self._max_short_term:]
+            self._short_term = self._short_term[-self._max_short_term :]
 
     def recall_recent(self, n: int = 10) -> list[dict[str, Any]]:
         """Get the N most recent short-term memories."""
@@ -342,8 +347,7 @@ class AgentTools:
     def list_tools(self) -> list[dict[str, str]]:
         """List all available tools with descriptions."""
         return [
-            {"name": name, "description": self._descriptions.get(name, "")}
-            for name in self._tools
+            {"name": name, "description": self._descriptions.get(name, "")} for name in self._tools
         ]
 
     def has(self, name: str) -> bool:
@@ -381,14 +385,14 @@ class BiasharaAgent:
         self.status = AgentStatus.IDLE
 
         # Injected after construction
-        self._event_bus: Any = None       # EventBus | None
-        self._tracer: Any = None          # AgentTracer | None
-        self._harness: Any = None         # AgentExecutionHarness | None
+        self._event_bus: Any = None  # EventBus | None
+        self._tracer: Any = None  # AgentTracer | None
+        self._harness: Any = None  # AgentExecutionHarness | None
         self._inference_harness: Any = None  # InferenceHarness | None
 
         # Agent loop improvements (injected via setters, feature-flagged)
         self._self_evaluation: Any = None  # SelfEvaluationMiddleware | None
-        self._cost_tracker: Any = None     # AgentCostTracker | None
+        self._cost_tracker: Any = None  # AgentCostTracker | None
 
         # Background polling lifecycle
         self._poll_task: asyncio.Task | None = None
@@ -486,11 +490,13 @@ class BiasharaAgent:
         Subclasses can override to filter or preprocess events.
         """
         self.status = AgentStatus.OBSERVING
-        self.memory.remember({
-            "event_type": event.event_type.value,
-            "source": event.source,
-            "payload_summary": {k: str(v)[:100] for k, v in event.payload.items()},
-        })
+        self.memory.remember(
+            {
+                "event_type": event.event_type.value,
+                "source": event.source,
+                "payload_summary": {k: str(v)[:100] for k, v in event.payload.items()},
+            }
+        )
         self._logger.debug(
             "observed_event",
             event_type=event.event_type.value,
@@ -524,8 +530,7 @@ class BiasharaAgent:
 
             # Gather past reflections from long-term memory
             reflections = [
-                v for k, v in self.memory._long_term.items()
-                if k.startswith("reflection:")
+                v for k, v in self.memory._long_term.items() if k.startswith("reflection:")
             ]
 
             # Check for strategy adjustments from consecutive failures
@@ -559,7 +564,9 @@ class BiasharaAgent:
             if self._self_evaluation:
                 try:
                     result = await self._self_evaluation.evaluate_and_refine(
-                        self, event, result,
+                        self,
+                        event,
+                        result,
                     )
                 except Exception as eval_err:
                     self._logger.warning(
@@ -583,16 +590,19 @@ class BiasharaAgent:
                         )
 
             # 7. Track cost (feature flag: only runs if _cost_tracker is injected)
-            if self._cost_tracker and hasattr(result, 'data') and isinstance(result.data, dict):
+            if self._cost_tracker and hasattr(result, "data") and isinstance(result.data, dict):
                 try:
                     from app.agents.cost_tracker import CostRecord
-                    self._cost_tracker.record(CostRecord(
-                        agent_name=self.name,
-                        input_tokens=result.data.get('input_tokens', 0),
-                        output_tokens=result.data.get('output_tokens', 0),
-                        cost_usd=result.data.get('cost_usd', 0),
-                        model=result.data.get('model_used', ''),
-                    ))
+
+                    self._cost_tracker.record(
+                        CostRecord(
+                            agent_name=self.name,
+                            input_tokens=result.data.get("input_tokens", 0),
+                            output_tokens=result.data.get("output_tokens", 0),
+                            cost_usd=result.data.get("cost_usd", 0),
+                            model=result.data.get("model_used", ""),
+                        )
+                    )
                 except Exception as cost_err:
                     self._logger.debug("cost_tracking_error", error=str(cost_err))
 
@@ -651,12 +661,14 @@ class BiasharaAgent:
         On consecutive failures, adjusts strategy parameters.
         """
         self.status = AgentStatus.REFLECTING
-        self.memory.remember({
-            "result_id": result.result_id,
-            "success": result.success,
-            "duration_ms": result.duration_ms,
-            "error": result.error,
-        })
+        self.memory.remember(
+            {
+                "result_id": result.result_id,
+                "success": result.success,
+                "duration_ms": result.duration_ms,
+                "error": result.error,
+            }
+        )
 
         if result.success:
             self._logger.info(
@@ -674,9 +686,7 @@ class BiasharaAgent:
 
             # ── Store reflection in long-term memory (closes reflect→behavior loop) ──
             recent_context = self.memory.recall_recent(5)
-            context_summary = [
-                m.get("event_type", "unknown") for m in recent_context
-            ]
+            context_summary = [m.get("event_type", "unknown") for m in recent_context]
             reflection = (
                 f"Action failed: {result.error}. "
                 f"Recent event types: {context_summary}. "
@@ -740,6 +750,7 @@ class BiasharaAgent:
         # Fallback: use LLMService directly (no harness features)
         try:
             from app.services.llm_service import LLMConfig, LLMMessage, get_llm_service
+
             llm = get_llm_service()
             messages = []
             if system_prompt:
@@ -752,6 +763,7 @@ class BiasharaAgent:
             result = await llm.complete(messages, config)
             # Wrap in a minimal InferenceResult-like object
             from app.services.ml.inference_harness import InferenceResult, ModelTier
+
             return InferenceResult(
                 success=result.success,
                 output=result.content,
@@ -765,6 +777,7 @@ class BiasharaAgent:
         except Exception as exc:
             self._logger.error("infer_fallback_failed", error=str(exc))
             from app.services.ml.inference_harness import InferenceResult
+
             return InferenceResult(success=False, error=str(exc))
 
     async def communicate(self, message: AgentMessage) -> None:
@@ -882,6 +895,7 @@ class BiasharaAgent:
         # Check database connectivity
         try:
             from app.db.database import engine
+
             # Simple sync check — engine is alive if it was created
             health["services"]["database"] = {
                 "status": "connected" if engine else "disconnected",
@@ -896,11 +910,14 @@ class BiasharaAgent:
         # Check Redis connectivity
         try:
             from app.config import get_settings
+
             settings = get_settings()
             if settings.REDIS_URL:
                 health["services"]["redis"] = {
                     "status": "configured",
-                    "url": settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL,
+                    "url": settings.REDIS_URL.split("@")[-1]
+                    if "@" in settings.REDIS_URL
+                    else settings.REDIS_URL,
                 }
             else:
                 health["services"]["redis"] = {"status": "not_configured"}
@@ -910,6 +927,7 @@ class BiasharaAgent:
         # Check ClickHouse connectivity
         try:
             from app.config import get_settings
+
             settings = get_settings()
             if settings.has_clickhouse:
                 health["services"]["clickhouse"] = {"status": "configured"}

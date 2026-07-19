@@ -41,13 +41,9 @@ logger = structlog.get_logger(__name__)
 
 # ── Feature Flags ──────────────────────────────────────────────────
 
-PROMPT_GUARD_ENABLED = os.getenv(
-    "ANGAVU_PROMPT_GUARD_ENABLED", "false"
-).lower() == "true"
+PROMPT_GUARD_ENABLED = os.getenv("ANGAVU_PROMPT_GUARD_ENABLED", "false").lower() == "true"
 
-PROMPT_GUARD_STRICT = os.getenv(
-    "ANGAVU_PROMPT_GUARD_STRICT", "false"
-).lower() == "true"
+PROMPT_GUARD_STRICT = os.getenv("ANGAVU_PROMPT_GUARD_STRICT", "false").lower() == "true"
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -57,15 +53,17 @@ PROMPT_GUARD_STRICT = os.getenv(
 
 class InjectionSeverity(StrEnum):
     """Severity of detected injection attempt."""
-    LOW = "low"          # Suspicious but could be legitimate
-    MEDIUM = "medium"    # Likely injection attempt
-    HIGH = "high"        # Almost certainly malicious
+
+    LOW = "low"  # Suspicious but could be legitimate
+    MEDIUM = "medium"  # Likely injection attempt
+    HIGH = "high"  # Almost certainly malicious
     CRITICAL = "critical"  # Confirmed attack pattern
 
 
 @dataclass
 class InjectionDetection:
     """Result of an injection detection scan."""
+
     is_injection: bool
     severity: InjectionSeverity
     pattern_name: str
@@ -80,60 +78,99 @@ class InjectionDetection:
 
 # Direct prompt override attempts
 DIRECT_INJECTION_PATTERNS = [
-    (r"(?i)ignore\s+(all\s+)?(previous|prior|above|system)\s+(instructions?|prompts?|rules?|context)",
-     InjectionSeverity.CRITICAL, "direct_override"),
-    (r"(?i)disregard\s+(all\s+)?(previous|prior|above|your)\s+(instructions?|prompts?|rules?)",
-     InjectionSeverity.CRITICAL, "direct_override"),
-    (r"(?i)forget\s+(everything|all|your)\s+(you\s+)?(know|learned|were\s+told)",
-     InjectionSeverity.CRITICAL, "direct_override"),
-    (r"(?i)you\s+are\s+now\s+(a|an|the)\s+\w+",
-     InjectionSeverity.HIGH, "role_override"),
-    (r"(?i)new\s+(system|initial)\s+prompt\s*:",
-     InjectionSeverity.CRITICAL, "system_prompt_injection"),
-    (r"(?i)\[?(system|assistant|user)\]?\s*:\s*$",
-     InjectionSeverity.HIGH, "role_marker_injection"),
-    (r"(?i)act\s+as\s+(if|though)\s+you\s+(are|were)",
-     InjectionSeverity.MEDIUM, "role_play_injection"),
-    (r"(?i)pretend\s+(to\s+be|you\s+are|you're)",
-     InjectionSeverity.MEDIUM, "role_play_injection"),
+    (
+        r"(?i)ignore\s+(all\s+)?(previous|prior|above|system)\s+(instructions?|prompts?|rules?|context)",
+        InjectionSeverity.CRITICAL,
+        "direct_override",
+    ),
+    (
+        r"(?i)disregard\s+(all\s+)?(previous|prior|above|your)\s+(instructions?|prompts?|rules?)",
+        InjectionSeverity.CRITICAL,
+        "direct_override",
+    ),
+    (
+        r"(?i)forget\s+(everything|all|your)\s+(you\s+)?(know|learned|were\s+told)",
+        InjectionSeverity.CRITICAL,
+        "direct_override",
+    ),
+    (r"(?i)you\s+are\s+now\s+(a|an|the)\s+\w+", InjectionSeverity.HIGH, "role_override"),
+    (
+        r"(?i)new\s+(system|initial)\s+prompt\s*:",
+        InjectionSeverity.CRITICAL,
+        "system_prompt_injection",
+    ),
+    (r"(?i)\[?(system|assistant|user)\]?\s*:\s*$", InjectionSeverity.HIGH, "role_marker_injection"),
+    (
+        r"(?i)act\s+as\s+(if|though)\s+you\s+(are|were)",
+        InjectionSeverity.MEDIUM,
+        "role_play_injection",
+    ),
+    (r"(?i)pretend\s+(to\s+be|you\s+are|you're)", InjectionSeverity.MEDIUM, "role_play_injection"),
 ]
 
 # Data exfiltration attempts
 EXFILTRATION_PATTERNS = [
-    (r"(?i)(send|post|transmit|upload|exfiltrate)\s+(all|every|the)\s+(data|info|keys?|tokens?|secrets?)",
-     InjectionSeverity.CRITICAL, "data_exfiltration"),
-    (r"(?i)(output|print|reveal|display|show)\s+(your|the)\s+(system\s+)?prompt",
-     InjectionSeverity.CRITICAL, "prompt_extraction"),
-    (r"(?i)what\s+(is|are)\s+(your|the)\s+(system\s+)?(prompt|instructions?|rules?)",
-     InjectionSeverity.HIGH, "prompt_extraction"),
-    (r"(?i)(repeat|echo|print)\s+(the\s+)?(above|previous|first)\s+(message|text|prompt)",
-     InjectionSeverity.HIGH, "prompt_extraction"),
+    (
+        r"(?i)(send|post|transmit|upload|exfiltrate)\s+(all|every|the)\s+(data|info|keys?|tokens?|secrets?)",
+        InjectionSeverity.CRITICAL,
+        "data_exfiltration",
+    ),
+    (
+        r"(?i)(output|print|reveal|display|show)\s+(your|the)\s+(system\s+)?prompt",
+        InjectionSeverity.CRITICAL,
+        "prompt_extraction",
+    ),
+    (
+        r"(?i)what\s+(is|are)\s+(your|the)\s+(system\s+)?(prompt|instructions?|rules?)",
+        InjectionSeverity.HIGH,
+        "prompt_extraction",
+    ),
+    (
+        r"(?i)(repeat|echo|print)\s+(the\s+)?(above|previous|first)\s+(message|text|prompt)",
+        InjectionSeverity.HIGH,
+        "prompt_extraction",
+    ),
 ]
 
 # Privilege escalation
 ESCALATION_PATTERNS = [
-    (r"(?i)(grant|give|elevate)\s+(me|us|the)\s+(admin|root|superuser|elevated)\s+(access|privileges?|permissions?)",
-     InjectionSeverity.CRITICAL, "privilege_escalation"),
-    (r"(?i)disable\s+(all\s+)?(security|auth|validation|verification|sandbox)",
-     InjectionSeverity.CRITICAL, "security_bypass"),
-    (r"(?i)bypass\s+(all\s+)?(security|auth|validation|checks?)",
-     InjectionSeverity.CRITICAL, "security_bypass"),
-    (r"(?i)execute\s+(this\s+)?(code|command|script|shell|python|bash)",
-     InjectionSeverity.HIGH, "code_execution"),
+    (
+        r"(?i)(grant|give|elevate)\s+(me|us|the)\s+(admin|root|superuser|elevated)\s+(access|privileges?|permissions?)",
+        InjectionSeverity.CRITICAL,
+        "privilege_escalation",
+    ),
+    (
+        r"(?i)disable\s+(all\s+)?(security|auth|validation|verification|sandbox)",
+        InjectionSeverity.CRITICAL,
+        "security_bypass",
+    ),
+    (
+        r"(?i)bypass\s+(all\s+)?(security|auth|validation|checks?)",
+        InjectionSeverity.CRITICAL,
+        "security_bypass",
+    ),
+    (
+        r"(?i)execute\s+(this\s+)?(code|command|script|shell|python|bash)",
+        InjectionSeverity.HIGH,
+        "code_execution",
+    ),
 ]
 
 # Indirect injection (embedded in data)
 INDIRECT_INJECTION_PATTERNS = [
-    (r"(?i)(important|critical|urgent)\s*:\s*(override|ignore|disregard|forget)",
-     InjectionSeverity.HIGH, "indirect_override"),
-    (r"(?i)note\s+to\s+(self|assistant|ai|agent)\s*:",
-     InjectionSeverity.MEDIUM, "indirect_note"),
-    (r"(?i)hidden\s+instruction\s*:",
-     InjectionSeverity.HIGH, "hidden_instruction"),
-    (r"(?i)<!--\s*(inject|override|ignore|system)\s*-->",
-     InjectionSeverity.HIGH, "html_comment_injection"),
-    (r"(?i)```\s*system\s*\n",
-     InjectionSeverity.HIGH, "code_block_injection"),
+    (
+        r"(?i)(important|critical|urgent)\s*:\s*(override|ignore|disregard|forget)",
+        InjectionSeverity.HIGH,
+        "indirect_override",
+    ),
+    (r"(?i)note\s+to\s+(self|assistant|ai|agent)\s*:", InjectionSeverity.MEDIUM, "indirect_note"),
+    (r"(?i)hidden\s+instruction\s*:", InjectionSeverity.HIGH, "hidden_instruction"),
+    (
+        r"(?i)<!--\s*(inject|override|ignore|system)\s*-->",
+        InjectionSeverity.HIGH,
+        "html_comment_injection",
+    ),
+    (r"(?i)```\s*system\s*\n", InjectionSeverity.HIGH, "code_block_injection"),
 ]
 
 # Combine all patterns
@@ -204,9 +241,7 @@ class PromptGuard:
                 continue
 
             # Check field length
-            max_len = self.MAX_FIELD_LENGTHS.get(
-                field_name, self.MAX_FIELD_LENGTHS["default"]
-            )
+            max_len = self.MAX_FIELD_LENGTHS.get(field_name, self.MAX_FIELD_LENGTHS["default"])
             if len(value) > max_len:
                 detection = InjectionDetection(
                     is_injection=True,
@@ -265,7 +300,7 @@ class PromptGuard:
                 )
 
         # Check for base64-encoded payloads (common obfuscation)
-        b64_pattern = re.compile(r'[A-Za-z0-9+/]{50,}={0,2}')
+        b64_pattern = re.compile(r"[A-Za-z0-9+/]{50,}={0,2}")
         b64_matches = b64_pattern.findall(text)
         for b64_str in b64_matches:
             try:
@@ -285,7 +320,9 @@ class PromptGuard:
                 pass  # Not valid base64, skip
 
         # Check for excessive special characters (obfuscation attempt)
-        special_ratio = sum(1 for c in text if not c.isalnum() and not c.isspace()) / max(len(text), 1)
+        special_ratio = sum(1 for c in text if not c.isalnum() and not c.isspace()) / max(
+            len(text), 1
+        )
         if special_ratio > 0.4 and len(text) > 50:
             return InjectionDetection(
                 is_injection=True,
@@ -334,9 +371,7 @@ class PromptGuard:
             "scanned": self._scanned_count,
             "blocked": self._blocked_count,
             "block_rate": (
-                self._blocked_count / self._scanned_count
-                if self._scanned_count > 0
-                else 0.0
+                self._blocked_count / self._scanned_count if self._scanned_count > 0 else 0.0
             ),
             "recent_detections": [
                 {

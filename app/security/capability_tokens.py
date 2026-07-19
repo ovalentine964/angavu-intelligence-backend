@@ -44,9 +44,7 @@ logger = structlog.get_logger(__name__)
 
 # ── Feature Flags ──────────────────────────────────────────────────
 
-CAPABILITY_TOKENS_ENABLED = os.getenv(
-    "ANGAVU_CAPABILITY_TOKENS_ENABLED", "false"
-).lower() == "true"
+CAPABILITY_TOKENS_ENABLED = os.getenv("ANGAVU_CAPABILITY_TOKENS_ENABLED", "false").lower() == "true"
 
 # Per-swarm feature flags (all enabled by default when master flag is on)
 SWARM_FLAGS = {
@@ -73,6 +71,7 @@ def is_swarm_capability_enabled(swarm: str) -> bool:
 
 class Action(StrEnum):
     """Permitted actions for agents."""
+
     READ = "read"
     WRITE = "write"
     EXECUTE = "execute"
@@ -84,6 +83,7 @@ class Action(StrEnum):
 
 class ResourceScope(StrEnum):
     """Resource scopes that agents can access."""
+
     TRANSACTION = "transaction"
     INTELLIGENCE = "intelligence"
     REPORT = "report"
@@ -97,6 +97,7 @@ class ResourceScope(StrEnum):
 @dataclass
 class Capability:
     """A single capability grant."""
+
     resource: ResourceScope
     actions: set[Action]
     # Optional: restrict to specific resource patterns
@@ -133,6 +134,7 @@ class AgentCapabilityToken:
     Grants specific permissions for a limited time window.
     Signed by the governance agent's ML-DSA-65 key.
     """
+
     # Token identity
     token_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     agent_name: str = ""
@@ -186,7 +188,9 @@ class AgentCapabilityToken:
             "agent_name": self.agent_name,
             "swarm": self.swarm,
             "capabilities": [c.to_dict() for c in self.capabilities],
-            "allowed_recipients": list(self.allowed_recipients) if self.allowed_recipients else None,
+            "allowed_recipients": list(self.allowed_recipients)
+            if self.allowed_recipients
+            else None,
             "issued_at": self.issued_at,
             "expires_at": self.expires_at,
             "max_uses": self.max_uses,
@@ -287,8 +291,7 @@ class CapabilityTokenIssuer:
 
         # Reconstruct signed data
         verify_data = {
-            k: v for k, v in token.to_dict().items()
-            if k not in ("signature", "issuer_public_key")
+            k: v for k, v in token.to_dict().items() if k not in ("signature", "issuer_public_key")
         }
         token_bytes = json.dumps(verify_data, sort_keys=True).encode()
 
@@ -315,19 +318,28 @@ class CapabilityTokenIssuer:
 SWARM_CAPABILITIES = {
     "intelligence": [
         Capability(resource=ResourceScope.TRANSACTION, actions={Action.READ, Action.SUBSCRIBE}),
-        Capability(resource=ResourceScope.INTELLIGENCE, actions={Action.READ, Action.WRITE, Action.PUBLISH}),
+        Capability(
+            resource=ResourceScope.INTELLIGENCE, actions={Action.READ, Action.WRITE, Action.PUBLISH}
+        ),
         Capability(resource=ResourceScope.REPORT, actions={Action.READ}),
     ],
     "revenue_ops": [
         Capability(resource=ResourceScope.INTELLIGENCE, actions={Action.READ}),
-        Capability(resource=ResourceScope.REPORT, actions={Action.READ, Action.WRITE, Action.PUBLISH}),
+        Capability(
+            resource=ResourceScope.REPORT, actions={Action.READ, Action.WRITE, Action.PUBLISH}
+        ),
         Capability(resource=ResourceScope.AGENT_COMM, actions={Action.READ, Action.WRITE}),
     ],
     "governance": [
-        Capability(resource=ResourceScope.ALL, actions={Action.READ, Action.WRITE, Action.ADMIN, Action.DELEGATE}),
+        Capability(
+            resource=ResourceScope.ALL,
+            actions={Action.READ, Action.WRITE, Action.ADMIN, Action.DELEGATE},
+        ),
     ],
     "data_pipeline": [
-        Capability(resource=ResourceScope.TRANSACTION, actions={Action.READ, Action.WRITE, Action.PUBLISH}),
+        Capability(
+            resource=ResourceScope.TRANSACTION, actions={Action.READ, Action.WRITE, Action.PUBLISH}
+        ),
         Capability(resource=ResourceScope.FEDERATED, actions={Action.READ, Action.WRITE}),
     ],
     "research": [
@@ -336,7 +348,10 @@ SWARM_CAPABILITIES = {
         Capability(resource=ResourceScope.REPORT, actions={Action.READ, Action.WRITE}),
     ],
     "communication": [
-        Capability(resource=ResourceScope.AGENT_COMM, actions={Action.READ, Action.WRITE, Action.PUBLISH, Action.SUBSCRIBE}),
+        Capability(
+            resource=ResourceScope.AGENT_COMM,
+            actions={Action.READ, Action.WRITE, Action.PUBLISH, Action.SUBSCRIBE},
+        ),
         Capability(resource=ResourceScope.REPORT, actions={Action.READ, Action.SUBSCRIBE}),
     ],
 }

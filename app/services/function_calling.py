@@ -2,6 +2,7 @@
 Financial function calling for Gemini integration.
 Backed by SQLAlchemy (works with both SQLite and PostgreSQL).
 """
+
 from __future__ import annotations
 
 import json
@@ -61,10 +62,19 @@ FINANCIAL_TOOLS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "current_start": {"type": "string", "description": "Current period start (YYYY-MM-DD)"},
+                "current_start": {
+                    "type": "string",
+                    "description": "Current period start (YYYY-MM-DD)",
+                },
                 "current_end": {"type": "string", "description": "Current period end (YYYY-MM-DD)"},
-                "previous_start": {"type": "string", "description": "Previous period start (YYYY-MM-DD)"},
-                "previous_end": {"type": "string", "description": "Previous period end (YYYY-MM-DD)"},
+                "previous_start": {
+                    "type": "string",
+                    "description": "Previous period start (YYYY-MM-DD)",
+                },
+                "previous_end": {
+                    "type": "string",
+                    "description": "Previous period end (YYYY-MM-DD)",
+                },
             },
             "required": ["current_start", "current_end", "previous_start", "previous_end"],
         },
@@ -118,7 +128,9 @@ class FunctionExecutor:
             logger.error("function_call.error", function=function_name, error=str(e))
             return json.dumps({"error": str(e), "function": function_name})
 
-    async def _dispatch(self, function_name: str, args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    async def _dispatch(
+        self, function_name: str, args: dict[str, Any], user_id: str
+    ) -> dict[str, Any]:
         """Route function call to handler."""
         handlers = {
             "get_transaction_summary": self._get_transaction_summary,
@@ -137,7 +149,9 @@ class FunctionExecutor:
         end_date = datetime.now()
         start_date = {
             "today": end_date.replace(hour=0, minute=0, second=0, microsecond=0),
-            "yesterday": (end_date - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0),
+            "yesterday": (end_date - timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ),
             "week": end_date - timedelta(days=7),
             "month": end_date - timedelta(days=30),
             "year": end_date - timedelta(days=365),
@@ -260,8 +274,18 @@ class FunctionExecutor:
         )
 
         return {
-            "current": {"start": current_start, "end": current_end, "income": cur["total_income"], "expenses": cur["total_expenses"]},
-            "previous": {"start": previous_start, "end": previous_end, "income": prev["total_income"], "expenses": prev["total_expenses"]},
+            "current": {
+                "start": current_start,
+                "end": current_end,
+                "income": cur["total_income"],
+                "expenses": cur["total_expenses"],
+            },
+            "previous": {
+                "start": previous_start,
+                "end": previous_end,
+                "income": prev["total_income"],
+                "expenses": prev["total_expenses"],
+            },
             "income_change_pct": round(income_change, 1),
             "expense_change_pct": round(expense_change, 1),
             "net_change_pct": round(income_change - expense_change, 1),
@@ -329,7 +353,9 @@ class FunctionExecutor:
         rows = result.all()
 
         income = sum(float(r.total) for r in rows if r.transaction_type == "SALE")
-        expenses = sum(float(r.total) for r in rows if r.transaction_type in ("PURCHASE", "EXPENSE"))
+        expenses = sum(
+            float(r.total) for r in rows if r.transaction_type in ("PURCHASE", "EXPENSE")
+        )
         total_count = sum(r.count for r in rows)
 
         monthly_income = income / 3
@@ -342,13 +368,22 @@ class FunctionExecutor:
             recommendations = ["Record more transactions to build your financial profile"]
         elif savings_rate > 20:
             readiness = "ready"
-            recommendations = ["Strong financial position. Consider applying for a small business loan."]
+            recommendations = [
+                "Strong financial position. Consider applying for a small business loan."
+            ]
         elif savings_rate > 0:
             readiness = "almost_ready"
-            recommendations = ["Reduce expenses to improve your savings rate", "Track all transactions consistently"]
+            recommendations = [
+                "Reduce expenses to improve your savings rate",
+                "Track all transactions consistently",
+            ]
         else:
             readiness = "not_ready"
-            recommendations = ["Focus on increasing sales", "Reduce non-essential expenses", "Build a consistent income stream"]
+            recommendations = [
+                "Focus on increasing sales",
+                "Reduce non-essential expenses",
+                "Build a consistent income stream",
+            ]
 
         return {
             "bfs_score": min(100, max(0, int(savings_rate + 30))),

@@ -50,6 +50,7 @@ try:
         SecureMessageHandler,
         get_prompt_guard,
     )
+
     _PROMPT_GUARD_AVAILABLE = True
 except ImportError:
     _PROMPT_GUARD_AVAILABLE = False
@@ -63,8 +64,9 @@ except ImportError:
 
 class CircuitState(StrEnum):
     """Circuit breaker states."""
-    CLOSED = "closed"        # Normal operation — requests pass through
-    OPEN = "open"            # Failing — requests are rejected immediately
+
+    CLOSED = "closed"  # Normal operation — requests pass through
+    OPEN = "open"  # Failing — requests are rejected immediately
     HALF_OPEN = "half_open"  # Testing — one request allowed through to probe
 
 
@@ -177,6 +179,7 @@ class CircuitBreaker:
 @dataclass
 class ExecutionRecord:
     """Record of a single agent execution through the harness."""
+
     execution_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     agent_name: str = ""
     event_type: str = ""
@@ -295,10 +298,7 @@ class AgentHealthTracker:
 
     def get_all_health(self) -> dict[str, dict[str, Any]]:
         """Get health status for all tracked agents."""
-        return {
-            name: self.get_health_status(name)
-            for name in self._agent_total_counts
-        }
+        return {name: self.get_health_status(name) for name in self._agent_total_counts}
 
 
 class AgentMetricsCollector:
@@ -321,8 +321,12 @@ class AgentMetricsCollector:
         self._user_costs: dict[str, float] = defaultdict(float)
         # Per-day cost tracking: key = "YYYY-MM-DD"
         self._daily_costs: dict[str, float] = defaultdict(float)
-        self._daily_agent_costs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-        self._daily_user_costs: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self._daily_agent_costs: dict[str, dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
+        self._daily_user_costs: dict[str, dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
         # Per-swarm metrics (swarm = group of agents working together)
         self._swarm_costs: dict[str, float] = defaultdict(float)
         self._swarm_calls: dict[str, int] = defaultdict(int)
@@ -342,12 +346,10 @@ class AgentMetricsCollector:
         """Get aggregated stats for a swarm of agents."""
         cutoff = time.time() - hours * 3600
         swarm_agents = [
-            name for name, swarm in self._agent_swarm_map.items()
-            if swarm == swarm_name
+            name for name, swarm in self._agent_swarm_map.items() if swarm == swarm_name
         ]
         records = [
-            r for r in self._records
-            if r.agent_name in swarm_agents and r.started_at > cutoff
+            r for r in self._records if r.agent_name in swarm_agents and r.started_at > cutoff
         ]
 
         if not records:
@@ -378,20 +380,19 @@ class AgentMetricsCollector:
     def get_all_swarm_stats(self, hours: int = 24) -> dict[str, Any]:
         """Get stats for all swarms."""
         swarms = set(self._agent_swarm_map.values())
-        return {
-            swarm: self.get_swarm_stats(swarm, hours)
-            for swarm in swarms
-        }
+        return {swarm: self.get_swarm_stats(swarm, hours) for swarm in swarms}
 
     def record(self, record: ExecutionRecord) -> None:
         """Record an execution."""
         self._records.append(record)
         if len(self._records) > self._max_records:
-            self._records = self._records[-self._max_records:]
+            self._records = self._records[-self._max_records :]
 
         self._agent_latencies[record.agent_name].append(record.duration_ms)
         if len(self._agent_latencies[record.agent_name]) > 1000:
-            self._agent_latencies[record.agent_name] = self._agent_latencies[record.agent_name][-1000:]
+            self._agent_latencies[record.agent_name] = self._agent_latencies[record.agent_name][
+                -1000:
+            ]
 
         if record.cost_usd > 0:
             self._agent_costs[record.agent_name] += record.cost_usd
@@ -475,6 +476,7 @@ class AgentMetricsCollector:
     def get_daily_costs(self, days: int = 7) -> dict[str, Any]:
         """Get cost breakdown by day for the last N days."""
         import datetime
+
         today = datetime.date.today()
         result = {}
         for i in range(days):
@@ -483,12 +485,10 @@ class AgentMetricsCollector:
             result[day_key] = {
                 "total_usd": round(self._daily_costs.get(day_key, 0), 6),
                 "by_agent": {
-                    k: round(v, 6)
-                    for k, v in self._daily_agent_costs.get(day_key, {}).items()
+                    k: round(v, 6) for k, v in self._daily_agent_costs.get(day_key, {}).items()
                 },
                 "by_user": {
-                    k: round(v, 6)
-                    for k, v in self._daily_user_costs.get(day_key, {}).items()
+                    k: round(v, 6) for k, v in self._daily_user_costs.get(day_key, {}).items()
                 },
             }
         return result
@@ -520,14 +520,15 @@ class AgentMetricsCollector:
 @dataclass
 class HarnessConfig:
     """Configuration for the execution harness."""
-    timeout_s: float = 30.0           # Default timeout per agent call
-    max_retries: int = 3              # Default max retries (3 attempts total)
-    retry_base_delay_s: float = 1.0   # Base delay for exponential backoff
-    retry_multiplier: float = 3.0     # Multiplier for exponential backoff
-    retry_max_delay_s: float = 30.0   # Max delay between retries
+
+    timeout_s: float = 30.0  # Default timeout per agent call
+    max_retries: int = 3  # Default max retries (3 attempts total)
+    retry_base_delay_s: float = 1.0  # Base delay for exponential backoff
+    retry_multiplier: float = 3.0  # Multiplier for exponential backoff
+    retry_max_delay_s: float = 30.0  # Max delay between retries
     circuit_failure_threshold: int = 5  # Failures before circuit opens
     circuit_recovery_timeout_s: float = 30.0  # Time before half-open probe
-    circuit_half_open_max: int = 3    # Successes in half-open to close circuit
+    circuit_half_open_max: int = 3  # Successes in half-open to close circuit
     enable_cost_tracking: bool = True
     per_agent_timeout: dict[str, float] = field(default_factory=dict)
     per_agent_retries: dict[str, int] = field(default_factory=dict)
@@ -573,8 +574,8 @@ class AgentExecutionHarness:
         self._post_hooks: list[Callable] = []
 
         # Agent loop improvements (injected via setters, feature-flagged)
-        self._cost_tracker: Any = None    # AgentCostTracker | None
-        self._governance: Any = None      # CircuitBreakerGovernance | None
+        self._cost_tracker: Any = None  # AgentCostTracker | None
+        self._governance: Any = None  # CircuitBreakerGovernance | None
 
         # Prompt guard integration (feature-flagged)
         self._prompt_guard: PromptGuard | None = None
@@ -625,7 +626,11 @@ class AgentExecutionHarness:
         # 0. Prompt injection scan (before circuit breaker check)
         if self._prompt_guard and PROMPT_GUARD_ENABLED:
             # Scan the event payload for injection attempts
-            event_payload = event.payload if hasattr(event, 'payload') and isinstance(event.payload, dict) else {}
+            event_payload = (
+                event.payload
+                if hasattr(event, "payload") and isinstance(event.payload, dict)
+                else {}
+            )
             if event_payload:
                 detection = self._prompt_guard.scan_message(event_payload)
                 if detection and detection.is_injection:
@@ -653,7 +658,9 @@ class AgentExecutionHarness:
             )
             record = ExecutionRecord(
                 agent_name=agent_name,
-                event_type=event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                event_type=event.event_type.value
+                if hasattr(event.event_type, "value")
+                else str(event.event_type),
                 user_id=user_id,
                 success=False,
                 error=f"Circuit breaker open for {agent_name}",
@@ -667,7 +674,9 @@ class AgentExecutionHarness:
             )
 
         # 2. Resolve per-agent config
-        timeout_s = timeout_override or self._config.per_agent_timeout.get(agent_name, self._config.timeout_s)
+        timeout_s = timeout_override or self._config.per_agent_timeout.get(
+            agent_name, self._config.timeout_s
+        )
         max_retries = self._config.per_agent_retries.get(agent_name, self._config.max_retries)
 
         # 3. Execute with retry
@@ -675,7 +684,9 @@ class AgentExecutionHarness:
         for attempt in range(max_retries + 1):
             record = ExecutionRecord(
                 agent_name=agent_name,
-                event_type=event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
+                event_type=event.event_type.value
+                if hasattr(event.event_type, "value")
+                else str(event.event_type),
                 user_id=user_id,
                 attempt=attempt + 1,
                 circuit_state=cb.state.value,
@@ -703,11 +714,11 @@ class AgentExecutionHarness:
                 record.error = result.error
 
                 # Extract cost info from result if available
-                if hasattr(result, 'data') and isinstance(result.data, dict):
-                    record.input_tokens = result.data.get('input_tokens', 0)
-                    record.output_tokens = result.data.get('output_tokens', 0)
-                    record.cost_usd = result.data.get('cost_usd', 0)
-                    record.model_used = result.data.get('model_used', '')
+                if hasattr(result, "data") and isinstance(result.data, dict):
+                    record.input_tokens = result.data.get("input_tokens", 0)
+                    record.output_tokens = result.data.get("output_tokens", 0)
+                    record.cost_usd = result.data.get("cost_usd", 0)
+                    record.model_used = result.data.get("model_used", "")
 
                 # Record success with circuit breaker
                 if result.success:
@@ -726,13 +737,16 @@ class AgentExecutionHarness:
                 if self._cost_tracker and record.cost_usd > 0:
                     try:
                         from app.agents.cost_tracker import CostRecord
-                        self._cost_tracker.record(CostRecord(
-                            agent_name=record.agent_name,
-                            input_tokens=record.input_tokens,
-                            output_tokens=record.output_tokens,
-                            cost_usd=record.cost_usd,
-                            model=record.model_used,
-                        ))
+
+                        self._cost_tracker.record(
+                            CostRecord(
+                                agent_name=record.agent_name,
+                                input_tokens=record.input_tokens,
+                                output_tokens=record.output_tokens,
+                                cost_usd=record.cost_usd,
+                                model=record.model_used,
+                            )
+                        )
                     except Exception:
                         pass
 
@@ -791,7 +805,7 @@ class AgentExecutionHarness:
             # Exponential backoff before retry
             if attempt < max_retries:
                 delay = min(
-                    self._config.retry_base_delay_s * (self._config.retry_multiplier ** attempt),
+                    self._config.retry_base_delay_s * (self._config.retry_multiplier**attempt),
                     self._config.retry_max_delay_s,
                 )
                 self._logger.info(
@@ -875,11 +889,11 @@ class AgentExecutionHarness:
     def get_health(self) -> dict[str, Any]:
         """Get overall harness health status."""
         open_circuits = [
-            name for name, cb in self._circuit_breakers.items()
-            if cb.state == CircuitState.OPEN
+            name for name, cb in self._circuit_breakers.items() if cb.state == CircuitState.OPEN
         ]
         half_open = [
-            name for name, cb in self._circuit_breakers.items()
+            name
+            for name, cb in self._circuit_breakers.items()
             if cb.state == CircuitState.HALF_OPEN
         ]
 
@@ -926,6 +940,7 @@ class AgentExecutionHarness:
 @dataclass
 class ValidationResult:
     """Result of output validation."""
+
     valid: bool
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -1158,9 +1173,7 @@ class CanaryRouter:
             for _, w, v in versions
         ]
 
-    def update_weight(
-        self, agent_name: str, version: str, new_weight: float
-    ) -> bool:
+    def update_weight(self, agent_name: str, version: str, new_weight: float) -> bool:
         """Update the traffic weight for a specific version."""
         versions = self._versions.get(agent_name, [])
         for i, (agent, _weight, ver) in enumerate(versions):
@@ -1179,7 +1192,5 @@ class CanaryRouter:
         """Remove a version from canary routing."""
         versions = self._versions.get(agent_name, [])
         original_len = len(versions)
-        self._versions[agent_name] = [
-            (a, w, v) for a, w, v in versions if v != version
-        ]
+        self._versions[agent_name] = [(a, w, v) for a, w, v in versions if v != version]
         return len(self._versions[agent_name]) < original_len

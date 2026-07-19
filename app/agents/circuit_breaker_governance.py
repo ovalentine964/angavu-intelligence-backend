@@ -32,6 +32,7 @@ logger = structlog.get_logger(__name__)
 @dataclass
 class CircuitEvent:
     """Record of a circuit breaker state change."""
+
     agent_name: str
     old_state: str
     new_state: str
@@ -122,7 +123,7 @@ class CircuitBreakerGovernance:
         )
         self._circuit_events.append(event)
         if len(self._circuit_events) > self._max_events:
-            self._circuit_events = self._circuit_events[-self._max_events:]
+            self._circuit_events = self._circuit_events[-self._max_events :]
 
         self._logger.warning(
             "circuit_state_change",
@@ -183,6 +184,7 @@ class CircuitBreakerGovernance:
         if self._event_bus:
             try:
                 from app.agents.base import AgentEvent, EventType
+
                 violation = AgentEvent(
                     event_type=EventType.COMPLIANCE_VIOLATION,
                     source="CircuitBreakerGovernance",
@@ -236,6 +238,7 @@ class CircuitBreakerGovernance:
         if self._event_bus:
             try:
                 from app.agents.base import AgentEvent, EventType
+
                 recovery_event = AgentEvent(
                     event_type=EventType.AGENT_HEALTH_CHECK,
                     source="CircuitBreakerGovernance",
@@ -256,7 +259,7 @@ class CircuitBreakerGovernance:
 
         # Compute backoff delay for next probe
         delay = min(
-            self._half_open_backoff_base * (2 ** attempts),
+            self._half_open_backoff_base * (2**attempts),
             self._half_open_backoff_max,
         )
         self._logger.info(
@@ -273,6 +276,7 @@ class CircuitBreakerGovernance:
 
         try:
             from app.agents.base import AgentEvent, EventType
+
             violation = AgentEvent(
                 event_type=EventType.COMPLIANCE_VIOLATION,
                 source="CircuitBreakerGovernance",
@@ -314,7 +318,8 @@ class CircuitBreakerGovernance:
                     from prometheus_client import Gauge
 
                     from app.infrastructure.metrics import _registry
-                    if not hasattr(self, '_prom_agent_paused'):
+
+                    if not hasattr(self, "_prom_agent_paused"):
                         self._prom_agent_paused = Gauge(
                             "angavu_agent_paused",
                             "Whether an agent is paused (1) or active (0)",
@@ -342,7 +347,7 @@ class CircuitBreakerGovernance:
 
                 # Update Prometheus
                 try:
-                    if hasattr(self, '_prom_agent_paused'):
+                    if hasattr(self, "_prom_agent_paused"):
                         self._prom_agent_paused.labels(agent_name=agent_name).set(0)
                 except Exception:
                     pass
@@ -392,6 +397,7 @@ class CircuitBreakerGovernance:
 
         try:
             from app.agents.base import AgentEvent, EventType
+
             escalation = AgentEvent(
                 event_type=EventType.SECURITY_INCIDENT,
                 source="CircuitBreakerGovernance",
@@ -418,7 +424,8 @@ class CircuitBreakerGovernance:
             # Update Prometheus
             try:
                 from prometheus_client import Counter
-                if not hasattr(self, '_prom_escalations'):
+
+                if not hasattr(self, "_prom_escalations"):
                     self._prom_escalations = Counter(
                         "angavu_governance_escalations_total",
                         "Total governance escalations",
@@ -443,7 +450,8 @@ class CircuitBreakerGovernance:
         """Export circuit breaker state change metrics to Prometheus."""
         try:
             from prometheus_client import Counter, Gauge
-            if not hasattr(self, '_prom_state_changes'):
+
+            if not hasattr(self, "_prom_state_changes"):
                 self._prom_state_changes = Counter(
                     "angavu_circuit_state_changes_total",
                     "Total circuit breaker state changes",

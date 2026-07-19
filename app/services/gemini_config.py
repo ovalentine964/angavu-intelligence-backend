@@ -2,6 +2,7 @@
 Gemini API configuration and rate limiting.
 Feature-flagged: set GEMINI_ENABLED=true to activate.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,7 +12,10 @@ from dataclasses import dataclass, field
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini 3.5 Flash cloud reasoning."""
-    enabled: bool = field(default_factory=lambda: os.getenv("GEMINI_ENABLED", "false").lower() == "true")
+
+    enabled: bool = field(
+        default_factory=lambda: os.getenv("GEMINI_ENABLED", "false").lower() == "true"
+    )
     api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     model: str = "gemini-2.0-flash"
     base_url: str = "https://generativelanguage.googleapis.com/v1beta"

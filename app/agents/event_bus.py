@@ -68,8 +68,8 @@ MAX_STREAM_LENGTH = 10_000
 IDEMPOTENCY_TTL = 3600  # 1 hour
 
 # Backpressure thresholds
-BACKPRESSURE_HIGH_WATER = 8_000   # Start throttling
-BACKPRESSURE_LOW_WATER = 2_000    # Stop throttling
+BACKPRESSURE_HIGH_WATER = 8_000  # Start throttling
+BACKPRESSURE_LOW_WATER = 2_000  # Stop throttling
 
 # Dead letter queue stream suffix
 DLQ_SUFFIX = ":dead_letter_queue"
@@ -196,6 +196,7 @@ class EventBus:
 
         try:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(
                 redis_url,
                 decode_responses=True,
@@ -232,7 +233,10 @@ class EventBus:
             stream_key = f"{STREAM_PREFIX}{event_type.value}"
             try:
                 await self._redis.xgroup_create(
-                    stream_key, CONSUMER_GROUP, id="0", mkstream=True,
+                    stream_key,
+                    CONSUMER_GROUP,
+                    id="0",
+                    mkstream=True,
                 )
                 self._logger.debug("consumer_group_created", stream=stream_key)
             except (ConnectionError, OSError, TimeoutError) as exc:
@@ -365,8 +369,10 @@ class EventBus:
             try:
                 entry_id = await self._redis.xadd(
                     stream_key,
-                    {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
-                     for k, v in event_data.items()},
+                    {
+                        k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+                        for k, v in event_data.items()
+                    },
                     maxlen=self._max_stream_length,
                     approximate=True,
                 )
@@ -379,7 +385,8 @@ class EventBus:
                 # Record telemetry
                 if self._agent_metrics:
                     self._agent_metrics.record_event_published(
-                        event.event_type.value, event.source,
+                        event.event_type.value,
+                        event.source,
                     )
 
                 self._logger.debug(
@@ -403,7 +410,9 @@ class EventBus:
         self._pending_buffer[stream_key].append(event_data)
         # Trim to max length
         if len(self._pending_buffer[stream_key]) > self._max_stream_length:
-            self._pending_buffer[stream_key] = self._pending_buffer[stream_key][-self._max_stream_length:]
+            self._pending_buffer[stream_key] = self._pending_buffer[stream_key][
+                -self._max_stream_length :
+            ]
 
         # Record idempotency key
         self._record_idempotency_key(idempotency_key)
@@ -414,7 +423,8 @@ class EventBus:
         # Record telemetry
         if self._agent_metrics:
             self._agent_metrics.record_event_published(
-                event.event_type.value, event.source,
+                event.event_type.value,
+                event.source,
             )
 
         self._logger.debug(
@@ -445,7 +455,10 @@ class EventBus:
                 stream_key = f"{STREAM_PREFIX}{etype}"
                 try:
                     await self._redis.xgroup_create(
-                        stream_key, CONSUMER_GROUP, id="0", mkstream=True,
+                        stream_key,
+                        CONSUMER_GROUP,
+                        id="0",
+                        mkstream=True,
                     )
                 except (ConnectionError, OSError, TimeoutError) as exc:
                     self._logger.debug("subscribe_group_skip", stream=stream_key, reason=str(exc))
@@ -475,8 +488,7 @@ class EventBus:
         """
 
         target_types = event_types or [
-            et for et, agents in self._subscriptions.items()
-            if agent.name in agents
+            et for et, agents in self._subscriptions.items() if agent.name in agents
         ]
 
         if not target_types:
@@ -524,9 +536,17 @@ class EventBus:
 
                         # Acknowledge processing
                         await self._redis.xack(
-                            stream_key, CONSUMER_GROUP, msg_id,
+                            stream_key,
+                            CONSUMER_GROUP,
+                            msg_id,
                         )
-                    except (json.JSONDecodeError, KeyError, ValueError, ConnectionError, OSError) as exc:
+                    except (
+                        json.JSONDecodeError,
+                        KeyError,
+                        ValueError,
+                        ConnectionError,
+                        OSError,
+                    ) as exc:
                         self._logger.warning(
                             "event_parse_error",
                             msg_id=msg_id,
@@ -554,8 +574,8 @@ class EventBus:
             stream_key = f"{STREAM_PREFIX}{etype}"
             buffer = self._pending_buffer.get(stream_key, [])
             # Take up to limit events from the buffer
-            taken = buffer[:limit - len(results)]
-            remaining = buffer[len(taken):]
+            taken = buffer[: limit - len(results)]
+            remaining = buffer[len(taken) :]
             self._pending_buffer[stream_key] = remaining
 
             for data in taken:
@@ -652,9 +672,7 @@ class EventBus:
         return {
             "mode": "redis" if (self._redis and not self._in_memory_enabled) else "in_memory",
             "subscriptions": dict(self._subscriptions.items()),
-            "in_memory_streams": {
-                k: len(v) for k, v in self._pending_buffer.items()
-            },
+            "in_memory_streams": {k: len(v) for k, v in self._pending_buffer.items()},
             "dead_letter_count": len(self._dead_letters),
             "dead_letters_recent": self._dead_letters[-5:],
             "persisted_count": self._persisted_count,
@@ -662,9 +680,7 @@ class EventBus:
             # Idempotency
             "idempotency_cache_size": len(self._idempotency_cache),
             # Backpressure
-            "backpressure_active_streams": [
-                k for k, v in self._backpressure_streams.items() if v
-            ],
+            "backpressure_active_streams": [k for k, v in self._backpressure_streams.items() if v],
             # Message signing
             "signing": self.get_signing_stats(),
             # Horizontal scaling info
@@ -751,11 +767,13 @@ class EventBus:
             "dead_lettered_at": str(time.time()),
         }
 
-        self._dead_letters.append({
-            "stream": original_stream,
-            "error": error,
-            "timestamp": time.time(),
-        })
+        self._dead_letters.append(
+            {
+                "stream": original_stream,
+                "error": error,
+                "timestamp": time.time(),
+            }
+        )
         # Cap in-memory dead letter list
         if len(self._dead_letters) > 1_000:
             self._dead_letters = self._dead_letters[-1_000:]

@@ -53,26 +53,28 @@ logger = structlog.get_logger(__name__)
 
 class EvaluationVerdict(StrEnum):
     """Verdict of the evaluation."""
-    PASS = "pass"                      # Quality acceptable, publish downstream
-    REFINE = "refine"                  # Quality below threshold, re-process with feedback
-    REJECT = "reject"                  # Quality too low, don't publish (dead letter)
+
+    PASS = "pass"  # Quality acceptable, publish downstream
+    REFINE = "refine"  # Quality below threshold, re-process with feedback
+    REJECT = "reject"  # Quality too low, don't publish (dead letter)
     BUDGET_EXCEEDED = "budget_exceeded"  # Loop budget exhausted, publish with warning
 
 
 @dataclass
 class EvaluationResult:
     """Result of evaluating an agent's output."""
+
     evaluation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     verdict: EvaluationVerdict = EvaluationVerdict.PASS
-    score: float = 1.0                  # 0.0 - 1.0
+    score: float = 1.0  # 0.0 - 1.0
     issues: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
-    refined_prompt_hint: str = ""       # Feedback for re-processing
-    evaluation_mode: str = "rule"       # "rule" | "llm" | "hybrid"
-    tokens_used: int = 0                # Tokens consumed by evaluation
-    cost_usd: float = 0.0              # Cost of evaluation
+    refined_prompt_hint: str = ""  # Feedback for re-processing
+    evaluation_mode: str = "rule"  # "rule" | "llm" | "hybrid"
+    tokens_used: int = 0  # Tokens consumed by evaluation
+    cost_usd: float = 0.0  # Cost of evaluation
     latency_ms: float = 0.0
-    iteration: int = 1                  # Which iteration this is
+    iteration: int = 1  # Which iteration this is
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -97,6 +99,7 @@ class EvaluationResult:
 @dataclass
 class RuleResult:
     """Result of a single rule check."""
+
     passed: bool
     rule_name: str
     message: str = ""
@@ -150,7 +153,8 @@ class SchemaValidationRule(EvaluationRule):
         missing = [f for f in self._required_fields if f not in data]
         if missing:
             return RuleResult(
-                False, self.name,
+                False,
+                self.name,
                 f"Missing required fields: {missing}",
                 self.severity,
             )
@@ -175,7 +179,8 @@ class RangeCheckRule(EvaluationRule):
         if value is not None and isinstance(value, (int, float)):
             if not (self._min <= value <= self._max):
                 return RuleResult(
-                    False, self.name,
+                    False,
+                    self.name,
                     f"{self._field}={value} outside [{self._min}, {self._max}]",
                     self.severity,
                 )
@@ -198,7 +203,8 @@ class OutputLengthRule(EvaluationRule):
         content = data.get(self._content_field, "")
         if isinstance(content, str) and len(content.strip()) < self._min_length:
             return RuleResult(
-                False, self.name,
+                False,
+                self.name,
                 f"Content length {len(content)} < minimum {self._min_length}",
                 self.severity,
             )
@@ -216,7 +222,8 @@ class ConfidenceThresholdRule(EvaluationRule):
         confidence = output.get("confidence") or context.get("confidence", 1.0)
         if confidence < self._min_confidence:
             return RuleResult(
-                False, self.name,
+                False,
+                self.name,
                 f"Confidence {confidence:.2f} < minimum {self._min_confidence:.2f}",
                 self.severity,
             )
@@ -234,7 +241,9 @@ class NoErrorRule(EvaluationRule):
             return RuleResult(False, self.name, f"Error present: {output['error']}", self.severity)
         data = output.get("data", {})
         if isinstance(data, dict) and data.get("error"):
-            return RuleResult(False, self.name, f"Data contains error: {data['error']}", self.severity)
+            return RuleResult(
+                False, self.name, f"Data contains error: {data['error']}", self.severity
+            )
         return RuleResult(True, self.name)
 
 
@@ -326,7 +335,12 @@ Respond in JSON:
                 return score, issues, suggestions, tokens
             except (json.JSONDecodeError, ValueError) as e:
                 self._logger.warning("llm_eval_parse_error", error=str(e))
-                return 0.5, ["Failed to parse evaluation response"], [], result.input_tokens + result.output_tokens
+                return (
+                    0.5,
+                    ["Failed to parse evaluation response"],
+                    [],
+                    result.input_tokens + result.output_tokens,
+                )
 
         except Exception as exc:
             self._logger.error("llm_eval_exception", error=str(exc))
@@ -341,14 +355,15 @@ Respond in JSON:
 @dataclass
 class AgentEvaluationConfig:
     """Per-agent evaluation configuration."""
+
     agent_name: str
-    quality_threshold: float = 0.7          # Minimum score to pass
-    rejection_threshold: float = 0.3        # Below this = reject (don't publish)
-    max_iterations: int = 3                 # Max re-processing attempts
-    max_tokens_per_loop: int = 2000         # Token budget per evaluation loop
-    max_cost_per_loop_usd: float = 0.01     # USD budget per evaluation loop
-    enable_llm_evaluation: bool = False     # Use LLM for quality check
-    llm_evaluation_threshold: float = 0.5   # Score below this triggers LLM eval
+    quality_threshold: float = 0.7  # Minimum score to pass
+    rejection_threshold: float = 0.3  # Below this = reject (don't publish)
+    max_iterations: int = 3  # Max re-processing attempts
+    max_tokens_per_loop: int = 2000  # Token budget per evaluation loop
+    max_cost_per_loop_usd: float = 0.01  # USD budget per evaluation loop
+    enable_llm_evaluation: bool = False  # Use LLM for quality check
+    llm_evaluation_threshold: float = 0.5  # Score below this triggers LLM eval
     rules: list[EvaluationRule] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -502,7 +517,11 @@ class SelfEvaluationMiddleware:
 
             # Evaluate
             eval_result = await self._evaluate(
-                agent, event, result, config, iteration,
+                agent,
+                event,
+                result,
+                config,
+                iteration,
             )
 
             total_tokens_used += eval_result.tokens_used
@@ -542,7 +561,9 @@ class SelfEvaluationMiddleware:
 
                 # Inject evaluation feedback into event metadata
                 refined_event = self._create_refined_event(
-                    event, eval_result, iteration,
+                    event,
+                    eval_result,
+                    iteration,
                 )
 
                 # Re-process
@@ -626,7 +647,9 @@ class SelfEvaluationMiddleware:
         llm_score = None
         if config.enable_llm_evaluation and rule_score < config.quality_threshold:
             llm_score, llm_issues, llm_suggestions, tokens = await self._llm_evaluator.evaluate(
-                agent.name, output_data, context,
+                agent.name,
+                output_data,
+                context,
             )
             total_tokens += tokens
             issues.extend(llm_issues)
@@ -704,14 +727,16 @@ class SelfEvaluationMiddleware:
         eval_result: EvaluationResult,
     ) -> None:
         """Record evaluation in history."""
-        self._evaluation_history.append({
-            "agent": agent_name,
-            "event_type": event.event_type.value,
-            "evaluation": eval_result.to_dict(),
-            "timestamp": time.time(),
-        })
+        self._evaluation_history.append(
+            {
+                "agent": agent_name,
+                "event_type": event.event_type.value,
+                "evaluation": eval_result.to_dict(),
+                "timestamp": time.time(),
+            }
+        )
         if len(self._evaluation_history) > self._max_history:
-            self._evaluation_history = self._evaluation_history[-self._max_history:]
+            self._evaluation_history = self._evaluation_history[-self._max_history :]
 
     def _export_evaluation_metrics(
         self,
@@ -721,6 +746,7 @@ class SelfEvaluationMiddleware:
         """Export evaluation metrics to Prometheus if available."""
         try:
             from app.infrastructure.metrics import PROMETHEUS_AVAILABLE
+
             if not PROMETHEUS_AVAILABLE:
                 return
 
@@ -729,7 +755,7 @@ class SelfEvaluationMiddleware:
             from app.infrastructure.metrics import _registry
 
             # Lazy-init metrics (avoid circular import at module level)
-            if not hasattr(self, '_prom_score_hist'):
+            if not hasattr(self, "_prom_score_hist"):
                 self._prom_score_hist = Histogram(
                     "angavu_evaluation_score",
                     "Evaluation quality scores",
@@ -777,10 +803,7 @@ class SelfEvaluationMiddleware:
 
     def get_agent_stats(self, agent_name: str) -> dict[str, Any]:
         """Get evaluation stats for a specific agent."""
-        agent_evals = [
-            e for e in self._evaluation_history
-            if e["agent"] == agent_name
-        ]
+        agent_evals = [e for e in self._evaluation_history if e["agent"] == agent_name]
         if not agent_evals:
             return {"agent": agent_name, "evaluations": 0}
 

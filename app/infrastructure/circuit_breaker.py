@@ -41,14 +41,16 @@ T = TypeVar("T")
 
 class CircuitState(StrEnum):
     """Circuit breaker states."""
-    CLOSED = "closed"         # Normal — requests pass through
-    OPEN = "open"             # Tripped — fail fast
-    HALF_OPEN = "half_open"   # Testing — limited requests
+
+    CLOSED = "closed"  # Normal — requests pass through
+    OPEN = "open"  # Tripped — fail fast
+    HALF_OPEN = "half_open"  # Testing — limited requests
 
 
 @dataclass
 class CircuitStats:
     """Statistics for circuit breaker monitoring."""
+
     name: str
     state: CircuitState
     failure_count: int = 0
@@ -86,10 +88,7 @@ class CircuitBreakerError(Exception):
     def __init__(self, name: str, retry_after: float):
         self.name = name
         self.retry_after = retry_after
-        super().__init__(
-            f"Circuit breaker '{name}' is OPEN. "
-            f"Retry after {retry_after:.1f}s."
-        )
+        super().__init__(f"Circuit breaker '{name}' is OPEN. Retry after {retry_after:.1f}s.")
 
 
 class CircuitBreaker:
@@ -167,8 +166,11 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         """Get current state, auto-transitioning OPEN → HALF_OPEN if timeout elapsed."""
-        if self._state == CircuitState.OPEN and self._last_failure_time and \
-               (time.time() - self._last_failure_time) >= self.recovery_timeout:
+        if (
+            self._state == CircuitState.OPEN
+            and self._last_failure_time
+            and (time.time() - self._last_failure_time) >= self.recovery_timeout
+        ):
             self._transition(CircuitState.HALF_OPEN)
         return self._state
 
@@ -251,13 +253,15 @@ class CircuitBreaker:
         if self._governance:
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._governance.on_state_change(
-                    agent_name=self.name,
-                    old_state=old_state.value,
-                    new_state=new_state.value,
-                    failure_count=self._failure_count,
-                    recovery_timeout_s=self.recovery_timeout,
-                ))
+                loop.create_task(
+                    self._governance.on_state_change(
+                        agent_name=self.name,
+                        old_state=old_state.value,
+                        new_state=new_state.value,
+                        failure_count=self._failure_count,
+                        recovery_timeout_s=self.recovery_timeout,
+                    )
+                )
             except RuntimeError:
                 pass
 
@@ -309,9 +313,11 @@ class CircuitBreaker:
             async def my_redis_call(key: str):
                 return await redis.get(key)
         """
+
         async def wrapper(*args, **kwargs):
             async with self.protect():
                 return await fn(*args, **kwargs)
+
         wrapper.__name__ = getattr(fn, "__name__", "wrapped")
         wrapper.__doc__ = getattr(fn, "__doc__", None)
         return wrapper
@@ -387,17 +393,11 @@ class CircuitBreakerRegistry:
 
     def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get stats for all registered circuit breakers."""
-        return {
-            name: cb.get_stats().to_dict()
-            for name, cb in self._breakers.items()
-        }
+        return {name: cb.get_stats().to_dict() for name, cb in self._breakers.items()}
 
     def get_open_circuits(self) -> list[str]:
         """Get names of all open (tripped) circuit breakers."""
-        return [
-            name for name, cb in self._breakers.items()
-            if cb.is_open
-        ]
+        return [name for name, cb in self._breakers.items() if cb.is_open]
 
     def reset_all(self) -> None:
         """Reset all circuit breakers to closed state."""

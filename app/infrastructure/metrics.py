@@ -58,6 +58,7 @@ try:
         Info,
         generate_latest,
     )
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -430,6 +431,7 @@ if PROMETHEUS_AVAILABLE:
 
 # ── Helper Classes ─────────────────────────────────────────────────
 
+
 class MetricsCollector:
     """
     Central metrics collector for Angavu Intelligence.
@@ -503,12 +505,14 @@ class MetricsCollector:
 
         if request_size > 0:
             HTTP_REQUEST_SIZE_BYTES.labels(
-                method=method, path=path,
+                method=method,
+                path=path,
             ).observe(request_size)
 
         if response_size > 0:
             HTTP_RESPONSE_SIZE_BYTES.labels(
-                method=method, path=path,
+                method=method,
+                path=path,
             ).observe(response_size)
 
     @contextmanager
@@ -529,7 +533,8 @@ class MetricsCollector:
         finally:
             duration = time.monotonic() - start
             HTTP_REQUEST_DURATION_SECONDS.labels(
-                method=method, path=path,
+                method=method,
+                path=path,
             ).observe(duration)
             HTTP_REQUESTS_IN_PROGRESS.labels(method=method, path=path).dec()
 
@@ -732,28 +737,36 @@ class MetricsCollector:
         """Record a cache hit."""
         if self._available:
             CACHE_OPERATIONS_TOTAL.labels(
-                operation="get", namespace=namespace, result="hit",
+                operation="get",
+                namespace=namespace,
+                result="hit",
             ).inc()
 
     def record_cache_miss(self, namespace: str = "default") -> None:
         """Record a cache miss."""
         if self._available:
             CACHE_OPERATIONS_TOTAL.labels(
-                operation="get", namespace=namespace, result="miss",
+                operation="get",
+                namespace=namespace,
+                result="miss",
             ).inc()
 
     def record_cache_set(self, namespace: str = "default") -> None:
         """Record a cache set operation."""
         if self._available:
             CACHE_OPERATIONS_TOTAL.labels(
-                operation="set", namespace=namespace, result="ok",
+                operation="set",
+                namespace=namespace,
+                result="ok",
             ).inc()
 
     def record_cache_delete(self, namespace: str = "default") -> None:
         """Record a cache delete operation."""
         if self._available:
             CACHE_OPERATIONS_TOTAL.labels(
-                operation="delete", namespace=namespace, result="ok",
+                operation="delete",
+                namespace=namespace,
+                result="ok",
             ).inc()
 
     @contextmanager
@@ -781,7 +794,8 @@ class MetricsCollector:
         """Record a message consumed from a stream."""
         if self._available:
             STREAM_MESSAGES_CONSUMED.labels(
-                stream=stream, consumer_group=consumer_group,
+                stream=stream,
+                consumer_group=consumer_group,
             ).inc()
 
     def record_stream_dead_letter(self, stream: str) -> None:
@@ -825,6 +839,7 @@ class MetricsCollector:
 
 
 # ── FastAPI Integration ────────────────────────────────────────────
+
 
 def create_metrics_endpoint():
     """

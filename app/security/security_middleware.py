@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # CORS Configuration — Strict Origin Validation
 # ══════════════════════════════════════════════════════════════
 
+
 def get_cors_origins() -> list[str]:
     """
     Get allowed CORS origins.
@@ -45,6 +46,7 @@ def get_cors_origins() -> list[str]:
     No wildcards. No localhost.
     """
     import os
+
     env = os.getenv("ANGAVU_ENV", "development")
 
     if env == "production":
@@ -109,6 +111,7 @@ def configure_cors(app):
 # Security Headers Middleware
 # ══════════════════════════════════════════════════════════════
 
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Adds security headers to all responses.
@@ -124,13 +127,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Cache-Control: Prevent caching of sensitive data
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
 
         # HSTS — force HTTPS for 1 year, include subdomains
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
 
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -143,10 +146,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Content Security Policy — restrict resource loading
         response.headers["Content-Security-Policy"] = (
-            "default-src 'none'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'none'; "
-            "form-action 'self'"
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         )
 
         # Referrer policy — don't leak URLs
@@ -154,8 +154,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Permissions policy — disable unnecessary browser features
         response.headers["Permissions-Policy"] = (
-            "camera=(), microphone=(), geolocation=(), "
-            "payment=(), usb=(), magnetometer=()"
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=()"
         )
 
         # Prevent caching of API responses (contains sensitive data)
@@ -176,7 +175,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 # SQL injection patterns (comprehensive)
 SQL_INJECTION_PATTERNS = [
-    re.compile(r"(?i)(\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|EXECUTE|UNION|TRUNCATE|REPLACE|LOAD|INTO)\b\s+)"),
+    re.compile(
+        r"(?i)(\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|EXEC|EXECUTE|UNION|TRUNCATE|REPLACE|LOAD|INTO)\b\s+)"
+    ),
     re.compile(r"(?i)(--|;|/\*|\*/|@@|@)"),
     re.compile(r"(?i)(\b(OR|AND)\b\s+\d+\s*=\s*\d+)"),
     re.compile(r"(?i)'\s*(OR|AND)\s+'"),
@@ -208,11 +209,11 @@ PATH_TRAVERSAL_PATTERNS = [
 
 # Request size limits by endpoint category
 MAX_REQUEST_SIZES = {
-    "/auth/": 4_096,           # Auth requests are small
+    "/auth/": 4_096,  # Auth requests are small
     "/api/intelligence/": 16_384,  # Intelligence queries
-    "/fl/upload": 10_485_760,   # Federated learning gradients can be large
-    "/api/": 65_536,            # General API
-    "default": 1_048_576,       # 1MB default
+    "/fl/upload": 10_485_760,  # Federated learning gradients can be large
+    "/api/": 65_536,  # General API
+    "default": 1_048_576,  # 1MB default
 }
 
 
@@ -231,9 +232,7 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
     # Paths to skip validation (static files, health checks)
     SKIP_PATHS = {"/health", "/ready", "/docs", "/openapi.json", "/redoc"}
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
         # Skip validation for certain paths
@@ -249,7 +248,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
             if int(content_length) > max_size:
                 logger.warning(
                     "Request too large: path=%s, size=%d, max=%d, ip=%s",
-                    path, int(content_length), max_size, client_ip,
+                    path,
+                    int(content_length),
+                    max_size,
+                    client_ip,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -261,11 +263,17 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
             content_type = request.headers.get("content-type", "")
             if content_type and not any(
                 ct in content_type
-                for ct in ["application/json", "multipart/form-data", "application/x-www-form-urlencoded"]
+                for ct in [
+                    "application/json",
+                    "multipart/form-data",
+                    "application/x-www-form-urlencoded",
+                ]
             ):
                 logger.warning(
                     "Invalid Content-Type: %s, path=%s, ip=%s",
-                    content_type, path, client_ip,
+                    content_type,
+                    path,
+                    client_ip,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -278,7 +286,8 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
             if pattern.search(url_str):
                 logger.warning(
                     "Path traversal attempt: url=%s, ip=%s",
-                    url_str[:100], client_ip,
+                    url_str[:100],
+                    client_ip,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -290,7 +299,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
             if self._contains_injection(value):
                 logger.warning(
                     "Injection attempt in query param '%s': value='%s', ip=%s, path=%s",
-                    key, value[:50], client_ip, path,
+                    key,
+                    value[:50],
+                    client_ip,
+                    path,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -299,15 +311,24 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
 
         # 5. Check headers for injection (skip standard headers)
         skip_headers = {
-            "authorization", "content-type", "accept", "host",
-            "connection", "user-agent", "accept-encoding",
-            "accept-language", "cache-control", "x-forwarded-for",
+            "authorization",
+            "content-type",
+            "accept",
+            "host",
+            "connection",
+            "user-agent",
+            "accept-encoding",
+            "accept-language",
+            "cache-control",
+            "x-forwarded-for",
         }
         for key, value in request.headers.items():
             if key.lower() not in skip_headers and self._contains_injection(value):
                 logger.warning(
                     "Injection attempt in header '%s': ip=%s, path=%s",
-                    key, client_ip, path,
+                    key,
+                    client_ip,
+                    path,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -327,7 +348,8 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                             if self._contains_injection(body_str):
                                 logger.warning(
                                     "Injection attempt in request body: ip=%s, path=%s",
-                                    client_ip, path,
+                                    client_ip,
+                                    path,
                                 )
                                 raise HTTPException(
                                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -357,6 +379,7 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
 # Audit Logging Middleware
 # ══════════════════════════════════════════════════════════════
 
+
 class AuditLoggingMiddleware(BaseHTTPMiddleware):
     """
     Logs all API requests for security audit trail.
@@ -372,9 +395,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
 
     SENSITIVE_PATHS = {"/auth/", "/api/transactions/", "/fl/"}
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         start_time = time.time()
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         client_ip = request.client.host if request.client else "unknown"
@@ -389,9 +410,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
             elapsed_ms = (time.time() - start_time) * 1000
 
             # Log security-sensitive requests
-            is_sensitive = any(
-                request.url.path.startswith(p) for p in self.SENSITIVE_PATHS
-            )
+            is_sensitive = any(request.url.path.startswith(p) for p in self.SENSITIVE_PATHS)
 
             if is_sensitive or response.status_code >= 400:
                 log_level = "warning" if response.status_code >= 400 else "info"
@@ -434,6 +453,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
 # Agent Capability Token Middleware
 # ══════════════════════════════════════════════════════════════
 
+
 class AgentCapabilityMiddleware(BaseHTTPMiddleware):
     """
     Validates agent capability tokens for inter-agent API requests.
@@ -449,9 +469,7 @@ class AgentCapabilityMiddleware(BaseHTTPMiddleware):
     # Paths that require capability tokens
     AGENT_PATHS = {"/api/agents/", "/agents/"}
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not CAPABILITY_TOKENS_ENABLED:
             return await call_next(request)
 
@@ -469,7 +487,8 @@ class AgentCapabilityMiddleware(BaseHTTPMiddleware):
         if not token_header:
             logger.warning(
                 "Missing capability token: path=%s, agent=%s",
-                path, agent_name,
+                path,
+                agent_name,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -487,15 +506,20 @@ class AgentCapabilityMiddleware(BaseHTTPMiddleware):
             issuer = get_capability_issuer()
             # Token is passed as JSON string in header
             import json
+
             token_data = json.loads(token_header)
-            token = AgentCapabilityToken(**{
-                k: v for k, v in token_data.items()
-                if k in AgentCapabilityToken.__dataclass_fields__
-            })
+            token = AgentCapabilityToken(
+                **{
+                    k: v
+                    for k, v in token_data.items()
+                    if k in AgentCapabilityToken.__dataclass_fields__
+                }
+            )
             if not issuer.verify_token(token):
                 logger.warning(
                     "Invalid capability token: agent=%s, path=%s",
-                    agent_name, path,
+                    agent_name,
+                    path,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -504,7 +528,8 @@ class AgentCapabilityMiddleware(BaseHTTPMiddleware):
         except json.JSONDecodeError:
             logger.warning(
                 "Malformed capability token: agent=%s, path=%s",
-                agent_name, path,
+                agent_name,
+                path,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -515,7 +540,8 @@ class AgentCapabilityMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             logger.error(
                 "Capability token verification error: %s, agent=%s",
-                str(exc), agent_name,
+                str(exc),
+                agent_name,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -553,6 +579,7 @@ def configure_security_middleware(app):
 
     # Rate limiting
     from app.security.rate_limiter import RateLimitMiddleware
+
     app.add_middleware(RateLimitMiddleware)
 
     # Audit logging — last to capture all requests

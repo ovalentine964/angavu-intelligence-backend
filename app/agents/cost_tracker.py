@@ -138,15 +138,17 @@ except ImportError:
 @dataclass
 class CostBudget:
     """Budget configuration for a scope (agent, swarm, domain, total)."""
-    scope: str                      # e.g. "agent:IntelligenceGenerator"
-    daily_limit_usd: float = 1.0    # Daily budget
-    monthly_limit_usd: float = 25.0 # Monthly budget
+
+    scope: str  # e.g. "agent:IntelligenceGenerator"
+    daily_limit_usd: float = 1.0  # Daily budget
+    monthly_limit_usd: float = 25.0  # Monthly budget
     alert_threshold_pct: float = 0.8  # Alert at 80% utilization
 
 
 @dataclass
 class CostRecord:
     """A single cost event."""
+
     agent_name: str
     swarm: str = ""
     domain: str = ""
@@ -247,7 +249,7 @@ class AgentCostTracker:
         # Store record
         self._records.append(record)
         if len(self._records) > self._max_records:
-            self._records = self._records[-self._max_records:]
+            self._records = self._records[-self._max_records :]
 
         # Update daily totals (reset if new day)
         self._maybe_reset_daily()
@@ -280,12 +282,14 @@ class AgentCostTracker:
         verdict: str,
     ) -> None:
         """Record cost from self-evaluation loop."""
-        self.record(CostRecord(
-            agent_name=agent_name,
-            input_tokens=tokens_used,
-            cost_usd=cost_usd,
-            source="evaluation",
-        ))
+        self.record(
+            CostRecord(
+                agent_name=agent_name,
+                input_tokens=tokens_used,
+                cost_usd=cost_usd,
+                source="evaluation",
+            )
+        )
 
         if COST_PROMETHEUS_AVAILABLE:
             EVALUATION_COST_USD.labels(
@@ -342,7 +346,9 @@ class AgentCostTracker:
         # Count records in last hour
         now = time.time()
         cutoff = now - self._rate_window_seconds
-        recent_records = [r for r in self._records if r.agent_name == agent_name and r.timestamp > cutoff]
+        recent_records = [
+            r for r in self._records if r.agent_name == agent_name and r.timestamp > cutoff
+        ]
         total_cost = sum(r.cost_usd for r in recent_records)
 
         # Extrapolate to hourly rate
@@ -355,6 +361,7 @@ class AgentCostTracker:
     def _maybe_reset_daily(self) -> None:
         """Reset daily counters if it's a new day."""
         import datetime
+
         today = datetime.date.today().isoformat()
         if today != self._current_day:
             self._daily_costs.clear()
@@ -421,6 +428,7 @@ class AgentCostTracker:
 
         try:
             from app.agents.base import AgentEvent, EventType
+
             alert_event = AgentEvent(
                 event_type=EventType.SECURITY_ALERT,  # Closest existing type
                 source="AgentCostTracker",
@@ -438,6 +446,7 @@ class AgentCostTracker:
             )
             # Fire and forget
             import asyncio
+
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(self._event_bus.publish(alert_event))
@@ -479,7 +488,9 @@ class AgentCostTracker:
             "cost_by_model": {k: round(v, 8) for k, v in model_costs.items()},
             "tokens_by_model": dict(model_tokens),
             "avg_cost_per_call": round(total_cost / len(records), 8) if records else 0,
-            "daily_budget": self._budgets.get(f"agent:{agent_name}", CostBudget("")).daily_limit_usd,
+            "daily_budget": self._budgets.get(
+                f"agent:{agent_name}", CostBudget("")
+            ).daily_limit_usd,
             "daily_spend": round(self._daily_costs.get(agent_name, 0), 8),
         }
 
@@ -487,10 +498,7 @@ class AgentCostTracker:
         """Get aggregated cost for a swarm."""
         cutoff = time.time() - hours * 3600
         agents = [name for name, s in self._agent_swarm.items() if s == swarm_name]
-        records = [
-            r for r in self._records
-            if r.agent_name in agents and r.timestamp > cutoff
-        ]
+        records = [r for r in self._records if r.agent_name in agents and r.timestamp > cutoff]
 
         if not records:
             return {"swarm_name": swarm_name, "total_cost_usd": 0.0}
@@ -571,7 +579,9 @@ class AgentCostTracker:
                     "daily_limit": b.daily_limit_usd,
                     "utilization": round(
                         self._daily_costs.get(scope.split(":", 1)[-1], 0) / b.daily_limit_usd
-                        if b.daily_limit_usd > 0 else 0, 2
+                        if b.daily_limit_usd > 0
+                        else 0,
+                        2,
                     ),
                 }
                 for scope, b in self._budgets.items()

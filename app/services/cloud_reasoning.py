@@ -2,6 +2,7 @@
 Cloud Reasoning Service — Gemini 3.5 Flash integration.
 Wraps Gemini REST API with retry, cost tracking, and complexity classification.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,23 +20,59 @@ logger = structlog.get_logger(__name__)
 
 class QueryComplexity(StrEnum):
     """Query complexity for routing decisions."""
-    SIMPLE = "simple"      # "What's my balance?" → on-device
+
+    SIMPLE = "simple"  # "What's my balance?" → on-device
     MODERATE = "moderate"  # "How much did I spend on stock?" → either
-    COMPLEX = "complex"    # "Compare cash flow and suggest cuts" → cloud
+    COMPLEX = "complex"  # "Compare cash flow and suggest cuts" → cloud
 
 
 # Swahili + English keywords for complexity classification
-_COMPLEX_KEYWORDS = frozenset([
-    "compare", "analyze", "predict", "forecast", "suggest", "recommend",
-    "optimize", "strategy", "plan", "budget", "trend", "pattern", "why",
-    "linganisha", "changanua", "bashiri", "pendekeza", "mpango", "kwa nini",
-    "tathimini", "uangalifu", "mwelekeo", "mfumo",
-])
+_COMPLEX_KEYWORDS = frozenset(
+    [
+        "compare",
+        "analyze",
+        "predict",
+        "forecast",
+        "suggest",
+        "recommend",
+        "optimize",
+        "strategy",
+        "plan",
+        "budget",
+        "trend",
+        "pattern",
+        "why",
+        "linganisha",
+        "changanua",
+        "bashiri",
+        "pendekeza",
+        "mpango",
+        "kwa nini",
+        "tathimini",
+        "uangalifu",
+        "mwelekeo",
+        "mfumo",
+    ]
+)
 
-_SIMPLE_KEYWORDS = frozenset([
-    "balance", "last", "show", "list", "how much", "total", "count",
-    "salio", "mwisho", "onyesha", "orodha", "ngapi", "jumla", "hesabu",
-])
+_SIMPLE_KEYWORDS = frozenset(
+    [
+        "balance",
+        "last",
+        "show",
+        "list",
+        "how much",
+        "total",
+        "count",
+        "salio",
+        "mwisho",
+        "onyesha",
+        "orodha",
+        "ngapi",
+        "jumla",
+        "hesabu",
+    ]
+)
 
 
 def classify_complexity(query: str) -> QueryComplexity:
@@ -53,6 +90,7 @@ def classify_complexity(query: str) -> QueryComplexity:
 @dataclass
 class CloudResponse:
     """Response from cloud reasoning."""
+
     text: str
     tokens_used: int = 0
     input_tokens: int = 0
@@ -200,8 +238,10 @@ class CloudReasoningService:
 
                     if resp.status_code == 429:
                         # Rate limited — back off
-                        retry_after = int(resp.headers.get("Retry-After", 2 ** attempt))
-                        logger.warning("cloud_reasoning.rate_limited_by_api", retry_after=retry_after)
+                        retry_after = int(resp.headers.get("Retry-After", 2**attempt))
+                        logger.warning(
+                            "cloud_reasoning.rate_limited_by_api", retry_after=retry_after
+                        )
                         await asyncio.sleep(retry_after)
                         continue
 
@@ -213,7 +253,7 @@ class CloudReasoningService:
             except (httpx.TimeoutException, httpx.HTTPStatusError) as e:
                 last_error = e
                 if attempt < self._config.max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
 
         raise last_error or RuntimeError("Gemini API call failed after retries")
@@ -257,6 +297,7 @@ class CloudReasoningService:
     def _check_budget(self, user_id: str) -> bool:
         """Check if user is within daily budget."""
         import time as _time
+
         today = int(_time.time() // 86400)
         if today != self._last_reset_day:
             self._user_daily_tokens.clear()

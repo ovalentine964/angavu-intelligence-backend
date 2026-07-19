@@ -1,4 +1,3 @@
-
 """
 Message signing middleware for Redis Streams.
 
@@ -119,10 +118,7 @@ class AgentKeyRegistry:
         """Return agents whose keys need rotation."""
         now = time.time()
         max_age = self._rotation_days * 86400
-        return [
-            name for name, created in self._key_created.items()
-            if now - created > max_age
-        ]
+        return [name for name, created in self._key_created.items() if now - created > max_age]
 
     def get_all_agents(self) -> list[str]:
         return list(self._keys.keys())
@@ -174,7 +170,9 @@ class MessageSigner:
         registry.register(agent_name, self._key_pair.public_key)
 
         # Nonce tracking (for replay detection on consumer side)
-        self._seen_nonces: dict[str, collections.OrderedDict[str, bool]] = {}  # agent → ordered nonce cache
+        self._seen_nonces: dict[
+            str, collections.OrderedDict[str, bool]
+        ] = {}  # agent → ordered nonce cache
 
         self._logger = logger.bind(
             component="message_signer",
@@ -230,9 +228,7 @@ class MessageSigner:
         result["_nonce"] = nonce
         result["_signed_at"] = signed_at
         result["_signature"] = base64.b64encode(signature).decode("ascii")
-        result["_sender_pubkey"] = base64.b64encode(
-            self._key_pair.public_key
-        ).decode("ascii")
+        result["_sender_pubkey"] = base64.b64encode(self._key_pair.public_key).decode("ascii")
 
         return result
 
@@ -271,10 +267,7 @@ class MessageSigner:
             return False, "nonce_replay_detected"
 
         # 4. Reconstruct canonical message (exclude signing metadata)
-        data = {
-            k: v for k, v in fields.items()
-            if not k.startswith("_")
-        }
+        data = {k: v for k, v in fields.items() if not k.startswith("_")}
         canonical = self._build_canonical(data, nonce, signed_at)
 
         # 5. Verify ML-DSA-65 signature
@@ -333,6 +326,7 @@ class MessageSigner:
     def _record_nonce(self, sender: str, nonce: str) -> None:
         """Record a nonce as seen."""
         import collections
+
         if sender not in self._seen_nonces:
             self._seen_nonces[sender] = collections.OrderedDict()
         self._seen_nonces[sender][nonce] = True
@@ -363,6 +357,7 @@ class SignedProducer:
 
     def __init__(self, agent_name: str, key_pair: CryptoKeyPair | None = None):
         from app.infrastructure.redis_streams import RedisStreamsProducer
+
         self._inner = RedisStreamsProducer()
         self._signer = MessageSigner(agent_name, key_pair)
         self._logger = logger.bind(component="signed_producer", agent=agent_name)
@@ -410,6 +405,7 @@ class SignedConsumer:
         **kwargs,
     ):
         from app.infrastructure.redis_streams import RedisStreamsConsumer
+
         self._inner = RedisStreamsConsumer(group=group, **kwargs)
         self._signer = MessageSigner(agent_name, key_pair)
         self._reject_unsigned = reject_unsigned
@@ -424,6 +420,7 @@ class SignedConsumer:
 
     async def subscribe(self, stream: str, handler):
         """Subscribe with signature verification wrapper."""
+
         async def verified_handler(message):
             fields = message.data  # Already deserialized
 
@@ -463,10 +460,7 @@ class SignedConsumer:
                 )
 
             # Strip signing metadata before passing to handler
-            clean_data = {
-                k: v for k, v in fields.items()
-                if not k.startswith("_")
-            }
+            clean_data = {k: v for k, v in fields.items() if not k.startswith("_")}
             message.data = clean_data
             await handler(message)
 
