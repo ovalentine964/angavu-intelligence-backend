@@ -44,6 +44,12 @@ import structlog
 
 from app.config import get_settings
 from app.exceptions import AgentError, EventBusError
+from app.infrastructure.streams_signing import (
+    SIGNING_ENABLED,
+    MessageSigner,
+    AgentKeyRegistry,
+    get_agent_key_registry,
+)
 
 if TYPE_CHECKING:
     from app.agents.base import AgentEvent, BiasharaAgent
@@ -83,6 +89,13 @@ class EventBus:
     - Stream trimming to prevent memory exhaustion
     - Event correlation for request/response patterns
     - Horizontal scaling configuration for multi-instance deployment
+    - **NEW**: ML-DSA-65 message signing (feature-flagged)
+
+    Security (when ANGAVU_MESSAGE_SIGNING_ENABLED=true):
+    - All published messages are signed with the agent's ML-DSA-65 key
+    - Consumed messages are verified before processing
+    - Nonce-based replay protection prevents message replay attacks
+    - During transition, unsigned messages are still accepted
 
     Scaling:
     - Supports multiple consumer instances via Redis consumer groups
@@ -139,6 +152,17 @@ class EventBus:
 
         # Telemetry (injected after init)
         self._agent_metrics: Any = None
+
+        # Message signing (feature-flagged)
+        self._signing_enabled = SIGNING_ENABLED
+        self._message_signers: Dict[str, MessageSigner] = {}  # agent_name → signer
+        self._signing_stats = {
+            "signed_published": 0,
+            "unsigned_published": 0,
+            "verified_consumed": 0,
+            "rejected_consumed": 0,
+            "unsigned_consumed": 0,
+        }
 
         self._logger = logger.bind(
             component="event_bus",
@@ -235,6 +259,68 @@ class EventBus:
 
     # ── Publish ─────────────────────────────────────────────────────
 
+    def _get_or_create_signer(self, agent_name: str) -> MessageSigner:
+        """Get or create a MessageSigner for an agent."""
+        if agent_name not in self._message_signers:
+            self._message_signers[agent_name] = MessageSigner(agent_name)
+        return self._message_signers[agent_name]
+
+    def _sign_event_data(self, event_data: Dict[str, Any], agent_name: str) -> Dict[str, Any]:
+        """
+        Sign event data if signing is enabled.
+
+        Returns the event data with signing metadata added.
+        If signing is disabled, returns data unchanged.
+        """
+        if not self._signing_enabled:
+            return event_data
+
+        signer = self._get_or_create_signer(agent_name)
+        signed = signer.sign_message(event_data)
+        self._signing_stats["signed_published"] += 1
+        return signed
+
+    def _verify_event_fields(self, fields: Dict[str, str]) -> tuple[bool, str]:
+        """
+        Verify a received message's signature if signing is enabled.
+
+        Returns (is_valid, reason). If signing is disabled, always returns (True, "signing_disabled").
+        """
+        if not self._signing_enabled:
+            return True, "signing_disabled"
+
+        if "_signature" not in fields:
+            # No signature present — accept during transition
+            self._signing_stats["unsigned_consumed"] += 1
+            return True, "unsigned_accepted_transition"
+
+        # Use any signer for verification (they share the key registry)
+        # Create a temporary signer for verification if needed
+        sender = fields.get("_sender", "unknown")
+        signer = self._get_or_create_signer(f"_verifier_{self._instance_id}")
+        valid, reason = signer.verify_message(fields)
+
+        if valid:
+            self._signing_stats["verified_consumed"] += 1
+        else:
+            self._signing_stats["rejected_consumed"] += 1
+            self._logger.warning(
+                "message_signature_invalid",
+                sender=sender,
+                reason=reason,
+            )
+
+        return valid, reason
+
+    def get_signing_stats(self) -> Dict[str, Any]:
+        """Return message signing statistics."""
+        return {
+            "enabled": self._signing_enabled,
+            **self._signing_stats,
+            "registered_signers": list(self._message_signers.keys()),
+            "key_registry_agents": get_agent_key_registry().get_all_agents(),
+        }
+
     async def publish(self, event: AgentEvent) -> str:
         """
         Publish an event to the appropriate stream.
@@ -243,6 +329,7 @@ class EventBus:
         - Idempotency: deduplicates events within IDEMPOTENCY_TTL window
         - Backpressure: throttles when stream depth exceeds high water mark
         - Telemetry: records publish metrics when available
+        - **NEW**: ML-DSA-65 message signing when enabled
 
         Returns the event ID (Redis stream ID or generated ID).
         """
@@ -270,6 +357,9 @@ class EventBus:
                 )
 
         event_data = event.to_dict()
+
+        # Sign the event data if signing is enabled
+        event_data = self._sign_event_data(event_data, event.source)
 
         if self._redis and not self._in_memory_enabled:
             try:
@@ -308,6 +398,8 @@ class EventBus:
                 # Fall through to in-memory
 
         # In-memory fallback — buffer for polling, no immediate dispatch
+        if not self._signing_enabled:
+            self._signing_stats["unsigned_published"] += 1
         self._pending_buffer[stream_key].append(event_data)
         # Trim to max length
         if len(self._pending_buffer[stream_key]) > self._max_stream_length:
@@ -576,6 +668,8 @@ class EventBus:
             "backpressure_active_streams": [
                 k for k, v in self._backpressure_streams.items() if v
             ],
+            # Message signing
+            "signing": self.get_signing_stats(),
             # Horizontal scaling info
             "scaling": {
                 "instance_id": self._instance_id,

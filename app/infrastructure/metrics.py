@@ -283,6 +283,136 @@ if PROMETHEUS_AVAILABLE:
         registry=_registry,
     )
 
+# ── Agent Loop Improvement Metrics (NEW) ───────────────────────────
+
+if PROMETHEUS_AVAILABLE:
+    # Agent cost tracking
+    AGENT_TOKENS_INPUT_TOTAL = Counter(
+        "angavu_agent_tokens_input_total",
+        "Total input tokens consumed per agent",
+        ["agent_name", "swarm", "model"],
+        registry=_registry,
+    )
+
+    AGENT_TOKENS_OUTPUT_TOTAL = Counter(
+        "angavu_agent_tokens_output_total",
+        "Total output tokens consumed per agent",
+        ["agent_name", "swarm", "model"],
+        registry=_registry,
+    )
+
+    AGENT_COST_USD_TOTAL = Counter(
+        "angavu_agent_cost_usd_total",
+        "Total cost in USD per agent",
+        ["agent_name", "swarm", "domain"],
+        registry=_registry,
+    )
+
+    SWARM_COST_USD_TOTAL = Counter(
+        "angavu_swarm_cost_usd_total",
+        "Total cost in USD per swarm",
+        ["swarm"],
+        registry=_registry,
+    )
+
+    DOMAIN_COST_USD_TOTAL = Counter(
+        "angavu_domain_cost_usd_total",
+        "Total cost in USD per business domain",
+        ["domain"],
+        registry=_registry,
+    )
+
+    COST_RATE_USD_PER_HOUR = Gauge(
+        "angavu_cost_rate_usd_per_hour",
+        "Current cost rate in USD per hour",
+        ["agent_name"],
+        registry=_registry,
+    )
+
+    BUDGET_UTILIZATION_RATIO = Gauge(
+        "angavu_budget_utilization_ratio",
+        "Budget utilization ratio (0.0-1.0+)",
+        ["scope"],
+        registry=_registry,
+    )
+
+    # Self-evaluation metrics
+    EVALUATION_COST_USD_TOTAL = Counter(
+        "angavu_evaluation_cost_usd_total",
+        "Cost of self-evaluation loops",
+        ["agent_name", "verdict"],
+        registry=_registry,
+    )
+
+    EVALUATION_TOKENS_TOTAL = Counter(
+        "angavu_evaluation_tokens_total",
+        "Tokens consumed by self-evaluation",
+        ["agent_name"],
+        registry=_registry,
+    )
+
+    EVALUATION_ITERATIONS_HISTOGRAM = Histogram(
+        "angavu_evaluation_iterations",
+        "Number of evaluation iterations per agent call",
+        ["agent_name"],
+        buckets=[1, 2, 3, 4, 5],
+        registry=_registry,
+    )
+
+    EVALUATION_SCORE_HISTOGRAM = Histogram(
+        "angavu_evaluation_score",
+        "Evaluation quality scores",
+        ["agent_name"],
+        buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        registry=_registry,
+    )
+
+    # Circuit breaker governance metrics
+    CIRCUIT_STATE_CHANGES_TOTAL = Counter(
+        "angavu_circuit_state_changes_total",
+        "Total circuit breaker state changes",
+        ["agent_name", "from_state", "to_state"],
+        registry=_registry,
+    )
+
+    CIRCUIT_OPEN_DURATION_SECONDS = Gauge(
+        "angavu_circuit_open_duration_seconds",
+        "How long a circuit has been open",
+        ["agent_name"],
+        registry=_registry,
+    )
+
+    AGENT_PAUSED_GAUGE = Gauge(
+        "angavu_agent_paused",
+        "Whether an agent is paused (1) or active (0)",
+        ["agent_name"],
+        registry=_registry,
+    )
+
+    GOVERNANCE_ESCALATIONS_TOTAL = Counter(
+        "angavu_governance_escalations_total",
+        "Total governance escalations",
+        ["agent_name", "severity"],
+        registry=_registry,
+    )
+
+    # Inference tier metrics
+    INFERENCE_LATENCY_SECONDS = Histogram(
+        "angavu_inference_latency_seconds",
+        "Inference latency by model tier",
+        ["tier", "agent_name"],
+        buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+        registry=_registry,
+    )
+
+    MODEL_FALLBACK_TOTAL = Counter(
+        "angavu_model_fallback_total",
+        "Number of model fallbacks",
+        ["from_model", "to_model", "reason"],
+        registry=_registry,
+    )
+
+
 # ── Application Info ───────────────────────────────────────────────
 
 if PROMETHEUS_AVAILABLE:

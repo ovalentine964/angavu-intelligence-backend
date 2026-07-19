@@ -23,6 +23,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+# Capability token integration (feature-flagged)
+from app.security.capability_tokens import (
+    CAPABILITY_TOKENS_ENABLED,
+    is_swarm_capability_enabled,
+    get_capability_issuer,
+    create_default_token,
+    AgentCapabilityToken,
+    Action,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -426,6 +436,101 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
 # Setup function
 # ══════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════
+# Agent Capability Token Middleware
+# ══════════════════════════════════════════════════════════════
+
+class AgentCapabilityMiddleware(BaseHTTPMiddleware):
+    """
+    Validates agent capability tokens for inter-agent API requests.
+
+    When ANGAVU_CAPABILITY_TOKENS_ENABLED=true:
+    - Requests to /api/agents/ endpoints must include a valid capability token
+    - Tokens are verified for signature, expiry, and permission scope
+    - Agent communication targets are checked against allowed_recipients
+
+    Integration point: wired into the middleware stack after input validation.
+    """
+
+    # Paths that require capability tokens
+    AGENT_PATHS = {"/api/agents/", "/agents/"}
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        if not CAPABILITY_TOKENS_ENABLED:
+            return await call_next(request)
+
+        path = request.url.path
+
+        # Only check agent-to-agent API paths
+        if not any(path.startswith(p) for p in self.AGENT_PATHS):
+            return await call_next(request)
+
+        # Extract capability token from header
+        token_header = request.headers.get("X-Capability-Token", "")
+        agent_name = request.headers.get("X-Agent-Name", "")
+        swarm = request.headers.get("X-Agent-Swarm", "")
+
+        if not token_header:
+            logger.warning(
+                "Missing capability token: path=%s, agent=%s",
+                path, agent_name,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Capability token required for agent endpoints",
+            )
+
+        # Check swarm-level flag
+        if swarm and not is_swarm_capability_enabled(swarm):
+            # Swarm not opted in yet — allow through
+            return await call_next(request)
+
+        # Verify token (basic format check — full crypto verification
+        # happens at the agent level via SecureMessageHandler)
+        try:
+            issuer = get_capability_issuer()
+            # Token is passed as JSON string in header
+            import json
+            token_data = json.loads(token_header)
+            token = AgentCapabilityToken(**{
+                k: v for k, v in token_data.items()
+                if k in AgentCapabilityToken.__dataclass_fields__
+            })
+            if not issuer.verify_token(token):
+                logger.warning(
+                    "Invalid capability token: agent=%s, path=%s",
+                    agent_name, path,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Invalid or expired capability token",
+                )
+        except json.JSONDecodeError:
+            logger.warning(
+                "Malformed capability token: agent=%s, path=%s",
+                agent_name, path,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Malformed capability token",
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(
+                "Capability token verification error: %s, agent=%s",
+                str(exc), agent_name,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Capability token verification failed",
+            )
+
+        return await call_next(request)
+
+
 def configure_security_middleware(app):
     """
     Configure all security middleware in the correct order.
@@ -434,8 +539,9 @@ def configure_security_middleware(app):
     1. CORS (handles preflight OPTIONS requests)
     2. Security headers (adds to all responses)
     3. Input validation (rejects bad requests early)
-    4. Rate limiting (after validation, before business logic)
-    5. Audit logging (captures everything)
+    4. Agent capability tokens (validates inter-agent auth)
+    5. Rate limiting (after validation, before business logic)
+    6. Audit logging (captures everything)
     """
     # CORS — must be first
     configure_cors(app)
@@ -446,6 +552,11 @@ def configure_security_middleware(app):
     # Input validation
     app.add_middleware(InputValidationMiddleware)
 
+    # Agent capability tokens (feature-flagged)
+    if CAPABILITY_TOKENS_ENABLED:
+        app.add_middleware(AgentCapabilityMiddleware)
+        logger.info("Agent capability token middleware enabled")
+
     # Rate limiting
     from app.security.rate_limiter import RateLimitMiddleware
     app.add_middleware(RateLimitMiddleware)
@@ -453,4 +564,8 @@ def configure_security_middleware(app):
     # Audit logging — last to capture all requests
     app.add_middleware(AuditLoggingMiddleware)
 
-    logger.info("Security middleware configured: CORS, headers, input validation, rate limiting, audit")
+    logger.info(
+        "Security middleware configured: CORS, headers, input validation, "
+        "capability_tokens=%s, rate limiting, audit",
+        CAPABILITY_TOKENS_ENABLED,
+    )

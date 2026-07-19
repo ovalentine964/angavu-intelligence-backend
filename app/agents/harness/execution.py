@@ -38,6 +38,20 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+# Prompt guard integration (feature-flagged)
+try:
+    from app.security.prompt_guard import (
+        PROMPT_GUARD_ENABLED,
+        PROMPT_GUARD_STRICT,
+        PromptGuard,
+        SecureMessageHandler,
+        get_prompt_guard,
+    )
+    _PROMPT_GUARD_AVAILABLE = True
+except ImportError:
+    _PROMPT_GUARD_AVAILABLE = False
+    PROMPT_GUARD_ENABLED = False
+
 
 # ════════════════════════════════════════════════════════════════════
 # Circuit Breaker
@@ -526,6 +540,12 @@ class AgentExecutionHarness:
     3. Circuit breaker (prevents cascading failures)
     4. Metrics collection (latency, success rate, tokens)
     5. Cost attribution (per agent, per user)
+    6. **NEW**: Prompt injection scanning (feature-flagged)
+
+    Security (when ANGAVU_PROMPT_GUARD_ENABLED=true):
+    - Inter-agent messages are scanned for prompt injection patterns
+    - Messages with injection attempts are blocked before reaching the LLM
+    - Chain: signature verification → capability check → prompt scan
 
     Usage:
         harness = AgentExecutionHarness()
@@ -548,6 +568,18 @@ class AgentExecutionHarness:
         # Pre/Post execution hooks
         self._pre_hooks: List[Callable] = []
         self._post_hooks: List[Callable] = []
+
+        # Agent loop improvements (injected via setters, feature-flagged)
+        self._cost_tracker: Any = None    # AgentCostTracker | None
+        self._governance: Any = None      # CircuitBreakerGovernance | None
+
+        # Prompt guard integration (feature-flagged)
+        self._prompt_guard: Optional["PromptGuard"] = None
+        self._secure_handlers: Dict[str, "SecureMessageHandler"] = {}
+        self._injection_blocks: int = 0
+        if PROMPT_GUARD_ENABLED and _PROMPT_GUARD_AVAILABLE:
+            self._prompt_guard = get_prompt_guard()
+            self._logger.info("prompt_guard_enabled", strict=PROMPT_GUARD_STRICT)
 
     # ── Circuit Breaker Management ──────────────────────────────────
 
@@ -586,6 +618,28 @@ class AgentExecutionHarness:
 
         agent_name = agent.name
         cb = self._get_circuit_breaker(agent_name)
+
+        # 0. Prompt injection scan (before circuit breaker check)
+        if self._prompt_guard and PROMPT_GUARD_ENABLED:
+            # Scan the event payload for injection attempts
+            event_payload = event.payload if hasattr(event, 'payload') and isinstance(event.payload, dict) else {}
+            if event_payload:
+                detection = self._prompt_guard.scan_message(event_payload)
+                if detection and detection.is_injection:
+                    self._injection_blocks += 1
+                    self._logger.warning(
+                        "prompt_injection_blocked",
+                        agent=agent_name,
+                        severity=detection.severity.value,
+                        pattern=detection.pattern_name,
+                        field=detection.field,
+                        confidence=detection.confidence,
+                    )
+                    return AgentResult(
+                        success=False,
+                        error=f"Message blocked: prompt injection detected ({detection.pattern_name})",
+                        duration_ms=0,
+                    )
 
         # 1. Circuit breaker check
         if cb.is_open:
@@ -657,9 +711,29 @@ class AgentExecutionHarness:
                     cb.record_success()
                 else:
                     cb.record_failure()
+                    # Notify governance of failure (for auto-pause tracking)
+                    if self._governance:
+                        try:
+                            self._governance.record_failure(agent_name)
+                        except Exception:
+                            pass
 
                 # Record metrics
                 self._metrics.record(record)
+
+                # Export to cost tracker if injected
+                if self._cost_tracker and record.cost_usd > 0:
+                    try:
+                        from app.agents.cost_tracker import CostRecord
+                        self._cost_tracker.record(CostRecord(
+                            agent_name=record.agent_name,
+                            input_tokens=record.input_tokens,
+                            output_tokens=record.output_tokens,
+                            cost_usd=record.cost_usd,
+                            model=record.model_used,
+                        ))
+                    except Exception:
+                        pass
 
                 # Run post-hooks
                 for hook in self._post_hooks:
@@ -741,6 +815,14 @@ class AgentExecutionHarness:
             duration_ms=0,
         )
 
+    def set_cost_tracker(self, tracker: Any) -> None:
+        """Inject the cost tracker for per-agent cost tracking."""
+        self._cost_tracker = tracker
+
+    def set_governance(self, governance: Any) -> None:
+        """Inject the circuit breaker governance for alerting and auto-pause."""
+        self._governance = governance
+
     # ── Hooks ───────────────────────────────────────────────────────
 
     def add_pre_hook(self, hook: Callable) -> None:
@@ -800,7 +882,7 @@ class AgentExecutionHarness:
             if cb.state == CircuitState.HALF_OPEN
         ]
 
-        return {
+        health = {
             "status": "degraded" if open_circuits else "healthy",
             "open_circuits": open_circuits,
             "half_open_circuits": half_open,
@@ -816,6 +898,14 @@ class AgentExecutionHarness:
                 "circuit_half_open_max": self._config.circuit_half_open_max,
             },
         }
+
+        # Include prompt guard stats if enabled
+        if self._prompt_guard:
+            guard_stats = self._prompt_guard.get_stats()
+            guard_stats["injection_blocks"] = self._injection_blocks
+            health["prompt_guard"] = guard_stats
+
+        return health
 
     def reset_circuit_breaker(self, agent_name: str) -> bool:
         """Manually reset a circuit breaker to closed state."""

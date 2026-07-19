@@ -237,6 +237,7 @@ class AgentResult:
     duration_ms: float = 0.0
     events_to_publish: List[AgentEvent] = field(default_factory=list)
     result_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -381,6 +382,10 @@ class BiasharaAgent:
         self._harness: Any = None         # AgentExecutionHarness | None
         self._inference_harness: Any = None  # InferenceHarness | None
 
+        # Agent loop improvements (injected via setters, feature-flagged)
+        self._self_evaluation: Any = None  # SelfEvaluationMiddleware | None
+        self._cost_tracker: Any = None     # AgentCostTracker | None
+
         # Background polling lifecycle
         self._poll_task: Optional[asyncio.Task] = None
         self._poll_interval: float = 1.0  # seconds between polls
@@ -405,6 +410,14 @@ class BiasharaAgent:
     def set_inference_harness(self, harness: Any) -> None:
         """Inject the model inference harness (called by orchestrator)."""
         self._inference_harness = harness
+
+    def set_self_evaluation(self, evaluator: Any) -> None:
+        """Inject the self-evaluation middleware (called by orchestrator)."""
+        self._self_evaluation = evaluator
+
+    def set_cost_tracker(self, tracker: Any) -> None:
+        """Inject the cost tracker (called by orchestrator)."""
+        self._cost_tracker = tracker
 
     # ── Lifecycle start / stop ──────────────────────────────────────
 
@@ -539,10 +552,23 @@ class BiasharaAgent:
             if self._tracer and trace_id:
                 self._tracer.record_result(trace_id, result)
 
-            # 4. Reflect
+            # 4. Self-Evaluate (quality gate before downstream publish)
+            # Feature flag: only runs if _self_evaluation is injected
+            if self._self_evaluation:
+                try:
+                    result = await self._self_evaluation.evaluate_and_refine(
+                        self, event, result,
+                    )
+                except Exception as eval_err:
+                    self._logger.warning(
+                        "self_evaluation_error",
+                        error=str(eval_err),
+                    )
+
+            # 5. Reflect
             await self.reflect(result)
 
-            # 5. Publish downstream events
+            # 6. Publish downstream events
             if self._event_bus and result.events_to_publish:
                 for downstream_event in result.events_to_publish:
                     try:
@@ -554,7 +580,21 @@ class BiasharaAgent:
                             error=str(pub_err),
                         )
 
-            # 6. Finalize trace
+            # 7. Track cost (feature flag: only runs if _cost_tracker is injected)
+            if self._cost_tracker and hasattr(result, 'data') and isinstance(result.data, dict):
+                try:
+                    from app.agents.cost_tracker import CostRecord
+                    self._cost_tracker.record(CostRecord(
+                        agent_name=self.name,
+                        input_tokens=result.data.get('input_tokens', 0),
+                        output_tokens=result.data.get('output_tokens', 0),
+                        cost_usd=result.data.get('cost_usd', 0),
+                        model=result.data.get('model_used', ''),
+                    ))
+                except Exception as cost_err:
+                    self._logger.debug("cost_tracking_error", error=str(cost_err))
+
+            # 8. Finalize trace
             if self._tracer and trace_id:
                 self._tracer.end_trace(trace_id, success=result.success)
 

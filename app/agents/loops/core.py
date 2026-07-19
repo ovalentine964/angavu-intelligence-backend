@@ -38,6 +38,95 @@ logger = structlog.get_logger(__name__)
 
 
 # ════════════════════════════════════════════════════════════════════
+# Budget Guard — Prevents runaway loops from consuming too many resources
+# ════════════════════════════════════════════════════════════════════
+
+
+@dataclass
+class BudgetGuard:
+    """
+    Budget guard for agent loops — prevents runaway token and cost consumption.
+
+    Tracks per-cycle and per-day budgets. When a budget is exhausted,
+    the loop should stop and return the best result so far.
+
+    Integration:
+        guard = BudgetGuard(max_iterations=5, max_tokens_per_cycle=5000, max_cost_per_cycle_usd=0.05)
+        # In reflexion loop:
+        if guard.is_exhausted():
+            break
+        guard.record(iteration_tokens, iteration_cost)
+    """
+    max_iterations: int = 5
+    max_tokens_per_cycle: int = 5000
+    max_cost_per_cycle_usd: float = 0.05
+    max_tokens_per_day: int = 500_000
+    max_cost_per_day_usd: float = 10.0
+
+    # Internal tracking
+    _iterations: int = field(default=0, init=False)
+    _cycle_tokens: int = field(default=0, init=False)
+    _cycle_cost_usd: float = field(default=0.0, init=False)
+    _day_tokens: int = field(default=0, init=False)
+    _day_cost_usd: float = field(default=0.0, init=False)
+    _day_key: str = field(default="", init=False)
+    _exhausted_reason: str = field(default="", init=False)
+
+    def record(self, tokens: int = 0, cost_usd: float = 0.0) -> None:
+        """Record token/cost usage for the current iteration."""
+        self._iterations += 1
+        self._cycle_tokens += tokens
+        self._cycle_cost_usd += cost_usd
+
+        # Daily tracking with auto-reset
+        import datetime
+        today = datetime.date.today().isoformat()
+        if today != self._day_key:
+            self._day_tokens = 0
+            self._day_cost_usd = 0.0
+            self._day_key = today
+        self._day_tokens += tokens
+        self._day_cost_usd += cost_usd
+
+    def is_exhausted(self) -> bool:
+        """Check if any budget is exhausted."""
+        if self._iterations >= self.max_iterations:
+            self._exhausted_reason = f"max_iterations ({self._iterations}/{self.max_iterations})"
+            return True
+        if self._cycle_tokens >= self.max_tokens_per_cycle:
+            self._exhausted_reason = f"max_tokens_per_cycle ({self._cycle_tokens}/{self.max_tokens_per_cycle})"
+            return True
+        if self._cycle_cost_usd >= self.max_cost_per_cycle_usd:
+            self._exhausted_reason = f"max_cost_per_cycle (${self._cycle_cost_usd:.6f}/${self.max_cost_per_cycle_usd:.6f})"
+            return True
+        if self._day_tokens >= self.max_tokens_per_day:
+            self._exhausted_reason = f"max_tokens_per_day ({self._day_tokens}/{self.max_tokens_per_day})"
+            return True
+        if self._day_cost_usd >= self.max_cost_per_day_usd:
+            self._exhausted_reason = f"max_cost_per_day (${self._day_cost_usd:.6f}/${self.max_cost_per_day_usd:.6f})"
+            return True
+        return False
+
+    def reset_cycle(self) -> None:
+        """Reset per-cycle counters (call between task executions)."""
+        self._iterations = 0
+        self._cycle_tokens = 0
+        self._cycle_cost_usd = 0.0
+        self._exhausted_reason = ""
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get current budget status."""
+        return {
+            "iterations": f"{self._iterations}/{self.max_iterations}",
+            "cycle_tokens": f"{self._cycle_tokens}/{self.max_tokens_per_cycle}",
+            "cycle_cost_usd": f"${self._cycle_cost_usd:.6f}/${self.max_cost_per_cycle_usd:.6f}",
+            "day_tokens": f"{self._day_tokens}/{self.max_tokens_per_day}",
+            "day_cost_usd": f"${self._day_cost_usd:.6f}/${self.max_cost_per_day_usd:.6f}",
+            "exhausted": self._exhausted_reason or False,
+        }
+
+
+# ════════════════════════════════════════════════════════════════════
 # 1. ReAct Loop — Reasoning + Acting with Explicit Trace
 # ════════════════════════════════════════════════════════════════════
 
@@ -303,11 +392,13 @@ class ReflexionAgent(ReActAgent):
         capabilities: Sequence[str],
         quality_threshold: float = 0.7,
         max_retries: int = 3,
+        budget_guard: Optional[BudgetGuard] = None,
     ):
         super().__init__(name, role, capabilities)
         self._quality_threshold = quality_threshold
         self._max_retries = max_retries
         self._critique_history: List[Critique] = []
+        self._budget_guard = budget_guard  # Feature flag: None means disabled
 
     async def handle_event(self, event: AgentEvent) -> AgentResult:
         """
@@ -358,8 +449,28 @@ class ReflexionAgent(ReActAgent):
                 )
                 break
 
+            # Check budget guard (prevents runaway token/cost consumption)
+            if self._budget_guard and self._budget_guard.is_exhausted():
+                self._logger.warning(
+                    "reflexion_budget_exhausted",
+                    agent=self.name,
+                    budget_status=self._budget_guard.get_status(),
+                    attempt=attempt,
+                )
+                break
+
             # Store critique in memory for the next attempt
             self.memory.store(f"reflexion_critique:{attempt}", critique.to_dict())
+
+            # Record budget usage if guard is present
+            if self._budget_guard:
+                # Estimate tokens from result data if available
+                tokens = 0
+                cost = 0.0
+                if last_result and hasattr(last_result, 'data') and isinstance(last_result.data, dict):
+                    tokens = last_result.data.get('input_tokens', 0) + last_result.data.get('output_tokens', 0)
+                    cost = last_result.data.get('cost_usd', 0.0)
+                self._budget_guard.record(tokens=tokens, cost_usd=cost)
 
         # Store the full Reflexion trace
         if self._current_trace:

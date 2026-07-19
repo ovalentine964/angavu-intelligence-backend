@@ -156,6 +156,9 @@ class CircuitBreaker:
         self._total_successes = 0
         self._last_success_time: Optional[float] = None
 
+        # Governance hook (injected, feature-flagged)
+        self._governance: Any = None  # CircuitBreakerGovernance | None
+
         self._logger = logger.bind(component="circuit_breaker", name=name)
 
     @property
@@ -186,6 +189,10 @@ class CircuitBreaker:
             return 0.0
         elapsed = time.time() - self._last_failure_time
         return max(0.0, self.recovery_timeout - elapsed)
+
+    def set_governance(self, governance: Any) -> None:
+        """Inject governance hook for state change notifications."""
+        self._governance = governance
 
     def record_success(self) -> None:
         """Record a successful call."""
@@ -237,6 +244,20 @@ class CircuitBreaker:
             failure_count=self._failure_count,
             success_count=self._success_count,
         )
+
+        # Notify governance of state change (feature flag)
+        if self._governance:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._governance.on_state_change(
+                    agent_name=self.name,
+                    old_state=old_state.value,
+                    new_state=new_state.value,
+                    failure_count=self._failure_count,
+                    recovery_timeout_s=self.recovery_timeout,
+                ))
+            except RuntimeError:
+                pass
 
     @asynccontextmanager
     async def protect(self):
