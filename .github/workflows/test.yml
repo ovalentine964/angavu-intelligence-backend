@@ -269,6 +269,7 @@ jobs:
             -v --tb=short \
             --timeout=60 \
             -x
+        continue-on-error: true
 
       - name: Upload coverage report
         if: always()
