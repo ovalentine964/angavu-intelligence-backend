@@ -23,7 +23,7 @@ cryptography>=49.0.0
 # Data Processing
 zstandard==0.25.0
 orjson==3.11.9
-numpy==2.5.1
+numpy>=2.0,<2.2
 polars==1.42.1
 scipy==1.18.0
 # Pin numba to avoid Python 3.12 incompatibility
