@@ -179,6 +179,71 @@ async def sync_batch(
     return await sync_data(request, current_user, db)
 
 
+@router.post("/push", response_model=SyncResponse)
+async def sync_push(
+    request: SyncRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Alias for /sync — push data from device to cloud.
+
+    Provided for mobile apps that use /sync/push as the upload endpoint.
+    """
+    return await sync_data(request, current_user, db)
+
+
+@router.post("/pull")
+async def sync_pull(
+    since: datetime | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Pull-based sync — fetch updates from cloud.
+
+    Returns intelligence updates, profile changes, and other
+    data that the device should sync. The device calls this
+    periodically to stay up-to-date.
+
+    Args:
+        since: Only return updates since this timestamp
+        current_user: Authenticated user (from JWT)
+        db: Database session
+
+    Returns:
+        Dict with sync data for the device
+    """
+    logger.info(
+        "sync_pull_requested",
+        user_id=str(current_user.id),
+        since=since,
+    )
+
+    # Get sync status
+    last_sync = current_user.last_sync_at
+
+    # Get recent transactions count
+    from sqlalchemy import func as _func
+    query = select(_func.count(Transaction.id)).where(
+        Transaction.user_id == current_user.id
+    )
+    if since:
+        query = query.where(Transaction.synced_at >= since)
+
+    result = await db.execute(query)
+    txn_count = result.scalar() or 0
+
+    return {
+        "user_id": str(current_user.id),
+        "last_sync_at": last_sync.isoformat() if last_sync else None,
+        "transactions_updated": txn_count,
+        "intelligence_updates_available": txn_count > 0,
+        "profile_updated": current_user.updated_at.isoformat() if current_user.updated_at else None,
+        "recommended_action": "sync" if txn_count > 0 else "idle",
+    }
+
+
 # =========================================================================
 # Msaidizi ↔ Angavu Intelligence Sync Pipeline Endpoints
 # =========================================================================

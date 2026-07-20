@@ -550,3 +550,39 @@ async def update_consent(
                else "Your data will not be shared.")
         ),
     }
+
+
+@router.post("/logout")
+async def logout(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Logout — revoke all refresh tokens for the current user.
+
+    This effectively invalidates all sessions for the user,
+    requiring re-authentication on all devices.
+
+    Use this when:
+    - User explicitly logs out
+    - User suspects their account is compromised
+    - Password/phone change
+    """
+    # Revoke all refresh tokens for this user
+    from sqlalchemy import update as _update
+    await db.execute(
+        _update(RefreshTokenModel)
+        .where(
+            and_(
+                RefreshTokenModel.user_id == user.id,
+                RefreshTokenModel.revoked == False,
+            )
+        )
+        .values(revoked=True)
+    )
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": "All sessions have been revoked. Please re-authenticate.",
+    }
