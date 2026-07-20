@@ -48,7 +48,7 @@ class LeadDB(Base):
     notes = Column(Text, nullable=True, default="")
     tags = Column(JSON, nullable=True, default=list)
     assigned_to = Column(String(100), nullable=True, default="")
-    metadata = Column(JSON, nullable=True, default=dict)
+    extra_data = Column("metadata", JSON, nullable=True, default=dict)
 
     qualified_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(

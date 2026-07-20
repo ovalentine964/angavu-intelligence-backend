@@ -47,10 +47,12 @@ class MultiChannelGateway:
         registry: ChannelRegistry,
         session_sync: SessionSync,
         pipeline: Any = None,
+        failover_manager: Any = None,
     ):
         self.registry = registry
         self.session_sync = session_sync
         self.pipeline = pipeline
+        self.failover_manager = failover_manager
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -181,8 +183,37 @@ class MultiChannelGateway:
         """
         Send a proactive message to a worker on their preferred channel.
         Used for alerts, reminders, and notifications.
+
+        If failover_manager is available, uses automatic failover.
+        Otherwise, falls back to direct adapter delivery.
         """
-        # Determine channel
+        # Use failover manager if available
+        if self.failover_manager:
+            channel_name = (
+                preferred_channel.value if preferred_channel else None
+            )
+            result = await self.failover_manager.send(
+                recipient_id=worker_id,
+                content=content,
+                preferred_channel=channel_name,
+            )
+            if result["success"]:
+                logger.info(
+                    "proactive_message_sent",
+                    worker_id=worker_id,
+                    channel_used=result["channel_used"],
+                    failover=result["failover_triggered"],
+                )
+                return True
+            else:
+                logger.error(
+                    "proactive_message_failed",
+                    worker_id=worker_id,
+                    attempted=result["attempted"],
+                )
+                return False
+
+        # Direct delivery without failover
         if preferred_channel is None:
             preferred_channel = await self.session_sync.get_preferred_channel(
                 worker_id

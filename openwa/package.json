@@ -1,6 +1,6 @@
 {
   "name": "msaidizi-openwa",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Msaidizi WhatsApp bot — self-hosted WhatsApp Web API using Baileys",
   "main": "index.js",
   "scripts": {

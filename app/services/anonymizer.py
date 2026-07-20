@@ -27,7 +27,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.intelligence import DataAccessLog
+from app.models.intelligence_products import DataAccessLog
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()

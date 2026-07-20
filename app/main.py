@@ -338,10 +338,75 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("pqc_init_failed", error=str(exc))
 
+    # ── Multi-Channel Infrastructure (Failover & Health) ────────
+    try:
+        from app.channels.adapters.telegram_adapter import TelegramAdapter
+        from app.channels.adapters.http_api_adapter import HttpApiAdapter
+        from app.channels.failover import FailoverManager
+        from app.channels.health_monitor import ChannelHealthMonitor
+        from app.channels.registry import ChannelRegistry
+
+        channel_registry = ChannelRegistry()
+
+        # Register WhatsApp adapter if enabled
+        if settings.ENABLE_WHATSAPP:
+            from app.channels.adapters.whatsapp_adapter import WhatsAppAdapter
+            wa_adapter = WhatsAppAdapter()
+            channel_registry.register(wa_adapter)
+
+        # Register Telegram adapter if configured
+        if settings.ENABLE_TELEGRAM and settings.TELEGRAM_BOT_TOKEN:
+            tg_adapter = TelegramAdapter(
+                bot_token=settings.TELEGRAM_BOT_TOKEN,
+                api_base=settings.TELEGRAM_API_URL or None,
+            )
+            channel_registry.register(tg_adapter)
+
+        # Register HTTP API adapter (always available as last resort)
+        http_adapter = HttpApiAdapter()
+        channel_registry.register(http_adapter)
+
+        # Initialize all adapters
+        await channel_registry.initialize_all()
+
+        # Create health monitor
+        health_monitor = ChannelHealthMonitor(registry=channel_registry)
+
+        # Create failover manager
+        failover_manager = FailoverManager(
+            registry=channel_registry,
+            health_monitor=health_monitor,
+        )
+
+        # Start health monitoring
+        if settings.CHANNEL_FAILOVER_ENABLED:
+            await health_monitor.start()
+
+        # Wire into API
+        set_channel_infrastructure(health_monitor, failover_manager)
+
+        # Store on app.state
+        app.state.channel_registry = channel_registry
+        app.state.health_monitor = health_monitor
+        app.state.failover_manager = failover_manager
+
+        logger.info(
+            "channel_infrastructure_initialized",
+            channels=channel_registry.registered_channels,
+            failover_enabled=settings.CHANNEL_FAILOVER_ENABLED,
+        )
+    except Exception as exc:
+        logger.warning("channel_infrastructure_init_failed", error=str(exc))
+
     yield
 
     # Shutdown
     logger.info("application_shutting_down")
+
+    # Shutdown channel health monitor
+    if hasattr(app.state, "health_monitor"):
+        await app.state.health_monitor.stop()
+        logger.info("channel_health_monitor_shutdown")
 
     # Shutdown telemetry
     if hasattr(app.state, "telemetry"):
@@ -808,138 +873,39 @@ async def root():
 
 
 # =========================================================================
-# API Routers
+# API Versioning Strategy
+# =========================================================================
+#
+# All endpoints live under /api/v1/ and are organized into domain
+# sub-routers via app.api.v1. Each domain aggregates related feature
+# routers so there is ONE entry point per domain:
+#
+#   /api/v1/auth/*          — Authentication (JWT + OTP)
+#   /api/v1/intelligence/*  — Intelligence products, analysis, FL, explainability
+#   /api/v1/finance/*       — Biashara sync, data sync, reports
+#   /api/v1/channels/*      — WhatsApp, triggers, channel health, webhooks
+#   /api/v1/agents/*        — Agent management, loops, model routing, harness, MCP
+#   /api/v1/dashboard/*     — Dashboard, policymaker, long-horizon research
+#   /api/v1/infra/*         — Deployment, infrastructure, evolution
+#   /api/v1/worker/*        — Onboarding, features, stickiness, skills, goals, loans
+#   /api/v1/revenue-ops/*   — Autonomous revenue operations
+#
+# When v2 is introduced, duplicate the app/api/v1/ tree as app/api/v2/
+# and mount a second v2_router under settings.API_V2_PREFIX. The domain
+# structure makes it trivial to evolve individual domains independently.
+#
+# OpenAPI docs (/docs, /redoc) are controlled by settings.ENABLE_DOCS.
+# Set ENABLE_DOCS=true in your environment to enable interactive docs.
 # =========================================================================
 
-# Agentic loop patterns (ReAct, Reflexion, Plan-Execute, Event Sourcing, Supervisor)
-from app.api.agent_loops import router as agent_loops_router
+# Domain-organized API router (single entry point for all /api/v1 endpoints)
+from app.api.v1 import v1_router
+from app.api.channel_health import set_channel_infrastructure
 
-# Multi-agent architecture (domain agent routing, worker classification)
-from app.api.agent_router import router as agent_router
-from app.api.analysis import router as analysis_router
-from app.api.auth import router as auth_router
-
-# Biashara Sync Protocol (anonymized transaction upload + intelligence pull)
-from app.api.biashara_sync import router as biashara_sync_router
-from app.api.dashboard import router as dashboard_router
-
-# Deployment Harness — canary releases, feature flags, version tracking
-from app.api.deployment import router as deployment_router
-
-# Dialect Dictionary & Language Training Pipeline
-from app.api.dialect_dictionary import router as dialect_dictionary_router
-
-# Evolution / Feedback Sync
-from app.api.evolution import router as evolution_router
-
-# SHAP Explainability (model interpretability for workers)
-from app.api.explain import router as explain_router
-from app.api.federated_learning import router as fl_router
-from app.api.fl_aggregator import router as fl_aggregator_router
-
-# FMCG intelligence (Pwani Oil, Unilever, Bidco)
-from app.api.fmcg import router as fmcg_router
-
-# Formal reports (bank, government, insurance)
-from app.api.formal_reports import router as formal_reports_router
-
-# Infrastructure dashboard (data center flywheel)
-from app.api.infrastructure import router as infrastructure_router
-
-# Infrastructure V2 (health monitoring, model registry, federated learning v2)
-from app.api.infrastructure_v2 import router as infrastructure_v2_router
-from app.api.intelligence import router as intelligence_router
-from app.api.intelligence_products import router as intelligence_products_router
-
-# Long-horizon research (DeerFlow-inspired orchestration)
-from app.api.long_horizon import router as long_horizon_router
-
-# OmniRoute-inspired model router (multi-provider inference gateway)
-from app.api.model_router import router as model_router_api
-
-# Phase 1 routers
-from app.api.onboarding import router as onboarding_router
-
-# OTP-Based Phone Authentication
-from app.api.otp_auth import router as otp_auth_router
-from app.api.phase1_intelligence import router as phase1_router
-from app.api.reports import router as reports_router
-
-# Skills API (degree-to-skill mappings)
-from app.api.skills import router as skills_router
-
-# Stickiness / Engagement (gamification, badges, streaks, social proof)
-from app.api.stickiness import router as stickiness_router
-from app.api.sync import router as sync_router
-
-# 12-Factor: Multi-channel triggers (WhatsApp, USSD, SMS, Voice)
-from app.api.trigger_router import router as trigger_router
-
-# Goal Planner (accountability-driven goal tracking)
-from app.api.v1.goals import router as goals_router
-
-# Loan Manager (dedicated loan management with purpose verification)
-from app.api.v1.loans import router as loans_router
-
-# Wealth Mindset (56 lessons, rich habits, affirmations, mastermind)
-from app.api.v1.mindset import router as mindset_router
-
-# Tithe Tracker — dedicated giving tracking API
-from app.api.v1.tithe import router as tithe_router
-
-# WhatsApp Connection Management (connect, verify, disconnect, send-report)
-from app.api.v1.whatsapp_connection import router as whatsapp_connection_router
-from app.api.whatsapp import router as whatsapp_router
-
-# Worker features (tithe, goals, loans, mindset)
-from app.api.worker_features import router as worker_features_router
-
-# Autonomous Revenue Operations (leads, invoicing, content, onboarding)
-from app.autonomous.api.router import router as autonomous_router
-
-# MCP (Model Context Protocol) server
-from app.mcp.router import router as mcp_router
-
-# Mount all API routers under versioned prefix
-app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
-app.include_router(sync_router, prefix=settings.API_V1_PREFIX)
-app.include_router(reports_router, prefix=settings.API_V1_PREFIX)
-app.include_router(intelligence_router, prefix=settings.API_V1_PREFIX)
-app.include_router(intelligence_products_router, prefix=settings.API_V1_PREFIX)
-app.include_router(whatsapp_router, prefix=settings.API_V1_PREFIX)
-app.include_router(fl_router, prefix=settings.API_V1_PREFIX)
-app.include_router(fl_aggregator_router, prefix=settings.API_V1_PREFIX)
-app.include_router(analysis_router, prefix=settings.API_V1_PREFIX)
-app.include_router(onboarding_router, prefix=settings.API_V1_PREFIX)
-app.include_router(dashboard_router, prefix=settings.API_V1_PREFIX)
-app.include_router(phase1_router, prefix=settings.API_V1_PREFIX)
-app.include_router(formal_reports_router, prefix=settings.API_V1_PREFIX)
-app.include_router(fmcg_router, prefix=settings.API_V1_PREFIX)
-app.include_router(infrastructure_router, prefix=settings.API_V1_PREFIX)
-app.include_router(infrastructure_v2_router, prefix=settings.API_V1_PREFIX)
-app.include_router(worker_features_router, prefix=settings.API_V1_PREFIX)
-app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
-app.include_router(model_router_api, prefix=settings.API_V1_PREFIX)
-app.include_router(skills_router, prefix=settings.API_V1_PREFIX)
-app.include_router(agent_loops_router, prefix=settings.API_V1_PREFIX)
-app.include_router(long_horizon_router, prefix=settings.API_V1_PREFIX)
-app.include_router(mcp_router, prefix=settings.API_V1_PREFIX)
-app.include_router(goals_router, prefix=settings.API_V1_PREFIX)
-app.include_router(trigger_router, prefix=settings.API_V1_PREFIX)
-app.include_router(loans_router, prefix=settings.API_V1_PREFIX)
-app.include_router(stickiness_router, prefix=settings.API_V1_PREFIX)
-app.include_router(tithe_router, prefix=settings.API_V1_PREFIX)
-app.include_router(mindset_router, prefix=settings.API_V1_PREFIX)
-app.include_router(whatsapp_connection_router, prefix=settings.API_V1_PREFIX)
-app.include_router(biashara_sync_router, prefix=settings.API_V1_PREFIX)
-app.include_router(otp_auth_router, prefix=settings.API_V1_PREFIX)
-app.include_router(evolution_router, prefix=settings.API_V1_PREFIX)
-app.include_router(dialect_dictionary_router, prefix=settings.API_V1_PREFIX)
-app.include_router(explain_router, prefix=settings.API_V1_PREFIX)
-app.include_router(deployment_router, prefix=settings.API_V1_PREFIX)
-app.include_router(autonomous_router)
-
-# Mount autonomous router (prefix is built into the router)
+# Mount the unified v1 router — all 35+ feature routers are organized
+# into 9 domain groups (auth, intelligence, finance, channels, agents,
+# dashboard, infra, worker, autonomous) behind one include.
+app.include_router(v1_router, prefix=settings.API_V1_PREFIX)
 
 
 # =========================================================================
@@ -954,6 +920,9 @@ async def startup_banner():
     logger.info("🇰🇪 Angavu Intelligence — Backend Starting")
     logger.info(f"   Environment: {settings.APP_ENV}")
     logger.info(f"   API Prefix:  {settings.API_V1_PREFIX}")
+    logger.info("   Domains:     auth, intelligence, finance, channels, agents,")
+    logger.info("                dashboard, infra, worker, revenue-ops")
+    logger.info(f"   OpenAPI Docs: {'ENABLED' if settings.ENABLE_DOCS else 'DISABLED'}")
     logger.info(f"   Debug:       {settings.DEBUG}")
     # PQC status in banner
     try:

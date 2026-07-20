@@ -113,4 +113,108 @@ Transaction → Statistical Foundation (STA 241/443/341)
 
 ---
 
+## Multi-Channel Communication Architecture
+
+### Overview
+
+Angavu Intelligence does NOT depend on a single communication channel.
+Messages are delivered through a prioritized channel stack with automatic
+failover when any channel goes down.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Failover Manager                         │
+│  Tries channels in priority order until delivery succeeds   │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Priority 1: WhatsApp (via OpenWA)                          │
+│     ↓ (if unhealthy)                                        │
+│  Priority 2: Telegram (Bot API)                             │
+│     ↓ (if unhealthy)                                        │
+│  Priority 3: SMS (Africa's Talking)                         │
+│     ↓ (if unhealthy)                                        │
+│  Priority 4: HTTP API (pull-based, always available)        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Channel Health Monitor
+
+Continuously monitors all registered channels:
+- Runs health checks every 60 seconds
+- Tracks consecutive failures per channel
+- Marks channels as `healthy` / `degraded` / `unhealthy`
+- Triggers automatic failover when a channel crosses the failure threshold
+- Exposes health status via `/api/v1/channels/health`
+
+### Failover Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| WhatsApp down, Telegram healthy | Auto-failover to Telegram |
+| WhatsApp + Telegram down | Auto-failover to SMS |
+| All push channels down | Messages queued in HTTP API for pull |
+| WhatsApp recovers | Automatically resumes as primary |
+
+### Configuration
+
+```env
+# WhatsApp (primary)
+ENABLE_WHATSAPP=true
+OPENWA_URL=http://localhost:3000
+OPENWA_WEBHOOK_SECRET=your-secret
+
+# Telegram (backup)
+ENABLE_TELEGRAM=true
+TELEGRAM_BOT_TOKEN=your-bot-token
+
+# SMS (fallback)
+ENABLE_SMS=true
+AFRICASTALKING_API_KEY=your-key
+AFRICASTALKING_USERNAME=your-username
+
+# Failover
+CHANNEL_FAILOVER_ENABLED=true
+CHANNEL_HEALTH_CHECK_INTERVAL=60
+```
+
+### Key Files
+
+| File | Purpose |
+|------|--------|
+| `app/channels/adapters/base.py` | `BaseChannelAdapter` ABC + `ChannelType` enum |
+| `app/channels/adapters/whatsapp_adapter.py` | WhatsApp via OpenWA |
+| `app/channels/adapters/telegram_adapter.py` | Telegram Bot API fallback |
+| `app/channels/adapters/sms_adapter.py` | SMS via Africa's Talking |
+| `app/channels/adapters/http_api_adapter.py` | HTTP API last-resort queue |
+| `app/channels/health_monitor.py` | Channel health monitoring |
+| `app/channels/failover.py` | Automatic failover manager |
+| `app/channels/gateway.py` | Multi-channel gateway with failover |
+| `app/channels/registry.py` | Channel adapter registry |
+| `app/api/channel_health.py` | Health monitoring API endpoints |
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/channels/health` | GET | All channel health status |
+| `/api/v1/channels/health/{channel}` | GET | Specific channel health |
+| `/api/v1/channels/failover/stats` | GET | Failover statistics |
+| `/api/v1/channels/failover/trigger` | POST | Manual failover trigger |
+| `/api/v1/channels/test` | POST | Test a specific channel |
+| `/api/v1/channels/summary` | GET | Combined channel summary |
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|------|-----------|
+| OpenWA breaks (Meta API change) | Auto-failover to Telegram → SMS → HTTP API |
+| WhatsApp account banned | Telegram takes over as primary |
+| All internet channels down | SMS works on any phone without data |
+| Telegram API outage | WhatsApp remains primary, SMS as backup |
+| Africa's Talking outage | WhatsApp + Telegram handle delivery |
+
+---
+
 *Generated: 2026-07-01 | Angavu Intelligence Architecture v2.0*
+*Updated: 2026-07-20 | Multi-channel failover architecture added*

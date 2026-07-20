@@ -50,7 +50,7 @@ class InvoiceDB(Base):
     payment_reference = Column(String(200), nullable=True, default="")
     reminder_count = Column(Integer, nullable=True, default=0)
     notes = Column(Text, nullable=True, default="")
-    metadata = Column(JSON, nullable=True, default=dict)
+    extra_data = Column("metadata", JSON, nullable=True, default=dict)
 
     items = relationship(
         "InvoiceItemDB",

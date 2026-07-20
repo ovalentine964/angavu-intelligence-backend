@@ -36,7 +36,7 @@ class RevenueMetricDB(Base):
         default=lambda: datetime.now(UTC),
         index=True,
     )
-    metadata = Column(JSON, nullable=True, default=dict)
+    extra_data = Column("metadata", JSON, nullable=True, default=dict)
 
     __table_args__ = (
         Index(

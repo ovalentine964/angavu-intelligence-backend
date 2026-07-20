@@ -88,6 +88,27 @@ class ChannelRegistry:
                     error=str(e),
                 )
 
+    async def health_check_all(self) -> dict[str, bool]:
+        """
+        Run health checks on all registered adapters.
+
+        Returns:
+            Dict mapping channel name to health status.
+        """
+        results = {}
+        for channel, adapter in self._adapters.items():
+            try:
+                is_healthy = await adapter.health_check()
+                results[channel.value] = is_healthy
+            except Exception as e:
+                results[channel.value] = False
+                logger.error(
+                    "adapter_health_check_error",
+                    channel=channel.value,
+                    error=str(e),
+                )
+        return results
+
     async def resolve_worker_id(
         self,
         channel: ChannelType,

@@ -38,7 +38,7 @@ class OnboardingFlowDB(Base):
     target_completion = Column(DateTime(timezone=True), nullable=True)
     satisfaction_score = Column(Float, nullable=True, default=0.0)
     feedback = Column(Text, nullable=True, default="")
-    metadata = Column(JSON, nullable=True, default=dict)
+    extra_data = Column("metadata", JSON, nullable=True, default=dict)
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -100,7 +100,7 @@ class OnboardingStepDB(Base):
     due_days = Column(Integer, nullable=True, default=3)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True, default="")
-    metadata = Column(JSON, nullable=True, default=dict)
+    extra_data = Column("metadata", JSON, nullable=True, default=dict)
 
     flow = relationship("OnboardingFlowDB", back_populates="steps")
 

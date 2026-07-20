@@ -93,9 +93,9 @@ async def init_db() -> None:
     """
     Initialize database tables.
 
-    Called on application startup. Creates all tables defined by
-    models that inherit from Base. In production, use Alembic
-    migrations instead.
+    Called on application startup. In production, Alembic migrations handle
+    schema changes, so create_all() is skipped to prevent drift.
+    Only runs create_all() in development/testing environments.
     """
     # Enable WAL mode for SQLite (better concurrency)
     if _is_sqlite:
@@ -103,6 +103,12 @@ async def init_db() -> None:
             await conn.execute(
                 __import__("sqlalchemy").text("PRAGMA journal_mode=WAL")
             )
+
+    # In production, Alembic is the source of truth — skip create_all()
+    # to prevent schema drift between ORM models and applied migrations.
+    env = settings.APP_ENV.lower()
+    if env in ("production", "staging"):
+        return
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

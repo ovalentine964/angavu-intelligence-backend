@@ -42,7 +42,7 @@ logger = structlog.get_logger(__name__)
 settings = get_settings()
 security = HTTPBearer()
 
-router = APIRouter(prefix="/api/v1/revenue-ops", tags=["revenue-ops"])
+router = APIRouter(prefix="/revenue-ops", tags=["Revenue Operations"])
 
 # Rate limiter (per-endpoint)
 limiter = Limiter(key_func=get_remote_address)

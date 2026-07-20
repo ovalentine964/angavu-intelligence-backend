@@ -13,6 +13,18 @@
  * - Image, document, and audio sending
  * - Health monitoring endpoints
  * - Rate limiting for API protection
+ *
+ * === BAN RISK MITIGATION (Critical) ===
+ * WhatsApp uses Baileys (unofficial library) — Meta could ban the
+ * phone number at any time. The following safety measures reduce risk:
+ *
+ * 1. Human-like delays between messages (2-8 seconds random)
+ * 2. Message queue with backpressure (never floods the connection)
+ * 3. Rate limiting: max 10 messages/second (configurable)
+ * 4. Consecutive message cap: 50 messages, then 60s cooldown
+ * 5. Connection health monitoring with ban detection
+ * 6. Delivery confirmation tracking
+ * 7. Graceful degradation on ban (auto-notify backend)
  */
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore } = require('@whiskeysockets/baileys');
@@ -23,6 +35,42 @@ const axios = require('axios');
 const FormData = require('form-data');
 const crypto = require('crypto');
 require('dotenv').config();
+
+// =========================================================================
+// WhatsApp Safety Configuration
+// =========================================================================
+
+const WhatsAppSafetyConfig = {
+    // Maximum messages per second (conservative — Baileys risk)
+    maxMessagesPerSecond: parseInt(process.env.WA_MAX_MSG_PER_SEC || '10'),
+
+    // Minimum delay between messages (ms) — human-like
+    minDelayBetweenMessages: parseInt(process.env.WA_MIN_DELAY_MS || '2000'),
+
+    // Maximum delay between messages (ms) — randomised
+    maxDelayBetweenMessages: parseInt(process.env.WA_MAX_DELAY_MS || '8000'),
+
+    // Max consecutive messages before forced cooldown
+    maxConsecutiveMessages: parseInt(process.env.WA_MAX_CONSECUTIVE || '50'),
+
+    // Cooldown period after hitting consecutive limit (ms)
+    cooldownPeriod: parseInt(process.env.WA_COOLDOWN_MS || '60000'),
+
+    // Max messages per minute (broader rate limit)
+    maxMessagesPerMinute: parseInt(process.env.WA_MAX_MSG_PER_MIN || '200'),
+
+    // Time window for per-minute rate limiting (ms)
+    rateLimitWindowMs: 60000,
+
+    // Ban detection: max consecutive send failures before flagging
+    banDetectionThreshold: parseInt(process.env.WA_BAN_THRESHOLD || '5'),
+
+    // Health check interval (ms)
+    healthCheckIntervalMs: parseInt(process.env.WA_HEALTH_INTERVAL_MS || '30000'),
+
+    // Delivery confirmation timeout (ms)
+    deliveryConfirmTimeoutMs: parseInt(process.env.WA_DELIVERY_TIMEOUT_MS || '30000'),
+};
 
 // =========================================================================
 // Configuration
@@ -47,7 +95,7 @@ const CONFIG = {
 const logger = pino({ level: CONFIG.logLevel });
 
 // =========================================================================
-// Rate Limiter (simple in-memory)
+// Rate Limiter (simple in-memory — for HTTP API requests)
 // =========================================================================
 
 const rateLimitStore = new Map();
@@ -71,6 +119,407 @@ setInterval(() => {
         else rateLimitStore.set(ip, recent);
     }
 }, 5 * 60 * 1000);
+
+// =========================================================================
+// WhatsApp Safety Manager
+// =========================================================================
+
+/**
+ * Manages message sending safety to minimize ban risk.
+ * Implements rate limiting, human-like delays, backpressure, and ban detection.
+ */
+class WhatsAppSafetyManager {
+    constructor(config) {
+        this.config = config;
+
+        // Message queue (FIFO with priority support)
+        this.queue = [];
+        this.processing = false;
+
+        // Rate limiting state
+        this.sendTimestamps = [];      // timestamps of recent sends
+        this.consecutiveSends = 0;     // consecutive messages without cooldown
+        this.lastSendTime = 0;         // last message send timestamp
+        this.inCooldown = false;       // currently in cooldown period
+
+        // Ban detection state
+        this.consecutiveFailures = 0;
+        this.banDetected = false;
+        this.banDetectedAt = null;
+        this.banReason = null;
+
+        // Delivery tracking
+        this.deliveryTracker = new Map(); // messageId → { status, timestamp, recipient }
+
+        // Statistics
+        this.stats = {
+            totalQueued: 0,
+            totalSent: 0,
+            totalFailed: 0,
+            totalDropped: 0,
+            totalCooldowns: 0,
+            avgDelayMs: 0,
+            _delaySum: 0,
+            _delayCount: 0,
+        };
+    }
+
+    /**
+     * Enqueue a message for safe delivery.
+     * Returns a promise that resolves with the delivery result.
+     */
+    enqueue(sendFn, metadata = {}) {
+        if (this.banDetected) {
+            return Promise.resolve({
+                success: false,
+                error: 'WhatsApp ban detected — refusing to send',
+                banDetected: true,
+                banReason: this.banReason,
+            });
+        }
+
+        return new Promise((resolve, reject) => {
+            const item = {
+                id: crypto.randomUUID(),
+                sendFn,
+                metadata,
+                resolve,
+                reject,
+                enqueuedAt: Date.now(),
+                attempts: 0,
+                priority: metadata.priority || 'normal', // 'high', 'normal', 'low'
+            };
+
+            // Priority insertion: high priority goes to front
+            if (item.priority === 'high') {
+                this.queue.unshift(item);
+            } else {
+                this.queue.push(item);
+            }
+
+            this.stats.totalQueued++;
+            logger.debug({ queueLength: this.queue.length, id: item.id }, 'Message enqueued');
+
+            // Start processing if not already running
+            if (!this.processing) {
+                this._processQueue();
+            }
+        });
+    }
+
+    /**
+     * Process the message queue with safety delays.
+     */
+    async _processQueue() {
+        if (this.processing) return;
+        this.processing = true;
+
+        while (this.queue.length > 0) {
+            // Check if we're in cooldown
+            if (this.inCooldown) {
+                logger.info({ cooldownMs: this.config.cooldownPeriod }, 'In cooldown — waiting');
+                await this._sleep(this.config.cooldownPeriod);
+                this.inCooldown = false;
+                this.consecutiveSends = 0;
+                this.stats.totalCooldowns++;
+            }
+
+            // Check consecutive message limit
+            if (this.consecutiveSends >= this.config.maxConsecutiveMessages) {
+                logger.warn(
+                    { consecutive: this.consecutiveSends, limit: this.config.maxConsecutiveMessages },
+                    'Hit consecutive message limit — entering cooldown'
+                );
+                this.inCooldown = true;
+                continue; // Will wait on next iteration
+            }
+
+            // Check per-minute rate limit
+            if (!this._checkMinuteRateLimit()) {
+                logger.warn('Per-minute rate limit hit — pausing');
+                await this._sleep(5000); // Wait 5 seconds and retry
+                continue;
+            }
+
+            // Calculate human-like delay
+            const delay = this._calculateDelay();
+            if (delay > 0 && this.stats.totalSent > 0) {
+                // Track average delay
+                this.stats._delaySum += delay;
+                this.stats._delayCount++;
+                this.stats.avgDelayMs = Math.round(this.stats._delaySum / this.stats._delayCount);
+
+                logger.debug({ delayMs: delay }, 'Human-like delay before next send');
+                await this._sleep(delay);
+            }
+
+            // Dequeue and send
+            const item = this.queue.shift();
+            if (!item) continue;
+
+            item.attempts++;
+            const sendStart = Date.now();
+
+            try {
+                // Rate limit check (per-second)
+                if (!this._checkPerSecondRateLimit()) {
+                    // Re-queue at front and wait
+                    this.queue.unshift(item);
+                    await this._sleep(1000);
+                    continue;
+                }
+
+                // Execute the actual send
+                const result = await item.sendFn();
+
+                // Record success
+                const sendDuration = Date.now() - sendStart;
+                this.sendTimestamps.push(Date.now());
+                this.consecutiveSends++;
+                this.lastSendTime = Date.now();
+                this.consecutiveFailures = 0; // Reset failure counter
+
+                this.stats.totalSent++;
+
+                // Track delivery
+                const messageId = result?.messageId || item.id;
+                this._trackDelivery(messageId, item.metadata.recipient, 'sent');
+
+                logger.info(
+                    {
+                        id: item.id,
+                        duration: sendDuration,
+                        queueLength: this.queue.length,
+                        consecutive: this.consecutiveSends,
+                    },
+                    'Message sent successfully'
+                );
+
+                item.resolve({ success: true, messageId, queueLength: this.queue.length });
+
+            } catch (err) {
+                const sendDuration = Date.now() - sendStart;
+                this.consecutiveFailures++;
+                this.stats.totalFailed++;
+
+                logger.error(
+                    {
+                        id: item.id,
+                        error: err.message,
+                        attempt: item.attempts,
+                        consecutiveFailures: this.consecutiveFailures,
+                        duration: sendDuration,
+                    },
+                    'Message send failed'
+                );
+
+                // Ban detection: check if failures indicate a ban
+                if (this._checkForBan(err)) {
+                    this.banDetected = true;
+                    this.banDetectedAt = Date.now();
+                    this.banReason = err.message;
+                    this.stats.totalDropped += this.queue.length;
+
+                    logger.fatal(
+                        { reason: err.message, consecutiveFailures: this.consecutiveFailures },
+                        '🚨 WHATSAPP BAN DETECTED — draining queue'
+                    );
+
+                    // Notify backend about ban
+                    this._notifyBackendOfBan(err.message).catch(() => {});
+
+                    // Reject all remaining items in queue
+                    for (const remaining of this.queue) {
+                        remaining.resolve({
+                            success: false,
+                            error: 'WhatsApp ban detected',
+                            banDetected: true,
+                        });
+                    }
+                    this.queue = [];
+                    break;
+                }
+
+                // Retry logic
+                if (item.attempts < CONFIG.messageRetryAttempts) {
+                    const retryDelay = CONFIG.messageRetryDelay * item.attempts;
+                    logger.warn({ retryIn: retryDelay, attempt: item.attempts }, 'Retrying message');
+                    await this._sleep(retryDelay);
+                    this.queue.unshift(item); // Re-queue at front
+                } else {
+                    item.resolve({ success: false, error: err.message, attempts: item.attempts });
+                }
+            }
+        }
+
+        this.processing = false;
+    }
+
+    /**
+     * Calculate a human-like delay between messages.
+     * Random delay between min and max, with jitter.
+     */
+    _calculateDelay() {
+        const { minDelayBetweenMessages, maxDelayBetweenMessages } = this.config;
+        const base = minDelayBetweenMessages + Math.random() * (maxDelayBetweenMessages - minDelayBetweenMessages);
+        // Add slight jitter (±10%)
+        const jitter = base * (Math.random() * 0.2 - 0.1);
+        return Math.max(0, Math.floor(base + jitter));
+    }
+
+    /**
+     * Check per-second rate limit.
+     */
+    _checkPerSecondRateLimit() {
+        const now = Date.now();
+        const oneSecAgo = now - 1000;
+        this.sendTimestamps = this.sendTimestamps.filter(t => t > oneSecAgo);
+        return this.sendTimestamps.length < this.config.maxMessagesPerSecond;
+    }
+
+    /**
+     * Check per-minute rate limit.
+     */
+    _checkMinuteRateLimit() {
+        const now = Date.now();
+        const oneMinAgo = now - this.config.rateLimitWindowMs;
+        this.sendTimestamps = this.sendTimestamps.filter(t => t > oneMinAgo);
+        return this.sendTimestamps.length < this.config.maxMessagesPerMinute;
+    }
+
+    /**
+     * Check if a send error indicates a WhatsApp ban.
+     */
+    _checkForBan(err) {
+        if (this.consecutiveFailures >= this.config.banDetectionThreshold) {
+            return true;
+        }
+
+        const banIndicators = [
+            'not-authorized',
+            'forbidden',
+            'banned',
+            'blocked',
+            'account suspended',
+            'rate-overlimit',
+            'too many requests',
+        ];
+
+        const errMsg = (err.message || '').toLowerCase();
+        return banIndicators.some(indicator => errMsg.includes(indicator));
+    }
+
+    /**
+     * Track a message delivery status.
+     */
+    _trackDelivery(messageId, recipient, status) {
+        this.deliveryTracker.set(messageId, {
+            status,
+            recipient,
+            timestamp: Date.now(),
+            confirmed: false,
+        });
+
+        // Auto-cleanup after timeout
+        setTimeout(() => {
+            const entry = this.deliveryTracker.get(messageId);
+            if (entry && !entry.confirmed) {
+                entry.status = 'timeout';
+                this.deliveryTracker.set(messageId, entry);
+            }
+        }, this.config.deliveryConfirmTimeoutMs);
+    }
+
+    /**
+     * Update delivery status from receipt events.
+     */
+    updateDeliveryStatus(messageId, status) {
+        const entry = this.deliveryTracker.get(messageId);
+        if (entry) {
+            entry.status = status;
+            entry.confirmed = true;
+            entry.confirmedAt = Date.now();
+            this.deliveryTracker.set(messageId, entry);
+            logger.debug({ messageId, status }, 'Delivery status updated');
+        }
+    }
+
+    /**
+     * Notify backend that a ban was detected.
+     */
+    async _notifyBackendOfBan(reason) {
+        try {
+            await axios.post(
+                `${CONFIG.backendUrl}/api/v1/channels/ban-detected`,
+                {
+                    channel: 'whatsapp',
+                    reason,
+                    detectedAt: new Date().toISOString(),
+                    stats: this.getStats(),
+                },
+                { timeout: 5000 }
+            );
+        } catch (err) {
+            logger.error({ error: err.message }, 'Failed to notify backend of ban');
+        }
+    }
+
+    /**
+     * Get safety manager statistics.
+     */
+    getStats() {
+        return {
+            ...this.stats,
+            queueLength: this.queue.length,
+            processing: this.processing,
+            inCooldown: this.inCooldown,
+            consecutiveSends: this.consecutiveSends,
+            consecutiveFailures: this.consecutiveFailures,
+            banDetected: this.banDetected,
+            banDetectedAt: this.banDetectedAt,
+            banReason: this.banReason,
+            activeDeliveries: this.deliveryTracker.size,
+        };
+    }
+
+    /**
+     * Get delivery status for a specific message.
+     */
+    getDeliveryStatus(messageId) {
+        return this.deliveryTracker.get(messageId) || null;
+    }
+
+    /**
+     * Get all tracked deliveries.
+     */
+    getAllDeliveries() {
+        const deliveries = {};
+        for (const [id, entry] of this.deliveryTracker) {
+            deliveries[id] = entry;
+        }
+        return deliveries;
+    }
+
+    /**
+     * Reset ban state (use after confirming ban is lifted).
+     */
+    resetBanState() {
+        this.banDetected = false;
+        this.banDetectedAt = null;
+        this.banReason = null;
+        this.consecutiveFailures = 0;
+        this.consecutiveSends = 0;
+        this.inCooldown = false;
+        logger.info('Ban state reset — WhatsApp sending re-enabled');
+    }
+
+    _sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+
+// Create global safety manager
+const safetyManager = new WhatsAppSafetyManager(WhatsAppSafetyConfig);
 
 // =========================================================================
 // Whisper STT Transcription
@@ -108,7 +557,7 @@ async function transcribeAudio(audioBuffer) {
 }
 
 // =========================================================================
-// Message Retry Helper
+// Message Retry Helper (legacy — prefer safetyManager.enqueue)
 // =========================================================================
 
 /**
@@ -150,7 +599,7 @@ app.use(express.json({ limit: '10mb' })); // Allow large payloads for base64 ima
 
 // Rate limiting middleware
 app.use((req, res, next) => {
-    if (req.path === '/health' || req.path === '/status') return next();
+    if (req.path === '/health' || req.path === '/status' || req.path === '/safety') return next();
     const ip = req.ip || req.connection.remoteAddress;
     if (!rateLimit(ip)) {
         return res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
@@ -182,15 +631,65 @@ const healthState = {
     messagesReceived: 0,
     errors: 0,
     uptime: 0,
+    // Ban detection
+    banDetected: false,
+    banDetectedAt: null,
+    banReason: null,
 };
+
+// =========================================================================
+// Health Check Loop
+// =========================================================================
+
+let healthCheckInterval = null;
+
+function startHealthCheck() {
+    if (healthCheckInterval) clearInterval(healthCheckInterval);
+
+    healthCheckInterval = setInterval(() => {
+        // Check if socket is actually alive
+        if (isConnected && sock) {
+            // Update uptime
+            healthState.uptime = connectionStartTime
+                ? Math.floor((Date.now() - connectionStartTime) / 1000)
+                : 0;
+        }
+
+        // Sync ban state from safety manager
+        if (safetyManager.banDetected && !healthState.banDetected) {
+            healthState.banDetected = true;
+            healthState.banDetectedAt = safetyManager.banDetectedAt;
+            healthState.banReason = safetyManager.banReason;
+            healthState.status = 'banned';
+            logger.fatal('Health check: WhatsApp ban confirmed');
+        }
+
+        // Log health summary periodically
+        const stats = safetyManager.getStats();
+        if (stats.totalSent > 0 && stats.totalSent % 50 === 0) {
+            logger.info({
+                sent: stats.totalSent,
+                failed: stats.totalFailed,
+                queued: stats.queueLength,
+                avgDelay: stats.avgDelayMs,
+                cooldowns: stats.totalCooldowns,
+                consecutive: stats.consecutiveSends,
+            }, 'Safety manager health summary');
+        }
+    }, WhatsAppSafetyConfig.healthCheckIntervalMs);
+}
+
+// =========================================================================
+// POST /send-message (via safety manager)
+// =========================================================================
 
 /**
  * POST /send-message
  * Send a WhatsApp text message to a phone number.
- * Called by the Msaidizi backend to deliver reports and responses.
+ * Messages go through the safety manager queue with human-like delays.
  */
 app.post('/send-message', async (req, res) => {
-    const { to, message } = req.body;
+    const { to, message, priority } = req.body;
 
     if (!to || !message) {
         return res.status(400).json({ error: 'Missing "to" or "message"' });
@@ -200,30 +699,50 @@ app.post('/send-message', async (req, res) => {
         return res.status(503).json({ error: 'WhatsApp not connected' });
     }
 
+    if (safetyManager.banDetected) {
+        return res.status(503).json({
+            error: 'WhatsApp ban detected — sending disabled',
+            banReason: safetyManager.banReason,
+            banDetectedAt: safetyManager.banDetectedAt,
+        });
+    }
+
     const jid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
 
-    const sent = await sendWithRetry(async () => {
-        await sock.sendMessage(jid, { text: message });
-    });
+    try {
+        const result = await safetyManager.enqueue(
+            async () => {
+                await sock.sendMessage(jid, { text: message });
+                healthState.messagesSent++;
+                return { sent: true };
+            },
+            { recipient: to, type: 'text', priority: priority || 'normal' }
+        );
 
-    if (sent) {
-        healthState.messagesSent++;
-        logger.info({ to: to.substring(0, 6) + '****' }, 'Message sent');
-        res.json({ status: 'ok', sent: true });
-    } else {
+        if (result.success) {
+            logger.info({ to: to.substring(0, 6) + '****' }, 'Message sent');
+            res.json({ status: 'ok', sent: true, queueLength: result.queueLength });
+        } else if (result.banDetected) {
+            healthState.banDetected = true;
+            healthState.banReason = result.banReason;
+            res.status(503).json({ error: 'WhatsApp ban detected', ban: true });
+        } else {
+            healthState.errors++;
+            res.status(500).json({ error: result.error || 'Failed to send message' });
+        }
+    } catch (err) {
         healthState.errors++;
-        logger.error({ to: to.substring(0, 6) + '****' }, 'Failed to send message after retries');
-        res.status(500).json({ error: 'Failed to send message after retries' });
+        logger.error({ error: err.message }, 'Send message error');
+        res.status(500).json({ error: 'Internal error' });
     }
 });
 
 /**
  * POST /send-image
  * Send an image message (base64 or URL) with optional caption.
- * Used by backend to send chart images in reports.
  */
 app.post('/send-image', async (req, res) => {
-    const { to, image, url, caption } = req.body;
+    const { to, image, url, caption, priority } = req.body;
 
     if (!to) {
         return res.status(400).json({ error: 'Missing "to"' });
@@ -236,34 +755,42 @@ app.post('/send-image', async (req, res) => {
         return res.status(503).json({ error: 'WhatsApp not connected' });
     }
 
+    if (safetyManager.banDetected) {
+        return res.status(503).json({ error: 'WhatsApp ban detected — sending disabled' });
+    }
+
     const jid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
 
     try {
         let imageBuffer;
         if (image) {
-            // Base64 encoded image
             imageBuffer = Buffer.from(image, 'base64');
         } else {
-            // URL — download first
             const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
             imageBuffer = Buffer.from(response.data);
         }
 
-        const sent = await sendWithRetry(async () => {
-            await sock.sendMessage(jid, {
-                image: imageBuffer,
-                caption: caption || '',
-                mimetype: 'image/png',
-            });
-        });
+        const result = await safetyManager.enqueue(
+            async () => {
+                await sock.sendMessage(jid, {
+                    image: imageBuffer,
+                    caption: caption || '',
+                    mimetype: 'image/png',
+                });
+                healthState.messagesSent++;
+                return { sent: true };
+            },
+            { recipient: to, type: 'image', priority: priority || 'normal' }
+        );
 
-        if (sent) {
-            healthState.messagesSent++;
+        if (result.success) {
             logger.info({ to: to.substring(0, 6) + '****' }, 'Image sent');
             res.json({ status: 'ok', sent: true });
+        } else if (result.banDetected) {
+            res.status(503).json({ error: 'WhatsApp ban detected' });
         } else {
             healthState.errors++;
-            res.status(500).json({ error: 'Failed to send image after retries' });
+            res.status(500).json({ error: result.error || 'Failed to send image' });
         }
     } catch (err) {
         healthState.errors++;
@@ -275,10 +802,9 @@ app.post('/send-image', async (req, res) => {
 /**
  * POST /send-voice
  * Send a voice note (audio buffer as base64).
- * Used for low-literacy report delivery.
  */
 app.post('/send-voice', async (req, res) => {
-    const { to, audio, url } = req.body;
+    const { to, audio, url, priority } = req.body;
 
     if (!to) {
         return res.status(400).json({ error: 'Missing "to"' });
@@ -289,6 +815,10 @@ app.post('/send-voice', async (req, res) => {
 
     if (!isConnected || !sock) {
         return res.status(503).json({ error: 'WhatsApp not connected' });
+    }
+
+    if (safetyManager.banDetected) {
+        return res.status(503).json({ error: 'WhatsApp ban detected — sending disabled' });
     }
 
     const jid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
@@ -302,21 +832,27 @@ app.post('/send-voice', async (req, res) => {
             audioBuffer = Buffer.from(response.data);
         }
 
-        const sent = await sendWithRetry(async () => {
-            await sock.sendMessage(jid, {
-                audio: audioBuffer,
-                mimetype: 'audio/mp4',
-                ptt: true, // Push-to-talk = voice note
-            });
-        });
+        const result = await safetyManager.enqueue(
+            async () => {
+                await sock.sendMessage(jid, {
+                    audio: audioBuffer,
+                    mimetype: 'audio/mp4',
+                    ptt: true,
+                });
+                healthState.messagesSent++;
+                return { sent: true };
+            },
+            { recipient: to, type: 'voice', priority: priority || 'normal' }
+        );
 
-        if (sent) {
-            healthState.messagesSent++;
+        if (result.success) {
             logger.info({ to: to.substring(0, 6) + '****' }, 'Voice note sent');
             res.json({ status: 'ok', sent: true });
+        } else if (result.banDetected) {
+            res.status(503).json({ error: 'WhatsApp ban detected' });
         } else {
             healthState.errors++;
-            res.status(500).json({ error: 'Failed to send voice note after retries' });
+            res.status(500).json({ error: result.error || 'Failed to send voice note' });
         }
     } catch (err) {
         healthState.errors++;
@@ -328,10 +864,9 @@ app.post('/send-voice', async (req, res) => {
 /**
  * POST /send-media
  * Send media (image, document, audio) to a phone number.
- * Generic media endpoint — prefer /send-image and /send-voice for those types.
  */
 app.post('/send-media', async (req, res) => {
-    const { to, type, url, caption, base64 } = req.body;
+    const { to, type, url, caption, base64, priority } = req.body;
 
     if (!to) {
         return res.status(400).json({ error: 'Missing "to"' });
@@ -342,6 +877,10 @@ app.post('/send-media', async (req, res) => {
 
     if (!isConnected || !sock) {
         return res.status(503).json({ error: 'WhatsApp not connected' });
+    }
+
+    if (safetyManager.banDetected) {
+        return res.status(503).json({ error: 'WhatsApp ban detected — sending disabled' });
     }
 
     const jid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
@@ -370,22 +909,82 @@ app.post('/send-media', async (req, res) => {
                 content = { image: mediaBuffer, caption: caption || '' };
         }
 
-        const sent = await sendWithRetry(async () => {
-            await sock.sendMessage(jid, content);
-        });
+        const result = await safetyManager.enqueue(
+            async () => {
+                await sock.sendMessage(jid, content);
+                healthState.messagesSent++;
+                return { sent: true };
+            },
+            { recipient: to, type: type || 'media', priority: priority || 'normal' }
+        );
 
-        if (sent) {
-            healthState.messagesSent++;
+        if (result.success) {
             res.json({ status: 'ok', sent: true });
+        } else if (result.banDetected) {
+            res.status(503).json({ error: 'WhatsApp ban detected' });
         } else {
             healthState.errors++;
-            res.status(500).json({ error: 'Failed to send media after retries' });
+            res.status(500).json({ error: result.error || 'Failed to send media' });
         }
     } catch (err) {
         healthState.errors++;
         logger.error({ error: err.message }, 'Failed to send media');
         res.status(500).json({ error: 'Failed to send media' });
     }
+});
+
+// =========================================================================
+// Safety & Status Endpoints
+// =========================================================================
+
+/**
+ * GET /safety
+ * Get safety manager statistics and state.
+ */
+app.get('/safety', (req, res) => {
+    const stats = safetyManager.getStats();
+    res.json({
+        config: WhatsAppSafetyConfig,
+        state: stats,
+        health: {
+            connected: isConnected,
+            banDetected: healthState.banDetected,
+            banReason: healthState.banReason,
+        },
+    });
+});
+
+/**
+ * POST /safety/reset-ban
+ * Reset ban state after confirming the number is not banned.
+ */
+app.post('/safety/reset-ban', (req, res) => {
+    safetyManager.resetBanState();
+    healthState.banDetected = false;
+    healthState.banReason = null;
+    healthState.status = isConnected ? 'connected' : 'disconnected';
+    res.json({ status: 'ok', message: 'Ban state reset' });
+});
+
+/**
+ * GET /delivery/:messageId
+ * Check delivery status for a specific message.
+ */
+app.get('/delivery/:messageId', (req, res) => {
+    const status = safetyManager.getDeliveryStatus(req.params.messageId);
+    if (status) {
+        res.json(status);
+    } else {
+        res.status(404).json({ error: 'Message not found in delivery tracker' });
+    }
+});
+
+/**
+ * GET /delivery
+ * Get all tracked deliveries.
+ */
+app.get('/delivery', (req, res) => {
+    res.json(safetyManager.getAllDeliveries());
 });
 
 /**
@@ -396,37 +995,50 @@ app.get('/status', (req, res) => {
     res.json({
         connected: isConnected,
         hasQR: !!qrCode,
-        version: '0.2.0',
+        version: '0.3.0',
         uptime: connectionStartTime ? Math.floor((Date.now() - connectionStartTime) / 1000) : 0,
         messagesSent: healthState.messagesSent,
         messagesReceived: healthState.messagesReceived,
+        banDetected: safetyManager.banDetected,
     });
 });
 
 /**
  * GET /health
  * Health check endpoint for container orchestration.
- * Returns 200 if service is running (even if WhatsApp is disconnected).
- * Returns connection status in body for monitoring.
  */
 app.get('/health', (req, res) => {
+    const safetyStats = safetyManager.getStats();
     const health = {
         status: 'ok',
         service: 'msaidizi-openwa',
-        version: '0.2.0',
+        version: '0.3.0',
         whatsapp: {
             connected: isConnected,
             hasQR: !!qrCode,
             reconnectAttempts: reconnectAttempts,
+            banDetected: safetyManager.banDetected,
+            banReason: safetyManager.banReason,
             lastDisconnect: lastDisconnect ? {
                 time: new Date(lastDisconnect.time).toISOString(),
                 reason: lastDisconnect.reason,
             } : null,
         },
+        safety: {
+            queueLength: safetyStats.queueLength,
+            consecutiveSends: safetyStats.consecutiveSends,
+            consecutiveFailures: safetyStats.consecutiveFailures,
+            inCooldown: safetyStats.inCooldown,
+            avgDelayMs: safetyStats.avgDelayMs,
+        },
         stats: {
             messagesSent: healthState.messagesSent,
             messagesReceived: healthState.messagesReceived,
             errors: healthState.errors,
+            totalQueued: safetyStats.totalQueued,
+            totalSent: safetyStats.totalSent,
+            totalFailed: safetyStats.totalFailed,
+            totalCooldowns: safetyStats.totalCooldowns,
         },
         uptime: connectionStartTime ? Math.floor((Date.now() - connectionStartTime) / 1000) : 0,
     };
@@ -435,6 +1047,9 @@ app.get('/health', (req, res) => {
     if (!isConnected && reconnectAttempts > 10) {
         health.status = 'degraded';
     }
+    if (safetyManager.banDetected) {
+        health.status = 'banned';
+    }
 
     res.json(health);
 });
@@ -442,7 +1057,6 @@ app.get('/health', (req, res) => {
 /**
  * GET /qr
  * Get current QR code for authentication.
- * Returns the QR string if available, or status if already connected.
  */
 app.get('/qr', (req, res) => {
     if (isConnected) {
@@ -461,7 +1075,7 @@ app.get('/qr', (req, res) => {
 /**
  * Initialize WhatsApp connection using Baileys.
  * Handles authentication, reconnection with exponential backoff,
- * and message routing.
+ * message routing, and delivery receipt tracking.
  */
 async function connectWhatsApp() {
     try {
@@ -493,11 +1107,26 @@ async function connectWhatsApp() {
                 healthState.lastDisconnectTime = Date.now();
                 lastDisconnect = { time: Date.now(), reason: statusCode };
 
+                // Check if this is a ban-related disconnect
+                const isBanDisconnect = [
+                    DisconnectReason.loggedOut,
+                    401, 403, 405,
+                ].includes(statusCode);
+
                 if (statusCode === DisconnectReason.loggedOut) {
                     logger.warn('Logged out — clearing auth state. Re-scan required.');
                     healthState.disconnectReason = 'logged_out';
-                    // Don't auto-reconnect on logout — user must re-scan
                     healthState.status = 'logged_out';
+
+                    // Check if this might be a ban (not just a manual logout)
+                    if (safetyManager.consecutiveFailures > 0) {
+                        logger.fatal('Logged out after consecutive failures — likely ban');
+                        safetyManager.banDetected = true;
+                        safetyManager.banDetectedAt = Date.now();
+                        safetyManager.banReason = 'logged_out_after_failures';
+                        healthState.banDetected = true;
+                        healthState.banReason = 'logged_out_after_failures';
+                    }
                 } else if (statusCode === DisconnectReason.restartRequired) {
                     logger.info('Restart required — reconnecting...');
                     healthState.disconnectReason = 'restart_required';
@@ -551,12 +1180,42 @@ async function connectWhatsApp() {
             }
         });
 
-        // Handle message receipts
+        // Handle message receipts (delivery confirmations)
         sock.ev.on('message-receipt.update', (updates) => {
             for (const update of updates) {
-                logger.debug({ update }, 'Receipt update');
+                const { key, receipt } = update;
+                const messageId = key?.id;
+                if (!messageId) continue;
+
+                // receipt.type: 1=delivered, 2=read, 3=played
+                let status = 'unknown';
+                if (receipt?.type === 1) status = 'delivered';
+                else if (receipt?.type === 2) status = 'read';
+                else if (receipt?.type === 3) status = 'played';
+
+                safetyManager.updateDeliveryStatus(messageId, status);
+                logger.debug({ messageId, status }, 'Delivery receipt received');
             }
         });
+
+        // Handle message acks
+        sock.ev.on('messages.update', (updates) => {
+            for (const update of updates) {
+                const messageId = update.key?.id;
+                if (!messageId) continue;
+
+                // ack values: 0=pending, 1=server, 2=device, 3=read, 4=played
+                const ackMap = { 0: 'pending', 1: 'server_ack', 2: 'device_ack', 3: 'read', 4: 'played' };
+                const status = ackMap[update.update?.ack] || 'unknown';
+
+                if (status !== 'pending') {
+                    safetyManager.updateDeliveryStatus(messageId, status);
+                }
+            }
+        });
+
+        // Start health check loop
+        startHealthCheck();
 
     } catch (err) {
         logger.error({ error: err.message }, 'Failed to initialize WhatsApp connection');
@@ -619,11 +1278,9 @@ async function handleIncomingMessage(msg) {
         messageType = 'document';
         messageText = messageContent.documentMessage.caption || '';
     } else if (messageContent.buttonsResponseMessage) {
-        // Interactive button response
         messageText = messageContent.buttonsResponseMessage.selectedButtonId || '';
         messageType = 'interactive';
     } else if (messageContent.listResponseMessage) {
-        // Interactive list response
         messageText = messageContent.listResponseMessage.singleSelectReply?.selectedRowId || '';
         messageType = 'interactive';
     } else {
@@ -698,6 +1355,15 @@ function generateSignature(payload) {
 
 async function start() {
     logger.info('🇰🇪 Msaidizi OpenWA Service Starting...');
+    logger.info({
+        safety: {
+            maxMsgPerSec: WhatsAppSafetyConfig.maxMessagesPerSecond,
+            minDelay: WhatsAppSafetyConfig.minDelayBetweenMessages,
+            maxDelay: WhatsAppSafetyConfig.maxDelayBetweenMessages,
+            maxConsecutive: WhatsAppSafetyConfig.maxConsecutiveMessages,
+            cooldown: WhatsAppSafetyConfig.cooldownPeriod,
+        },
+    }, 'WhatsApp Safety Config loaded');
 
     // Start Express server
     app.listen(CONFIG.port, '0.0.0.0', () => {

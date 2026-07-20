@@ -289,14 +289,14 @@ async def _get_goals(
     args: dict[str, Any], requester_id: str, db: AsyncSession
 ) -> dict[str, Any]:
     """Fetch goal records."""
-    from app.models.worker_features import GoalRecord as Goal
+    from app.models.goal import Goal
 
     user_id = args["user_id"]
 
     query = select(Goal).where(Goal.user_id == user_id)
 
     if args.get("goal_type"):
-        query = query.where(Goal.goal_type == args["goal_type"])
+        query = query.where(Goal.category == args["goal_type"])
     if args.get("status", "all") != "all":
         query = query.where(Goal.status == args["status"])
 
@@ -306,12 +306,12 @@ async def _get_goals(
     goals = [
         {
             "id": str(g.id),
-            "goal_type": g.goal_type,
+            "goal_type": g.category,
             "title": g.title,
             "target_amount": float(g.target_amount) if g.target_amount else 0,
             "current_amount": float(g.current_amount) if g.current_amount else 0,
             "progress_pct": round(float(g.current_amount or 0) / float(g.target_amount or 1) * 100, 1),
-            "deadline": g.deadline.isoformat() if g.deadline else None,
+            "deadline": g.target_date.isoformat() if hasattr(g, 'target_date') and g.target_date else (g.deadline.isoformat() if hasattr(g, 'deadline') and g.deadline else None),
             "status": g.status,
             "created_at": g.created_at.isoformat() if g.created_at else None,
         }
@@ -330,7 +330,7 @@ async def _get_loans(
     args: dict[str, Any], requester_id: str, db: AsyncSession
 ) -> dict[str, Any]:
     """Fetch loan records."""
-    from app.models.worker_features import LoanRecord as Loan
+    from app.models.loan import Loan
 
     user_id = args["user_id"]
 
@@ -345,13 +345,13 @@ async def _get_loans(
     loans = [
         {
             "id": str(l.id),
-            "principal": float(l.principal) if l.principal else 0,
+            "amount": float(l.amount) if l.amount else 0,
             "interest_rate": float(l.interest_rate) if l.interest_rate else 0,
-            "total_repaid": float(l.total_repaid) if l.total_repaid else 0,
-            "outstanding_balance": float(l.outstanding_balance) if l.outstanding_balance else 0,
+            "amount_repaid": float(l.amount_repaid) if l.amount_repaid else 0,
+            "outstanding_balance": float((l.total_due or 0) - (l.amount_repaid or 0)),
             "purpose": l.purpose,
             "status": l.status,
-            "source": l.source,
+            "lender": l.lender,
             "created_at": l.created_at.isoformat() if l.created_at else None,
         }
         for l in rows
@@ -371,7 +371,7 @@ async def _get_tithe(
     """Fetch tithe/giving records."""
     from datetime import timedelta
 
-    from app.models.worker_features import TitheRecord
+    from app.models.tithe import TitheRecord
 
     user_id = args["user_id"]
     period_days = min(args.get("period_days", 90), 365)

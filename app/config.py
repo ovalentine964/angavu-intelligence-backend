@@ -64,6 +64,21 @@ class Settings(BaseSettings):
     OPENWA_URL: str = "http://localhost:3000"
     OPENWA_WEBHOOK_SECRET: str = ""
     ENABLE_WHATSAPP: bool = False  # Set to true to enable WhatsApp (OpenWA) integration
+
+    # === Telegram Fallback Channel ===
+    TELEGRAM_BOT_TOKEN: str = ""  # Bot token from @BotFather
+    TELEGRAM_API_URL: str = ""  # Override for self-hosted Telegram Bot API
+    ENABLE_TELEGRAM: bool = False  # Enable Telegram as fallback channel
+
+    # === SMS Fallback Channel (Africa's Talking) ===
+    AFRICASTALKING_API_KEY: str = ""
+    AFRICASTALKING_USERNAME: str = ""
+    AFRICASTALKING_SENDER_ID: str = "Msaidizi"
+    ENABLE_SMS: bool = False  # Enable SMS as fallback channel
+
+    # === Channel Failover ===
+    CHANNEL_FAILOVER_ENABLED: bool = True  # Enable automatic channel failover
+    CHANNEL_HEALTH_CHECK_INTERVAL: int = 60  # Seconds between health checks
     # NOTE: GROQ_API_KEY, DEEPSEEK_API_KEY, NVIDIA_NIM_API_KEY removed.
     # Angavu uses zero-cost on-device inference only.
     # No paid API keys are needed or accepted.

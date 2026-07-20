@@ -22,6 +22,7 @@ Configuration:
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,6 +44,9 @@ MAX_MESSAGE_LENGTH = 4000
 
 # Rate limit: max messages per minute to avoid WhatsApp bans
 RATE_LIMIT_PER_MINUTE = 20
+
+# Ban detection — how many consecutive failures before declaring ban
+BAN_DETECTION_THRESHOLD = 5
 
 # =========================================================================
 # WhatsApp Delivery Service
@@ -67,12 +71,67 @@ class WhatsAppDelivery:
         self._last_send_time: dict[str, float] = {}
         self._send_count: int = 0
         self._window_start: float = 0
+        # Ban detection state
+        self._consecutive_failures: int = 0
+        self._ban_detected: bool = False
+        self._ban_detected_at: float | None = None
+        self._ban_reason: str | None = None
+        # Failover callback (set by channel infrastructure)
+        self._failover_callback = None
         # Check if WhatsApp is enabled via settings
         try:
             from app.config import get_settings
             self.enabled = get_settings().ENABLE_WHATSAPP
         except Exception:
             self.enabled = False
+
+    def set_failover_callback(self, callback) -> None:
+        """Register a callback for when ban is detected."""
+        self._failover_callback = callback
+
+    @property
+    def is_banned(self) -> bool:
+        """Check if WhatsApp ban has been detected."""
+        return self._ban_detected
+
+    @property
+    def ban_info(self) -> dict:
+        """Get ban detection info."""
+        return {
+            "banned": self._ban_detected,
+            "detected_at": self._ban_detected_at,
+            "reason": self._ban_reason,
+        }
+
+    async def check_remote_ban_status(self) -> bool:
+        """Check OpenWA safety endpoint for ban detection."""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(f"{self.openwa_url}/safety")
+                if response.status_code == 200:
+                    data = response.json()
+                    remote_ban = data.get("state", {}).get("banDetected", False)
+                    if remote_ban and not self._ban_detected:
+                        self._ban_detected = True
+                        self._ban_detected_at = time.time()
+                        self._ban_reason = data.get("state", {}).get("banReason", "remote_detected")
+                        logger.fatal(
+                            "whatsapp_ban_detected_via_openwa",
+                            reason=self._ban_reason,
+                        )
+                        await self._trigger_failover()
+                    return remote_ban
+        except Exception as e:
+            logger.debug("openwa_safety_check_failed", error=str(e))
+        return self._ban_detected
+
+    async def _trigger_failover(self) -> None:
+        """Trigger failover to backup channel."""
+        if self._failover_callback:
+            try:
+                await self._failover_callback("whatsapp", "telegram", self._ban_reason)
+            except Exception as e:
+                logger.error("failover_callback_error", error=str(e))
 
     async def send_message(
         self,
@@ -100,6 +159,20 @@ class WhatsAppDelivery:
             logger.debug("whatsapp_disabled_skip_delivery", phone=normalized[:6] + "****")
             return False
 
+        # Check ban state
+        if self._ban_detected:
+            logger.warning(
+                "whatsapp_banned_skip_send",
+                phone=normalized[:6] + "****",
+                reason=self._ban_reason,
+            )
+            return False
+
+        # Periodically check remote ban status
+        await self.check_remote_ban_status()
+        if self._ban_detected:
+            return False
+
         # Truncate if too long
         if len(message) > MAX_MESSAGE_LENGTH:
             message = message[:MAX_MESSAGE_LENGTH - 50] + "\n\n... (ripoti imefupishwa)"
@@ -121,6 +194,7 @@ class WhatsAppDelivery:
                         result = response.json()
                         if result.get("sent"):
                             self._record_send(normalized)
+                            self._consecutive_failures = 0  # Reset on success
                             logger.info(
                                 "whatsapp_message_sent",
                                 phone=normalized[:6] + "****",
@@ -128,6 +202,14 @@ class WhatsAppDelivery:
                                 attempt=attempt + 1,
                             )
                             return True
+                        elif result.get("banDetected"):
+                            # OpenWA detected ban
+                            self._ban_detected = True
+                            self._ban_detected_at = time.time()
+                            self._ban_reason = result.get("banReason", "openwa_reported")
+                            logger.fatal("whatsapp_ban_from_openwa", reason=self._ban_reason)
+                            await self._trigger_failover()
+                            return False
 
                     logger.warning(
                         "whatsapp_send_failed",
@@ -135,15 +217,31 @@ class WhatsAppDelivery:
                         body=response.text[:200],
                         attempt=attempt + 1,
                     )
+                    self._consecutive_failures += 1
 
             except httpx.TimeoutException:
                 logger.warning("whatsapp_timeout", attempt=attempt + 1)
+                self._consecutive_failures += 1
             except Exception as e:
                 logger.error(
                     "whatsapp_send_error",
                     error=str(e),
                     attempt=attempt + 1,
                 )
+                self._consecutive_failures += 1
+
+            # Check if we should declare ban
+            if self._consecutive_failures >= BAN_DETECTION_THRESHOLD:
+                self._ban_detected = True
+                self._ban_detected_at = time.time()
+                self._ban_reason = f"consecutive_failures_{self._consecutive_failures}"
+                logger.fatal(
+                    "whatsapp_ban_declared",
+                    consecutive_failures=self._consecutive_failures,
+                    phone=normalized[:6] + "****",
+                )
+                await self._trigger_failover()
+                return False
 
             # Exponential backoff
             if attempt < retry_attempts - 1:
@@ -445,7 +543,10 @@ class WhatsAppDelivery:
 
     def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits."""
-        now = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
+        try:
+            now = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
+        except RuntimeError:
+            now = 0
         # Simple rate limiting: max RATE_LIMIT_PER_MINUTE per 60 seconds
         if now - self._window_start > 60:
             self._send_count = 0
@@ -455,8 +556,11 @@ class WhatsAppDelivery:
     def _record_send(self, phone: str):
         """Record a successful send for rate limiting."""
         self._send_count += 1
-        self._last_send_time[phone] = (
-            asyncio.get_event_loop().time()
-            if asyncio.get_event_loop().is_running()
-            else 0
-        )
+        try:
+            self._last_send_time[phone] = (
+                asyncio.get_event_loop().time()
+                if asyncio.get_event_loop().is_running()
+                else 0
+            )
+        except RuntimeError:
+            pass

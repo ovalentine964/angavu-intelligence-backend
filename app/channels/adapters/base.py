@@ -23,9 +23,11 @@ class ChannelType(str, Enum):
     APP_TEXT = "app_text"
     APP_VOICE = "app_voice"
     WHATSAPP = "whatsapp"
+    TELEGRAM = "telegram"
     SMS = "sms"
     USSD = "ussd"
     VOICE_CALL = "voice_call"
+    HTTP_API = "http_api"
 
 
 @dataclass

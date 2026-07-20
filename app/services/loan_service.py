@@ -1198,7 +1198,10 @@ async def _assess_risk(db: AsyncSession, loan: Loan) -> dict[str, Any]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Legacy Wrappers — Backward compatibility with worker_features.py
+# Legacy Wrappers — Backward compatibility (DEPRECATED)
+#
+# These functions translate old V1 API signatures to V2 model calls.
+# They will be removed once all callers have been updated.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -1217,8 +1220,11 @@ async def record_loan_legacy(
     commitment_text: str | None = None,
     currency: str = "KES",
 ) -> dict[str, Any]:
-    """Legacy wrapper for backward compatibility with worker_features.py."""
-    from app.models.worker_features import LoanRecord
+    """Legacy wrapper — maps V1 params to V2 Loan model.
+
+    DEPRECATED: Use record_loan() instead.
+    """
+    from app.models.loan import Loan as LoanV2
 
     total_due = round(principal * (1 + interest_rate), 2)
     if due_date is None:
@@ -1233,24 +1239,24 @@ async def record_loan_legacy(
     else:
         suggested_amount = round(total_due / max(1, weeks_to_due), 0)
 
-    loan = LoanRecord(
+    # Map V1 params → V2 fields
+    loan = LoanV2(
         user_id=user_id,
-        source=source,
-        principal=principal,
+        amount=principal,
+        currency=currency,
+        purpose=purpose.title() if purpose else "Personal",
+        purpose_description=str(purpose_details) if purpose_details else None,
+        lender=source,
         interest_rate=interest_rate,
+        start_date=disbursed_at.date() if disbursed_at else date.today(),
+        end_date=due_date,
         total_due=total_due,
         amount_repaid=0,
-        currency=currency,
-        purpose=purpose,
-        purpose_details=purpose_details,
         status="active",
-        disbursed_at=disbursed_at or datetime.now(UTC),
-        due_date=due_date,
-        repayment_type=repayment_type,
         repayment_frequency=repayment_frequency,
-        repayment_amount_per_period=suggested_amount,
-        commitment_made=bool(commitment_text),
+        suggested_payment_amount=suggested_amount,
         commitment_text=commitment_text,
+        commitment_date=datetime.now(UTC) if commitment_text else None,
     )
     db.add(loan)
     await db.flush()
@@ -1285,21 +1291,24 @@ async def get_loan_status_legacy(
     user_id: UUID,
     loan_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Legacy wrapper for backward compatibility with worker_features.py."""
-    from app.models.worker_features import LoanRecord as LegacyLoan
-    from app.models.worker_features import LoanRepayment as LegacyRepayment
+    """Legacy wrapper — maps V1 query to V2 Loan model.
+
+    DEPRECATED: Use get_loan_status() instead.
+    """
+    from app.models.loan import Loan as LoanV2
+    from app.models.loan import LoanRepayment as RepayV2
 
     if loan_id:
         result = await db.execute(
-            select(LegacyLoan).where(
-                and_(LegacyLoan.id == loan_id, LegacyLoan.user_id == user_id)
+            select(LoanV2).where(
+                and_(LoanV2.id == loan_id, LoanV2.user_id == user_id)
             )
         )
     else:
         result = await db.execute(
-            select(LegacyLoan).where(
-                and_(LegacyLoan.user_id == user_id, LegacyLoan.status == "active")
-            ).order_by(LegacyLoan.created_at.desc()).limit(1)
+            select(LoanV2).where(
+                and_(LoanV2.user_id == user_id, LoanV2.status == "active")
+            ).order_by(LoanV2.created_at.desc()).limit(1)
         )
 
     loan = result.scalar_one_or_none()
@@ -1310,9 +1319,9 @@ async def get_loan_status_legacy(
     progress_pct = round((loan.amount_repaid / loan.total_due) * 100, 1) if loan.total_due > 0 else 0
 
     roi = None
-    if loan.purpose in ("stock", "equipment", "improvement") and loan.sales_attributed:
-        roi_value = loan.sales_attributed - loan.principal
-        roi_pct = round((roi_value / loan.principal) * 100, 1) if loan.principal > 0 else 0
+    if loan.purpose in ("Business", "stock", "equipment", "improvement") and loan.sales_attributed:
+        roi_value = loan.sales_attributed - loan.amount
+        roi_pct = round((roi_value / loan.amount) * 100, 1) if loan.amount > 0 else 0
         roi = {
             "sales_attributed": loan.sales_attributed,
             "profit": round(roi_value, 2),
@@ -1320,30 +1329,30 @@ async def get_loan_status_legacy(
             "status": "profitable" if roi_value > 0 else "not_yet_profitable",
         }
 
-    days_remaining = (loan.due_date - date.today()).days if loan.due_date else None
+    days_remaining = (loan.end_date - date.today()).days if loan.end_date else None
     overdue = days_remaining is not None and days_remaining < 0
 
     risk = await predict_default_risk_legacy(db, loan)
 
     repayments_result = await db.execute(
-        select(LegacyRepayment)
-        .where(LegacyRepayment.loan_id == loan.id)
-        .order_by(LegacyRepayment.recorded_at.desc())
+        select(RepayV2)
+        .where(RepayV2.loan_id == loan.id)
+        .order_by(RepayV2.created_at.desc())
         .limit(10)
     )
     recent_repayments = [
         {
             "amount": r.amount,
             "method": r.method,
-            "date": str(r.recorded_at.date()) if r.recorded_at else None,
+            "date": str(r.date) if hasattr(r, 'date') and r.date else (str(r.created_at.date()) if r.created_at else None),
         }
         for r in repayments_result.scalars().all()
     ]
 
     return {
         "loan_id": str(loan.id),
-        "source": loan.source,
-        "principal": loan.principal,
+        "source": loan.lender,
+        "principal": loan.amount,
         "interest_rate": loan.interest_rate,
         "total_due": loan.total_due,
         "amount_repaid": loan.amount_repaid,
@@ -1351,16 +1360,16 @@ async def get_loan_status_legacy(
         "progress_pct": progress_pct,
         "purpose": loan.purpose,
         "status": loan.status,
-        "due_date": str(loan.due_date) if loan.due_date else None,
+        "due_date": str(loan.end_date) if loan.end_date else None,
         "days_remaining": days_remaining,
         "overdue": overdue,
-        "repayment_streak": loan.current_repayment_streak,
-        "best_streak": loan.best_repayment_streak,
+        "repayment_streak": loan.current_streak,
+        "best_streak": loan.best_streak,
         "roi": roi,
         "risk": risk,
         "recent_repayments": recent_repayments,
         "voice_summary_sw": (
-            f"Mkopo: KSh {loan.principal:,.0f}. "
+            f"Mkopo: KSh {loan.amount:,.0f}. "
             f"Umelipa: KSh {loan.amount_repaid:,.0f} ya KSh {loan.total_due:,.0f} ({progress_pct}%). "
             f"Baki: KSh {remaining:,.0f}. "
             f"{'Siku ' + str(days_remaining) + ' zimebaki.' if days_remaining and days_remaining > 0 else 'Umepitwa na wakati!' if overdue else ''}"
@@ -1372,12 +1381,15 @@ async def predict_default_risk_legacy(
     db: AsyncSession,
     loan,
 ) -> dict[str, Any]:
-    """Legacy risk prediction for LoanRecord model."""
+    """Legacy risk prediction — works with V2 Loan model.
+
+    DEPRECATED: Use _assess_risk() instead.
+    """
     today = date.today()
-    days_active = (today - loan.disbursed_at.date()).days if loan.disbursed_at else 0
+    days_active = (today - loan.start_date).days if loan.start_date else 0
     repayment_pct = (loan.amount_repaid / loan.total_due * 100) if loan.total_due > 0 else 0
-    days_to_due = (loan.due_date - today).days if loan.due_date else 30
-    streak = loan.current_repayment_streak or 0
+    days_to_due = (loan.end_date - today).days if loan.end_date else 30
+    streak = loan.current_streak or 0
 
     risk_score = 0.30
     if repayment_pct >= 75:
@@ -1393,8 +1405,9 @@ async def predict_default_risk_legacy(
         risk_score -= 0.05
 
     purpose_risk = {
-        "stock": -0.05, "equipment": -0.05, "improvement": -0.03,
-        "emergency": 0.08, "education": 0.03, "other": 0.05,
+        "Business": -0.05, "stock": -0.05, "equipment": -0.05,
+        "Personal": 0.03, "Emergency": 0.08, "Education": -0.02,
+        "improvement": -0.03, "education": 0.03, "other": 0.05,
     }
     risk_score += purpose_risk.get(loan.purpose, 0)
 

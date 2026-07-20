@@ -12,7 +12,9 @@ from app.channels.adapters.base import (
     ChannelType,
     UnifiedMessage,
 )
+from app.channels.adapters.http_api_adapter import HttpApiAdapter
 from app.channels.adapters.sms_adapter import SMSAdapter
+from app.channels.adapters.telegram_adapter import TelegramAdapter
 from app.channels.adapters.voice_adapter import VoiceAdapter
 from app.channels.adapters.whatsapp_adapter import WhatsAppAdapter
 
@@ -21,7 +23,9 @@ __all__ = [
     "BaseChannelAdapter",
     "ChannelResponse",
     "ChannelType",
+    "HttpApiAdapter",
     "SMSAdapter",
+    "TelegramAdapter",
     "UnifiedMessage",
     "VoiceAdapter",
     "WhatsAppAdapter",

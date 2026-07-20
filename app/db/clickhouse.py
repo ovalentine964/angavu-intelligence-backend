@@ -10,6 +10,7 @@ Used for:
 ClickHouse is 30-200x faster than PostgreSQL for these queries.
 """
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -207,8 +208,8 @@ class ClickHouseClient:
         """
         Apply the ClickHouse schema SQL if tables don't exist.
 
-        Called once on application startup. Reads database/schema/clickhouse.sql
-        and executes each statement. Idempotent (uses IF NOT EXISTS).
+        Uses a migration tracking table to avoid re-applying DDL.
+        Each schema file is hashed and tracked in clickhouse_migrations.
         """
         schema_file = None
         for candidate in _SCHEMA_CANDIDATES:
@@ -220,7 +221,17 @@ class ClickHouseClient:
             logger.warning("clickhouse_schema_file_not_found", paths=[str(c) for c in _SCHEMA_CANDIDATES])
             return
 
+        # Create migration tracking table
+        await self._ensure_migration_table()
+
         sql = schema_file.read_text(encoding="utf-8")
+        schema_hash = hashlib.sha256(sql.encode()).hexdigest()[:16]
+
+        # Check if this version was already applied
+        if await self._is_migration_applied(schema_hash):
+            logger.info("clickhouse_schema_already_applied", hash=schema_hash)
+            return
+
         statements = [s.strip() for s in sql.split(";") if s.strip()]
 
         applied = 0
@@ -236,7 +247,9 @@ class ClickHouseClient:
                 # ALTER TTL on empty table can warn — that's fine
                 logger.debug("clickhouse_schema_stmt_skip", error=str(e), stmt=clean[:120])
 
-        logger.info("clickhouse_schema_applied", statements=applied)
+        # Record successful migration
+        await self._record_migration(schema_hash, schema_file.name, applied)
+        logger.info("clickhouse_schema_applied", statements=applied, hash=schema_hash)
 
         # Verify expected tables exist
         client = await get_clickhouse()
@@ -250,3 +263,41 @@ class ClickHouseClient:
             logger.error("clickhouse_tables_missing", tables=missing)
         else:
             logger.info("clickhouse_tables_verified", tables=ALL_TABLES)
+
+    async def _ensure_migration_table(self) -> None:
+        """Create the clickhouse_migrations tracking table if it doesn't exist."""
+        await self.command("""
+            CREATE TABLE IF NOT EXISTS clickhouse_migrations
+            (
+                version_hash String,
+                schema_file String,
+                statements_applied UInt32,
+                applied_at DateTime DEFAULT now()
+            )
+            ENGINE = MergeTree()
+            ORDER BY version_hash
+        """)
+
+    async def _is_migration_applied(self, schema_hash: str) -> bool:
+        """Check if a schema version was already applied."""
+        try:
+            client = await get_clickhouse()
+            result = await client.query(
+                "SELECT count() FROM clickhouse_migrations WHERE version_hash = {hash:String}",
+                parameters={"hash": schema_hash},
+            )
+            return result.result_rows[0][0] > 0
+        except Exception:
+            return False
+
+    async def _record_migration(self, schema_hash: str, filename: str, statements: int) -> None:
+        """Record a successful migration."""
+        try:
+            client = await get_clickhouse()
+            await client.insert(
+                "clickhouse_migrations",
+                [[schema_hash, filename, statements]],
+                column_names=["version_hash", "schema_file", "statements_applied"],
+            )
+        except Exception as e:
+            logger.warning("clickhouse_migration_record_failed", error=str(e))

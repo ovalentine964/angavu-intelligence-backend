@@ -108,6 +108,71 @@ docker-compose up -d
 
 ---
 
+## ⚠️ Critical Risk: WhatsApp via Baileys (Unofficial Library)
+
+### The Problem
+
+WhatsApp integration uses **Baileys** (unofficial WhatsApp Web library). This is an **existential risk**:
+
+- **Meta can ban the phone number at any time** — no warning, no appeal
+- Baileys reverse-engineers WhatsApp Web protocol — violates ToS
+- Ban is permanent for that number — cannot be undone
+- All users on that number lose report delivery instantly
+
+### Why We Accept This Risk (For Now)
+
+- Official WhatsApp Business API costs $0.05-0.10 per conversation — prohibitive at scale
+- Baileys is free, self-hosted, works today
+- Our users (informal workers in Kenya) overwhelmingly prefer WhatsApp
+- We mitigate risk until revenue justifies official API
+
+### Safety Measures Implemented
+
+The following measures reduce ban probability by mimicking human behavior:
+
+| Measure | Config | Purpose |
+|---------|--------|---------|
+| **Human-like delays** | 2-8 seconds random between messages | Avoid bot detection |
+| **Message queue** | FIFO with backpressure | Never flood the connection |
+| **Rate limiting** | Max 10 msg/sec, 200 msg/min | Stay under detection thresholds |
+| **Consecutive cap** | 50 messages, then 60s cooldown | Prevent burst patterns |
+| **Ban detection** | 5 consecutive failures → auto-failover | Catch bans early |
+| **Auto-failover** | WhatsApp → Telegram → SMS → HTTP | Keep delivering reports |
+| **Delivery tracking** | Per-message receipt monitoring | Know what got through |
+
+### If WhatsApp Gets Banned
+
+1. OpenWA detects the ban (connection failure + auth error)
+2. Calls `/api/v1/channels/ban-detected` on the backend
+3. Backend marks WhatsApp as unhealthy
+4. FailoverManager routes all messages to Telegram
+5. Admin gets alerted via `WhatsAppHealthMonitor`
+6. Users continue receiving reports on Telegram (if connected)
+
+### Migration Path
+
+- **Short term**: Baileys with safety measures (current)
+- **Medium term**: WhatsApp Business API (when revenue > $5K/mo)
+- **Long term**: Multi-channel default (WhatsApp + Telegram + SMS + App)
+
+### Safety Configuration
+
+Environment variables for the OpenWA service:
+
+```env
+WA_MAX_MSG_PER_SEC=10          # Max messages per second
+WA_MIN_DELAY_MS=2000           # Min delay between messages (ms)
+WA_MAX_DELAY_MS=8000           # Max delay between messages (ms)
+WA_MAX_CONSECUTIVE=50          # Max consecutive messages before cooldown
+WA_COOLDOWN_MS=60000           # Cooldown period (ms)
+WA_MAX_MSG_PER_MIN=200         # Max messages per minute
+WA_BAN_THRESHOLD=5             # Consecutive failures before ban declaration
+WA_HEALTH_INTERVAL_MS=30000    # Health check interval (ms)
+WA_DELIVERY_TIMEOUT_MS=30000   # Delivery confirmation timeout (ms)
+```
+
+---
+
 ## Security
 
 - **JWT RS256** — RSA-4096 keys, JWKS endpoint, token family theft detection
