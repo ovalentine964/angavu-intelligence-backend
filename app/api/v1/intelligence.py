@@ -1,37 +1,56 @@
 """
-Intelligence Domain — /api/v1/intelligence/*
-
-Aggregates:
-    - Intelligence API          (app.api.intelligence)
-    - Intelligence Products     (app.api.intelligence_products)
-    - Phase 1 Intelligence      (app.api.phase1_intelligence)
-    - Deep Analysis             (app.api.analysis)
-    - Explainability (SHAP)     (app.api.explain)
-    - FMCG Intelligence         (app.api.fmcg)
-    - Dialect Dictionary        (app.api.dialect_dictionary)
-    - Federated Learning        (app.api.federated_learning)
-    - FL Aggregator             (app.api.fl_aggregator)
+Intelligence endpoints — Soko Pulse, Alama Score, Angavu Pulse.
+Architecture: arch_backend.md
 """
-
 from fastapi import APIRouter
+from typing import Optional
 
-from app.api.analysis import router as _analysis
-from app.api.dialect_dictionary import router as _dialect
-from app.api.explain import router as _explain
-from app.api.federated_learning import router as _fl
-from app.api.fl_aggregator import router as _fl_agg
-from app.api.fmcg import router as _fmcg
-from app.api.intelligence import router as _intel
-from app.api.intelligence_products import router as _intel_products
-from app.api.phase1_intelligence import router as _phase1
+router = APIRouter()
 
-intelligence_router = APIRouter(tags=["Intelligence"])
-intelligence_router.include_router(_intel)
-intelligence_router.include_router(_intel_products)
-intelligence_router.include_router(_phase1)
-intelligence_router.include_router(_analysis)
-intelligence_router.include_router(_explain)
-intelligence_router.include_router(_fmcg)
-intelligence_router.include_router(_dialect)
-intelligence_router.include_router(_fl)
-intelligence_router.include_router(_fl_agg)
+
+@router.get("/soko-pulse/{region}")
+async def get_soko_pulse(region: str, commodity: Optional[str] = None):
+    """Soko Pulse — Real-time market intelligence."""
+    # TODO: Query ClickHouse for aggregated market data
+    return {
+        "region": region,
+        "commodity": commodity,
+        "status": "pending",
+        "message": "Intelligence pipeline not yet active"
+    }
+
+
+@router.get("/alama-score/{worker_id}")
+async def get_alama_score(worker_id: str):
+    """Alama Score — Credit scoring without formal records."""
+    # TODO: Compute score from transaction history
+    return {
+        "worker_id": worker_id,
+        "score": None,
+        "status": "pending",
+        "message": "Credit scoring not yet active"
+    }
+
+
+@router.get("/angavu-pulse/{region}")
+async def get_angavu_pulse(region: str):
+    """Angavu Pulse — MSME activity index."""
+    # TODO: Aggregate economic activity data
+    return {
+        "region": region,
+        "index": None,
+        "status": "pending",
+        "message": "MSME index not yet active"
+    }
+
+
+@router.get("/jamii-insights/{region}")
+async def get_jamii_insights(region: str):
+    """Jamii Insights — Financial inclusion analytics."""
+    # TODO: Aggregate financial inclusion data
+    return {
+        "region": region,
+        "metrics": None,
+        "status": "pending",
+        "message": "Financial inclusion analytics not yet active"
+    }

@@ -1,16 +1,10 @@
 """
-Msaidizi / Angavu Intelligence — Cloud Backend
-=======================================
+Angavu Intelligence Backend — Super Agent Enterprise Platform
 
-Intelligence platform for Kenya's informal economy.
-Transforms raw transaction data from dukawallahs and mama mbogas
-into actionable economic intelligence for FMCG companies, government,
-financial institutions, and development organizations.
+Africa's operating system for the informal economy.
+Processing data from 600M+ informal workers into economic intelligence.
 
-Architecture:
-    On-Device (2GB Android) → Sync API → Data Pipeline → Intelligence APIs
-    All data is anonymized with k-anonymity (k≥10) before serving to buyers.
+Architecture: arch_backend.md, arch_chief.md
+Version: 2.0.0 (Super Agent)
 """
-
-__version__ = "0.1.0"
-__title__ = "Msaidizi Backend"
+__version__ = "2.0.0"
