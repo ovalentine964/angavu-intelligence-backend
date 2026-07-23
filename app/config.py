@@ -3,6 +3,7 @@ Angavu Intelligence Backend — Configuration
 
 Architecture: arch_backend.md
 """
+import os
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -51,6 +52,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_REPORTS: str = "200/hour"
     RATE_LIMIT_INTELLIGENCE: str = "50/hour"
     RATE_LIMIT_BUYER: str = "1000/hour"
+
+    # PQC Security
+    PQC_PHASE: int = int(os.getenv("ANGAVU_PQC_PHASE", "1"))
+    PQC_HYBRID_KEX: bool = os.getenv("ANGAVU_PQC_HYBRID_KEX", "true").lower() == "true"
+    PQC_SIGNING: bool = os.getenv("ANGAVU_PQC_SIGNING", "true").lower() == "true"
+
+    # TLS
+    TLS_CERT_PATH: str = "keys/server.crt"
+    TLS_KEY_PATH: str = "keys/server.key"
+    TLS_ENABLED: bool = os.getenv("ANGAVU_TLS_ENABLED", "false").lower() == "true"
 
     class Config:
         env_file = ".env"

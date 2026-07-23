@@ -162,31 +162,50 @@ async def process_sync_upload(
     """Process a sync upload from a device. Returns sync result."""
     conflicts = []
     synced_count = 0
-    backend_clock = {}
+    skipped_count = 0
 
     for tx_data in transactions:
         idempotency_key = tx_data.get("idempotency_key")
         if not idempotency_key:
             idempotency_key = str(uuid.uuid4())
 
-        # Check for duplicate
-        existing = await db.execute(
+        # Check for duplicate by idempotency key
+        existing_row = await db.execute(
             select(Transaction).where(Transaction.idempotency_key == idempotency_key)
         )
-        if existing.scalar_one_or_none() is not None:
+        existing_txn = existing_row.scalar_one_or_none()
+        if existing_txn is not None:
+            skipped_count += 1
             continue
 
-        # Check for vector clock conflict
+        # ── Vector clock conflict detection ──────────────────────────────
+        # remote_clock: the clock the device sent with this transaction
+        # stored_clock: the clock we already have in the DB for this entity
+        #   (empty dict if this entity is brand-new to us)
         entity_id = tx_data.get("id")
-        stored_clock = tx_data.get("vector_clock", {})
-        remote_clock = tx_data.get("vector_clock", {})
+        remote_clock = tx_data.get("vector_clock", {}) or {}
+        stored_clock: dict = {}
 
-        # Resolve conflicts if needed
-        if is_conflicted(stored_clock, remote_clock):
+        # If the device sent an entity ID, look up the existing stored clock
+        if entity_id:
+            existing_entity = await db.execute(
+                select(Transaction).where(
+                    and_(
+                        Transaction.user_id == worker_id_hash,
+                        Transaction.id == entity_id,
+                    )
+                )
+            )
+            existing_entity_txn = existing_entity.scalar_one_or_none()
+            if existing_entity_txn is not None:
+                stored_clock = existing_entity_txn.vector_clock or {}
+
+        # Determine if clocks are concurrent (conflicted)
+        if stored_clock and is_conflicted(stored_clock, remote_clock):
             resolution = resolver.resolve(
                 EntityType.TRANSACTION,
-                tx_data,
-                tx_data,
+                {"stored": stored_clock, "entity_id": entity_id},
+                {"remote": remote_clock, **tx_data},
                 stored_clock,
                 remote_clock,
             )
@@ -194,11 +213,37 @@ async def process_sync_upload(
                 conflicts.append({
                     "entity_type": "transaction",
                     "entity_id": entity_id,
+                    "stored_clock": stored_clock,
+                    "remote_clock": remote_clock,
                     "reason": resolution.escalate_reason,
+                    "action": "escalate",
+                })
+                continue
+            elif resolution.action == ResolutionAction.MERGE:
+                conflicts.append({
+                    "entity_type": "transaction",
+                    "entity_id": entity_id,
+                    "stored_clock": stored_clock,
+                    "remote_clock": remote_clock,
+                    "merged_data": resolution.merged_data,
+                    "action": "merge",
+                })
+            elif resolution.action == ResolutionAction.KEEP_LATEST:
+                conflicts.append({
+                    "entity_type": "transaction",
+                    "entity_id": entity_id,
+                    "stored_clock": stored_clock,
+                    "remote_clock": remote_clock,
+                    "winner_data": resolution.winner_data,
+                    "action": "keep_latest",
                 })
 
-        # Store the transaction
+        # Store the transaction with a properly merged clock
+        merged_clock = merge_clocks(stored_clock, remote_clock)
+        merged_clock = merge_clocks(merged_clock, {"backend:primary": 1})
+
         txn = Transaction(
+            id=entity_id or str(uuid.uuid4()),
             user_id=worker_id_hash,
             idempotency_key=idempotency_key,
             tx_type=tx_data.get("tx_type", "sale"),
@@ -210,20 +255,26 @@ async def process_sync_upload(
             quantity=tx_data.get("quantity", 1),
             payment_method=tx_data.get("payment_method", "cash"),
             location_geohash=tx_data.get("location_geohash"),
-            vector_clock=merge_clocks(stored_clock, {"backend:primary": 1}),
+            vector_clock=merged_clock,
             device_timestamp=tx_data.get("device_timestamp"),
         )
         db.add(txn)
         synced_count += 1
 
-    # Update backend vector clock
+    # Compute the backend clock as the total synced across all transactions
     backend_clock = {"backend:primary": synced_count}
 
     await db.flush()
 
+    status = "ok"
+    if conflicts:
+        has_escalations = any(c["action"] == "escalate" for c in conflicts)
+        status = "conflict" if has_escalations else "partial"
+
     return {
-        "status": "ok" if not conflicts else "partial",
+        "status": status,
         "synced_count": synced_count,
+        "skipped_count": skipped_count,
         "conflicts": conflicts,
         "backend_clock": backend_clock,
         "intelligence_updates_available": True,

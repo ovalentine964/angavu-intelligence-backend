@@ -14,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.services.intelligence_engine import IntelligenceEngine
 from app.infrastructure.metrics import INTEL_GENERATION
+from app.middleware.rate_limiter import create_rate_limiter
 import time
 
 router = APIRouter()
+
+# Per-endpoint rate limiter: 50 requests/hour for intelligence
+intel_rate_limit = create_rate_limiter(requests=50, window=3600)
 
 
 # ─── Soko Pulse ───────────────────────────────────────────────────────────────
@@ -27,6 +31,7 @@ async def get_soko_pulse(
     commodity: Optional[str] = Query(None, description="Product category"),
     period_start: Optional[date] = None,
     period_end: Optional[date] = None,
+    _rate=Depends(intel_rate_limit),
     db: AsyncSession = Depends(get_db),
 ):
     """Soko Pulse — FMCG demand forecasting and market intelligence."""

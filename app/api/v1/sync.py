@@ -18,9 +18,13 @@ from app.services.auth import verify_worker_token
 from app.services.sync import process_sync_upload
 from app.services.fl_service import FLService
 from app.infrastructure.metrics import SYNC_TRANSACTIONS, SYNC_DURATION
+from app.middleware.rate_limiter import create_rate_limiter
 import time
 
 router = APIRouter()
+
+# Per-endpoint rate limiter: 100 requests/hour for sync
+sync_rate_limit = create_rate_limiter(requests=100, window=3600)
 
 
 # ─── Request/Response Models ─────────────────────────────────────────────────
@@ -61,6 +65,7 @@ class GradientSyncRequest(BaseModel):
 class SyncResponse(BaseModel):
     status: str
     synced_count: int = 0
+    skipped_count: int = 0
     conflicts: list = []
     backend_clock: dict = {}
     intelligence_updates_available: bool = False
@@ -84,6 +89,7 @@ async def get_current_worker(authorization: str = Header(...)):
 @router.post("/push", response_model=SyncResponse)
 async def sync_push(
     payload: SyncPushRequest,
+    _rate=Depends(sync_rate_limit),
     worker=Depends(get_current_worker),
     db: AsyncSession = Depends(get_db),
 ):

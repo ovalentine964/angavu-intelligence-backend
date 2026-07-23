@@ -20,6 +20,7 @@ from prometheus_client import make_asgi_app
 
 from app.api.v1 import sync, intelligence, buyer, auth, health, fl
 from app.config import settings
+from app.middleware.rate_limiter import create_rate_limiter
 
 logger = structlog.get_logger(__name__)
 
@@ -77,6 +78,10 @@ app.add_middleware(
 from app.middleware.input_validation import InputValidationMiddleware
 app.add_middleware(InputValidationMiddleware)
 
+# Rate limiting middleware — per-endpoint Redis sliding window
+from app.middleware.rate_limiter import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 # API Routes
 app.include_router(health.router, tags=["Health"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -84,6 +89,11 @@ app.include_router(sync.router, prefix="/api/v1/sync", tags=["Sync"])
 app.include_router(intelligence.router, prefix="/api/v1/intelligence", tags=["Intelligence"])
 app.include_router(fl.router, prefix="/api/v1", tags=["Federated Learning"])
 app.include_router(buyer.router, prefix="/api/v1/buyer", tags=["Buyer Dashboard"])
+
+# Wire rate limiter as dependency for endpoints that need it
+sync_rate_limit = create_rate_limiter(requests=100, window=3600)
+intel_rate_limit = create_rate_limiter(requests=50, window=3600)
+fl_rate_limit = create_rate_limiter(requests=200, window=3600)
 
 
 @app.get("/")
