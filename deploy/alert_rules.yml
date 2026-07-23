@@ -1,0 +1,53 @@
+# Prometheus alerting rules for Angavu Intelligence
+# Architecture: arch_backend.md §3.7
+
+groups:
+  - name: angavu_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(angavu_phase_errors_total[5m])) > 10
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Phase error rate > 10/s across all phases"
+
+      - alert: HighApiLatency
+        expr: histogram_quantile(0.95, rate(angavu_api_latency_seconds_bucket[5m])) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency > 2s"
+
+      - alert: SyncHighLatency
+        expr: histogram_quantile(0.95, rate(angavu_sync_duration_seconds_bucket[5m])) > 5.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sync p95 latency > 5s"
+
+      - alert: FLRoundFailure
+        expr: rate(angavu_phase_errors_total{phase="fl_aggregate"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FL aggregation errors detected"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / (1024*1024*1024) > 0.45
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process memory > 450MB"
+
+      - alert: LowSuccessRate
+        expr: angavu_phase_success_rate < 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phase success rate < 85%"
