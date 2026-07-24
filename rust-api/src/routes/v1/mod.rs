@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod transactions;
+pub mod workers;
 pub mod intelligence;
 pub mod credit;
 pub mod goals;
@@ -13,10 +14,11 @@ use axum::{
     Router,
 };
 
-use crate::middleware::{auth_middleware, RateLimiter};
+use crate::middleware::auth_middleware;
+use crate::AppState;
 
 /// Build v1 API routes.
-pub fn routes() -> Router {
+pub fn routes() -> Router<AppState> {
     // Public routes (no auth required)
     let public_routes = Router::new()
         .merge(auth::routes())
@@ -25,6 +27,7 @@ pub fn routes() -> Router {
     // Protected routes (auth required)
     let protected_routes = Router::new()
         .merge(transactions::routes())
+        .merge(workers::routes())
         .merge(intelligence::routes())
         .merge(credit::routes())
         .merge(goals::routes())
