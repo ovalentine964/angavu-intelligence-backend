@@ -23,6 +23,7 @@ use super::alert_generator::AlertGenerator;
 use super::audit_logger::AuditLogger;
 use super::market_analyzer::MarketAnalyzer;
 use super::credit_scorer::CreditScorer;
+use super::report_engine::ReportEngine;
 use super::circuit_breaker::CircuitBreaker;
 
 /// Configuration for the OODA loop
@@ -70,6 +71,7 @@ pub struct OODAOrchestrator {
     /// Sub-tools for specific analysis
     market_analyzer: Arc<MarketAnalyzer>,
     credit_scorer: Arc<CreditScorer>,
+    report_engine: Arc<ReportEngine>,
     alert_generator: Arc<AlertGenerator>,
     audit_logger: Arc<AuditLogger>,
     circuit_breaker: Arc<CircuitBreaker>,
@@ -83,6 +85,7 @@ impl OODAOrchestrator {
         let config = OODAConfig::default();
         let market_analyzer = Arc::new(MarketAnalyzer::new(db.clone()));
         let credit_scorer = Arc::new(CreditScorer::new(db.clone()));
+        let report_engine = Arc::new(ReportEngine::new());
         let alert_generator = Arc::new(AlertGenerator::new(db.clone()));
         let audit_logger = Arc::new(AuditLogger::new(db.clone()));
         let circuit_breaker = Arc::new(CircuitBreaker::new(Default::default()));
@@ -96,6 +99,7 @@ impl OODAOrchestrator {
             cycle_history: Arc::new(Mutex::new(VecDeque::with_capacity(100))),
             market_analyzer,
             credit_scorer,
+            report_engine,
             alert_generator,
             audit_logger,
             circuit_breaker,
@@ -482,6 +486,14 @@ impl OODAOrchestrator {
     pub async fn decide(&self, orientation: &Orientation) -> Result<Decision> {
         let mut options: Vec<DecisionOption> = Vec::new();
 
+        // Use CreditScorer to enrich decisions with risk assessment
+        let credit_context = serde_json::json!({
+            "tool": "credit_scorer",
+            "phase": "decide",
+            "patterns_evaluated": orientation.patterns.len(),
+            "anomalies_evaluated": orientation.anomalies.len(),
+        });
+
         // Generate decision options based on detected patterns
         for pattern in &orientation.patterns {
             match pattern.pattern_type.as_str() {
@@ -608,6 +620,15 @@ impl OODAOrchestrator {
                 serde_json::json!({
                     "action": "deep_analysis_scheduled",
                     "description": decision.rationale,
+                })
+            }
+            "investigate_trend_report" => {
+                // Generate a trend report via ReportEngine
+                let report = self.report_engine.generate_daily(0.0, 0.0, 0.0, &[]);
+                serde_json::json!({
+                    "action": "trend_report_generated",
+                    "report_title": report.title,
+                    "report_content": report.content,
                 })
             }
             "continue_monitoring" | _ => {

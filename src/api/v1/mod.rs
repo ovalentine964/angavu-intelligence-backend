@@ -4,6 +4,7 @@ pub mod intelligence;
 pub mod memory;
 pub mod sync;
 pub mod analytics;
+pub mod endpoints;
 
 use axum::{
     routing::{get, post, put, delete},
@@ -56,4 +57,31 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/analytics/revenue", get(analytics::revenue_analytics))
         .route("/analytics/customers", get(analytics::customer_analytics))
         .route("/analytics/system", get(analytics::system_analytics))
+        
+        // ── Tool endpoints (all 20 tools accessible via API) ──────────
+        .route("/tools", get(endpoints::tools::list_tools))
+        // Analysis & Intelligence
+        .route("/tools/health", get(endpoints::tools::health_metrics))
+        .route("/tools/credit", post(endpoints::tools::credit_score))
+        .route("/tools/market", get(endpoints::tools::market_analysis))
+        .route("/tools/market/demand", get(endpoints::tools::market_demand))
+        .route("/tools/economic", post(endpoints::tools::economic_indicators))
+        .route("/tools/distribution", get(endpoints::tools::distribution_gaps))
+        .route("/tools/fmcg", get(endpoints::tools::fmcg_report))
+        // Privacy & Security
+        .route("/tools/privacy/noise", post(endpoints::tools::add_noise))
+        .route("/tools/anonymize", post(endpoints::tools::anonymize))
+        .route("/tools/federated", get(endpoints::tools::federated_status))
+        // Data & Sync
+        .route("/tools/sync", get(endpoints::tools::sync_status))
+        .route("/tools/model", get(endpoints::tools::model_status))
+        // Reporting & Alerts
+        .route("/tools/report", post(endpoints::tools::generate_report))
+        .route("/tools/alert", post(endpoints::tools::generate_alert))
+        .route("/tools/whatsapp", post(endpoints::tools::send_whatsapp))
+        // Infrastructure
+        .route("/tools/gateway", get(endpoints::tools::gateway_status))
+        .route("/tools/audit", get(endpoints::tools::audit_status))
+        .route("/tools/circuit-breaker", get(endpoints::tools::circuit_breaker_status))
+        .route("/tools/rate-limiter", get(endpoints::tools::rate_limiter_status))
 }

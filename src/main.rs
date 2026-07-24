@@ -33,6 +33,7 @@ mod intelligence;
 mod memory;
 mod models;
 mod security;
+mod tools;
 mod superagent;
 mod sync;
 
@@ -79,16 +80,9 @@ async fn main() -> Result<()> {
     let db_conns = DatabaseConnections::new(&config).await?;
     info!("Database connections established");
 
-    // Initialize OODA orchestrator
-    let orchestrator = OODAOrchestrator::new(db_conns.clone()).await?;
-    info!("OODA Orchestrator initialized");
-
-    // Build application state
-    let state = Arc::new(AppState {
-        db: db_conns,
-        orchestrator: Arc::new(orchestrator),
-        config: config.clone(),
-    });
+    // Build application state with all 20 tools wired in
+    let state = AppState::new(db_conns, config.clone()).await?;
+    info!("All 20 tools + OODA orchestrator initialized");
 
     // Build router
     let app = build_router(state);
