@@ -6,3 +6,7 @@ Domain-specific intelligence for financial services:
 - FMCG Intelligence: Fast-moving consumer goods analytics
 - Distribution Intelligence: Supply chain and distribution gap analysis
 """
+
+from app.superagent.financial.module import FinancialModule
+
+__all__ = ["FinancialModule"]

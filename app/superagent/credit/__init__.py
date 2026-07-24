@@ -6,3 +6,7 @@ Credit assessment and risk profiling:
 - Risk Profiling: Multi-factor risk assessment
 - Creditworthiness: Loan eligibility and capacity analysis
 """
+
+from app.superagent.credit.module import CreditModule
+
+__all__ = ["CreditModule"]

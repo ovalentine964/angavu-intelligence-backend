@@ -24,8 +24,10 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.agents.base import AgentEvent, EventType
-from app.agents.factory import AgentFactory
+from app.agents.base import AgentEvent, AgentStatus, EventType
+from app.agents.event_bus import EventBus
+from app.agents.observability import AgentTracer
+from app.superagent.core.reasoning_engine import SuperagentEngine
 
 # Loop and long-horizon infrastructure (used in lifespan)
 from app.api.agent_loops import set_loop_infrastructure
@@ -156,75 +158,82 @@ async def lifespan(app: FastAPI):
         except (ConnectionError, OSError, TimeoutError) as e:
             logger.warning("clickhouse_init_failed", error=str(e))
 
-    # ── Multi-Agent Wiring (via AgentFactory) ─────────────────────
-    agent_factory = AgentFactory()
-    agent_infra = await agent_factory.create_all(
-        enable_loops=True,
-        enable_long_horizon=True,
-    )
-
-    # Unpack for local use and API access
-    event_bus = agent_infra.event_bus
-    tracer = agent_infra.tracer
-    agents = agent_infra.agents
-
-    # Store references on app.state for API access
-    app.state.event_bus = event_bus
-    app.state.agent_tracer = tracer
-    app.state.agents = agent_infra.agent_map
-    app.state.agent_factory = agent_factory
-    app.state.agent_infra = agent_infra
+    # ── SuperagentEngine Initialization ───────────────────────────
+    event_bus = EventBus()
+    tracer = AgentTracer()
 
     # Wire telemetry into event bus
     if telemetry.agent_metrics:
         event_bus.set_agent_metrics(telemetry.agent_metrics)
 
-    # V2: MetaAgent, domain agents, utility agents
-    if agent_infra.meta_agent:
-        app.state.meta_agent = agent_infra.meta_agent
-    if agent_infra.domain_agents:
-        app.state.domain_agents = {a.name: a for a in agent_infra.domain_agents}
-    if agent_infra.utility_agents:
-        app.state.utility_agents = {a.name: a for a in agent_infra.utility_agents}
-    if agent_infra.broadcast_protocol:
-        app.state.broadcast_protocol = agent_infra.broadcast_protocol
-    if agent_infra.p2p_protocol:
-        app.state.p2p_protocol = agent_infra.p2p_protocol
-    if agent_infra.delegation_protocol:
-        app.state.delegation_protocol = agent_infra.delegation_protocol
+    # Create and initialize the SuperagentEngine (unified brain)
+    superagent = SuperagentEngine(event_bus=event_bus, tracer=tracer)
+    await superagent.initialize()
 
-    # Store DeerFlow integration on app.state if available
-    if agent_infra.deerflow_factory:
-        app.state.deerflow_factory = agent_infra.deerflow_factory
-        app.state.deerflow_lead_agent = agent_infra.deerflow_lead_agent
-        logger.info(
-            "deerflow_agents_ready",
-            domain_agents=agent_infra.deerflow_factory.list_agents(),
-            has_lead=agent_infra.deerflow_lead_agent is not None,
-        )
+    # Store references on app.state for API access
+    app.state.event_bus = event_bus
+    app.state.agent_tracer = tracer
+    app.state.agents = {superagent.name: superagent}
+    app.state.superagent = superagent
+    app.state.meta_agent = superagent
 
     # Store loop infrastructure on app.state if available
-    if agent_infra.loop_supervisor:
-        app.state.loop_event_store = agent_infra.loop_event_store
-        app.state.loop_supervisor = agent_infra.loop_supervisor
-        app.state.loop_agents = {a.name: a for a in agent_infra.loop_agents}
+    # The SuperagentEngine replaces the loop infrastructure internally
+    # but we still wire it for the API layer's introspection endpoints
+    from app.agents.loops import EventStore
+    from app.agents.loops.ooda_loop import OODAAgent
+    from app.agents.loops.feedback_loop import FeedbackAgent
+    from app.agents.loops.human_in_the_loop import HumanInTheLoopAgent
 
-        # Wire loop infrastructure into the API
-        set_loop_infrastructure(
-            supervisor=agent_infra.loop_supervisor,
-            event_store=agent_infra.loop_event_store,
-            agents=agent_infra.loop_agents,
-        )
+    loop_event_store = EventStore()
+    ooda_agent = OODAAgent(name="SuperagentOODA", superagent=superagent)
+    feedback_agent = FeedbackAgent(name="SuperagentFeedback", superagent=superagent)
+    hitl_agent = HumanInTheLoopAgent(name="SuperagentHITL")
+    loop_agents = [ooda_agent, feedback_agent, hitl_agent]
 
-    # Store long-horizon infrastructure if available
-    if agent_infra.intelligence_flows:
-        app.state.intelligence_flows = agent_infra.intelligence_flows
-        app.state.research_orchestrator = agent_infra.research_orchestrator
+    class _LoopSupervisor:
+        """Simple loop supervisor for API introspection."""
+        def __init__(self, agents, event_store):
+            self.agents = agents
+            self.event_store = event_store
+            self._history = []
 
-        set_long_horizon_infrastructure(
-            intelligence_flows=agent_infra.intelligence_flows,
-            research_orchestrator=agent_infra.research_orchestrator,
-        )
+        async def supervise(self, task: str, context: dict = None):
+            result = {"task": task, "status": "completed", "agents": []}
+            for agent in self.agents:
+                try:
+                    agent_result = await agent.execute({"task": task, **(context or {})});
+                    result["agents"].append({"name": agent.name, "success": True})
+                except Exception as e:
+                    result["agents"].append({"name": agent.name, "error": str(e)})
+            self._history.append(result)
+            return result
+
+        def get_stats(self):
+            return {"total_supervised": len(self._history), "agents": [a.name for a in self.agents]}
+
+    loop_supervisor = _LoopSupervisor(loop_agents, loop_event_store)
+
+    app.state.loop_event_store = loop_event_store
+    app.state.loop_supervisor = loop_supervisor
+    app.state.loop_agents = {a.name: a for a in loop_agents}
+
+    set_loop_infrastructure(
+        supervisor=loop_supervisor,
+        event_store=loop_event_store,
+        agents=loop_agents,
+    )
+
+    # Store long-horizon infrastructure
+    from app.agents.long_horizon import LongHorizonOrchestrator
+    research_orchestrator = LongHorizonOrchestrator(name="SuperagentResearch")
+    app.state.intelligence_flows = None
+    app.state.research_orchestrator = research_orchestrator
+
+    set_long_horizon_infrastructure(
+        intelligence_flows=None,
+        research_orchestrator=research_orchestrator,
+    )
 
     # Initialize Autonomous Orchestrator
     try:
@@ -305,8 +314,7 @@ async def lifespan(app: FastAPI):
     except (ImportError, AttributeError) as exc:
         logger.warning("fl_verification_setup_failed", error=str(exc))
 
-    # Loop and long-horizon infrastructure is now managed by AgentFactory
-    # (see agent_factory.create_all() above)
+    # Loop and long-horizon infrastructure is now managed by SuperagentEngine
 
     # Initialize MCP server
     from app.mcp.server import get_mcp_server
@@ -413,9 +421,10 @@ async def lifespan(app: FastAPI):
         app.state.telemetry.shutdown()
         logger.info("telemetry_shutdown")
 
-    # Graceful agent shutdown via factory (reverse order)
-    await agent_factory.shutdown()
-    logger.info("agents_shutdown_complete")
+    # Graceful agent shutdown
+    if hasattr(app.state, 'superagent'):
+        app.state.superagent.status = AgentStatus.STOPPED
+        logger.info("superagent_shutdown_complete")
 
     if settings.has_clickhouse:
         await close_clickhouse()

@@ -6,3 +6,7 @@ Privacy-preserving distributed learning:
 - Federated Training: Decentralized model updates
 - Privacy Guarantees: Differential privacy in model updates
 """
+
+from app.superagent.learning.module import LearningModule
+
+__all__ = ["LearningModule"]

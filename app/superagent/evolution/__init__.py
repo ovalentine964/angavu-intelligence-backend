@@ -6,3 +6,7 @@ Continuous learning and adaptation:
 - Strategy Adaptation: Automatic parameter tuning
 - Feedback Integration: Learning from outcomes and corrections
 """
+
+from app.superagent.evolution.module import EvolutionModule
+
+__all__ = ["EvolutionModule"]
