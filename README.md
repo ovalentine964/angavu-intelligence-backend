@@ -2,9 +2,11 @@
 
 # ⚙️ Angavu Intelligence Backend
 
-### Revenue Intelligence API Platform for Africa's Informal Economy
+### AI-Powered CFO for Informal Workers — Backend Platform
 
-**Rust-primary backend powering 15 revenue intelligence engines with superagent orchestration, post-quantum cryptography, and privacy-first data processing.**
+**Rust-primary backend powering Msaidizi, the CFO for 600 million informal workers.** 15 revenue intelligence engines with superagent orchestration, post-quantum cryptography, and privacy-first data processing.
+
+> Msaidizi is not an assistant — it's a **CFO** that delivers daily briefings, cash flow forecasting, savings advice, and credit building for workers who never had one.
 
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
 [![Axum](https://img.shields.io/badge/Axum-Web_Framework-blue.svg)](https://github.com/tokio-rs/axum)
@@ -20,7 +22,7 @@
 
 ---
 
-> Rust-primary backend for the Angavu superagent-powered revenue intelligence platform.
+> Rust-primary backend for the Angavu superagent-powered CFO platform for informal workers.
 > Python is used **only** for LLM inference — all business logic, APIs, and data processing run in Rust.
 
 ---
@@ -88,25 +90,27 @@
 
 ---
 
-## Revenue Engines (15 Products)
+## Revenue Engines (15 CFO Capabilities)
 
-| Engine | Description |
+Msaidizi's backend powers 15 intelligence engines that work together as a complete CFO system for informal workers:
+
+| Engine | CFO Capability | Description |
 |--------|-------------|
-| **Soko Pulse** | FMCG demand forecasting |
-| **Alama Score** | Credit scoring (300-850) |
-| **Angavu Pulse** | Government economic intelligence |
-| **Distribution Intel** | Supply chain optimization |
-| **FMCG Intelligence** | Consumer goods analytics |
-| **Market Heat Maps** | Geographic demand visualization |
-| **Price Index** | Real-time pricing intelligence |
-| **Trade Routes** | Logistics optimization |
-| **Vendor Score** | Supplier reliability metrics |
-| **Consumer Pulse** | Demand pattern analysis |
-| **Inventory Optimizer** | Stock level intelligence |
-| **Cash Flow Predictor** | Working capital forecasting |
-| **Risk Radar** | Business risk assessment |
-| **Growth Atlas** | Market expansion intelligence |
-| **Sector Benchmark** | Industry comparison metrics |
+| **Soko Pulse** | Market Intelligence | FMCG demand forecasting |
+| **Alama Score** | Credit Management | Credit scoring (300-850) |
+| **Angavu Pulse** | Economic Intelligence | Government economic intelligence |
+| **Distribution Intel** | Supply Chain CFO | Supply chain optimization |
+| **FMCG Intelligence** | Consumer Insights | Consumer goods analytics |
+| **Market Heat Maps** | Market Visualization | Geographic demand visualization |
+| **Price Index** | Pricing Intelligence | Real-time pricing intelligence |
+| **Trade Routes** | Logistics Optimization | Logistics optimization |
+| **Vendor Score** | Supplier Management | Supplier reliability metrics |
+| **Consumer Pulse** | Demand Forecasting | Demand pattern analysis |
+| **Inventory Optimizer** | Working Capital | Stock level intelligence |
+| **Cash Flow Predictor** | Cash Flow Forecasting | Working capital forecasting |
+| **Risk Radar** | Risk Assessment | Business risk assessment |
+| **Growth Atlas** | Strategic Planning | Market expansion intelligence |
+| **Sector Benchmark** | Performance Benchmarking | Industry comparison metrics |
 
 ---
 
@@ -435,6 +439,6 @@ Proprietary — Angavu Intelligence Team
 
 **Built with ❤️ for Africa's informal economy**
 
-*Intelligence infrastructure for the continent's $1.2 trillion informal sector.*
+*Free CFO for 600 million informal workers. Intelligence infrastructure for the continent's $1.2 trillion informal sector.*
 
 </div>
