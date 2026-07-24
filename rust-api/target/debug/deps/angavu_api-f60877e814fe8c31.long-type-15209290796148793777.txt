@@ -1,0 +1,2 @@
+fn(State<AppState>, AuthContext, axum::extract::Path<uuid::Uuid>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {get_score}
+fn(State<AppState>, AuthContext, axum::extract::Path<uuid::Uuid>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {get_score}: Handler<_, _>

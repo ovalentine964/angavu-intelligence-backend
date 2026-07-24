@@ -26,6 +26,7 @@ pub fn routes() -> Router<AppState> {
 
     // Protected routes (auth required)
     let protected_routes = Router::new()
+        .merge(auth::protected_routes())
         .merge(transactions::routes())
         .merge(workers::routes())
         .merge(intelligence::routes())

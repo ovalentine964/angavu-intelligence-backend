@@ -1,4 +1,4 @@
-use axum::{Json, Router, routing::{get, post}};
+use axum::{Json, Router, routing::post};
 use crate::error::AppResult;
 use crate::middleware::AuthContext;
 use crate::AppState;
@@ -12,7 +12,7 @@ pub fn routes() -> Router<AppState> {
 /// POST /goals
 async fn create_goal(
     auth_ctx: AuthContext,
-    Json(body): Json<serde_json::Value>,
+    Json(_body): Json<serde_json::Value>,
 ) -> AppResult<Json<serde_json::Value>> {
     tracing::info!(user_id = %auth_ctx.user_id, "Create goal requested");
     Ok(Json(serde_json::json!({"status": "not_implemented"})))

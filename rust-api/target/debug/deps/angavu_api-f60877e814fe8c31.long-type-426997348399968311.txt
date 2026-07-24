@@ -1,0 +1,2 @@
+fn(State<AppState>, AuthContext, axum::Json<VerifyOutcomeRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {verify_outcome}
+fn(State<AppState>, AuthContext, axum::Json<VerifyOutcomeRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {verify_outcome}: Handler<_, _>

@@ -12,7 +12,7 @@ pub fn routes() -> Router<AppState> {
 /// POST /sync/batch
 async fn batch_sync(
     auth_ctx: AuthContext,
-    Json(body): Json<serde_json::Value>,
+    Json(_body): Json<serde_json::Value>,
 ) -> AppResult<Json<serde_json::Value>> {
     tracing::info!(user_id = %auth_ctx.user_id, "Batch sync requested");
     Ok(Json(serde_json::json!({

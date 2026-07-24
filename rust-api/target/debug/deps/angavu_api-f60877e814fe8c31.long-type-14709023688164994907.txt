@@ -1,0 +1,2 @@
+fn(State<AppState>, AuthContext, axum::extract::Path<uuid::Uuid>, axum::Json<worker::UpdateWorkerRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {update_worker}
+fn(State<AppState>, AuthContext, axum::extract::Path<uuid::Uuid>, axum::Json<worker::UpdateWorkerRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {update_worker}: Handler<_, _>

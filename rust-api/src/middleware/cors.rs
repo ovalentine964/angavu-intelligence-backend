@@ -10,7 +10,7 @@ pub fn cors_layer(allowed_origins: &[String]) -> CorsLayer {
 
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods(AllowMethods::vec(vec![
+        .allow_methods(AllowMethods::list(vec![
             Method::GET,
             Method::POST,
             Method::PUT,
@@ -18,7 +18,7 @@ pub fn cors_layer(allowed_origins: &[String]) -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ]))
-        .allow_headers(AllowHeaders::vec(vec![
+        .allow_headers(AllowHeaders::list(vec![
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,

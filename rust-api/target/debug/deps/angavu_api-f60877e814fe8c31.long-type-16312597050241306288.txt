@@ -1,0 +1,2 @@
+fn(AuthContext) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {credit_report}
+fn(AuthContext) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {credit_report}: Handler<_, _>

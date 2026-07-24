@@ -1,0 +1,2 @@
+fn(State<AppState>, AuthContext, axum::Json<transaction::CreateTransactionRequest>) -> impl std::future::Future<Output = Result<(reqwest::StatusCode, axum::Json<JsonValue>), AppError>> {create_transaction}
+fn(State<AppState>, AuthContext, axum::Json<transaction::CreateTransactionRequest>) -> impl std::future::Future<Output = Result<(reqwest::StatusCode, axum::Json<JsonValue>), AppError>> {create_transaction}: Handler<_, _>

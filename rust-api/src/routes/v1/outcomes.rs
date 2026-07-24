@@ -53,7 +53,7 @@ fn default_consent_scope() -> String {
 async fn update_consent(
     State(_state): State<AppState>,
     auth_ctx: AuthContext,
-    Json(body): ConsentRequest,
+    Json(body): Json<ConsentRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
     let valid_scopes = ["all", "revenue", "cost", "efficiency"];
     if !valid_scopes.contains(&body.scope.as_str()) {

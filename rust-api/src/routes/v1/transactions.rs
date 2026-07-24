@@ -38,7 +38,7 @@ pub fn routes() -> Router<AppState> {
     tag = "transactions"
 )]
 async fn create_transaction(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     auth_ctx: AuthContext,
     Json(body): Json<CreateTransactionRequest>,
 ) -> AppResult<(StatusCode, Json<serde_json::Value>)> {

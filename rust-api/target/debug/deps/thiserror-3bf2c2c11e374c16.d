@@ -1,0 +1,14 @@
+/home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/deps/thiserror-3bf2c2c11e374c16.d: /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/lib.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/aserror.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/display.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/var.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/private.rs /home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/build/thiserror-065d38539fa57520/out/private.rs
+
+/home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/deps/libthiserror-3bf2c2c11e374c16.rlib: /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/lib.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/aserror.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/display.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/var.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/private.rs /home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/build/thiserror-065d38539fa57520/out/private.rs
+
+/home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/deps/libthiserror-3bf2c2c11e374c16.rmeta: /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/lib.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/aserror.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/display.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/var.rs /home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/private.rs /home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/build/thiserror-065d38539fa57520/out/private.rs
+
+/home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/lib.rs:
+/home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/aserror.rs:
+/home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/display.rs:
+/home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/var.rs:
+/home/work/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.19/src/private.rs:
+/home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/build/thiserror-065d38539fa57520/out/private.rs:
+
+# env-dep:OUT_DIR=/home/work/.openclaw/workspace/angavu-intelligence-backend/rust-api/target/debug/build/thiserror-065d38539fa57520/out

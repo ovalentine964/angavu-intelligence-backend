@@ -7,7 +7,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 
 /// Unified API error response.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ApiError {
     /// HTTP status code
     pub status: u16,
@@ -21,7 +21,7 @@ pub struct ApiError {
 }
 
 /// Field-level validation error.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct FieldError {
     /// Field name that failed validation
     pub field: String,

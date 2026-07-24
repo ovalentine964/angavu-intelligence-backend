@@ -1,6 +1,6 @@
 use axum::{
-    extract::Request,
-    http::header,
+    extract::{FromRequestParts, Request},
+    http::{header, request::Parts},
     middleware::Next,
     response::Response,
 };
@@ -33,6 +33,29 @@ pub struct AuthContext {
     pub user_id: Uuid,
     pub email: String,
     pub role: String,
+}
+
+/// Implement `FromRequestParts` so `AuthContext` can be used directly
+/// as a handler parameter. The auth middleware must have run first to
+/// insert it into request extensions.
+#[axum::async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for AuthContext {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<AuthContext>()
+            .cloned()
+            .ok_or_else(|| {
+                AppError::Unauthorized(
+                    "Authentication required".to_string(),
+                )
+            })
+    }
 }
 
 /// Axum middleware that validates JWT from the Authorization header.

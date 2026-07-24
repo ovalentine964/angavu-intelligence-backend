@@ -1,0 +1,2 @@
+fn(AuthContext, axum::Json<models::intelligence::IntelligenceQueryRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {routes::v1::intelligence::query}
+fn(AuthContext, axum::Json<models::intelligence::IntelligenceQueryRequest>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {routes::v1::intelligence::query}: Handler<_, _>

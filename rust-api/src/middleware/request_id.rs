@@ -45,14 +45,4 @@ impl std::fmt::Display for RequestId {
     }
 }
 
-/// Build the request ID middleware layer.
-pub fn request_id_layer() -> axum::middleware::FromFnLayer<
-    impl Fn(
-        Request,
-        Next,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Response> + Send>,
-    > + Clone + Send + 'static,
-> {
-    axum::middleware::from_fn(request_id_middleware)
-}
+

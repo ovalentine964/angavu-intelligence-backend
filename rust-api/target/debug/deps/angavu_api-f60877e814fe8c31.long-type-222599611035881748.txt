@@ -1,0 +1,2 @@
+fn(State<AppState>, AuthContext, ConsentRequest) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {update_consent}
+fn(State<AppState>, AuthContext, ConsentRequest) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {update_consent}: Handler<_, _>

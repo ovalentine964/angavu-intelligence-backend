@@ -12,7 +12,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use config::AppConfig;
-use middleware::{cors_layer, rate_limit_layer, request_id_layer, RateLimiter};
+use middleware::{cors_layer, rate_limit_layer, RateLimiter};
 
 /// Shared application state available to all handlers via `State(state)`.
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ async fn main() {
     let app = routes::api_routes()
         .with_state(state)
         .layer(cors_layer(&config.cors_allowed_origins))
-        .layer(request_id_layer())
+        .layer(axum::middleware::from_fn(middleware::request_id::request_id_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn(inject_jwt_secret));
 

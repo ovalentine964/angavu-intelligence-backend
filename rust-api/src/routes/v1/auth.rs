@@ -12,12 +12,17 @@ use crate::middleware::auth::{self, AuthContext};
 use crate::models::user::*;
 use crate::AppState;
 
-/// Auth routes.
-pub fn routes() -> Router {
+/// Public auth routes (no authentication required).
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
         .route("/auth/refresh", post(refresh_token))
+}
+
+/// Protected auth routes (authentication required).
+pub fn protected_routes() -> Router<AppState> {
+    Router::new()
         .route("/auth/me", get(profile))
 }
 

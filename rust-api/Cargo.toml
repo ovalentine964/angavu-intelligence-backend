@@ -37,8 +37,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = { version = "4", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "7", features = ["axum"] }
 
-# HTTP client (for LLM proxy calls)
-reqwest = { version = "0.12", features = ["json"] }
+# HTTP client (for LLM proxy calls) — uses rustls to avoid native OpenSSL linkage
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Error handling
 thiserror = "1"

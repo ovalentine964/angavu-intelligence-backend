@@ -12,7 +12,7 @@ pub fn routes() -> Router<AppState> {
 /// POST /voice/transcribe
 async fn transcribe(
     auth_ctx: AuthContext,
-    Json(body): Json<serde_json::Value>,
+    Json(_body): Json<serde_json::Value>,
 ) -> AppResult<Json<serde_json::Value>> {
     tracing::info!(user_id = %auth_ctx.user_id, "Voice transcription requested");
     Ok(Json(serde_json::json!({
