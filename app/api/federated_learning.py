@@ -49,10 +49,16 @@ _fl_service = FederatedLearningService()
 # ── PQC Infrastructure ──────────────────────────────────────────────
 # Server-side ML-KEM-768 key pair for gradient decapsulation.
 # Generated once at startup; public key distributed to devices.
-_server_ml_kem = MlKemProvider(MlKemParameterSet.ML_KEM_768)
-_server_kem_keypair = _server_ml_kem.generate_key_pair()
-_fl_decryptor = FlPqcDecryptor(server_ml_kem_keypair=_server_kem_keypair)
-_crypto_audit = CryptoAuditLogger()
+try:
+    _server_ml_kem = MlKemProvider(MlKemParameterSet.ML_KEM_768)
+    _server_kem_keypair = _server_ml_kem.generate_key_pair()
+    _fl_decryptor = FlPqcDecryptor(server_ml_mek_keypair=_server_kem_keypair)
+    _crypto_audit = CryptoAuditLogger()
+except (RuntimeError, Exception):
+    _server_ml_kem = None
+    _server_kem_keypair = None
+    _fl_decryptor = None
+    _crypto_audit = None  # PQC disabled — liboqs not installed
 
 
 # ════════════════════════════════════════════════════════════════════

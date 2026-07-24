@@ -506,7 +506,7 @@ app.state.limiter = limiter
 # Prometheus metrics middleware
 from app.infrastructure.metrics import create_metrics_middleware
 
-app.middleware("http")(create_metrics_middleware())
+create_metrics_middleware(app)
 
 
 # Security headers middleware — uses strict CSP, no deprecated headers

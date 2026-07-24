@@ -3,9 +3,6 @@ Credit Intelligence Module
 
 Wraps the existing AlamaScore service into the superagent architecture.
 Provides credit scoring, risk profiling, and creditworthiness assessment.
-
-Existing service wrapped:
-- app.services.intelligence.alama_score — Transaction-based credit scoring
 """
 
 from __future__ import annotations
@@ -35,19 +32,19 @@ class CreditModule:
             return
 
         try:
-            from app.services.intelligence.alama_score import AlamaScoreService
-            self._alama_score = AlamaScoreService()
-        except (ImportError, Exception) as e:
+            from app.db.database import async_session_factory
+            if async_session_factory:
+                session = async_session_factory()
+                from app.services.intelligence.alama_score import AlamaScoreService
+                self._alama_score = AlamaScoreService(db=session)
+                logger.info("alama_score_loaded")
+        except (ImportError, AttributeError, TypeError) as e:
             logger.warning("alama_score_load_failed", error=str(e))
 
         self._initialized = True
 
     async def observe(self, data: dict) -> dict:
-        """
-        Observe: Gather credit-relevant data.
-
-        Extracts transaction patterns relevant to creditworthiness.
-        """
+        """Gather credit-relevant data."""
         await self._ensure_initialized()
 
         enrichment = {
@@ -55,7 +52,6 @@ class CreditModule:
             "indicators": [],
         }
 
-        # Analyze transaction patterns for credit indicators
         if "transactions" in data:
             txns = data["transactions"]
             amounts = [t.get("amount", 0) for t in txns if t.get("amount")]
@@ -67,7 +63,6 @@ class CreditModule:
                     "count": len(amounts),
                 })
 
-                # Consistency indicator
                 if len(amounts) >= 10:
                     avg = total / len(amounts)
                     variance = sum((a - avg) ** 2 for a in amounts) / len(amounts)
@@ -79,11 +74,7 @@ class CreditModule:
         return enrichment
 
     async def orient(self, observation: dict) -> dict:
-        """
-        Orient: Assess credit situation.
-
-        Analyzes credit indicators to determine risk profile.
-        """
+        """Assess credit situation."""
         analysis = {
             "risk_profile": "moderate",
             "creditworthiness": "assessing",
@@ -92,9 +83,10 @@ class CreditModule:
         indicators = observation.get("enrichment", {}).get("indicators", [])
         for ind in indicators:
             if ind.get("type") == "transaction_volume":
-                if ind.get("value", 0) > 100000:
+                value = ind.get("value", 0)
+                if value > 100000:
                     analysis["volume_tier"] = "high"
-                elif ind.get("value", 0) > 30000:
+                elif value > 30000:
                     analysis["volume_tier"] = "medium"
                 else:
                     analysis["volume_tier"] = "low"
@@ -102,19 +94,24 @@ class CreditModule:
         return analysis
 
     async def execute(self, decision: dict) -> dict:
-        """
-        Execute credit intelligence operations.
-
-        Routes to AlamaScore for credit assessment.
-        """
+        """Execute credit intelligence operations."""
         await self._ensure_initialized()
 
+        data = decision.get("data", decision.get("params", {}))
         result = {
             "module": "credit",
             "status": "completed",
         }
 
-        if self._alama_score:
+        if self._alama_score and "worker_id" in data:
+            try:
+                score = await self._alama_score.compute_score(
+                    worker_id=data["worker_id"],
+                )
+                result["alama_score"] = score
+            except (ValueError, KeyError, ConnectionError) as e:
+                result["alama_score_error"] = str(e)
+        elif self._alama_score:
             result["alama_score_available"] = True
         else:
             result["alama_score_available"] = False

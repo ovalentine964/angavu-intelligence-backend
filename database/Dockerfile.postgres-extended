@@ -1,0 +1,26 @@
+# =============================================================
+# Angavu Intelligence — PostgreSQL with pgvector + TimescaleDB
+# =============================================================
+# Custom image that includes both pgvector (for vector search)
+# and TimescaleDB (for time-series data).
+# =============================================================
+FROM pgvector/pgvector:pg16
+
+# Install TimescaleDB
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    && curl -L https://packagecloud.io/timescale/timescaledb/gpgkey | \
+       gpg --dearmor -o /usr/share/keyrings/timescale-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/timescale-archive-keyring.gpg] \
+       https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" \
+       > /etc/apt/sources.list.d/timescaledb.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends timescaledb-2-postgresql-16 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# TimescaleDB tuning (loaded at startup)
+RUN echo "shared_preload_libraries = 'timescaledb'" >> /usr/share/postgresql/16/postgresql.conf.sample

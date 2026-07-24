@@ -2,8 +2,9 @@
 # Angavu Intelligence — Main Docker Compose
 # Full stack for development / dedicated servers (8GB+ RAM)
 #
-# Memory budget (~11.5GB used):
-#   postgres:    2G
+# Memory budget (~11.6GB used):
+#   postgres:    2G        (pgvector + TimescaleDB)
+#   pgbouncer:   128M      (connection pooler)
 #   redis:       512M
 #   clickhouse:  2G
 #   backend:     2G
@@ -12,7 +13,7 @@
 #   whisper:     2G
 #   nginx:       128M
 #   ─────────────────
-#   Total:       ~11.1G
+#   Total:       ~11.2G
 #
 # Usage:
 #   docker compose up -d
@@ -20,9 +21,11 @@
 # =============================================================
 
 services:
-  # ─── PostgreSQL — Economic Data ───────────────────────────
+  # ─── PostgreSQL — Economic Data + pgvector + TimescaleDB ──
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: ./database
+      dockerfile: Dockerfile.postgres-extended
     container_name: msaidizi-postgres
     environment:
       - POSTGRES_DB=msaidizi
@@ -31,6 +34,22 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/migrations/001_enable_pgvector.sql:/docker-entrypoint-initdb.d/02-pgvector.sql
+      - ./database/migrations/002_enable_timescaledb.sql:/docker-entrypoint-initdb.d/03-timescaledb.sql
+      - ./database/migrations/003_table_partitioning.sql:/docker-entrypoint-initdb.d/04-partitioning.sql
+      - ./database/migrations/004_connection_pooling_and_replicas.sql:/docker-entrypoint-initdb.d/05-pooling.sql
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=timescaledb
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=5
+      - -c
+      - max_replication_slots=5
+      - -c
+      - max_connections=200
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -38,7 +57,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -50,6 +69,93 @@ services:
     restart: unless-stopped
     networks:
       - biashara-net
+
+  # ─── PgBouncer — Connection Pooler ───────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: msaidizi-pgbouncer
+    environment:
+      - DATABASE_URL=postgresql://msaidizi:${DB_PASSWORD}@postgres:5432/msaidizi
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=25
+      - MIN_POOL_SIZE=5
+      - SERVER_IDLE_TIMEOUT=300
+      - SERVER_CONNECT_TIMEOUT=5
+      - SERVER_CHECK_DELAY=10
+      - SERVER_CHECK_QUERY=SELECT 1
+      - LOG_CONNECTIONS=1
+      - LOG_DISCONNECTIONS=1
+    volumes:
+      - ./config/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./config/pgbouncer_userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "127.0.0.1:6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 32M
+          cpus: '0.1'
+    restart: unless-stopped
+    networks:
+      - biashara-net
+
+  # ─── PostgreSQL Read Replica ──────────────────────────────
+  # Uncomment when ready to deploy a read replica.
+  # Requires: primary running with wal_level=replica (already set above).
+  #
+  # To set up:
+  #   1. Create replication slot on primary:
+  #      SELECT pg_create_physical_replication_slot('replica_1', true);
+  #   2. Uncomment this service
+  #   3. Run: docker compose up -d postgres-replica
+  #
+  # postgres-replica:
+  #   image: postgres:16-alpine
+  #   container_name: msaidizi-postgres-replica
+  #   environment:
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+  #   volumes:
+  #     - postgres-replica-data:/var/lib/postgresql/data
+  #   command:
+  #     - bash
+  #     - -c
+  #     - |
+  #       # Wait for primary
+  #       until pg_isready -h postgres -p 5432 -U msaidizi; do sleep 1; done
+  #       # If data dir is empty, do base backup from primary
+  #       if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+  #         pg_basebackup -h postgres -U msaidizi_replication -D /var/lib/postgresql/data -Fp -Xs -P -R
+  #       fi
+  #       exec postgres
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "127.0.0.1:5433:5432"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 1G
+  #         cpus: '0.5'
+  #     reservations:
+  #       memory: 256M
+  #       cpus: '0.1'
+  #   restart: unless-stopped
+  #   networks:
+  #     - biashara-net
 
   # ─── Redis — Caching & Queues ────────────────────────────
   redis:
@@ -307,6 +413,7 @@ networks:
 
 volumes:
   postgres-data:
+  # postgres-replica-data:  # Uncomment when read replica is deployed
   redis-data:
   clickhouse-data:
   openwa-data:

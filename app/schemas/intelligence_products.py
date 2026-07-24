@@ -97,7 +97,7 @@ class PriceIntelligence(BaseModel):
 class SokoPulseResponse(IntelligenceResponse):
     """Response for Soko Pulse demand forecasting."""
 
-    product = "soko_pulse"
+    product: str = "soko_pulse"
     region: str
     product_category: str
     product_name: str = "all"
@@ -171,7 +171,7 @@ class BusinessFormation(BaseModel):
 class BiasharaPulseResponse(IntelligenceResponse):
     """Response for Angavu Pulse MSME Activity Index."""
 
-    product = "biashara_pulse"
+    product: str = "biashara_pulse"
     region: str
     region_type: str
     time_period: str
@@ -257,7 +257,7 @@ class RiskIndicators(BaseModel):
 class AlamaScoreResponse(IntelligenceResponse):
     """Response for Alama credit scoring."""
 
-    product = "alama_score"
+    product: str = "alama_score"
     business_hash: str
     business_type: str
     market_id: str | None = None
@@ -355,7 +355,7 @@ class Barrier(BaseModel):
 class JamiiInsightsResponse(IntelligenceResponse):
     """Response for Jamii Insights financial inclusion."""
 
-    product = "jamii_insights"
+    product: str = "jamii_insights"
     region: str
     demographic_segment: str | None = None
     time_period: str
@@ -431,7 +431,7 @@ class SectorTaxBreakdown(BaseModel):
 class TaxBaseResponse(IntelligenceResponse):
     """Response for Tax Base Estimation."""
 
-    product = "tax_base_estimation"
+    product: str = "tax_base_estimation"
     region: str
     region_type: str
     sector: str | None = None
@@ -508,7 +508,7 @@ class DistributionCoverage(BaseModel):
 class DistributionGapResponse(IntelligenceResponse):
     """Response for Distribution Gap Analysis."""
 
-    product = "distribution_gap"
+    product: str = "distribution_gap"
     product_category: str
     product_name: str = "all"
     region: str

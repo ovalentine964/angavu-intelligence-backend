@@ -19,6 +19,7 @@ Design principles:
 - Purpose verification (research: <8% default with verification)
 """
 
+import datetime as _dt
 from datetime import date
 from uuid import UUID
 
@@ -59,8 +60,8 @@ class LoanRecordRequest(BaseModel):
         description="Interest rate as decimal (0.15 = 15%)",
         examples=[0.15],
     )
-    start_date: date = Field(..., description="Loan disbursement date")
-    end_date: date = Field(..., description="Expected full repayment date")
+    start_date: _dt.date = Field(..., description="Loan disbursement date")
+    end_date: _dt.date = Field(..., description="Expected full repayment date")
     purpose_subcategory: str | None = Field(
         None,
         description="Subcategory: stock, equipment, medical, school_fees, etc.",
@@ -90,7 +91,7 @@ class RepaymentRequest(BaseModel):
     """Request to record a repayment."""
 
     amount: float = Field(..., gt=0, description="Repayment amount")
-    date: date = Field(..., description="Date of repayment")
+    repayment_date: _dt.date = Field(..., description="Date of repayment")
     method: str = Field(
         "manual",
         description="Payment method: manual, mpesa, cash, auto_set_aside, chama",
@@ -173,7 +174,7 @@ async def record_repayment(
             db=db,
             loan_id=loan_id,
             amount=request.amount,
-            date=request.date,
+            date=request.repayment_date,
             method=request.method,
             notes=request.notes,
             nudge_type=request.nudge_type,

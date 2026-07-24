@@ -18,7 +18,11 @@ See: https://csrc.nist.gov/pubs/fips/204/final
 
 from enum import Enum
 
-import oqs
+try:
+    import oqs
+    _HAS_LIBOQS = True
+except (ImportError, Exception):
+    _HAS_LIBOQS = False
 
 from .crypto_provider import CryptoKeyPair, CryptoProvider
 
@@ -59,6 +63,8 @@ class MlDsaProvider(CryptoProvider):
         self._oqs_name = _PARAM_TO_OQS[parameter_set]
 
         # Verify liboqs supports this algorithm
+        if not _HAS_LIBOQS:
+            raise RuntimeError("liboqs not installed.")
         enabled_sigs = oqs.get_enabled_sig_mechanisms()
         if self._oqs_name not in enabled_sigs:
             raise RuntimeError(

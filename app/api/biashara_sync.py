@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_user
 from app.db.database import get_db
 from app.models.transaction import Transaction
 from app.services.intelligence_delivery import IntelligenceDelivery

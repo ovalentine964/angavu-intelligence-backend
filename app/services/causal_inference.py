@@ -982,3 +982,22 @@ class RegressionDiscontinuity:
 iv_2sls = InstrumentalVariables2SLS()
 did = DifferenceInDifferences()
 rdd = RegressionDiscontinuity()
+
+
+class CausalInferenceEngine:
+    """Unified interface for causal inference methods."""
+    
+    def __init__(self, db=None):
+        self.db = db
+        self.iv = InstrumentalVariables2SLS()
+        self.did = DifferenceInDifferences()
+        self.rdd = RegressionDiscontinuity()
+    
+    async def run_iv(self, data, outcome_col, treatment_col, instrument_col):
+        return self.iv.estimate(data, outcome_col, treatment_col, instrument_col)
+    
+    async def run_did(self, data, outcome_col, treatment_col, time_col, treatment_time):
+        return self.did.estimate(data, outcome_col, treatment_col, time_col, treatment_time)
+    
+    async def run_rdd(self, data, outcome_col, running_col, cutoff):
+        return self.rdd.estimate(data, outcome_col, running_col, cutoff)

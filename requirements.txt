@@ -51,6 +51,8 @@ opentelemetry-semantic-conventions>=0.46b0
 pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
+# Dependency vulnerability scanning
+pip-audit>=2.7.0
 # Utilities
 python-dotenv==1.2.2
 python-dateutil==2.9.0.post0

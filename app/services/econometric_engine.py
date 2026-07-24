@@ -2162,3 +2162,15 @@ var_model = VARModel()
 cointegration = CointegrationTester()
 did = DifferenceInDifferences()
 rdd = RegressionDiscontinuity()
+
+
+class EconometricEngine:
+    """Unified interface for econometric methods."""
+    
+    def __init__(self, db=None):
+        self.db = db
+        self.ols = OLSRegression()
+        self.logit = LogitModel()
+        self.index = IndexNumberBuilder()
+        self.forecast = TimeSeriesForecaster()
+        self.heckman = HeckmanCorrection()

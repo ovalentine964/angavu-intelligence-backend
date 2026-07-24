@@ -113,6 +113,19 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     LOG_LEVEL: str = "INFO"
 
+    # === Secret Rotation ===
+    SECRET_ROTATION_ENABLED: bool = True
+    SECRET_ROTATION_ENCRYPTION_DAYS: int = 90
+    SECRET_ROTATION_JWT_DAYS: int = 30
+    SECRET_ROTATION_WEBHOOK_DAYS: int = 90
+    SECRET_ROTATION_API_KEY_DAYS: int = 180
+    SECRET_ROTATION_GRACE_HOURS: int = 24
+    SECRET_ROTATION_ENDPOINT_ENABLED: bool = True
+
+    # === Prompt Guard ===
+    PROMPT_GUARD_ENABLED: bool = True
+    PROMPT_GUARD_STRICT: bool = False
+
     # === Agent Scaling ===
     # Controls max concurrent agents and event bus queue depth
     AGENT_MAX_CONCURRENT: int = 50         # Max agents running simultaneously

@@ -19,7 +19,10 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-import polars as pl
+try:
+    import polars as pl
+except ImportError:
+    pl = None  # type: ignore[assignment]
 import structlog
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -710,6 +713,13 @@ async def get_time_to_goal(
         }
 
     # Build Polars DataFrame for analysis
+    if pl is None:
+        return {
+            "status": "unavailable",
+            "message_sw": "Huduma ya uchambuzi haipatikani.",
+            "message_en": "Analytics service unavailable (polars not installed).",
+        }
+
     data = {
         "date": [e.entry_date for e in entries],
         "amount": [float(e.amount) for e in entries],
@@ -860,6 +870,13 @@ async def get_obstacle_analysis(
         }
 
     # Build Polars DataFrame
+    if pl is None:
+        return {
+            "status": "unavailable",
+            "message_sw": "Huduma ya uchambuzi haipatikani.",
+            "message_en": "Analytics service unavailable (polars not installed).",
+        }
+
     data = {
         "date": [e.entry_date for e in entries],
         "amount": [float(e.amount) for e in entries],

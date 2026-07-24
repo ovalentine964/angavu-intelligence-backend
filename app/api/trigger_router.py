@@ -17,19 +17,31 @@ import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.triggers.sms_trigger import SMSTrigger
-from app.triggers.ussd_trigger import USSDTrigger
-from app.triggers.voice_trigger import VoiceTrigger
-from app.triggers.whatsapp_trigger import WhatsAppTrigger
+try:
+    from app.triggers.sms_trigger import SMSTrigger
+    from app.triggers.ussd_trigger import USSDTrigger
+    from app.triggers.voice_trigger import VoiceTrigger
+    from app.triggers.whatsapp_trigger import WhatsAppTrigger
+except ImportError:
+    SMSTrigger = None
+    USSDTrigger = None
+    VoiceTrigger = None
+    WhatsAppTrigger = None
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/triggers", tags=["Multi-Channel Triggers"])
 
 # Singleton trigger instances
-_whatsapp_trigger = WhatsAppTrigger()
-_ussd_trigger = USSDTrigger()
-_sms_trigger = SMSTrigger()
-_voice_trigger = VoiceTrigger()
+try:
+    _whatsapp_trigger = WhatsAppTrigger()
+    _ussd_trigger = USSDTrigger()
+    _sms_trigger = SMSTrigger()
+    _voice_trigger = VoiceTrigger()
+except (TypeError, Exception):
+    _whatsapp_trigger = None
+    _ussd_trigger = None
+    _sms_trigger = None
+    _voice_trigger = None
 
 
 # ── Request/Response Models ─────────────────────────────────────────

@@ -19,7 +19,8 @@ Defense layers:
 
 Integration:
     - Wired into AgentExecutionHarness via SecureMessageHandler
-    - Set ANGAVU_PROMPT_GUARD_ENABLED=true to enable
+    - Enabled by default (ANGAVU_PROMPT_GUARD_ENABLED=true)
+    - Set ANGAVU_PROMPT_GUARD_ENABLED=false to disable
     - Set ANGAVU_PROMPT_GUARD_STRICT=true for strict mode (block all detections)
 """
 
@@ -41,7 +42,7 @@ logger = structlog.get_logger(__name__)
 
 # ── Feature Flags ──────────────────────────────────────────────────
 
-PROMPT_GUARD_ENABLED = os.getenv("ANGAVU_PROMPT_GUARD_ENABLED", "false").lower() == "true"
+PROMPT_GUARD_ENABLED = os.getenv("ANGAVU_PROMPT_GUARD_ENABLED", "true").lower() == "true"
 
 PROMPT_GUARD_STRICT = os.getenv("ANGAVU_PROMPT_GUARD_STRICT", "false").lower() == "true"
 

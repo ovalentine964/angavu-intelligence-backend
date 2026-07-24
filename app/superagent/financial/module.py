@@ -4,12 +4,6 @@ Financial Intelligence Module
 Wraps existing SokoPulse, FMCG Intelligence, and Distribution Gap services
 into the superagent architecture. Provides a unified interface for all
 financial intelligence operations.
-
-Existing services wrapped:
-- app.services.intelligence.soko_pulse — Market intelligence and price forecasting
-- app.services.intelligence.fmcg_intelligence — FMCG analytics
-- app.services.intelligence.distribution_gap — Supply chain gap analysis
-- app.services.intelligence.biashara_pulse — Business health pulse
 """
 
 from __future__ import annotations
@@ -41,32 +35,41 @@ class FinancialModule:
             return
 
         try:
-            from app.services.intelligence.soko_pulse import SokoPulseService
-            self._soko_pulse = SokoPulseService()
-        except (ImportError, Exception) as e:
+            from app.db.database import async_session_factory
+            if async_session_factory:
+                session = async_session_factory()
+                from app.services.intelligence.soko_pulse import SokoPulseService
+                self._soko_pulse = SokoPulseService(db=session)
+                logger.info("soko_pulse_loaded")
+        except (ImportError, AttributeError, TypeError) as e:
             logger.warning("soko_pulse_load_failed", error=str(e))
 
         try:
-            from app.services.intelligence.fmcg_intelligence import FMCGIntelligenceService
-            self._fmcg = FMCGIntelligenceService()
-        except (ImportError, Exception) as e:
+            if not self._fmcg:
+                from app.db.database import async_session_factory
+                if async_session_factory:
+                    session = async_session_factory()
+                    from app.services.intelligence.fmcg_intelligence import FMCGIntelligenceService
+                    self._fmcg = FMCGIntelligenceService(db=session)
+                    logger.info("fmcg_loaded")
+        except (ImportError, AttributeError, TypeError) as e:
             logger.warning("fmcg_load_failed", error=str(e))
 
         try:
-            from app.services.intelligence.distribution_gap import DistributionGapAnalyzer
-            self._distribution_gap = DistributionGapAnalyzer()
-        except (ImportError, Exception) as e:
+            if not self._distribution_gap:
+                from app.db.database import async_session_factory
+                if async_session_factory:
+                    session = async_session_factory()
+                    from app.services.intelligence.distribution_gap import DistributionGapService
+                    self._distribution_gap = DistributionGapService(db=session)
+                    logger.info("distribution_gap_loaded")
+        except (ImportError, AttributeError, TypeError) as e:
             logger.warning("distribution_gap_load_failed", error=str(e))
 
         self._initialized = True
 
     async def observe(self, data: dict) -> dict:
-        """
-        Observe: Gather financial context from market data.
-
-        Enriches the observation with current market conditions,
-        price trends, and demand signals.
-        """
+        """Enrich observation with financial context."""
         await self._ensure_initialized()
 
         enrichment = {
@@ -74,7 +77,6 @@ class FinancialModule:
             "data_points": [],
         }
 
-        # Extract relevant financial data
         if "transactions" in data:
             txns = data["transactions"]
             amounts = [t.get("amount", 0) for t in txns if t.get("amount")]
@@ -89,12 +91,7 @@ class FinancialModule:
         return enrichment
 
     async def orient(self, observation: dict) -> dict:
-        """
-        Orient: Analyze financial situation.
-
-        Determines market conditions, identifies trends,
-        and assesses financial health indicators.
-        """
+        """Analyze financial situation."""
         analysis = {
             "market_condition": "stable",
             "trend": "neutral",
@@ -104,25 +101,45 @@ class FinancialModule:
         data_points = observation.get("enrichment", {}).get("data_points", [])
         for dp in data_points:
             if dp.get("type") == "transaction_summary":
-                if dp.get("count", 0) > 100:
+                count = dp.get("count", 0)
+                if count > 100:
                     analysis["activity_level"] = "high"
-                elif dp.get("count", 0) > 20:
+                elif count > 20:
                     analysis["activity_level"] = "medium"
                 else:
                     analysis["activity_level"] = "low"
 
         return analysis
 
-    async def execute(self, decision: dict) -> dict:
-        """
-        Execute financial intelligence operations.
+    async def analyze(self, data: dict) -> dict:
+        """Run financial analysis using available services."""
+        await self._ensure_initialized()
+        results = {"module": "financial", "analyses": {}}
 
-        Routes to the appropriate sub-service based on the request.
-        """
+        if self._soko_pulse and "product" in data:
+            try:
+                forecast = await self._soko_pulse.generate_demand_forecast(
+                    product_id=data["product"],
+                    region=data.get("region", "default"),
+                )
+                results["analyses"]["demand_forecast"] = forecast
+            except (ValueError, KeyError, ConnectionError) as e:
+                results["analyses"]["demand_forecast_error"] = str(e)
+
+        if self._fmcg and "brand" in data:
+            try:
+                results["analyses"]["fmcg"] = "analysis_available"
+            except (ValueError, KeyError) as e:
+                results["analyses"]["fmcg_error"] = str(e)
+
+        return results
+
+    async def execute(self, decision: dict) -> dict:
+        """Execute financial intelligence operations."""
         await self._ensure_initialized()
 
-        data = decision.get("data", {})
         action = decision.get("action", "analyze")
+        data = decision.get("data", decision.get("params", {}))
 
         result = {
             "module": "financial",
@@ -130,17 +147,19 @@ class FinancialModule:
             "status": "completed",
         }
 
-        # Route to appropriate service
-        if action == "price_forecast" and self._soko_pulse:
-            try:
-                result["soko_pulse"] = "available"
-            except Exception as e:
-                result["soko_pulse_error"] = str(e)
+        # Try to run actual analysis
+        try:
+            analysis = await self.analyze(data)
+            result["analysis"] = analysis.get("analyses", {})
+        except (ValueError, KeyError, ConnectionError) as e:
+            result["analysis_error"] = str(e)
 
+        # Route to specific service
+        if action == "price_forecast" and self._soko_pulse:
+            result["soko_pulse"] = "available"
         if action == "fmcg_analysis" and self._fmcg:
-            try:
-                result["fmcg"] = "available"
-            except Exception as e:
-                result["fmcg_error"] = str(e)
+            result["fmcg"] = "available"
+        if self._distribution_gap:
+            result["distribution_gap"] = "available"
 
         return result

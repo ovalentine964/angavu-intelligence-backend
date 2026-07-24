@@ -19,7 +19,11 @@ See: https://csrc.nist.gov/pubs/fips/203/final
 
 from enum import Enum
 
-import oqs
+try:
+    import oqs
+    _HAS_LIBOQS = True
+except (ImportError, Exception):
+    _HAS_LIBOQS = False
 
 from .crypto_provider import CryptoKeyPair, EncapsulatedKey, KeyEncapsulationProvider
 
@@ -63,6 +67,8 @@ class MlKemProvider(KeyEncapsulationProvider):
         self._oqs_name = _PARAM_TO_OQS[parameter_set]
 
         # Verify liboqs supports this algorithm
+        if not _HAS_LIBOQS:
+            raise RuntimeError("liboqs not installed. PQC features disabled.")
         enabled_kems = oqs.get_enabled_kem_mechanisms()
         if self._oqs_name not in enabled_kems:
             raise RuntimeError(

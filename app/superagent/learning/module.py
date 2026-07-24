@@ -3,10 +3,6 @@ Federated Learning Module
 
 Wraps the existing FederatedLearning service into the superagent architecture.
 Provides privacy-preserving distributed learning capabilities.
-
-Existing service wrapped:
-- app.services.federated_learning — FedAvg with differential privacy
-- app.services.federated_learning_v2 — Enhanced FL implementation
 """
 
 from __future__ import annotations
@@ -38,17 +34,14 @@ class LearningModule:
         try:
             from app.services.federated_learning import FederatedLearningService
             self._fl_service = FederatedLearningService()
+            logger.info("fl_service_loaded")
         except (ImportError, Exception) as e:
             logger.warning("fl_service_load_failed", error=str(e))
 
         self._initialized = True
 
     async def observe(self, data: dict) -> dict:
-        """
-        Observe: Gather learning-relevant signals.
-
-        Monitors model performance and data distribution.
-        """
+        """Gather learning-relevant signals."""
         await self._ensure_initialized()
 
         enrichment = {
@@ -56,7 +49,6 @@ class LearningModule:
             "signals": [],
         }
 
-        # Check for model update signals
         if "model_updates" in data:
             enrichment["signals"].append({
                 "type": "model_updates",
@@ -66,22 +58,20 @@ class LearningModule:
         return enrichment
 
     async def orient(self, observation: dict) -> dict:
-        """
-        Orient: Assess learning state.
+        """Assess learning state."""
+        status_info = {"training_status": "stable", "model_health": "good"}
 
-        Analyzes current model performance and training status.
-        """
-        return {
-            "training_status": "stable",
-            "model_health": "good",
-        }
+        if self._fl_service:
+            try:
+                fl_status = await self._fl_service.get_status()
+                status_info["fl_status"] = fl_status
+            except (ValueError, ConnectionError) as e:
+                status_info["fl_status_error"] = str(e)
+
+        return status_info
 
     async def execute(self, decision: dict) -> dict:
-        """
-        Execute federated learning operations.
-
-        Coordinates model aggregation and distribution.
-        """
+        """Execute federated learning operations."""
         await self._ensure_initialized()
 
         result = {
@@ -90,7 +80,13 @@ class LearningModule:
         }
 
         if self._fl_service:
-            result["fl_service_available"] = True
+            try:
+                fl_status = await self._fl_service.get_status()
+                result["fl_service_available"] = True
+                result["fl_status"] = fl_status
+            except (ValueError, ConnectionError) as e:
+                result["fl_service_available"] = True
+                result["fl_status_error"] = str(e)
         else:
             result["fl_service_available"] = False
             result["note"] = "FederatedLearning service not loaded"

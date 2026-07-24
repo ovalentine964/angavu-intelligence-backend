@@ -1,0 +1,16 @@
+# PgBouncer User List
+# =====================================================
+# Format: "username" "password"
+# Passwords should be MD5-hashed in production.
+#
+# Generate MD5 password:
+#   echo -n "passwordusername" | md5sum
+#   Then: "md5" + <hash>
+#
+# For plain text (development only):
+#   "msaidizi" "your_password_here"
+# =====================================================
+
+"msaidizi" "CHANGE_ME"
+"msaidizi_app" "CHANGE_ME_APP_PASSWORD"
+"msaidizi_readonly" "CHANGE_ME_READONLY_PASSWORD"

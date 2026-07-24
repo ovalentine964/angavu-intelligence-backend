@@ -22,6 +22,13 @@ from .prompt_guard import (
     get_prompt_guard,
 )
 from .rate_limiter import RATE_LIMITS, RateLimitMiddleware, RateLimitStore, rate_limit
+from .secret_rotation import (
+    RotationConfig,
+    RotationPolicy,
+    SecretRotationManager,
+    SecretType,
+    get_rotation_manager,
+)
 from .security_middleware import (
     AgentCapabilityMiddleware,
     AuditLoggingMiddleware,
@@ -61,6 +68,7 @@ __all__ = [
     "create_default_token",
     "get_capability_issuer",
     "get_prompt_guard",
+    "get_rotation_manager",
     "is_swarm_capability_enabled",
     "rate_limit",
 ]
