@@ -86,3 +86,4 @@ backups/
 # === Rust build artifacts ===
 rust/target/
 rust/.venv/
+rust-api/target/

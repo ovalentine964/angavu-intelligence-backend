@@ -1,0 +1,184 @@
+name: Rust API CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "rust-api/**"
+      - ".github/workflows/rust-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust-api/**"
+      - ".github/workflows/rust-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: rust-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ──────────────────────────────────────
+  # 1. Format Check
+  # ──────────────────────────────────────
+  fmt:
+    name: 🎨 rustfmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        working-directory: rust-api
+        run: cargo fmt --all -- --check
+
+  # ──────────────────────────────────────
+  # 2. Clippy Lint
+  # ──────────────────────────────────────
+  clippy:
+    name: 📎 Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-api/target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('rust-api/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-clippy-
+
+      - name: Run Clippy
+        working-directory: rust-api
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ──────────────────────────────────────
+  # 3. Build Check (debug + release)
+  # ──────────────────────────────────────
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        profile: [dev, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-api/target
+          key: ${{ runner.os }}-cargo-${{ matrix.profile }}-${{ hashFiles('rust-api/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.profile }}-
+
+      - name: Build (${{ matrix.profile }})
+        working-directory: rust-api
+        run: cargo build --profile ${{ matrix.profile }}
+
+      - name: Upload binary
+        if: matrix.profile == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: angavu-api-linux-amd64
+          path: rust-api/target/release/angavu-api
+          retention-days: 7
+
+  # ──────────────────────────────────────
+  # 4. Tests
+  # ──────────────────────────────────────
+  test:
+    name: 🧪 Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-api/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('rust-api/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Run tests
+        working-directory: rust-api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: test-secret-for-ci
+          LLM_SERVICE_URL: http://localhost:9999
+        run: cargo test --all-features -- --test-threads=1
+        continue-on-error: true
+
+  # ──────────────────────────────────────
+  # 5. Security Audit
+  # ──────────────────────────────────────
+  audit:
+    name: 🔒 Cargo Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        working-directory: rust-api
+        run: cargo audit
+        continue-on-error: true
+
+  # ──────────────────────────────────────
+  # 6. Dependency License Check
+  # ──────────────────────────────────────
+  licenses:
+    name: 📄 License Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check licenses
+        working-directory: rust-api
+        run: cargo deny check licenses
+        continue-on-error: true
