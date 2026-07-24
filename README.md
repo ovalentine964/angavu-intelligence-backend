@@ -1,4 +1,24 @@
-# Angavu Intelligence Backend
+<div align="center">
+
+# ⚙️ Angavu Intelligence Backend
+
+### Revenue Intelligence API Platform for Africa's Informal Economy
+
+**Rust-primary backend powering 15 revenue intelligence engines with superagent orchestration, post-quantum cryptography, and privacy-first data processing.**
+
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Axum](https://img.shields.io/badge/Axum-Web_Framework-blue.svg)](https://github.com/tokio-rs/axum)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-blue.svg)](https://www.postgresql.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+[![PQC](https://img.shields.io/badge/PQC-ML--KEM--768-brightgreen.svg)](#security)
+[![Privacy](https://img.shields.io/badge/Privacy-k--Anonymity-green.svg)](#security)
+
+[API Docs](#api-documentation) · [Quick Start](#quick-start) · [Deployment](#deployment) · [Security](#security)
+
+</div>
+
+---
 
 > Rust-primary backend for the Angavu superagent-powered revenue intelligence platform.
 > Python is used **only** for LLM inference — all business logic, APIs, and data processing run in Rust.
@@ -395,6 +415,26 @@ cargo audit
 
 ---
 
-## License
+## 🔒 Security Policy
+
+Please see [SECURITY.md](SECURITY.md) for our security policy and vulnerability reporting process.
+
+## 📬 Contact
+
+- **GitHub**: [@ovalentine964](https://github.com/ovalentine964)
+- **Issues**: [GitHub Issues](../../issues)
+- **Website**: [angavu-intelligence](https://ovalentine964.github.io/angavu-intelligence/)
+
+## 📄 License
 
 Proprietary — Angavu Intelligence Team
+
+---
+
+<div align="center">
+
+**Built with ❤️ for Africa's informal economy**
+
+*Intelligence infrastructure for the continent's $1.2 trillion informal sector.*
+
+</div>
