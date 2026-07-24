@@ -1,131 +1,400 @@
 # Angavu Intelligence Backend
 
-## Architecture Overview
+> Rust-primary backend for the Angavu superagent-powered revenue intelligence platform.
+> Python is used **only** for LLM inference — all business logic, APIs, and data processing run in Rust.
 
-Angavu Intelligence Backend is a cloud intelligence engine that processes anonymized data from millions of informal workers to generate market intelligence, credit scores, and business reports.
+---
 
-### Superagent Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    OODA Orchestrator                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ Observe  │→│  Orient  │→│  Decide  │→│   Act    │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│  Capability Modules                                          │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │  Market    │ │  Credit    │ │Distribution│              │
-│  │  Research  │ │  Scoring   │ │ Analysis   │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   FMCG    │ │  Health    │ │  Economic  │              │
-│  │Intelligence│ │  Metrics   │ │  Analysis  │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-├─────────────────────────────────────────────────────────────┤
-│  5-Layer Memory                                              │
-│  Request → Session → Daily → Market Patterns → Knowledge    │
-├─────────────────────────────────────────────────────────────┤
-│  Guardrails                                                  │
-│  k-anonymity (≥10) │ Differential Privacy (ε=0.1) │ Audit  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        Nginx (TLS + Rate Limit)                 │
+├─────────────────────────────────────────────────────────────────┤
+│                    Axum HTTP Server (Rust)                       │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
+│  │  REST API    │ │  WebSocket   │ │  Superagent  │            │
+│  │  /api/v1/*   │ │  /ws         │ │  /superagent │            │
+│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘            │
+│         │                │                │                     │
+│  ┌──────┴────────────────┴────────────────┴───────┐            │
+│  │              OODA Orchestrator                   │            │
+│  │  Observe → Orient → Decide → Act               │            │
+│  └────────────────────┬───────────────────────────┘            │
+│                       │                                         │
+│  ┌────────────────────┴───────────────────────────┐            │
+│  │           Capability Modules (Rust)              │            │
+│  │  Market Research │ Credit Scoring │ FMCG Intel   │            │
+│  │  Distribution    │ Health Metrics │ Economic     │            │
+│  └────────────────────┬───────────────────────────┘            │
+│                       │                                         │
+│  ┌─────────┐  ┌──────┴──────┐  ┌────────────┐                 │
+│  │PyO3/FFI │  │  5-Layer    │  │ Guardrails │                 │
+│  │→ Python │  │  Memory     │  │ k-anon/DP  │                 │
+│  │  LLM    │  │  Hierarchy  │  │ PQC crypto │                 │
+│  └─────────┘  └─────────────┘  └────────────┘                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Data Layer                                                     │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐               │
+│  │ PostgreSQL │  │  Redis 7   │  │ ClickHouse │               │
+│  │ 16+pgvector│  │  (cache)   │  │ 24 (OLAP)  │               │
+│  └────────────┘  └────────────┘  └────────────┘               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Revenue Engines (15 Products)
+### Design Principles
+
+- **Rust-primary**: All API handling, business logic, crypto, and data processing in Rust (Axum)
+- **Python for LLM only**: Python runs as a subprocess for DeepSeek/Qwen inference via PyO3
+- **Memory-safe crypto**: Post-quantum cryptography (ML-KEM-768, Ed25519, X25519)
+- **Privacy-first**: k-anonymity (k≥10), differential privacy (ε=0.1), PII never stored
+- **Free-tier optimized**: Fits within Oracle Cloud Always Free (4 OCPUs, 24GB RAM)
+
+---
+
+## Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| API Server | Rust + Axum | HTTP/WebSocket server |
+| Async Runtime | Tokio | Async I/O |
+| LLM Inference | Python 3.12 + PyO3 | DeepSeek, Qwen models |
+| Primary DB | PostgreSQL 16 + pgvector | Structured data + vectors |
+| Cache | Redis 7 | Sessions, rate limiting, cache |
+| OLAP | ClickHouse 24 | Analytics, time-series |
+| Reverse Proxy | Nginx | TLS, rate limiting, compression |
+| Crypto | AES-256-GCM, ML-KEM-768, Ed25519 | Encryption, PQC |
+| Container | Docker + Docker Compose | Deployment |
+
+---
+
+## Revenue Engines (15 Products)
 
 | Engine | Description |
 |--------|-------------|
-| Soko Pulse | FMCG demand forecasting |
-| Alama Score | Credit scoring (300-850) |
-| Angavu Pulse | Government economic intelligence |
-| Distribution Intel | Supply chain optimization |
-| FMCG Intelligence | Consumer goods analytics |
-| Market Heat Maps | Geographic demand visualization |
-| Price Index | Real-time pricing intelligence |
-| Trade Routes | Logistics optimization |
-| Vendor Score | Supplier reliability metrics |
-| Consumer Pulse | Demand pattern analysis |
-| Inventory Optimizer | Stock level intelligence |
-| Cash Flow Predictor | Working capital forecasting |
-| Risk Radar | Business risk assessment |
-| Growth Atlas | Market expansion intelligence |
-| Sector Benchmark | Industry comparison metrics |
+| **Soko Pulse** | FMCG demand forecasting |
+| **Alama Score** | Credit scoring (300-850) |
+| **Angavu Pulse** | Government economic intelligence |
+| **Distribution Intel** | Supply chain optimization |
+| **FMCG Intelligence** | Consumer goods analytics |
+| **Market Heat Maps** | Geographic demand visualization |
+| **Price Index** | Real-time pricing intelligence |
+| **Trade Routes** | Logistics optimization |
+| **Vendor Score** | Supplier reliability metrics |
+| **Consumer Pulse** | Demand pattern analysis |
+| **Inventory Optimizer** | Stock level intelligence |
+| **Cash Flow Predictor** | Working capital forecasting |
+| **Risk Radar** | Business risk assessment |
+| **Growth Atlas** | Market expansion intelligence |
+| **Sector Benchmark** | Industry comparison metrics |
 
-### Tech Stack
+---
 
-- **API**: Python 3.12 + FastAPI
-- **Crypto**: Rust (PyO3) for crypto and vector ops
-- **Primary DB**: PostgreSQL 16 + pgvector + TimescaleDB
-- **OLAP**: ClickHouse 24
-- **Cache**: Redis 7
-- **Graph Patterns**: DeerFlow/LangGraph adapted
-- **Containerization**: Docker + Docker Compose
+## API Documentation
 
-### Memory Budget (Oracle Cloud Free Tier: 11.6GB)
+### Health & Status
 
-| Service | Memory |
-|---------|--------|
-| PostgreSQL | 4 GB |
-| ClickHouse | 2 GB |
-| Redis | 1.2 GB |
-| API Server | 3 GB |
-| Worker | 1.5 GB |
-| PgBouncer | 128 MB |
-| **Total** | **~11.8 GB** |
+```
+GET  /health              — Liveness check
+GET  /ready               — Readiness check (DB + Redis)
+GET  /metrics             — Prometheus metrics
+```
 
-### Quick Start
+### Authentication (`/api/v1/auth`)
+
+```
+POST /api/v1/auth/login       — Login (returns JWT)
+POST /api/v1/auth/register    — Register new user
+POST /api/v1/auth/refresh     — Refresh access token
+```
+
+### Intelligence (`/api/v1/intelligence`)
+
+```
+POST /api/v1/intelligence/market-research   — Market analysis
+POST /api/v1/intelligence/credit-score      — Generate credit score
+POST /api/v1/intelligence/fmcg              — FMCG demand intel
+POST /api/v1/intelligence/distribution      — Supply chain analysis
+POST /api/v1/intelligence/economic          — Economic indicators
+POST /api/v1/intelligence/heat-map          — Geographic heat map
+```
+
+### Users (`/api/v1/users`)
+
+```
+GET    /api/v1/users/me        — Current user profile
+PUT    /api/v1/users/me        — Update profile
+DELETE /api/v1/users/me        — Delete account
+GET    /api/v1/users/{id}      — Get user (admin)
+```
+
+### Memory (`/api/v1/memory`)
+
+```
+GET    /api/v1/memory          — List memory entries
+POST   /api/v1/memory          — Create memory entry
+GET    /api/v1/memory/{id}     — Get specific memory
+DELETE /api/v1/memory/{id}     — Delete memory
+```
+
+### Sync (`/api/v1/sync`)
+
+```
+POST /api/v1/sync/push        — Push local data
+POST /api/v1/sync/pull        — Pull remote data
+GET  /api/v1/sync/status      — Sync status
+```
+
+### Superagent (`/superagent`)
+
+```
+POST /superagent/query        — Send query to OODA orchestrator
+GET  /superagent/status       — Orchestrator status
+GET  /superagent/capabilities — List available capabilities
+```
+
+### WebSocket
+
+```
+GET /ws                       — Real-time updates (JWT required)
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Docker 24+ and Docker Compose v2
+- 4GB+ RAM available for Docker
+- Ports 80, 443, 8000 available
+
+### Local Development
 
 ```bash
-# Clone and start
-git clone <repo>
+# Clone
+git clone <repo-url>
 cd angavu-intelligence-backend
+
+# Create .env file
+cat > .env << 'EOF'
+POSTGRES_PASSWORD=dev_password
+JWT_SECRET=dev-jwt-secret-change-in-production
+ENCRYPTION_KEY=dev-32-bytes-encryption-key!!
+DEEPSEEK_API_KEY=sk-your-key
+QWEN_API_KEY=sk-your-key
+EOF
+
+# Start all services
 docker compose up -d
 
-# Run migrations
-docker compose exec api alembic upgrade head
-
-# Health check
+# Check health
 curl http://localhost:8000/health
 
-# API docs
-open http://localhost:8000/docs
+# View logs
+docker compose logs -f api
 ```
 
-### Development
+### Build Locally (without Docker)
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Run tests
-pytest -v
+# Build
+cargo build --release
 
-# Lint
-ruff check app/ tests/
-
-# Type check
-mypy app/
+# Run (requires PostgreSQL, Redis, ClickHouse running)
+DATABASE_URL=postgres://angavu:dev@localhost:5432/angavu \
+REDIS_URL=redis://localhost:6379 \
+./target/release/angavu-server --port 8000
 ```
 
-### Project Structure
+---
+
+## Deployment
+
+### Oracle Cloud Free Tier
+
+The stack is optimized for Oracle Cloud Always Free Tier:
+- **Shape**: VM.Standard.E2.1.Micro (4 OCPUs, 24GB RAM) or Ampere A1 (4 OCPUs, 24GB RAM)
+- **OS**: Ubuntu 22.04/24.04 aarch64 (ARM) or amd64
+
+#### Memory Budget
+
+| Service | Memory Limit |
+|---------|-------------|
+| PostgreSQL 16 | 4 GB |
+| ClickHouse 24 | 2 GB |
+| Redis 7 | 1.2 GB |
+| Rust API Server | 3 GB |
+| Nginx | 256 MB |
+| OS + overhead | ~3 GB |
+| **Total** | **~13.5 GB / 24 GB** |
+
+#### Deploy Steps
+
+1. **Set up Oracle Cloud instance** (Ubuntu 22.04+, ARM64 or x86_64)
+
+2. **Install Docker**:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   sudo usermod -aG docker $USER
+   # Log out and back in
+   ```
+
+3. **Clone and configure**:
+   ```bash
+   git clone <repo-url> /opt/angavu
+   cd /opt/angavu
+   cp .env.example .env
+   # Edit .env with production values
+   nano .env
+   ```
+
+4. **Generate SSL certificates** (Let's Encrypt):
+   ```bash
+   sudo apt install certbot
+   sudo certbot certonly --standalone -d your-domain.com
+   mkdir -p nginx/ssl
+   sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem nginx/ssl/
+   sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem nginx/ssl/
+   ```
+
+5. **Deploy**:
+   ```bash
+   chmod +x scripts/deploy.sh
+   ./scripts/deploy.sh
+   ```
+
+### GitHub Actions CI/CD
+
+Push to `main` triggers automatic deployment. Configure these secrets in GitHub:
+
+| Secret | Description |
+|--------|-------------|
+| `DEPLOY_HOST` | Oracle Cloud instance IP/hostname |
+| `DEPLOY_USER` | SSH user (e.g., `ubuntu`) |
+| `DEPLOY_SSH_KEY` | SSH private key for deployment |
+
+### Manual Deploy
+
+```bash
+# On the server
+cd /opt/angavu
+git pull
+./scripts/deploy.sh
+```
+
+### Rollback
+
+```bash
+./scripts/deploy.sh --rollback
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `REDIS_URL` | Yes | — | Redis connection string |
+| `CLICKHOUSE_URL` | Yes | — | ClickHouse HTTP endpoint |
+| `JWT_SECRET` | Yes | — | JWT signing secret (32+ chars) |
+| `ENCRYPTION_KEY` | Yes | — | AES-256 encryption key (32 bytes) |
+| `DEEPSEEK_API_KEY` | No | — | DeepSeek API key for LLM inference |
+| `QWEN_API_KEY` | No | — | Qwen API key for LLM inference |
+| `RUST_LOG` | No | `info` | Log level (trace/debug/info/warn/error) |
+| `ANGAVU_HOST` | No | `0.0.0.0` | Server bind address |
+| `ANGAVU_PORT` | No | `8000` | Server port |
+| `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password |
+
+---
+
+## Project Structure
 
 ```
 angavu-intelligence-backend/
-├── app/
-│   ├── api/v1/           # REST endpoints
-│   ├── superagent/        # OODA orchestrator + capability modules
-│   ├── memory/            # 5-layer memory hierarchy
-│   ├── guardrails/        # Anonymization, k-anonymity, DP
-│   ├── flywheel/          # Collective intelligence loops
-│   ├── intelligence/      # 15 revenue engines
-│   ├── sync/              # Device sync, federated learning
-│   ├── models/            # SQLAlchemy + Pydantic models
-│   ├── services/          # Business logic
-│   ├── security/          # PQC, encryption
-│   └── core/              # Config, logging, dependencies
-├── rust/                  # PyO3 crypto extensions
-├── config/                # Service configs
-├── database/migrations/   # Alembic migrations
-├── scripts/               # Deployment, backup, health
-└── tests/                 # Test suite
+├── src/                        # Rust source code
+│   ├── main.rs                 # Server entrypoint (Axum)
+│   ├── api/                    # REST + WebSocket handlers
+│   │   ├── v1/                 # API v1 routes
+│   │   ├── ws.rs               # WebSocket handler
+│   │   └── middleware.rs       # Auth, rate limiting
+│   ├── db/                     # Database connections
+│   │   ├── postgres.rs         # PostgreSQL (sqlx)
+│   │   ├── redis.rs            # Redis
+│   │   └── clickhouse.rs       # ClickHouse
+│   ├── models/                 # Data models
+│   │   ├── config.rs           # Configuration structs
+│   │   ├── user.rs             # User models
+│   │   ├── intelligence.rs     # Intelligence models
+│   │   ├── memory.rs           # Memory hierarchy models
+│   │   ├── agent.rs            # Agent/orchestrator models
+│   │   └── sync.rs             # Sync models
+│   ├── security/               # Cryptography
+│   │   ├── crypto.rs           # AES-256-GCM encryption
+│   │   ├── jwt.rs              # JWT handling
+│   │   └── pqc.rs              # Post-quantum crypto
+│   ├── superagent/             # OODA orchestrator
+│   ├── intelligence/           # 15 revenue engines
+│   ├── memory/                 # 5-layer memory hierarchy
+│   ├── guardrails/             # Privacy & anonymization
+│   ├── flywheel/               # Collective intelligence
+│   └── sync/                   # Device sync, federated learning
+├── python/                     # LLM inference ONLY
+│   ├── llm/inference.py        # DeepSeek/Qwen calls
+│   └── requirements.txt        # Minimal Python deps
+├── scripts/                    # Deployment & operations
+│   ├── deploy.sh               # Production deploy script
+│   ├── backup.sh               # Database backup
+│   ├── restore.sh              # Database restore
+│   └── health.sh               # Health check script
+├── nginx/
+│   └── nginx.conf              # Nginx reverse proxy config
+├── Dockerfile                  # Multi-stage build
+├── docker-compose.yml          # Full stack orchestration
+├── Cargo.toml                  # Rust dependencies
+└── .github/workflows/
+    └── deploy.yml              # CI/CD pipeline
 ```
+
+---
+
+## Development
+
+```bash
+# Run tests
+cargo test
+
+# Run with debug logging
+RUST_LOG=debug cargo run
+
+# Format code
+cargo fmt
+
+# Lint
+cargo clippy
+
+# Check for security vulnerabilities
+cargo audit
+```
+
+---
+
+## Security
+
+- **Post-Quantum Crypto**: ML-KEM-768 key exchange, Ed25519 signatures
+- **Encryption**: AES-256-GCM for data at rest
+- **Authentication**: JWT with RS256
+- **Rate Limiting**: Per-IP via Nginx (30 req/s API, 5 req/s auth)
+- **Privacy**: k-anonymity (k≥10), differential privacy (ε=0.1)
+- **Network**: All internal services bound to localhost only
+- **TLS**: TLS 1.2/1.3 with Mozilla Intermediate config
+
+---
+
+## License
+
+Proprietary — Angavu Intelligence Team
