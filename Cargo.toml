@@ -1,0 +1,171 @@
+[package]
+name = "angavu-intelligence-backend"
+version = "0.1.0"
+edition = "2021"
+authors = ["Angavu Intelligence Team"]
+description = "Angavu Intelligence Backend - Superagent-powered revenue intelligence platform"
+license = "Proprietary"
+
+[[bin]]
+name = "angavu-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "angavu-migrate"
+path = "src/migrate.rs"
+
+[dependencies]
+# Web Framework
+axum = { version = "0.7", features = ["macros", "ws", "json", "headers"] }
+axum-extra = { version = "0.9", features = ["cookie", "typed-routing"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression", "limit", "timeout"] }
+hyper = { version = "1.0", features = ["full"] }
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1.3"
+
+# Database - PostgreSQL
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "json", "bigdecimal"] }
+
+# Database - Redis
+redis = { version = "0.26", features = ["tokio-comp", "connection-manager", "cluster", "streams"] }
+
+# Database - ClickHouse
+clickhouse = { version = "0.11", features = ["test-util"] }
+
+# UUID & Time
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+
+# Cryptography - Post-Quantum
+aes-gcm = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+rand = "0.8"
+argon2 = "0.5"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+ed25519-dalek = { version = "2", features = ["serde"] }
+p256 = { version = "0.13", features = ["ecdh"] }
+kem = "0.3"
+ml-kem = "0.2"
+hpke = "0.12"
+
+# HTTP Client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "trust-dns"] }
+
+# Error Handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry"] }
+tracing-opentelemetry = "0.27"
+opentelemetry = { version = "0.26", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Rate Limiting
+governor = "0.6"
+
+# Circuit Breaker
+tower = { version = "0.4" }
+
+# Data Processing
+ndarray = "0.15"
+nalgebra = "0.33"
+statrs = "0.17"
+
+# Python Interop (PyO3)
+pyo3 = { version = "0.22", features = ["auto-initialize"] }
+
+# JWT
+jsonwebtoken = "9"
+
+# Regex
+regex = "1"
+
+# URL
+url = "2"
+
+# Dashmap (concurrent hashmap)
+dashmap = "6"
+
+# Parking lot (faster mutexes)
+parking_lot = "0.12"
+
+# Bytes
+bytes = "1"
+
+# Base64
+base64 = "0.22"
+
+# Hex
+hex = "0.4"
+
+# Percent encoding
+percent-encoding = "2"
+
+# System info
+sysinfo = "0.30"
+
+# Signal handling
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
+# Async-trait
+async-trait = "0.1"
+
+# Pin-project
+pin-project = "1"
+
+# Try-lock
+try-lock = "0.2"
+
+# Validator
+validator = { version = "0.18", features = ["derive"] }
+
+# Garde (validation)
+garde = { version = "0.20", features = ["derive"] }
+
+# Geo
+geo = "0.28"
+geohash = "0.13"
+
+[dev-dependencies]
+tokio-test = "0.4"
+axum-test = "16"
+tempfile = "3"
+wiremock = "0.6"
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
+debug = true
