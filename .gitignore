@@ -82,3 +82,7 @@ nginx/ssl/
 # === Deployment ===
 /opt/angavu/
 backups/
+
+# === Rust build artifacts ===
+rust/target/
+rust/.venv/
