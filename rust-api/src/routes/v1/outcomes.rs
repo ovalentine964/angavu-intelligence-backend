@@ -115,6 +115,7 @@ async fn track_outcomes(
 
 /// Outcome verification request.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+#[allow(dead_code)]
 pub struct VerifyOutcomeRequest {
     /// Outcome ID to verify
     pub outcome_id: Uuid,

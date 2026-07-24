@@ -31,6 +31,7 @@ pub struct FieldError {
 
 /// Application error enum covering all error types.
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum AppError {
     #[error("Authentication failed: {0}")]
     Unauthorized(String),
