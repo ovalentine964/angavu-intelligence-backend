@@ -1,7 +1,0 @@
-# Ignore test/CI secrets that are not real credentials
-.github/workflows/test.yml
-# Ignore example/template files
-.env.example
-app/services/gemini_config.py
-app/security/capability_tokens.py
-app/services/cloud_reasoning.py
