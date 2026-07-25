@@ -496,6 +496,20 @@ impl DemandForecaster {
         self.forecast(region, None, None, horizon_days).await
     }
 
+    /// Generate stocking recommendations for mama mboga (alias for `recommend_stocking`).
+    ///
+    /// Convenience method that wraps `recommend_stocking` with a name that
+    /// matches the OODA API surface. Accepts a list of commodity names and
+    /// returns actionable stocking quantities, expected spoilage reduction,
+    /// and reasoning for each.
+    pub async fn generate_recommendations(
+        &self,
+        region: &str,
+        commodities: Vec<String>,
+    ) -> Result<Vec<StockingRecommendation>> {
+        self.recommend_stocking(region, commodities).await
+    }
+
     /// Ingest external signal data (weather, school calendar, etc.)
     pub async fn ingest_external_signal(
         &self,

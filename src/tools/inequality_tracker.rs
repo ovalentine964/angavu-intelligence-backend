@@ -1168,7 +1168,6 @@ impl InequalityTracker {
         metric: &InequalityMetric,
         as_of: NaiveDate,
     ) -> Result<Vec<CellData>> {
-        let dimension_str = dimension.to_string();
         let metric_str = metric.to_string();
 
         // Query aggregated worker-level data grouped by the dimension
@@ -1187,25 +1186,28 @@ impl InequalityTracker {
         let query = format!(
             r#"
             SELECT
-                {cell_column} AS cell_id,
-                {cell_column} AS cell_label,
+                {cc} AS cell_id,
+                {cc} AS cell_label,
                 groupArray(value) AS values,
                 count() AS sample_size
             FROM inequality_worker_data
-            WHERE metric_name = $1
-              AND snapshot_date = $2
-            GROUP BY {cell_column}
-            HAVING sample_size >= $3
+            WHERE metric_name = '{metric}'
+              AND snapshot_date = '{date}'
+            GROUP BY {cc}
+            HAVING sample_size >= {min}
             ORDER BY cell_id
             "#,
-            cell_column = cell_column
+            cc = cell_column,
+            metric = metric_str,
+            date = as_of,
+            min = self.config.min_cell_size,
         );
 
-        let rows = sqlx::query_as::<_, CellDataRow>(&query)
-            .bind(&metric_str)
-            .bind(as_of)
-            .bind(self.config.min_cell_size as i64)
-            .fetch_all(&self.db.clickhouse)
+        let rows = self
+            .db
+            .clickhouse
+            .query(&query)
+            .fetch_all::<CellDataRow>()
             .await
             .context("Failed to fetch cell data from ClickHouse")?;
 
@@ -1226,7 +1228,6 @@ impl InequalityTracker {
         metric: &InequalityMetric,
         range: &DateRange,
     ) -> Result<Vec<CellData>> {
-        let dimension_str = dimension.to_string();
         let metric_str = metric.to_string();
 
         let cell_column = match dimension {
@@ -1242,26 +1243,29 @@ impl InequalityTracker {
         let query = format!(
             r#"
             SELECT
-                {cell_column} AS cell_id,
-                {cell_column} AS cell_label,
+                {cc} AS cell_id,
+                {cc} AS cell_label,
                 groupArray(value) AS values,
                 count() AS sample_size
             FROM inequality_worker_data
-            WHERE metric_name = $1
-              AND snapshot_date BETWEEN $2 AND $3
-            GROUP BY {cell_column}
-            HAVING sample_size >= $4
+            WHERE metric_name = '{metric}'
+              AND snapshot_date BETWEEN '{start}' AND '{end}'
+            GROUP BY {cc}
+            HAVING sample_size >= {min}
             ORDER BY cell_id
             "#,
-            cell_column = cell_column
+            cc = cell_column,
+            metric = metric_str,
+            start = range.start,
+            end = range.end,
+            min = self.config.min_cell_size,
         );
 
-        let rows = sqlx::query_as::<_, CellDataRow>(&query)
-            .bind(&metric_str)
-            .bind(range.start)
-            .bind(range.end)
-            .bind(self.config.min_cell_size as i64)
-            .fetch_all(&self.db.clickhouse)
+        let rows = self
+            .db
+            .clickhouse
+            .query(&query)
+            .fetch_all::<CellDataRow>()
             .await
             .context("Failed to fetch cell data range from ClickHouse")?;
 
@@ -2134,16 +2138,17 @@ struct CellData {
 }
 
 /// ClickHouse row type for cell data queries.
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, clickhouse::Row, Deserialize)]
 struct CellDataRow {
     cell_id: String,
     cell_label: String,
+    #[serde(default)]
     values: Vec<f64>,
-    sample_size: i64,
+    sample_size: u64,
 }
 
 /// ClickHouse row type for trend queries.
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, clickhouse::Row, Deserialize)]
 struct TrendRow {
     snapshot_date: NaiveDate,
     gini: f64,
