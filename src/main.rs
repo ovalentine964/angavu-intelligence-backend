@@ -28,15 +28,15 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
 mod billing;
 mod db;
-mod flywheel;
-mod guardrails;
-mod intelligence;
-mod memory;
+// mod flywheel;      // TODO: not yet implemented
+// mod guardrails;    // TODO: not yet implemented
+// mod intelligence;  // TODO: not yet implemented
+// mod memory;        // TODO: not yet implemented
 mod models;
-mod security;
+// mod security;      // TODO: not yet implemented
 mod tools;
 mod superagent;
-mod sync;
+// mod sync;          // TODO: not yet implemented
 
 use crate::db::{AppState, DatabaseConnections};
 use crate::superagent::OODAOrchestrator;
@@ -114,8 +114,8 @@ fn build_router(state: Arc<AppState>) -> Router {
         // API v1
         .nest("/api/v1", api::v1::router())
         
-        // WebSocket
-        .route("/ws", get(api::ws::websocket_handler))
+        // WebSocket — TODO: uncomment when api::ws is implemented
+        // .route("/ws", get(api::ws::websocket_handler))
         
         // Superagent endpoints
         .nest("/superagent", superagent::router())
@@ -143,7 +143,10 @@ async fn health_check() -> impl IntoResponse {
 
 async fn readiness_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let pg_ok = state.db.postgres.acquire().await.is_ok();
-    let redis_ok = state.db.redis.get_async_connection().await.is_ok();
+    let redis_ok = redis::cmd("PING")
+        .query_async::<String>(&mut state.db.redis.clone())
+        .await
+        .is_ok();
     
     if pg_ok && redis_ok {
         (StatusCode::OK, Json(serde_json::json!({

@@ -221,22 +221,19 @@ impl AlertGenerator {
         let alert_id = alert.alert_id;
 
         // Store in PostgreSQL
-        let _ = sqlx::query!(
-            r#"
-            INSERT INTO alerts (id, alert_type, urgency, title, message, source, confidence, action_required, data, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            "#,
-            alert_id,
-            format!("{:?}", alert.alert_type),
-            format!("{:?}", alert.urgency),
-            alert.title,
-            alert.message,
-            alert.source,
-            alert.confidence,
-            alert.action_required,
-            alert.data,
-            alert.created_at
+        let _ = sqlx::query(
+            "INSERT INTO alerts (id, alert_type, urgency, title, message, source, confidence, action_required, data, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
+        .bind(alert_id)
+        .bind(format!("{:?}", alert.alert_type))
+        .bind(format!("{:?}", alert.urgency))
+        .bind(&alert.title)
+        .bind(&alert.message)
+        .bind(&alert.source)
+        .bind(alert.confidence)
+        .bind(alert.action_required)
+        .bind(&alert.data)
+        .bind(alert.created_at)
         .execute(&self.db.postgres)
         .await;
 
@@ -409,10 +406,11 @@ impl AlertGenerator {
         if let Some(alert) = recent.iter_mut().find(|a| a.alert_id == alert_id) {
             alert.acknowledged_at = Some(Utc::now());
 
-            let _ = sqlx::query!(
-                "UPDATE alerts SET acknowledged_at = $1 WHERE id = $1",
-                alert_id
+            let _ = sqlx::query(
+                "UPDATE alerts SET acknowledged_at = $1 WHERE id = $2"
             )
+            .bind(Utc::now())
+            .bind(alert_id)
             .execute(&self.db.postgres)
             .await;
 

@@ -202,11 +202,10 @@ impl ApiKeyManager {
         let key_prefix = format!("agvk_{}", &hex_body[..8]);
 
         // Hash with Argon2id
+        use argon2::password_hash::SaltString;
+        let salt = SaltString::generate(&mut rand::thread_rng());
         let key_hash = argon2::Argon2::default()
-            .password_hash(
-                full_key.as_bytes(),
-                &argon2::password_salt::SaltString::generate(&mut rand::thread_rng()),
-            )
+            .hash_password(full_key.as_bytes(), &salt)
             .map_err(|e| ApiKeyError::Database(sqlx::Error::Protocol(e.to_string())))?
             .to_string();
 
@@ -361,7 +360,7 @@ impl ApiKeyManager {
 
     /// Update last_used_at timestamp.
     pub async fn touch(&self, key_id: Uuid) -> Result<(), ApiKeyError> {
-        sqlx::query("UPDATE api_keys SET last_used_at = $1 WHERE id = $1")
+        sqlx::query("UPDATE api_keys SET last_used_at = $1 WHERE id = $2")
             .bind(Utc::now())
             .bind(key_id)
             .execute(&self.pool)

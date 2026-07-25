@@ -88,7 +88,6 @@ metrics-exporter-prometheus = "0.13"
 governor = "0.6"
 
 # Circuit Breaker
-tower = { version = "0.4" }
 
 # Data Processing
 ndarray = "0.15"
@@ -127,6 +126,15 @@ percent-encoding = "2"
 
 # System info
 sysinfo = "0.30"
+
+# CPU count
+num_cpus = "1"
+
+# TOML parsing
+toml = "0.8"
+
+# MD5
+md5 = "0.7"
 
 # Signal handling
 signal-hook = "0.3"

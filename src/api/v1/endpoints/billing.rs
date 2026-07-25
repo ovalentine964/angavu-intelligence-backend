@@ -91,7 +91,7 @@ pub async fn create_subscription(
     let tier: SubscriptionTier = req
         .tier
         .parse()
-        .map_err(|_| bad_request("invalid tier; must be free, starter, pro, or enterprise").1)?;
+        .map_err(|_| bad_request("invalid tier; must be free, starter, pro, or enterprise"))?;
 
     let manager = SubscriptionManager::new(state.db.postgres.clone());
 
@@ -160,7 +160,7 @@ pub async fn change_tier(
     let new_tier: SubscriptionTier = req
         .new_tier
         .parse()
-        .map_err(|_| bad_request("invalid tier").1)?;
+        .map_err(|_| bad_request("invalid tier"))?;
 
     let manager = SubscriptionManager::new(state.db.postgres.clone());
 

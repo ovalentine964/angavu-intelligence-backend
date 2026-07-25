@@ -14,7 +14,7 @@ pub struct ModelDistributor;
 impl ModelDistributor {
     pub fn new() -> Self { Self }
 
-    pub fn create_delta(&self, old_weights: &[f8], new_weights: &[f8]) -> Vec<u8> {
+    pub fn create_delta(&self, old_weights: &[u8], new_weights: &[u8]) -> Vec<u8> {
         // Sparse delta encoding — only changed weights
         new_weights.iter().zip(old_weights.iter())
             .enumerate()

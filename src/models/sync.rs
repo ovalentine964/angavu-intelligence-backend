@@ -18,7 +18,8 @@ pub struct DeviceSync {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "sync_status", rename_all = "snake_case")]
 pub enum SyncStatus {
     Synced,
     Pending,
@@ -91,7 +92,8 @@ pub struct FederatedModel {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "federated_status", rename_all = "snake_case")]
 pub enum FederatedStatus {
     Collecting,
     Aggregating,
@@ -115,7 +117,8 @@ pub struct FederatedParticipant {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "participant_status", rename_all = "snake_case")]
 pub enum ParticipantStatus {
     Invited,
     Training,
