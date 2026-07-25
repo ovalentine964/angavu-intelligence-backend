@@ -1906,33 +1906,36 @@ impl InequalityTracker {
 
         // ClickHouse: time-series per cell
         for cell in &snapshot.cell_stats {
-            sqlx::query(
+            let insert = format!(
                 r#"
                 INSERT INTO inequality_timeseries
                     (snapshot_date, dimension, metric, cell_id, cell_label, mean, median, p10, p25, p75, p90, std_dev, sample_size, share_of_total, gini, theil, computed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                VALUES ('{date}', '{dim}', '{metric}', '{cell_id}', '{cell_label}', {mean}, {median}, {p10}, {p25}, {p75}, {p90}, {std_dev}, {n}, {share}, {gini}, {theil}, '{computed}')
                 "#,
-            )
-            .bind(snapshot.snapshot_date)
-            .bind(snapshot.dimension.to_string())
-            .bind(snapshot.metric.to_string())
-            .bind(&cell.cell_id)
-            .bind(&cell.cell_label)
-            .bind(cell.mean)
-            .bind(cell.median)
-            .bind(cell.p10)
-            .bind(cell.p25)
-            .bind(cell.p75)
-            .bind(cell.p90)
-            .bind(cell.std_dev)
-            .bind(cell.sample_size)
-            .bind(cell.share_of_total)
-            .bind(snapshot.global_stats.gini_coefficient)
-            .bind(snapshot.global_stats.theil_index)
-            .bind(snapshot.computed_at)
-            .execute(&self.db.clickhouse)
-            .await
-            .context("Failed to insert inequality time-series into ClickHouse")?;
+                date = snapshot.snapshot_date,
+                dim = snapshot.dimension,
+                metric = snapshot.metric,
+                cell_id = cell.cell_id,
+                cell_label = cell.cell_label,
+                mean = cell.mean,
+                median = cell.median,
+                p10 = cell.p10,
+                p25 = cell.p25,
+                p75 = cell.p75,
+                p90 = cell.p90,
+                std_dev = cell.std_dev,
+                n = cell.sample_size,
+                share = cell.share_of_total,
+                gini = snapshot.global_stats.gini_coefficient,
+                theil = snapshot.global_stats.theil_index,
+                computed = snapshot.computed_at.format("%Y-%m-%d %H:%M:%S%.3f") ,
+            );
+            self.db
+                .clickhouse
+                .query(&insert)
+                .execute()
+                .await
+                .context("Failed to insert inequality time-series into ClickHouse")?;
         }
 
         debug!(id = %snapshot.id, "Snapshot stored in PostgreSQL + ClickHouse");
@@ -1941,27 +1944,34 @@ impl InequalityTracker {
 
     /// Store intersectional analysis results.
     async fn store_intersectional(&self, analysis: &IntersectionalAnalysis) -> Result<()> {
+        let today = Utc::now().date_naive();
+        let dims_json = serde_json::to_string(&analysis.dimensions)?;
+
         for cell in &analysis.intersectional_cells {
-            sqlx::query(
+            let combo_json = serde_json::to_string(&cell.combination)?;
+            let insert = format!(
                 r#"
                 INSERT INTO intersectional_inequality
                     (snapshot_date, metric, dimensions_json, cell_combination, mean, median, sample_size, percentile_rank, disadvantage_score, computed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ('{date}', '{metric}', '{dims}', '{combo}', {mean}, {median}, {n}, {pct}, {disadv}, '{computed}')
                 "#,
-            )
-            .bind(Utc::now().date_naive())
-            .bind(analysis.metric.to_string())
-            .bind(serde_json::to_string(&analysis.dimensions)?)
-            .bind(serde_json::to_string(&cell.combination)?)
-            .bind(cell.mean)
-            .bind(cell.median)
-            .bind(cell.sample_size)
-            .bind(cell.percentile_rank)
-            .bind(cell.disadvantage_score)
-            .bind(analysis.computed_at)
-            .execute(&self.db.clickhouse)
-            .await
-            .context("Failed to store intersectional data in ClickHouse")?;
+                date = today,
+                metric = analysis.metric,
+                dims = dims_json.replace('"', "'"),
+                combo = combo_json.replace('"', "'"),
+                mean = cell.mean,
+                median = cell.median,
+                n = cell.sample_size,
+                pct = cell.percentile_rank,
+                disadv = cell.disadvantage_score,
+                computed = analysis.computed_at.format("%Y-%m-%d %H:%M:%S%.3f"),
+            );
+            self.db
+                .clickhouse
+                .query(&insert)
+                .execute()
+                .await
+                .context("Failed to store intersectional data in ClickHouse")?;
         }
 
         debug!(id = %analysis.id, "Intersectional analysis stored");
@@ -1977,13 +1987,14 @@ impl InequalityTracker {
             snapshot.snapshot_date
         );
         let value = serde_json::to_string(snapshot)?;
+        let mut conn = self.db.redis.clone();
 
         redis::cmd("SET")
             .arg(&key)
             .arg(&value)
             .arg("EX")
             .arg(604_800_i64) // 7 days TTL
-            .execute_async(&mut self.db.redis.clone())
+            .execute_async(&mut conn)
             .await
             .context("Failed to cache snapshot in Redis")?;
 
@@ -2119,56 +2130,6 @@ impl InequalityTracker {
         Ok(())
     }
 
-    /// Fetch previous Gini coefficient for comparison.
-    async fn fetch_previous_gini(
-        &self,
-        dimension: &InequalityDimension,
-        metric: &InequalityMetric,
-        current_date: NaiveDate,
-    ) -> Option<f64> {
-        let dimension_str = dimension.to_string();
-        let metric_str = metric.to_string();
-
-        sqlx::query_scalar::<_, f64>(
-            r#"
-            SELECT gini
-            FROM inequality_timeseries
-            WHERE dimension = $1
-              AND metric = $2
-              AND snapshot_date < $3
-            ORDER BY snapshot_date DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(&dimension_str)
-        .bind(&metric_str)
-        .bind(current_date)
-        .fetch_optional(&self.db.clickhouse)
-        .await
-        .ok()
-        .flatten()
-    }
-
-    /// Emit a signal to the OODA orchestrator.
-    async fn emit_ooda_signal(&self, signal_type: &str, payload: &serde_json::Value) -> Result<()> {
-        let signal = serde_json::json!({
-            "source": "inequality_tracker",
-            "signal_type": signal_type,
-            "payload": payload,
-            "timestamp": Utc::now().to_rfc3339(),
-        });
-
-        // Publish to Redis pub/sub for OODA orchestrator consumption
-        redis::cmd("PUBLISH")
-            .arg("ooda:signals")
-            .arg(serde_json::to_string(&signal)?)
-            .execute_async(&mut self.db.redis.clone())
-            .await
-            .context("Failed to emit OODA signal")?;
-
-        debug!(signal_type = signal_type, "OODA signal emitted");
-        Ok(())
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────

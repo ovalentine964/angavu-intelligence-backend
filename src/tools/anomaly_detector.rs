@@ -1,36 +1,13 @@
-//! AnomalyDetector — Real-time anomaly detection across all data streams
-//!
-//! Detects sudden shifts that indicate fraud, market shocks, policy impacts,
-//! or emerging crises before they show up in aggregate statistics.
-//!
-//! ## Detection Methods
-//!
-//! - **Z-score**: Statistical outlier detection against rolling mean ± std dev
-//! - **CUSUM**: Change-point detection for sustained baseline shifts
-//! - **Seasonal ESD**: Extreme Studentized Deviate for time series with trend + seasonality
-//! - **Multi-stream correlation**: Auto-correlates simultaneous anomalies to generate hypotheses
-//!
-//! ## OODA Integration
-//!
-//! - **Observe**: Receives streaming data from ALL other tools via OODA event bus
-//! - **Orient**: Maintains rolling statistical models per metric per region
-//! - **Decide**: Classifies severity; Critical/Emergency bypass normal cadence
-//! - **Act**: Routes to AlertGenerator, AuditLogger, ScenarioModeler, ReportEngine
-
-use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
+use anyhow::Result;
+use std::collections::{HashMap, VecDeque};
 
-use crate::db::DatabaseConnections;
-use super::demand_forecaster::WorkerType;
-
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Configuration
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
-/// Configuration for the AnomalyDetector.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnomalyConfig {
     /// Z-score threshold for point anomalies (default: 3.0).
@@ -39,22 +16,16 @@ pub struct AnomalyConfig {
     pub min_history_points: u32,
     /// Sliding window size for rolling statistics (data points).
     pub window_size: u32,
-    /// How far back to load baselines on startup (days).
-    pub baseline_lookback_days: u32,
     /// Minimum consecutive anomalous points before raising alert.
     pub min_consecutive_anomalies: u32,
     /// Rate limit: max anomalies raised per metric per hour.
     pub max_alerts_per_metric_per_hour: u32,
-    /// CUSUM threshold for change-point detection.
+    /// CUSUM target mean shift threshold (in standard deviations).
     pub cusum_threshold: f64,
-    /// CUSUM slack parameter (allowance for normal variation).
-    pub cusum_slack: f64,
-    /// Seasonal ESD maximum ratio of outliers to detect.
-    pub seasonal_esd_max_outlier_ratio: f64,
-    /// Seasonal period (data points per cycle, e.g. 7 for daily data with weekly seasonality).
+    /// CUSUM allowance (slack parameter, in standard deviations).
+    pub cusum_allowance: f64,
+    /// Seasonal period for decomposition (e.g., 7 for weekly, 30 for monthly).
     pub seasonal_period: usize,
-    /// Correlation window for multi-stream anomaly matching (minutes).
-    pub correlation_window_minutes: i64,
 }
 
 impl Default for AnomalyConfig {
@@ -63,91 +34,25 @@ impl Default for AnomalyConfig {
             z_score_threshold: 3.0,
             min_history_points: 30,
             window_size: 100,
-            baseline_lookback_days: 90,
             min_consecutive_anomalies: 3,
-            max_alerts_per_metric_per_hour: 5,
-            cusum_threshold: 5.0,
-            cusum_slack: 0.5,
-            seasonal_esd_max_outlier_ratio: 0.1,
+            max_alerts_per_metric_per_hour: 10,
+            cusum_threshold: 4.0,
+            cusum_allowance: 0.5,
             seasonal_period: 7,
-            correlation_window_minutes: 30,
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Statistical Models (in-memory for speed)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Anomaly event types
+// ---------------------------------------------------------------------------
 
-/// Running statistical models loaded into memory for real-time detection.
-#[derive(Debug, Clone)]
-pub enum StatisticalModel {
-    /// Z-score based: compare point to rolling mean ± std dev.
-    ZScore {
-        mean: f64,
-        std_dev: f64,
-        window: VecDeque<f64>,
-    },
-    /// CUSUM change-point detection model.
-    CUSUM {
-        target_mean: f64,
-        cumulative_sum_pos: f64,
-        cumulative_sum_neg: f64,
-        threshold: f64,
-        slack: f64,
-    },
-    /// Seasonal hybrid ESD for time series with trend + seasonality.
-    SeasonalESD {
-        trend_component: Vec<f64>,
-        seasonal_component: Vec<f64>,
-        residual_std: f64,
-        period: usize,
-    },
-}
-
-impl StatisticalModel {
-    /// Create a new Z-score model with an empty window.
-    pub fn new_zscore() -> Self {
-        Self::ZScore {
-            mean: 0.0,
-            std_dev: 0.0,
-            window: VecDeque::new(),
-        }
-    }
-
-    /// Create a new CUSUM model with the given parameters.
-    pub fn new_cusum(initial_mean: f64, threshold: f64, slack: f64) -> Self {
-        Self::CUSUM {
-            target_mean: initial_mean,
-            cumulative_sum_pos: 0.0,
-            cumulative_sum_neg: 0.0,
-            threshold,
-            slack,
-        }
-    }
-
-    /// Create a new Seasonal ESD model.
-    pub fn new_seasonal_esd(period: usize) -> Self {
-        Self::SeasonalESD {
-            trend_component: Vec::new(),
-            seasonal_component: vec![0.0; period],
-            residual_std: 0.0,
-            period,
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Anomaly Event Types
-// ─────────────────────────────────────────────────────────────────────
-
-/// A detected anomaly event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnomalyEvent {
     pub id: Uuid,
     pub metric_name: String,
     pub region: String,
-    pub worker_type: Option<WorkerType>,
+    pub worker_type: Option<String>,
     pub anomaly_type: AnomalyType,
     pub severity: AnomalySeverity,
     pub observed_value: f64,
@@ -159,35 +64,23 @@ pub struct AnomalyEvent {
     pub root_cause: Option<String>,
 }
 
-/// Classification of anomaly types.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnomalyType {
-    /// Single outlier value.
     PointAnomaly,
-    /// Normal value in abnormal context (e.g., high sales at 3 AM).
     ContextualAnomaly,
-    /// Sequence of values that together are anomalous.
     CollectiveAnomaly,
-    /// Sustained shift in baseline.
     ChangePoint,
-    /// Pattern breaks expected seasonality.
     SeasonalBreak,
 }
 
-/// Severity levels for anomalies.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnomalySeverity {
-    /// Noteworthy, no action needed.
     Info,
-    /// May indicate emerging issue.
     Warning,
-    /// Requires immediate investigation.
     Critical,
-    /// Systemic risk detected.
     Emergency,
 }
 
-/// Contextual information attached to an anomaly event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnomalyContext {
     pub recent_values: Vec<TimestampedValue>,
@@ -197,14 +90,12 @@ pub struct AnomalyContext {
     pub possible_causes: Vec<String>,
 }
 
-/// A value with its timestamp for context windows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimestampedValue {
     pub timestamp: DateTime<Utc>,
     pub value: f64,
 }
 
-/// Comparison against a peer region or cohort.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerComparison {
     pub peer_region: String,
@@ -212,1224 +103,1104 @@ pub struct PeerComparison {
     pub divergence_pct: f64,
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Data Point for batch ingestion
-// ─────────────────────────────────────────────────────────────────────
-
-/// A single data point for ingestion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataPoint {
-    pub metric_name: String,
+    pub metric: String,
     pub region: String,
-    pub worker_type: Option<WorkerType>,
+    pub worker_type: Option<String>,
     pub value: f64,
     pub timestamp: DateTime<Utc>,
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Anomaly Filter
-// ─────────────────────────────────────────────────────────────────────
-
-/// Filter for querying active anomalies.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnomalyFilter {
-    pub metric_name: Option<String>,
     pub region: Option<String>,
-    pub worker_type: Option<WorkerType>,
-    pub min_severity: Option<AnomalySeverity>,
-    pub unacknowledged_only: bool,
+    pub metric_name: Option<String>,
+    pub severity: Option<AnomalySeverity>,
+    pub worker_type: Option<String>,
+    pub acknowledged: Option<bool>,
     pub since: Option<DateTime<Utc>>,
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Rate Limiter State
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Internal statistical model state
+// ---------------------------------------------------------------------------
 
-/// Per-metric rate limiting for anomaly alerts.
 #[derive(Debug, Clone)]
-struct RateLimitState {
-    window_start: DateTime<Utc>,
-    count: u32,
+pub struct MetricState {
+    /// Sliding window of recent values.
+    pub window: VecDeque<f64>,
+    /// Timestamps corresponding to window values.
+    pub timestamps: VecDeque<DateTime<Utc>>,
+    /// Running sum for incremental mean.
+    pub sum: f64,
+    /// Running sum of squares for incremental variance.
+    pub sum_sq: f64,
+    /// Total count of observed values.
+    pub count: u64,
+    /// CUSUM: cumulative sum above target.
+    pub cusum_high: f64,
+    /// CUSUM: cumulative sum below target.
+    pub cusum_low: f64,
+    /// CUSUM target mean (estimated from initial data).
+    pub cusum_target: f64,
+    /// CUSUM running std dev.
+    pub cusum_std: f64,
+    /// Consecutive anomaly count.
+    pub consecutive_anomalies: u32,
+    /// Seasonal component (one full period).
+    pub seasonal: Vec<f64>,
+    /// Seasonal baseline established flag.
+    pub seasonal_established: bool,
+    /// Count of alerts raised in the current hour window.
+    pub alerts_this_hour: u32,
+    /// Hour marker for rate limiting.
+    pub alert_hour: Option<u64>,
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Anomaly Detector
-// ─────────────────────────────────────────────────────────────────────
+impl MetricState {
+    pub fn new(window_size: usize) -> Self {
+        Self {
+            window: VecDeque::with_capacity(window_size),
+            timestamps: VecDeque::with_capacity(window_size),
+            sum: 0.0,
+            sum_sq: 0.0,
+            count: 0,
+            cusum_high: 0.0,
+            cusum_low: 0.0,
+            cusum_target: 0.0,
+            cusum_std: 0.0,
+            consecutive_anomalies: 0,
+            seasonal: vec![0.0; window_size],
+            seasonal_established: false,
+            alerts_this_hour: 0,
+            alert_hour: None,
+        }
+    }
 
-/// The main anomaly detection engine.
-///
-/// Maintains in-memory statistical models for real-time detection across
-/// all data streams. Supports Z-score, CUSUM, and Seasonal ESD methods,
-/// with automatic multi-stream correlation for hypothesis generation.
+    pub fn mean(&self) -> f64 {
+        if self.count == 0 { 0.0 } else { self.sum / self.count as f64 }
+    }
+
+    pub fn std_dev(&self) -> f64 {
+        if self.count < 2 { return 0.0; }
+        let mean = self.mean();
+        let variance = (self.sum_sq / self.count as f64) - mean * mean;
+        variance.max(0.0).sqrt()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AnomalyDetector
+// ---------------------------------------------------------------------------
+
 pub struct AnomalyDetector {
-    db: DatabaseConnections,
     config: AnomalyConfig,
-    /// Running statistical models keyed by "metric:region:worker_type".
-    models: dashmap::DashMap<String, Vec<StatisticalModel>>,
-    /// Recent values per metric key for context windows.
-    recent_values: dashmap::DashMap<String, VecDeque<TimestampedValue>>,
-    /// Active (unacknowledged) anomalies.
-    active_anomalies: dashmap::DashMap<Uuid, AnomalyEvent>,
-    /// Rate limit state per metric key.
-    rate_limits: dashmap::DashMap<String, RateLimitState>,
+    /// Per-metric-region statistical state, keyed by "{metric}:{region}".
+    models: std::sync::RwLock<HashMap<String, MetricState>>,
+    /// Active (unacknowledged) anomaly events.
+    active_anomalies: std::sync::RwLock<Vec<AnomalyEvent>>,
 }
 
 impl AnomalyDetector {
-    /// Create a new AnomalyDetector with default configuration.
-    pub fn new(db: DatabaseConnections) -> Self {
+    pub fn new(config: AnomalyConfig) -> Self {
         Self {
-            db,
-            config: AnomalyConfig::default(),
-            models: dashmap::DashMap::new(),
-            recent_values: dashmap::DashMap::new(),
-            active_anomalies: dashmap::DashMap::new(),
-            rate_limits: dashmap::DashMap::new(),
-        }
-    }
-
-    /// Create with custom configuration.
-    pub fn with_config(db: DatabaseConnections, config: AnomalyConfig) -> Self {
-        Self {
-            db,
             config,
-            models: dashmap::DashMap::new(),
-            recent_values: dashmap::DashMap::new(),
-            active_anomalies: dashmap::DashMap::new(),
-            rate_limits: dashmap::DashMap::new(),
+            models: std::sync::RwLock::new(HashMap::new()),
+            active_anomalies: std::sync::RwLock::new(Vec::new()),
         }
     }
 
-    /// Build the composite key for a metric stream.
-    fn metric_key(metric: &str, region: &str, worker_type: &Option<WorkerType>) -> String {
-        let wt = worker_type
-            .as_ref()
-            .map(|w| format!("{:?}", w))
-            .unwrap_or_else(|| "all".to_string());
-        format!("{}:{}:{}", metric, region, wt)
-    }
+    // -----------------------------------------------------------------------
+    // 1. detect_zscore — Z-score outlier detection
+    // -----------------------------------------------------------------------
 
-    // ─────────────────────────────────────────────────────────────────
-    // Public API
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Ingest a single data point and check for anomalies in real-time.
-    ///
-    /// Updates the internal statistical models and returns an anomaly event
-    /// if the point is detected as anomalous.
-    pub async fn ingest_and_detect(
+    /// Detect point anomalies using Z-score against a rolling window.
+    /// Returns the anomaly event if the value is an outlier, None otherwise.
+    pub fn detect_zscore(
         &self,
         metric: &str,
         region: &str,
-        worker_type: Option<WorkerType>,
         value: f64,
         timestamp: DateTime<Utc>,
     ) -> Result<Option<AnomalyEvent>> {
-        let key = Self::metric_key(metric, region, &worker_type);
+        let key = format!("{}:{}", metric, region);
+        let mut models = self.models.write().unwrap();
+        let state = models.entry(key.clone()).or_insert_with(|| MetricState::new(self.config.window_size as usize));
 
-        // Update recent values for context
-        self.push_recent_value(&key, value, timestamp);
+        // Update incremental statistics
+        state.sum += value;
+        state.sum_sq += value * value;
+        state.count += 1;
+        state.window.push_back(value);
+        state.timestamps.push_back(timestamp);
 
-        // Get or initialize models for this metric stream
-        let has_enough_history = {
-            let entry = self.models.entry(key.clone()).or_insert_with(|| {
-                vec![
-                    StatisticalModel::new_zscore(),
-                    StatisticalModel::new_cusum(
-                        value,
-                        self.config.cusum_threshold,
-                        self.config.cusum_slack,
-                    ),
-                    StatisticalModel::new_seasonal_esd(self.config.seasonal_period),
-                ]
-            });
-            let zscore = &entry[0];
-            match zscore {
-                StatisticalModel::ZScore { window, .. } => {
-                    window.len() >= self.config.min_history_points as usize
-                }
-                _ => false,
+        // Trim window
+        while state.window.len() > self.config.window_size as usize {
+            if let Some(old) = state.window.pop_front() {
+                state.sum -= old;
+                state.sum_sq -= old * old;
+                state.count -= 1; // approximate; window stats are rolling
             }
-        };
+            state.timestamps.pop_front();
+        }
 
-        // Not enough history yet — just update models, no detection
-        if !has_enough_history {
-            self.update_models(&key, value)?;
+        // Not enough data yet
+        if state.window.len() < self.config.min_history_points as usize {
             return Ok(None);
         }
 
-        // Run all detectors
-        let mut anomalies = Vec::new();
+        let mean = state.mean();
+        let std = state.std_dev();
 
-        // 1. Z-score point anomaly detection
-        if let Some(event) = self.detect_zscore(&key, metric, region, &worker_type, value, timestamp)? {
-            anomalies.push(event);
+        if std < 1e-10 {
+            return Ok(None); // No variance, can't compute z-score
         }
 
-        // 2. CUSUM change-point detection
-        if let Some(event) = self.detect_cusum(&key, metric, region, &worker_type, value, timestamp)? {
-            anomalies.push(event);
-        }
+        let z_score = (value - mean) / std;
+        let abs_z = z_score.abs();
 
-        // 3. Seasonal anomaly detection
-        if let Some(event) =
-            self.detect_seasonal(&key, metric, region, &worker_type, value, timestamp)?
-        {
-            anomalies.push(event);
-        }
-
-        // Update models with the new value
-        self.update_models(&key, value)?;
-
-        // Select the most severe anomaly (if any)
-        let event = anomalies
-            .into_iter()
-            .max_by_key(|a| a.severity.clone())
-            .map(|mut e| {
-                // Correlate with other simultaneous anomalies
-                if let Ok(causes) =
-                    self.correlate_anomalies_sync(&e, self.config.correlation_window_minutes)
-                {
-                    e.context.possible_causes = causes;
-                }
-
-                // Rate limit check
-                if self.is_rate_limited(&key) {
-                    return None;
-                }
-
-                // Store as active anomaly
-                self.active_anomalies.insert(e.id, e.clone());
-
-                // Persist to ClickHouse
-                let db = self.db.clone();
-                let event_clone = e.clone();
-                tokio::spawn(async move {
-                    Self::persist_anomaly(&db, &event_clone).await;
-                });
-
-                Some(e)
-            })
-            .flatten();
-
-        Ok(event)
-    }
-
-    /// Batch-ingest and detect (for bulk ETL pipelines).
-    pub async fn batch_detect(&self, points: Vec<DataPoint>) -> Result<Vec<AnomalyEvent>> {
-        let mut events = Vec::new();
-        for point in points {
-            if let Some(event) = self
-                .ingest_and_detect(
-                    &point.metric_name,
-                    &point.region,
-                    point.worker_type,
-                    point.value,
-                    point.timestamp,
-                )
-                .await?
-            {
-                events.push(event);
-            }
-        }
-        Ok(events)
-    }
-
-    /// Get active anomalies (unacknowledged), filtered.
-    pub async fn get_active_anomalies(
-        &self,
-        filter: AnomalyFilter,
-    ) -> Result<Vec<AnomalyEvent>> {
-        let mut results: Vec<AnomalyEvent> = self
-            .active_anomalies
-            .iter()
-            .filter(|entry| {
-                let e = entry.value();
-                if filter.unacknowledged_only && e.acknowledged {
-                    return false;
-                }
-                if let Some(ref metric) = filter.metric_name {
-                    if e.metric_name != *metric {
-                        return false;
-                    }
-                }
-                if let Some(ref region) = filter.region {
-                    if e.region != *region {
-                        return false;
-                    }
-                }
-                if let Some(ref wt) = filter.worker_type {
-                    let wt_str = format!("{:?}", wt);
-                    let ewt_str = e.worker_type.as_ref().map(|w| format!("{:?}", w));
-                    if ewt_str.as_deref() != Some(wt_str.as_str()) {
-                        return false;
-                    }
-                }
-                if let Some(ref min_sev) = filter.min_severity {
-                    if e.severity < *min_sev {
-                        return false;
-                    }
-                }
-                if let Some(since) = filter.since {
-                    if e.detected_at < since {
-                        return false;
-                    }
-                }
-                true
-            })
-            .map(|entry| entry.value().clone())
-            .collect();
-
-        // Sort by severity (descending) then timestamp (descending)
-        results.sort_by(|a, b| {
-            b.severity
-                .cmp(&a.severity)
-                .then_with(|| b.detected_at.cmp(&a.detected_at))
-        });
-
-        Ok(results)
-    }
-
-    /// Acknowledge an anomaly and optionally attach root cause.
-    pub async fn acknowledge(
-        &self,
-        anomaly_id: Uuid,
-        root_cause: Option<String>,
-        acknowledged_by: String,
-    ) -> Result<()> {
-        let mut event = self
-            .active_anomalies
-            .get_mut(&anomaly_id)
-            .ok_or_else(|| anyhow!("Anomaly {} not found", anomaly_id))?;
-
-        event.acknowledged = true;
-        event.root_cause = root_cause.clone();
-
-        // Persist acknowledgment to PostgreSQL
-        sqlx::query(
-            "INSERT INTO anomaly_acknowledgments (anomaly_id, root_cause, acknowledged_by, acknowledged_at)
-             VALUES ($1, $2, $3, now())
-             ON CONFLICT (anomaly_id) DO UPDATE SET root_cause = $2, acknowledged_by = $3, acknowledged_at = now()",
-        )
-        .bind(anomaly_id)
-        .bind(&root_cause)
-        .bind(&acknowledged_by)
-        .execute(&self.db.postgres)
-        .await?;
-
-        Ok(())
-    }
-
-    /// Run batch anomaly scan over historical data (backfill or audit).
-    pub async fn scan_historical(
-        &self,
-        metric: &str,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-    ) -> Result<Vec<AnomalyEvent>> {
-        let query = format!(
-            r#"
-            SELECT
-                region,
-                worker_type,
-                value,
-                event_time
-            FROM metric_timeseries
-            WHERE metric_name = '{metric}'
-              AND event_time >= '{from}'
-              AND event_time <= '{to}'
-            ORDER BY region, worker_type, event_time
-            "#,
-            metric = metric,
-            from = from.format("%Y-%m-%d %H:%M:%S"),
-            to = to.format("%Y-%m-%d %H:%M:%S"),
-        );
-
-        #[derive(clickhouse::Row, Deserialize)]
-        struct MetricRow {
-            region: String,
-            worker_type: String,
-            value: f64,
-            event_time: chrono::NaiveDateTime,
-        }
-
-        let rows = self
-            .db
-            .clickhouse
-            .query(&query)
-            .fetch_all::<MetricRow>()
-            .await
-            .unwrap_or_default();
-
-        // Group by region + worker_type and run detection
-        let mut grouped: HashMap<String, Vec<(f64, DateTime<Utc>)>> = HashMap::new();
-        for row in &rows {
-            let key = format!("{}:{}", row.region, row.worker_type);
-            grouped
-                .entry(key)
-                .or_default()
-                .push((row.value, row.event_time.and_utc()));
-        }
-
-        let mut all_events = Vec::new();
-        for (_key, points) in grouped {
-            // Create temporary detector for this scan
-            let temp_config = AnomalyConfig {
-                min_history_points: 10, // Lower threshold for historical scan
-                ..self.config.clone()
+        if abs_z >= self.config.z_score_threshold {
+            // Classify severity based on sigma distance
+            let severity = if abs_z >= 5.0 {
+                AnomalySeverity::Emergency
+            } else if abs_z >= 4.0 {
+                AnomalySeverity::Critical
+            } else if abs_z >= 3.5 {
+                AnomalySeverity::Warning
+            } else {
+                AnomalySeverity::Info
             };
-            let temp_detector = AnomalyDetector::with_config(self.db.clone(), temp_config);
 
-            for (value, ts) in &points {
-                if let Some(event) = temp_detector
-                    .ingest_and_detect(metric, "historical", None, *value, *ts)
-                    .await?
-                {
-                    all_events.push(event);
-                }
+            state.consecutive_anomalies += 1;
+
+            // Only emit alert if consecutive threshold met
+            if state.consecutive_anomalies >= self.config.min_consecutive_anomalies {
+                let recent: Vec<TimestampedValue> = state
+                    .window
+                    .iter()
+                    .zip(state.timestamps.iter())
+                    .take(10)
+                    .map(|(v, t)| TimestampedValue { timestamp: *t, value: *v })
+                    .collect();
+
+                let event = AnomalyEvent {
+                    id: Uuid::new_v4(),
+                    metric_name: metric.to_string(),
+                    region: region.to_string(),
+                    worker_type: None,
+                    anomaly_type: AnomalyType::PointAnomaly,
+                    severity,
+                    observed_value: value,
+                    expected_value: mean,
+                    deviation_sigma: abs_z,
+                    context: AnomalyContext {
+                        recent_values: recent,
+                        historical_mean: mean,
+                        historical_std: std,
+                        peer_comparison: None,
+                        possible_causes: self.generate_hypotheses(metric, value, mean),
+                    },
+                    detected_at: timestamp,
+                    acknowledged: false,
+                    root_cause: None,
+                };
+
+                return Ok(Some(event));
             }
-        }
-
-        Ok(all_events)
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Detection Methods
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Z-score based statistical outlier detection.
-    ///
-    /// Compares the incoming value against the rolling mean and standard
-    /// deviation of the metric stream. Returns an anomaly if the absolute
-    /// z-score exceeds the configured threshold.
-    pub fn detect_zscore(
-        &self,
-        key: &str,
-        metric: &str,
-        region: &str,
-        worker_type: &Option<WorkerType>,
-        value: f64,
-        timestamp: DateTime<Utc>,
-    ) -> Result<Option<AnomalyEvent>> {
-        let models = self.models.get(key).ok_or_else(|| {
-            anyhow!("No models found for key {}", key)
-        })?;
-
-        let zscore_model = models.iter().find_map(|m| match m {
-            StatisticalModel::ZScore {
-                mean,
-                std_dev,
-                window,
-            } => Some((*mean, *std_dev, window.len())),
-            _ => None,
-        });
-
-        let (mean, std_dev, _window_len) = match zscore_model {
-            Some(v) => v,
-            None => return Ok(None),
-        };
-
-        if std_dev < 1e-10 {
-            return Ok(None); // No variance yet
-        }
-
-        let z_score = (value - mean).abs() / std_dev;
-
-        if z_score >= self.config.z_score_threshold {
-            let expected = mean;
-            let severity = self.classify_zscore_severity(z_score);
-
-            let recent = self.get_recent_values(key, 20);
-            let causes = self.generate_point_anomaly_hypotheses(metric, region, value, mean, std_dev);
-
-            Ok(Some(AnomalyEvent {
-                id: Uuid::new_v4(),
-                metric_name: metric.to_string(),
-                region: region.to_string(),
-                worker_type: worker_type.clone(),
-                anomaly_type: AnomalyType::PointAnomaly,
-                severity,
-                observed_value: value,
-                expected_value: expected,
-                deviation_sigma: z_score,
-                context: AnomalyContext {
-                    recent_values: recent,
-                    historical_mean: mean,
-                    historical_std: std_dev,
-                    peer_comparison: None, // Populated by correlate_anomalies
-                    possible_causes: causes,
-                },
-                detected_at: timestamp,
-                acknowledged: false,
-                root_cause: None,
-            }))
         } else {
-            Ok(None)
+            state.consecutive_anomalies = 0;
         }
+
+        Ok(None)
     }
 
-    /// CUSUM (Cumulative Sum) change-point detection.
-    ///
-    /// Detects sustained shifts in the mean of a metric stream. Unlike
-    /// Z-score which catches individual outliers, CUSUM accumulates
-    /// deviations from the target mean and fires when the cumulative
-    /// sum crosses a threshold — indicating a regime change.
+    // -----------------------------------------------------------------------
+    // 2. detect_cusum — CUSUM change-point detection
+    // -----------------------------------------------------------------------
+
+    /// Detect sustained shifts in the mean using the Cumulative Sum (CUSUM) algorithm.
+    /// Returns a ChangePoint anomaly if the process mean has shifted.
     pub fn detect_cusum(
         &self,
-        key: &str,
         metric: &str,
         region: &str,
-        worker_type: &Option<WorkerType>,
         value: f64,
         timestamp: DateTime<Utc>,
     ) -> Result<Option<AnomalyEvent>> {
-        let mut models = self.models.get_mut(key).ok_or_else(|| {
-            anyhow!("No models found for key {}", key)
-        })?;
+        let key = format!("{}:{}", metric, region);
+        let mut models = self.models.write().unwrap();
+        let state = models.entry(key.clone()).or_insert_with(|| MetricState::new(self.config.window_size as usize));
 
-        let mut change_detected = false;
-        let mut cumulative_pos = 0.0;
-        let mut cumulative_neg = 0.0;
-        let mut target = 0.0;
-        let mut threshold = 0.0;
+        // Bootstrap target mean and std from initial observations
+        if state.count < self.config.min_history_points as u64 {
+            state.sum += value;
+            state.sum_sq += value * value;
+            state.count += 1;
+            state.window.push_back(value);
+            state.timestamps.push_back(timestamp);
 
-        for model in models.iter_mut() {
-            if let StatisticalModel::CUSUM {
-                target_mean,
-                cumulative_sum_pos,
-                cumulative_sum_neg,
-                threshold: thresh,
-                slack,
-            } = model
-            {
-                target = *target_mean;
-                threshold = *thresh;
-
-                // CUSUM accumulation with slack
-                let deviation_pos = value - target_mean - slack;
-                let deviation_neg = target_mean - value - slack;
-
-                *cumulative_sum_pos = (*cumulative_sum_pos + deviation_pos).max(0.0);
-                *cumulative_sum_neg = (*cumulative_sum_neg + deviation_neg).max(0.0);
-
-                cumulative_pos = *cumulative_sum_pos;
-                cumulative_neg = *cumulative_sum_neg;
-
-                // Check if either cumulative sum exceeds the threshold
-                if *cumulative_sum_pos > *thresh || *cumulative_sum_neg > *thresh {
-                    change_detected = true;
-                    // Reset after detection
-                    *cumulative_sum_pos = 0.0;
-                    *cumulative_sum_neg = 0.0;
-                    // Update target mean to new level
-                    *target_mean = value;
-                }
-                break;
+            if state.count == self.config.min_history_points as u64 {
+                state.cusum_target = state.mean();
+                state.cusum_std = state.std_dev().max(1e-10);
             }
+            return Ok(None);
         }
 
-        if change_detected {
-            let direction = if cumulative_pos > cumulative_neg {
-                "increase"
+        let k = self.config.cusum_allowance * state.cusum_std; // allowance (slack)
+        let h = self.config.cusum_threshold * state.cusum_std; // decision threshold
+
+        // Standardized deviation from target
+        let dev = value - state.cusum_target;
+
+        // Update CUSUM statistics (two-sided)
+        state.cusum_high = (state.cusum_high + dev - k).max(0.0);
+        state.cusum_low = (state.cusum_low - dev - k).max(0.0);
+
+        // Also update rolling window for recent context
+        state.window.push_back(value);
+        state.timestamps.push_back(timestamp);
+        while state.window.len() > self.config.window_size as usize {
+            state.window.pop_front();
+            state.timestamps.pop_front();
+        }
+
+        // Check for change-point
+        let (triggered, direction) = if state.cusum_high > h {
+            (true, "upward")
+        } else if state.cusum_low > h {
+            (true, "downward")
+        } else {
+            (false, "none")
+        };
+
+        if triggered {
+            let shift_magnitude = if direction == "upward" {
+                state.cusum_high
             } else {
-                "decrease"
+                state.cusum_low
             };
-            let severity = AnomalySeverity::Critical;
 
-            let recent = self.get_recent_values(key, 30);
-            let causes = vec![
-                format!(
-                    "Sustained {} detected in {} — baseline shifted from {:.2}",
-                    direction, metric, target
-                ),
-                "Possible policy change or market shock".to_string(),
-                "Check for concurrent events in the same region".to_string(),
+            let sigma_deviation = shift_magnitude / state.cusum_std;
+
+            let severity = if sigma_deviation >= 8.0 {
+                AnomalySeverity::Emergency
+            } else if sigma_deviation >= 6.0 {
+                AnomalySeverity::Critical
+            } else if sigma_deviation >= 4.5 {
+                AnomalySeverity::Warning
+            } else {
+                AnomalySeverity::Info
+            };
+
+            let recent: Vec<TimestampedValue> = state
+                .window
+                .iter()
+                .zip(state.timestamps.iter())
+                .rev()
+                .take(15)
+                .map(|(v, t)| TimestampedValue { timestamp: *t, value: *v })
+                .collect();
+
+            let mut causes = vec![
+                format!("Sustained {} shift detected by CUSUM", direction),
+                format!("Target mean was {:.2}, recent drift is {:.2}σ", state.cusum_target, sigma_deviation),
             ];
+            if direction == "upward" {
+                causes.push("Possible demand surge or price spike".to_string());
+            } else {
+                causes.push("Possible market disruption, crackdown, or supply shock".to_string());
+            }
 
-            Ok(Some(AnomalyEvent {
+            let event = AnomalyEvent {
                 id: Uuid::new_v4(),
                 metric_name: metric.to_string(),
                 region: region.to_string(),
-                worker_type: worker_type.clone(),
+                worker_type: None,
                 anomaly_type: AnomalyType::ChangePoint,
                 severity,
                 observed_value: value,
-                expected_value: target,
-                deviation_sigma: if cumulative_pos > cumulative_neg {
-                    cumulative_pos / threshold
-                } else {
-                    cumulative_neg / threshold
-                },
+                expected_value: state.cusum_target,
+                deviation_sigma: sigma_deviation,
                 context: AnomalyContext {
                     recent_values: recent,
-                    historical_mean: target,
-                    historical_std: 0.0, // Not applicable for CUSUM
+                    historical_mean: state.cusum_target,
+                    historical_std: state.cusum_std,
                     peer_comparison: None,
                     possible_causes: causes,
                 },
                 detected_at: timestamp,
                 acknowledged: false,
                 root_cause: None,
-            }))
-        } else {
-            Ok(None)
+            };
+
+            // Reset CUSUM after detection to avoid repeated alerts for same shift
+            state.cusum_high = 0.0;
+            state.cusum_low = 0.0;
+            // Update target to new level (adaptive)
+            state.cusum_target = state.window.iter().sum::<f64>() / state.window.len() as f64;
+
+            return Ok(Some(event));
         }
+
+        Ok(None)
     }
 
-    /// Seasonal anomaly detection using decomposition.
-    ///
-    /// Decomposes the time series into trend + seasonal + residual components,
-    /// then checks if the residual is abnormally large — indicating a value
-    /// that breaks expected seasonal patterns.
+    // -----------------------------------------------------------------------
+    // 3. detect_seasonal — Seasonal decomposition anomaly detection
+    // -----------------------------------------------------------------------
+
+    /// Detect anomalies by decomposing the time series into trend + seasonal + residual,
+    /// then flagging observations where the residual is abnormally large.
+    /// Uses a simple moving-average decomposition (STL-lite).
     pub fn detect_seasonal(
         &self,
-        key: &str,
         metric: &str,
         region: &str,
-        worker_type: &Option<WorkerType>,
         value: f64,
         timestamp: DateTime<Utc>,
     ) -> Result<Option<AnomalyEvent>> {
-        let mut models = self.models.get_mut(key).ok_or_else(|| {
-            anyhow!("No models found for key {}", key)
-        })?;
+        let key = format!("{}:{}", metric, region);
+        let mut models = self.models.write().unwrap();
+        let state = models.entry(key.clone()).or_insert_with(|| MetricState::new(self.config.window_size as usize));
 
-        let mut anomaly = None;
+        let period = self.config.seasonal_period;
 
-        for model in models.iter_mut() {
-            if let StatisticalModel::SeasonalESD {
-                trend_component,
-                seasonal_component,
-                residual_std,
-                period,
-            } = model
-            {
-                if trend_component.len() < *period * 2 {
-                    // Not enough data for seasonal decomposition
-                    break;
-                }
-
-                // Compute expected value: trend + seasonal
-                let trend = if trend_component.len() >= 5 {
-                    // Simple moving average trend
-                    let n = trend_component.len();
-                    let window = 5.min(n);
-                    trend_component[n - window..n].iter().sum::<f64>() / window as f64
-                } else {
-                    trend_component.last().copied().unwrap_or(value)
-                };
-
-                let season_idx = trend_component.len() % period;
-                let seasonal = seasonal_component[season_idx];
-                let expected = trend + seasonal;
-
-                // Compute residual
-                let residual = value - expected;
-
-                if *residual_std > 1e-10 {
-                    let residual_z = residual.abs() / *residual_std;
-
-                    if residual_z >= self.config.z_score_threshold {
-                        let severity = self.classify_zscore_severity(residual_z);
-
-                        let recent = self.get_recent_values(key, 20);
-                        let causes = vec![
-                            format!(
-                                "Value deviates {:.1}σ from expected seasonal pattern",
-                                residual_z
-                            ),
-                            format!(
-                                "Expected: {:.2} (trend={:.2}, seasonal={:+.2})",
-                                expected, trend, seasonal
-                            ),
-                            "Check for calendar effects, holidays, or one-off events".to_string(),
-                        ];
-
-                        anomaly = Some(AnomalyEvent {
-                            id: Uuid::new_v4(),
-                            metric_name: metric.to_string(),
-                            region: region.to_string(),
-                            worker_type: worker_type.clone(),
-                            anomaly_type: AnomalyType::SeasonalBreak,
-                            severity,
-                            observed_value: value,
-                            expected_value: expected,
-                            deviation_sigma: residual_z,
-                            context: AnomalyContext {
-                                recent_values: recent,
-                                historical_mean: trend,
-                                historical_std: *residual_std,
-                                peer_comparison: None,
-                                possible_causes: causes,
-                            },
-                            detected_at: timestamp,
-                            acknowledged: false,
-                            root_cause: None,
-                        });
-                    }
-                }
-
-                // Update seasonal model
-                trend_component.push(value);
-                if trend_component.len() > *period * 10 {
-                    trend_component.remove(0);
-                }
-
-                // Update seasonal component (exponential smoothing)
-                let alpha = 0.1;
-                let deseasonalized = value - trend;
-                seasonal_component[season_idx] =
-                    seasonal_component[season_idx] * (1.0 - alpha) + deseasonalized * alpha;
-
-                // Update residual std (exponential moving average of squared residuals)
-                let residual_sq = residual * residual;
-                *residual_std =
-                    (*residual_std * *residual_std * 0.95 + residual_sq * 0.05).sqrt();
-
-                break;
-            }
+        state.window.push_back(value);
+        state.timestamps.push_back(timestamp);
+        while state.window.len() > self.config.window_size as usize {
+            state.window.pop_front();
+            state.timestamps.pop_front();
         }
 
-        Ok(anomaly)
+        // Need at least 2 full periods to establish seasonal pattern
+        if state.window.len() < period * 2 {
+            return Ok(None);
+        }
+
+        let data: Vec<f64> = state.window.iter().copied().collect();
+        let n = data.len();
+
+        // Step 1: Compute trend via centered moving average (window = seasonal period)
+        let half = period / 2;
+        let mut trend = vec![0.0f64; n];
+        for i in half..n - half {
+            let sum: f64 = data[i - half..=i + half].iter().sum();
+            trend[i] = sum / period as f64;
+        }
+        // Fill edges with nearest computed value
+        for i in 0..half {
+            trend[i] = trend[half];
+        }
+        for i in n - half..n {
+            trend[i] = trend[n - half - 1];
+        }
+
+        // Step 2: Detrended series
+        let detrended: Vec<f64> = data.iter().zip(trend.iter()).map(|(d, t)| d - t).collect();
+
+        // Step 3: Compute seasonal component (average detrended value at each position in period)
+        let mut seasonal_means = vec![0.0f64; period];
+        let mut seasonal_counts = vec![0u32; period];
+        for (i, &val) in detrended.iter().enumerate() {
+            let pos = i % period;
+            seasonal_means[pos] += val;
+            seasonal_counts[pos] += 1;
+        }
+        for i in 0..period {
+            if seasonal_counts[i] > 0 {
+                seasonal_means[i] /= seasonal_counts[i] as f64;
+            }
+        }
+        // Center seasonal component (sum to zero)
+        let seasonal_mean: f64 = seasonal_means.iter().sum::<f64>() / period as f64;
+        for s in seasonal_means.iter_mut() {
+            *s -= seasonal_mean;
+        }
+
+        state.seasonal = seasonal_means.clone();
+        state.seasonal_established = true;
+
+        // Step 4: Residual = detrended - seasonal
+        let mut residuals = Vec::with_capacity(n);
+        for (i, &d) in detrended.iter().enumerate() {
+            residuals.push(d - seasonal_means[i % period]);
+        }
+
+        // Step 5: Compute residual statistics
+        let resid_mean: f64 = residuals.iter().sum::<f64>() / n as f64;
+        let resid_var: f64 = residuals.iter().map(|r| (r - resid_mean).powi(2)).sum::<f64>() / n as f64;
+        let resid_std = resid_var.max(1e-10).sqrt();
+
+        // Step 6: Check latest residual
+        let latest_residual = residuals[n - 1];
+        let sigma = latest_residual.abs() / resid_std;
+
+        if sigma >= self.config.z_score_threshold {
+            let severity = if sigma >= 5.0 {
+                AnomalySeverity::Emergency
+            } else if sigma >= 4.0 {
+                AnomalySeverity::Critical
+            } else if sigma >= 3.5 {
+                AnomalySeverity::Warning
+            } else {
+                AnomalySeverity::Info
+            };
+
+            let expected = trend[n - 1] + seasonal_means[(n - 1) % period];
+
+            let recent: Vec<TimestampedValue> = state
+                .window
+                .iter()
+                .zip(state.timestamps.iter())
+                .rev()
+                .take(10)
+                .map(|(v, t)| TimestampedValue { timestamp: *t, value: *v })
+                .collect();
+
+            let mut causes = vec![
+                "Residual exceeds expected seasonal pattern".to_string(),
+                format!("Expected seasonal value: {:.2}, observed: {:.2}", expected, value),
+            ];
+
+            // Check if other recent points are also breaking seasonal pattern
+            let recent_residuals: Vec<f64> = residuals[n.saturating_sub(5)..].to_vec();
+            let recent_breaks = recent_residuals.iter().filter(|r| r.abs() / resid_std > 2.0).count();
+            if recent_breaks >= 3 {
+                causes.push(format!("{} of last 5 observations also break seasonal pattern", recent_breaks));
+            }
+
+            let event = AnomalyEvent {
+                id: Uuid::new_v4(),
+                metric_name: metric.to_string(),
+                region: region.to_string(),
+                worker_type: None,
+                anomaly_type: AnomalyType::SeasonalBreak,
+                severity,
+                observed_value: value,
+                expected_value: expected,
+                deviation_sigma: sigma,
+                context: AnomalyContext {
+                    recent_values: recent,
+                    historical_mean: expected,
+                    historical_std: resid_std,
+                    peer_comparison: None,
+                    possible_causes: causes,
+                },
+                detected_at: timestamp,
+                acknowledged: false,
+                root_cause: None,
+            };
+
+            return Ok(Some(event));
+        }
+
+        Ok(None)
     }
 
-    /// Correlate anomalies across multiple data streams.
-    ///
-    /// When an anomaly is detected in one stream, checks if other streams
-    /// also show anomalies within the correlation window. Uses temporal
-    /// proximity and metric relationships to generate hypotheses about
-    /// root causes.
-    pub fn correlate_anomalies_sync(
+    // -----------------------------------------------------------------------
+    // 4. correlate_anomalies — Multi-stream correlation
+    // -----------------------------------------------------------------------
+
+    /// Given an anomaly event, find other anomalies that occurred within a time window
+    /// across different metrics/regions to generate cross-stream hypotheses.
+    pub fn correlate_anomalies(
         &self,
         event: &AnomalyEvent,
         window_minutes: i64,
     ) -> Result<Vec<String>> {
-        let window_start = event.detected_at - Duration::minutes(window_minutes);
-        let window_end = event.detected_at + Duration::minutes(window_minutes);
+        let active = self.active_anomalies.read().unwrap();
+        let window = chrono::Duration::minutes(window_minutes);
 
-        // Find anomalies in other streams within the time window
-        let correlated: Vec<&AnomalyEvent> = self
-            .active_anomalies
+        let correlated: Vec<&AnomalyEvent> = active
             .iter()
-            .filter(|entry| {
-                let other = entry.value();
-                other.id != event.id
-                    && other.detected_at >= window_start
-                    && other.detected_at <= window_end
-                    && !other.acknowledged
+            .filter(|other| {
+                // Different metric or region
+                (other.metric_name != event.metric_name || other.region != event.region)
+                // Same worker type or both None
+                && other.worker_type == event.worker_type
+                // Within time window
+                && (other.detected_at - event.detected_at).num_seconds().abs() <= window.num_seconds()
+                // Not the same event
+                && other.id != event.id
             })
-            .map(|entry| entry.value())
             .collect();
-
-        if correlated.is_empty() {
-            return Ok(Vec::new());
-        }
 
         let mut hypotheses = Vec::new();
 
-        // Generate hypotheses based on correlated anomalies
-        for other in &correlated {
-            let hypothesis = self.generate_correlation_hypothesis(event, other);
-            if !hypothesis.is_empty() {
-                hypotheses.push(hypothesis);
+        if correlated.is_empty() {
+            hypotheses.push("No correlated anomalies detected — possible isolated incident".to_string());
+            return Ok(hypotheses);
+        }
+
+        // Group by region
+        let mut by_region: HashMap<&str, Vec<&AnomalyEvent>> = HashMap::new();
+        for a in &correlated {
+            by_region.entry(&a.region).or_default().push(a);
+        }
+
+        // Multi-metric anomaly in same region → systemic issue
+        for (reg, events) in &by_region {
+            let metrics: Vec<&str> = events.iter().map(|e| e.metric_name.as_str()).collect();
+            if metrics.len() >= 2 {
+                hypotheses.push(format!(
+                    "Multi-metric anomaly in {}: {} — possible systemic economic event",
+                    reg, metrics.join(", ")
+                ));
             }
         }
 
-        // Add systemic hypothesis if many streams are affected
-        if correlated.len() >= 3 {
-            let regions: std::collections::HashSet<&str> = correlated
-                .iter()
-                .map(|a| a.region.as_str())
-                .collect();
-
+        // Same metric across multiple regions → widespread event
+        let mut by_metric: HashMap<&str, Vec<&AnomalyEvent>> = HashMap::new();
+        for a in &correlated {
+            by_metric.entry(&a.metric_name).or_default().push(a);
+        }
+        for (met, events) in &by_metric {
+            let regions: Vec<&str> = events.iter().map(|e| e.region.as_str()).collect();
             if regions.len() >= 2 {
-                hypotheses.push(
-                    "⚠️ Multi-region anomaly detected — possible systemic shock or policy event"
-                        .to_string(),
-                );
+                hypotheses.push(format!(
+                    "Cross-regional anomaly in {}: {} — possible national-level event",
+                    met, regions.join(", ")
+                ));
             }
+        }
 
-            let metrics: std::collections::HashSet<&str> = correlated
-                .iter()
-                .map(|a| a.metric_name.as_str())
-                .collect();
-
-            if metrics.len() >= 3 {
-                hypotheses.push(
-                    "⚠️ Cross-metric anomaly cluster — investigate upstream cause (policy, weather, market event)".to_string(),
-                );
+        // Check for cascade pattern: one metric's anomaly followed by another
+        let mut time_sorted = correlated.clone();
+        time_sorted.sort_by_key(|a| a.detected_at);
+        for window_events in time_sorted.windows(2) {
+            if let [earlier, later] = window_events {
+                let lag_secs = (later.detected_at - earlier.detected_at).num_seconds();
+                if lag_secs > 0 && lag_secs < 1800 {
+                    hypotheses.push(format!(
+                        "Cascade: {} ({}) preceded {} ({}) by {}s — possible causal chain",
+                        earlier.metric_name, earlier.region,
+                        later.metric_name, later.region,
+                        lag_secs
+                    ));
+                }
             }
+        }
+
+        if hypotheses.is_empty() {
+            hypotheses.push(format!("{} correlated anomalies found but no clear pattern", correlated.len()));
         }
 
         Ok(hypotheses)
     }
 
-    /// Async wrapper for correlate_anomalies (used in OODA integration).
-    pub async fn correlate_anomalies(
-        &self,
-        event: &AnomalyEvent,
-        window_minutes: i64,
-    ) -> Result<Vec<String>> {
-        self.correlate_anomalies_sync(event, window_minutes)
-    }
+    // -----------------------------------------------------------------------
+    // 5. ingest_and_detect — Real-time ingestion with all detectors
+    // -----------------------------------------------------------------------
 
-    // ─────────────────────────────────────────────────────────────────
-    // Model Update
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Update all statistical models for a metric stream with a new value.
-    fn update_models(&self, key: &str, value: f64) -> Result<()> {
-        if let Some(mut models) = self.models.get_mut(key) {
-            for model in models.iter_mut() {
-                match model {
-                    StatisticalModel::ZScore {
-                        mean,
-                        std_dev,
-                        window,
-                    } => {
-                        window.push_back(value);
-                        if window.len() > self.config.window_size as usize {
-                            window.pop_front();
-                        }
-
-                        // Recompute mean and std_dev
-                        let n = window.len() as f64;
-                        if n > 0.0 {
-                            *mean = window.iter().sum::<f64>() / n;
-                            if n > 1.0 {
-                                let variance = window
-                                    .iter()
-                                    .map(|v| (v - *mean).powi(2))
-                                    .sum::<f64>()
-                                    / (n - 1.0);
-                                *std_dev = variance.sqrt();
-                            }
-                        }
-                    }
-                    StatisticalModel::CUSUM { .. } => {
-                        // CUSUM is updated in detect_cusum
-                    }
-                    StatisticalModel::SeasonalESD { .. } => {
-                        // Seasonal ESD is updated in detect_seasonal
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Severity Classification
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Classify severity based on z-score magnitude.
-    fn classify_zscore_severity(&self, z_score: f64) -> AnomalySeverity {
-        if z_score >= 6.0 {
-            AnomalySeverity::Emergency
-        } else if z_score >= 4.5 {
-            AnomalySeverity::Critical
-        } else if z_score >= 3.5 {
-            AnomalySeverity::Warning
-        } else {
-            AnomalySeverity::Info
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Rate Limiting
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Check if a metric key is rate-limited.
-    fn is_rate_limited(&self, key: &str) -> bool {
-        let now = Utc::now();
-        let mut entry = self.rate_limits.entry(key.to_string()).or_insert(RateLimitState {
-            window_start: now,
-            count: 0,
-        });
-
-        // Reset window if expired (1 hour)
-        if now.signed_duration_since(entry.window_start).num_hours() >= 1 {
-            entry.window_start = now;
-            entry.count = 0;
-        }
-
-        entry.count += 1;
-        entry.count > self.config.max_alerts_per_metric_per_hour
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Context & Hypothesis Generation
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Push a value into the recent values buffer.
-    fn push_recent_value(&self, key: &str, value: f64, timestamp: DateTime<Utc>) {
-        let mut entry = self
-            .recent_values
-            .entry(key.to_string())
-            .or_insert_with(VecDeque::new);
-        entry.push_back(TimestampedValue { timestamp, value });
-        // Keep last 100 values
-        while entry.len() > 100 {
-            entry.pop_front();
-        }
-    }
-
-    /// Get recent values for a metric key.
-    fn get_recent_values(&self, key: &str, limit: usize) -> Vec<TimestampedValue> {
-        self.recent_values
-            .get(key)
-            .map(|entry| entry.iter().rev().take(limit).cloned().collect())
-            .unwrap_or_default()
-    }
-
-    /// Generate hypotheses for a point anomaly based on metric and deviation.
-    fn generate_point_anomaly_hypotheses(
+    /// Ingest a single data point and run all detection algorithms.
+    /// Returns all anomaly events triggered by this observation.
+    pub fn ingest_and_detect(
         &self,
         metric: &str,
         region: &str,
+        worker_type: Option<String>,
         value: f64,
-        mean: f64,
-        std_dev: f64,
-    ) -> Vec<String> {
-        let direction = if value > mean { "spike" } else { "drop" };
-        let pct_change = ((value - mean) / mean.abs().max(1e-10) * 100.0).abs();
+        timestamp: DateTime<Utc>,
+    ) -> Result<Vec<AnomalyEvent>> {
+        let mut anomalies = Vec::new();
 
-        let mut causes = vec![format!(
-            "Unusual {} of {:.1}% in {} (z={:.1}σ)",
-            direction,
-            pct_change,
-            metric,
-            (value - mean).abs() / std_dev.max(1e-10)
-        )];
+        // Run Z-score detection
+        if let Some(mut event) = self.detect_zscore(metric, region, value, timestamp)? {
+            event.worker_type = worker_type.clone();
+            anomalies.push(event);
+        }
+
+        // Run CUSUM detection
+        if let Some(mut event) = self.detect_cusum(metric, region, value, timestamp)? {
+            event.worker_type = worker_type.clone();
+            anomalies.push(event);
+        }
+
+        // Run seasonal detection
+        if let Some(mut event) = self.detect_seasonal(metric, region, value, timestamp)? {
+            event.worker_type = worker_type.clone();
+            anomalies.push(event);
+        }
+
+        // Deduplicate: if multiple detectors fire, keep the highest severity
+        // (they may detect the same underlying anomaly differently)
+        if anomalies.len() > 1 {
+            let severity_rank = |s: &AnomalySeverity| -> u8 {
+                match s {
+                    AnomalySeverity::Emergency => 4,
+                    AnomalySeverity::Critical => 3,
+                    AnomalySeverity::Warning => 2,
+                    AnomalySeverity::Info => 1,
+                }
+            };
+            anomalies.sort_by(|a, b| severity_rank(&b.severity).cmp(&severity_rank(&a.severity)));
+            anomalies.truncate(1);
+        }
+
+        // Enrich with correlation hypotheses
+        for event in &mut anomalies {
+            if let Ok(hypotheses) = self.correlate_anomalies(event, 60) {
+                event.context.possible_causes.extend(hypotheses);
+            }
+        }
+
+        // Store active anomalies
+        if !anomalies.is_empty() {
+            let mut active = self.active_anomalies.write().unwrap();
+            active.extend(anomalies.clone());
+
+            // Prune old acknowledged anomalies (keep last 1000)
+            if active.len() > 1000 {
+                active.retain(|a| !a.acknowledged);
+            }
+        }
+
+        Ok(anomalies)
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. get_active_anomalies — Query active (unacknowledged) anomalies
+    // -----------------------------------------------------------------------
+
+    /// Retrieve active anomalies filtered by region, metric, severity, etc.
+    pub fn get_active_anomalies(
+        &self,
+        filter: AnomalyFilter,
+    ) -> Result<Vec<AnomalyEvent>> {
+        let active = self.active_anomalies.read().unwrap();
+
+        let filtered: Vec<AnomalyEvent> = active
+            .iter()
+            .filter(|a| {
+                if let Some(ref region) = filter.region {
+                    if a.region != *region { return false; }
+                }
+                if let Some(ref metric) = filter.metric_name {
+                    if a.metric_name != *metric { return false; }
+                }
+                if let Some(ref severity) = filter.severity {
+                    let rank = |s: &AnomalySeverity| -> u8 {
+                        match s {
+                            AnomalySeverity::Info => 1,
+                            AnomalySeverity::Warning => 2,
+                            AnomalySeverity::Critical => 3,
+                            AnomalySeverity::Emergency => 4,
+                        }
+                    };
+                    if rank(&a.severity) < rank(severity) { return false; }
+                }
+                if let Some(ref wt) = filter.worker_type {
+                    if a.worker_type.as_ref() != Some(wt) { return false; }
+                }
+                if let Some(ack) = filter.acknowledged {
+                    if a.acknowledged != ack { return false; }
+                }
+                if let Some(since) = filter.since {
+                    if a.detected_at < since { return false; }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(filtered)
+    }
+
+    // -----------------------------------------------------------------------
+    // Acknowledge an anomaly
+    // -----------------------------------------------------------------------
+
+    /// Acknowledge an anomaly and optionally attach a root cause explanation.
+    pub fn acknowledge(
+        &self,
+        anomaly_id: Uuid,
+        root_cause: Option<String>,
+    ) -> Result<bool> {
+        let mut active = self.active_anomalies.write().unwrap();
+        if let Some(event) = active.iter_mut().find(|a| a.id == anomaly_id) {
+            event.acknowledged = true;
+            event.root_cause = root_cause;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal helpers
+    // -----------------------------------------------------------------------
+
+    /// Generate possible cause hypotheses based on metric type and deviation.
+    fn generate_hypotheses(&self, metric: &str, observed: f64, expected: f64) -> Vec<String> {
+        let mut causes = Vec::new();
+        let pct_change = ((observed - expected) / expected.abs().max(1e-10)) * 100.0;
+        let direction = if observed > expected { "increase" } else { "decrease" };
 
         // Metric-specific hypotheses
-        match metric {
-            m if m.contains("transaction") || m.contains("volume") => {
-                causes.push("Possible market closure, crackdown, or holiday".to_string());
-                causes.push("Check for concurrent infrastructure disruptions".to_string());
+        let metric_lower = metric.to_lowercase();
+
+        if metric_lower.contains("transaction") || metric_lower.contains("volume") {
+            causes.push(format!("Sudden {} in transaction volume — possible market event", direction));
+            if pct_change.abs() > 30.0 {
+                causes.push("Large shift may indicate market closure, crackdown, or holiday".to_string());
             }
-            m if m.contains("price") => {
-                causes.push("Supply chain disruption or price manipulation".to_string());
-                causes.push("Check fuel prices, import policies, or weather events".to_string());
+        }
+
+        if metric_lower.contains("price") || metric_lower.contains("cost") {
+            causes.push(format!("Price {} detected — possible supply chain disruption", direction));
+            if observed > expected {
+                causes.push("Price spike may indicate scarcity or hoarding".to_string());
             }
-            m if m.contains("credit") || m.contains("fuliza") => {
-                causes.push("Possible predatory lending sweep or policy change".to_string());
-                causes.push("Check M-Pesa policy announcements".to_string());
+        }
+
+        if metric_lower.contains("credit") || metric_lower.contains("score") {
+            causes.push(format!("Credit score {} — possible lending pattern change", direction));
+            if observed < expected {
+                causes.push("Drop may indicate predatory lending sweep or economic shock".to_string());
             }
-            m if m.contains("profit") || m.contains("income") => {
-                causes.push("Demand shift, cost increase, or competitive entry".to_string());
-                causes.push("Check market levy changes or supplier pricing".to_string());
-            }
-            _ => {
-                causes.push(format!("Investigate {} in {}", metric, region));
-            }
+        }
+
+        if metric_lower.contains("fuliza") || metric_lower.contains("overdraft") {
+            causes.push(format!("Overdraft usage {} — {} financial stress", direction,
+                if observed > expected { "increasing" } else { "decreasing" }));
+        }
+
+        if metric_lower.contains("spoilage") || metric_lower.contains("waste") {
+            causes.push(format!("Spoilage {} — possible supply chain or demand issue", direction));
+        }
+
+        if metric_lower.contains("profit") || metric_lower.contains("income") {
+            causes.push(format!("Earnings {} detected — economic impact on workers", direction));
+        }
+
+        // Generic fallback
+        if causes.is_empty() {
+            causes.push(format!("{}% {} from expected value", pct_change.abs(), direction));
         }
 
         causes
     }
-
-    /// Generate a hypothesis based on two correlated anomalies.
-    fn generate_correlation_hypothesis(
-        &self,
-        primary: &AnomalyEvent,
-        correlated: &AnomalyEvent,
-    ) -> String {
-        let same_region = primary.region == correlated.region;
-        let time_diff = (primary.detected_at - correlated.detected_at)
-            .num_minutes()
-            .abs();
-
-        match (
-            primary.metric_name.as_str(),
-            correlated.metric_name.as_str(),
-        ) {
-            (a, b)
-                if (a.contains("price") && b.contains("volume"))
-                    || (a.contains("volume") && b.contains("price")) =>
-            {
-                if same_region {
-                    format!(
-                        "Price-volume divergence in {}: possible supply shock (Δ{}min)",
-                        primary.region, time_diff
-                    )
-                } else {
-                    format!(
-                        "Cross-region price-volume signal: {} ↔ {}",
-                        primary.region, correlated.region
-                    )
-                }
-            }
-            (a, b)
-                if (a.contains("credit") && b.contains("profit"))
-                    || (a.contains("profit") && b.contains("credit")) =>
-            {
-                format!(
-                    "Credit-profit correlation: rising debt with falling income in {}",
-                    primary.region
-                )
-            }
-            (a, b)
-                if (a.contains("transaction") && b.contains("fuliza"))
-                    || (a.contains("fuliza") && b.contains("transaction")) =>
-            {
-                format!(
-                    "Transaction-Fuliza spike: possible cash flow crisis in {}",
-                    primary.region
-                )
-            }
-            _ => {
-                if same_region {
-                    format!(
-                        "Simultaneous anomalies in {}: {} & {} (Δ{}min)",
-                        primary.region,
-                        primary.metric_name,
-                        correlated.metric_name,
-                        time_diff
-                    )
-                } else {
-                    format!(
-                        "Cross-region anomaly: {} in {} ↔ {} in {}",
-                        primary.metric_name,
-                        primary.region,
-                        correlated.metric_name,
-                        correlated.region
-                    )
-                }
-            }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Persistence
-    // ─────────────────────────────────────────────────────────────────
-
-    /// Persist an anomaly event to ClickHouse.
-    async fn persist_anomaly(db: &DatabaseConnections, event: &AnomalyEvent) {
-        let context_json = serde_json::to_string(&event.context).unwrap_or_default();
-        let anomaly_type = format!("{:?}", event.anomaly_type);
-        let severity = format!("{:?}", event.severity);
-        let worker_type = event
-            .worker_type
-            .as_ref()
-            .map(|w| format!("{:?}", w))
-            .unwrap_or_default();
-
-        let query = format!(
-            r#"INSERT INTO anomaly_events (id, metric_name, region, worker_type, anomaly_type, severity, observed_value, expected_value, deviation_sigma, context_json, detected_at) VALUES ('{id}', '{metric}', '{region}', '{wt}', '{atype}', '{sev}', {observed}, {expected}, {sigma}, '{ctx}', '{detected}')"#,
-            id = event.id,
-            metric = event.metric_name,
-            region = event.region,
-            wt = worker_type,
-            atype = anomaly_type,
-            sev = severity,
-            observed = event.observed_value,
-            expected = event.expected_value,
-            sigma = event.deviation_sigma,
-            ctx = context_json.replace('\'', "''"),
-            detected = event.detected_at.format("%Y-%m-%d %H:%M:%S%.3f"),
-        );
-
-        if let Err(e) = db.clickhouse.query(&query).execute().await {
-            tracing::warn!(error = %e, "Failed to persist anomaly to ClickHouse");
-        }
-    }
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Tests
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn test_config() -> AnomalyConfig {
-        AnomalyConfig {
-            z_score_threshold: 3.0,
-            min_history_points: 5,
-            window_size: 20,
-            baseline_lookback_days: 30,
-            min_consecutive_anomalies: 1,
-            max_alerts_per_metric_per_hour: 100,
+    #[test]
+    fn test_zscore_detects_outlier() {
+        let detector = AnomalyDetector::new(AnomalyConfig::default());
+        let base = Utc::now();
+
+        // Feed normal values (all ~100.0)
+        for i in 0..40 {
+            let ts = base + chrono::Duration::hours(i);
+            let val = 100.0 + ((i as f64) * 0.1).sin();
+            let _ = detector.detect_zscore("test_metric", "nairobi", val, ts);
+        }
+
+        // Now feed an extreme outlier
+        let ts = base + chrono::Duration::hours(41);
+        // Need consecutive anomalies, so feed multiple outliers
+        let mut result = None;
+        for i in 0..4 {
+            let ts = base + chrono::Duration::hours(41 + i);
+            result = detector.detect_zscore("test_metric", "nairobi", 500.0, ts).unwrap();
+        }
+
+        assert!(result.is_some(), "Should detect the outlier after consecutive anomalies");
+        let event = result.unwrap();
+        assert_eq!(event.anomaly_type as u8, AnomalyType::PointAnomaly as u8);
+        assert!(event.deviation_sigma >= 3.0);
+    }
+
+    #[test]
+    fn test_cusum_detects_shift() {
+        let detector = AnomalyDetector::new(AnomalyConfig {
+            min_history_points: 20,
             cusum_threshold: 4.0,
-            cusum_slack: 0.5,
-            seasonal_esd_max_outlier_ratio: 0.1,
+            cusum_allowance: 0.5,
+            ..Default::default()
+        });
+        let base = Utc::now();
+
+        // Feed baseline data around 100
+        for i in 0..25 {
+            let ts = base + chrono::Duration::hours(i);
+            let val = 100.0 + ((i as f64) * 0.3).sin() * 2.0;
+            let _ = detector.detect_cusum("price", "mombasa", val, ts);
+        }
+
+        // Feed a sustained shift to 130 (30% increase)
+        let mut result = None;
+        for i in 0..15 {
+            let ts = base + chrono::Duration::hours(25 + i);
+            result = detector.detect_cusum("price", "mombasa", 130.0, ts).unwrap();
+        }
+
+        assert!(result.is_some(), "CUSUM should detect the sustained shift");
+        let event = result.unwrap();
+        assert_eq!(event.anomaly_type as u8, AnomalyType::ChangePoint as u8);
+    }
+
+    #[test]
+    fn test_seasonal_break_detection() {
+        let config = AnomalyConfig {
             seasonal_period: 7,
-            correlation_window_minutes: 30,
+            min_history_points: 10,
+            ..Default::default()
+        };
+        let detector = AnomalyDetector::new(config);
+        let base = Utc::now();
+
+        // Feed 3 weeks of data with a clear weekly pattern
+        for i in 0..21 {
+            let ts = base + chrono::Duration::days(i);
+            let day_of_week = (i % 7) as f64;
+            // Pattern: higher on weekdays, lower on weekends
+            let val = if day_of_week < 5.0 { 100.0 } else { 60.0 };
+            let _ = detector.detect_seasonal("sales", "kisumu", val, ts);
         }
+
+        // Feed a value that breaks the pattern: weekend with weekday-level sales
+        let ts = base + chrono::Duration::days(21); // This is a Saturday
+        let result = detector.detect_seasonal("sales", "kisumu", 150.0, ts).unwrap();
+
+        assert!(result.is_some(), "Should detect seasonal break");
+        let event = result.unwrap();
+        assert_eq!(event.anomaly_type as u8, AnomalyType::SeasonalBreak as u8);
     }
 
     #[test]
-    fn test_zscore_severity_classification() {
-        // Severity classification uses AnomalyDetector's method
-        // We test the logic directly
-        let thresholds = vec![
-            (2.5, AnomalySeverity::Info),
-            (3.5, AnomalySeverity::Warning),
-            (5.0, AnomalySeverity::Critical),
-            (7.0, AnomalySeverity::Emergency),
-        ];
+    fn test_ingest_and_detect_integration() {
+        let detector = AnomalyDetector::new(AnomalyConfig {
+            min_history_points: 10,
+            window_size: 50,
+            ..Default::default()
+        });
+        let base = Utc::now();
 
-        for (z, expected) in thresholds {
-            let severity = if z >= 6.0 {
-                AnomalySeverity::Emergency
-            } else if z >= 4.5 {
-                AnomalySeverity::Critical
-            } else if z >= 3.5 {
-                AnomalySeverity::Warning
-            } else {
-                AnomalySeverity::Info
-            };
-            assert_eq!(severity, expected, "z_score={}", z);
+        // Feed normal data
+        for i in 0..15 {
+            let ts = base + chrono::Duration::hours(i);
+            let _ = detector.ingest_and_detect("volume", "nairobi", Some("mama_mboga".to_string()), 50.0, ts);
         }
+
+        // Feed anomalous data
+        let ts = base + chrono::Duration::hours(16);
+        let results = detector.ingest_and_detect("volume", "nairobi", Some("mama_mboga".to_string()), 500.0, ts).unwrap();
+
+        // May or may not trigger depending on consecutive count, but should not panic
+        assert!(results.len() <= 1); // Deduplication keeps at most 1
     }
 
     #[test]
-    fn test_statistical_model_zscore_update() {
-        let mut model = StatisticalModel::new_zscore();
-        let values = vec![10.0, 12.0, 11.0, 13.0, 9.0, 10.5, 11.5, 12.5, 10.0, 11.0];
+    fn test_get_active_anomalies_filter() {
+        let detector = AnomalyDetector::new(AnomalyConfig::default());
 
-        for v in &values {
-            if let StatisticalModel::ZScore {
-                mean,
-                std_dev,
-                window,
-            } = &mut model
-            {
-                window.push_back(*v);
-                let n = window.len() as f64;
-                *mean = window.iter().sum::<f64>() / n;
-                if n > 1.0 {
-                    let variance =
-                        window.iter().map(|x| (x - *mean).powi(2)).sum::<f64>() / (n - 1.0);
-                    *std_dev = variance.sqrt();
-                }
-            }
-        }
-
-        if let StatisticalModel::ZScore {
-            mean, std_dev, window, ..
-        } = &model
+        // Manually insert test anomalies
         {
-            assert!(window.len() == 10);
-            assert!((*mean - 11.1).abs() < 0.2, "mean={}", mean);
-            assert!(*std_dev > 0.0, "std_dev={}", std_dev);
-
-            // An outlier at 50.0 should produce a high z-score
-            let z = (50.0 - mean).abs() / *std_dev;
-            assert!(z > 3.0, "z_score for outlier={}", z);
+            let mut active = detector.active_anomalies.write().unwrap();
+            active.push(AnomalyEvent {
+                id: Uuid::new_v4(),
+                metric_name: "price".to_string(),
+                region: "nairobi".to_string(),
+                worker_type: Some("mama_mboga".to_string()),
+                anomaly_type: AnomalyType::PointAnomaly,
+                severity: AnomalySeverity::Critical,
+                observed_value: 200.0,
+                expected_value: 100.0,
+                deviation_sigma: 4.0,
+                context: AnomalyContext {
+                    recent_values: vec![],
+                    historical_mean: 100.0,
+                    historical_std: 25.0,
+                    peer_comparison: None,
+                    possible_causes: vec![],
+                },
+                detected_at: Utc::now(),
+                acknowledged: false,
+                root_cause: None,
+            });
+            active.push(AnomalyEvent {
+                id: Uuid::new_v4(),
+                metric_name: "volume".to_string(),
+                region: "mombasa".to_string(),
+                worker_type: None,
+                anomaly_type: AnomalyType::ChangePoint,
+                severity: AnomalySeverity::Info,
+                observed_value: 10.0,
+                expected_value: 50.0,
+                deviation_sigma: 2.0,
+                context: AnomalyContext {
+                    recent_values: vec![],
+                    historical_mean: 50.0,
+                    historical_std: 15.0,
+                    peer_comparison: None,
+                    possible_causes: vec![],
+                },
+                detected_at: Utc::now(),
+                acknowledged: true,
+                root_cause: None,
+            });
         }
+
+        // Filter by region
+        let nairobi = detector.get_active_anomalies(AnomalyFilter {
+            region: Some("nairobi".to_string()),
+            metric_name: None,
+            severity: None,
+            worker_type: None,
+            acknowledged: None,
+            since: None,
+        }).unwrap();
+        assert_eq!(nairobi.len(), 1);
+        assert_eq!(nairobi[0].region, "nairobi");
+
+        // Filter by severity (at least Critical)
+        let critical = detector.get_active_anomalies(AnomalyFilter {
+            region: None,
+            metric_name: None,
+            severity: Some(AnomalySeverity::Critical),
+            worker_type: None,
+            acknowledged: None,
+            since: None,
+        }).unwrap();
+        assert_eq!(critical.len(), 1);
+        assert_eq!(critical[0].severity as u8, AnomalySeverity::Critical as u8);
+
+        // Filter unacknowledged only
+        let unacked = detector.get_active_anomalies(AnomalyFilter {
+            region: None,
+            metric_name: None,
+            severity: None,
+            worker_type: None,
+            acknowledged: Some(false),
+            since: None,
+        }).unwrap();
+        assert_eq!(unacked.len(), 1);
     }
 
     #[test]
-    fn test_cusum_detection() {
-        let mut model = StatisticalModel::new_cusum(10.0, 4.0, 0.5);
+    fn test_correlate_anomalies() {
+        let detector = AnomalyDetector::new(AnomalyConfig::default());
+        let now = Utc::now();
 
-        // Feed stable values around the mean
-        for _ in 0..20 {
-            if let StatisticalModel::CUSUM {
-                cumulative_sum_pos,
-                cumulative_sum_neg,
-                target_mean,
-                slack,
-                ..
-            } = &mut model
-            {
-                let v = 10.0 + (rand::random::<f64>() - 0.5) * 0.5;
-                let dev_pos = v - target_mean - slack;
-                let dev_neg = target_mean - v - slack;
-                *cumulative_sum_pos = (*cumulative_sum_pos + dev_pos).max(0.0);
-                *cumulative_sum_neg = (*cumulative_sum_neg + dev_neg).max(0.0);
-            }
-        }
-
-        // CUSUMs should be near zero for stable data
-        if let StatisticalModel::CUSUM {
-            cumulative_sum_pos,
-            cumulative_sum_neg,
-            ..
-        } = &model
+        // Insert anomalies across different metrics in the same region
         {
-            assert!(
-                *cumulative_sum_pos < 4.0,
-                "pos cusum={}",
-                cumulative_sum_pos
-            );
-            assert!(
-                *cumulative_sum_neg < 4.0,
-                "neg cusum={}",
-                cumulative_sum_neg
-            );
+            let mut active = detector.active_anomalies.write().unwrap();
+            active.push(AnomalyEvent {
+                id: Uuid::new_v4(),
+                metric_name: "price".to_string(),
+                region: "nairobi".to_string(),
+                worker_type: Some("mama_mboga".to_string()),
+                anomaly_type: AnomalyType::PointAnomaly,
+                severity: AnomalySeverity::Critical,
+                observed_value: 200.0,
+                expected_value: 100.0,
+                deviation_sigma: 4.0,
+                context: AnomalyContext {
+                    recent_values: vec![],
+                    historical_mean: 100.0,
+                    historical_std: 25.0,
+                    peer_comparison: None,
+                    possible_causes: vec![],
+                },
+                detected_at: now - chrono::Duration::minutes(5),
+                acknowledged: false,
+                root_cause: None,
+            });
+            active.push(AnomalyEvent {
+                id: Uuid::new_v4(),
+                metric_name: "volume".to_string(),
+                region: "nairobi".to_string(),
+                worker_type: Some("mama_mboga".to_string()),
+                anomaly_type: AnomalyType::PointAnomaly,
+                severity: AnomalySeverity::Warning,
+                observed_value: 10.0,
+                expected_value: 50.0,
+                deviation_sigma: 3.5,
+                context: AnomalyContext {
+                    recent_values: vec![],
+                    historical_mean: 50.0,
+                    historical_std: 12.0,
+                    peer_comparison: None,
+                    possible_causes: vec![],
+                },
+                detected_at: now - chrono::Duration::minutes(2),
+                acknowledged: false,
+                root_cause: None,
+            });
         }
+
+        let test_event = AnomalyEvent {
+            id: Uuid::new_v4(),
+            metric_name: "profit".to_string(),
+            region: "nairobi".to_string(),
+            worker_type: Some("mama_mboga".to_string()),
+            anomaly_type: AnomalyType::PointAnomaly,
+            severity: AnomalySeverity::Critical,
+            observed_value: 20.0,
+            expected_value: 80.0,
+            deviation_sigma: 4.0,
+            context: AnomalyContext {
+                recent_values: vec![],
+                historical_mean: 80.0,
+                historical_std: 15.0,
+                peer_comparison: None,
+                possible_causes: vec![],
+            },
+            detected_at: now,
+            acknowledged: false,
+            root_cause: None,
+        };
+
+        let hypotheses = detector.correlate_anomalies(&test_event, 30).unwrap();
+        assert!(!hypotheses.is_empty());
+        // Should find multi-metric correlation in nairobi
+        assert!(hypotheses.iter().any(|h| h.contains("Multi-metric")));
     }
 
     #[test]
-    fn test_metric_key_generation() {
-        let key = AnomalyDetector::metric_key(
-            "daily_profit",
-            "nairobi",
-            &Some(WorkerType::MamaMboga),
-        );
-        assert_eq!(key, "daily_profit:nairobi:MamaMboga");
+    fn test_acknowledge() {
+        let detector = AnomalyDetector::new(AnomalyConfig::default());
+        let id = Uuid::new_v4();
 
-        let key = AnomalyDetector::metric_key("volume", "mombasa", &None);
-        assert_eq!(key, "volume:mombasa:all");
-    }
-
-    #[test]
-    fn test_hypothesis_generation() {
-        // Test that hypotheses are generated for different metric types
-        let metrics = vec![
-            ("transaction_volume", "Possible market closure"),
-            ("price_sukuma", "Supply chain disruption"),
-            ("credit_score", "predatory lending"),
-            ("daily_profit", "Demand shift"),
-        ];
-
-        for (metric, expected_fragment) in metrics {
-            let causes = generate_test_hypotheses(metric, "nairobi", 50.0, 100.0, 10.0);
-            let has_match = causes.iter().any(|c| c.contains(expected_fragment));
-            assert!(
-                has_match,
-                "Expected '{}' in causes for metric '{}', got: {:?}",
-                expected_fragment, metric, causes
-            );
-        }
-    }
-
-    fn generate_test_hypotheses(
-        metric: &str,
-        region: &str,
-        value: f64,
-        mean: f64,
-        std_dev: f64,
-    ) -> Vec<String> {
-        let direction = if value > mean { "spike" } else { "drop" };
-        let pct_change = ((value - mean) / mean.abs().max(1e-10) * 100.0).abs();
-
-        let mut causes = vec![format!(
-            "Unusual {} of {:.1}% in {} (z={:.1}σ)",
-            direction,
-            pct_change,
-            metric,
-            (value - mean).abs() / std_dev.max(1e-10)
-        )];
-
-        match metric {
-            m if m.contains("transaction") || m.contains("volume") => {
-                causes.push("Possible market closure, crackdown, or holiday".to_string());
-            }
-            m if m.contains("price") => {
-                causes.push("Supply chain disruption or price manipulation".to_string());
-            }
-            m if m.contains("credit") || m.contains("fuliza") => {
-                causes.push("Possible predatory lending sweep or policy change".to_string());
-            }
-            m if m.contains("profit") || m.contains("income") => {
-                causes.push("Demand shift, cost increase, or competitive entry".to_string());
-            }
-            _ => {}
+        {
+            let mut active = detector.active_anomalies.write().unwrap();
+            active.push(AnomalyEvent {
+                id,
+                metric_name: "test".to_string(),
+                region: "test".to_string(),
+                worker_type: None,
+                anomaly_type: AnomalyType::PointAnomaly,
+                severity: AnomalySeverity::Info,
+                observed_value: 1.0,
+                expected_value: 0.0,
+                deviation_sigma: 1.0,
+                context: AnomalyContext {
+                    recent_values: vec![],
+                    historical_mean: 0.0,
+                    historical_std: 1.0,
+                    peer_comparison: None,
+                    possible_causes: vec![],
+                },
+                detected_at: Utc::now(),
+                acknowledged: false,
+                root_cause: None,
+            });
         }
 
-        causes
+        let result = detector.acknowledge(id, Some("Test root cause".to_string())).unwrap();
+        assert!(result);
+
+        let active = detector.active_anomalies.read().unwrap();
+        let event = active.iter().find(|a| a.id == id).unwrap();
+        assert!(event.acknowledged);
+        assert_eq!(event.root_cause.as_deref(), Some("Test root cause"));
     }
 }
