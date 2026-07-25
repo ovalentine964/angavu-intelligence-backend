@@ -26,6 +26,7 @@ use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
+mod billing;
 mod db;
 mod flywheel;
 mod guardrails;

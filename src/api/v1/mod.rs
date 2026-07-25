@@ -84,4 +84,19 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/tools/audit", get(endpoints::tools::audit_status))
         .route("/tools/circuit-breaker", get(endpoints::tools::circuit_breaker_status))
         .route("/tools/rate-limiter", get(endpoints::tools::rate_limiter_status))
+        
+        // Billing routes
+        .route("/billing/tiers", get(endpoints::billing::list_tiers))
+        .route("/billing/subscriptions", post(endpoints::billing::create_subscription))
+        .route("/billing/subscriptions/{org_id}", get(endpoints::billing::get_subscription))
+        .route("/billing/subscriptions/{id}/tier", put(endpoints::billing::change_tier))
+        .route("/billing/subscriptions/{id}/cancel", post(endpoints::billing::cancel_subscription))
+        .route("/billing/api-keys", post(endpoints::billing::create_api_key))
+        .route("/billing/api-keys/{org_id}", get(endpoints::billing::list_api_keys))
+        .route("/billing/api-keys/{id}", delete(endpoints::billing::revoke_api_key))
+        .route("/billing/usage/{org_id}", get(endpoints::billing::get_usage))
+        .route("/billing/invoices/{org_id}", get(endpoints::billing::list_invoices))
+        .route("/billing/invoices/detail/{id}", get(endpoints::billing::get_invoice))
+        .route("/billing/invoices/{id}/finalize", post(endpoints::billing::finalize_invoice))
+        .route("/billing/invoices/{id}/pay", post(endpoints::billing::pay_invoice))
 }

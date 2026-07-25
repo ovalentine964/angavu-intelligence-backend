@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Memory layer types (5-layer hierarchy)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, sqlx::Type)]
+#[sqlx(type_name = "memory_layer", rename_all = "snake_case")]
 pub enum MemoryLayer {
     /// Working memory (current context, < 1 hour)
     Working,

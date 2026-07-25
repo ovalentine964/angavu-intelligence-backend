@@ -2,8 +2,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// Re-use canonical enum definitions from intelligence module
+pub use super::intelligence::{TaskStatus, OODAPhase};
+
 /// Agent types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "varchar", rename_all = "snake_case")]
 pub enum AgentType {
     Orchestrator,
     Analyst,
@@ -14,7 +18,8 @@ pub enum AgentType {
 }
 
 /// Agent status
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "varchar", rename_all = "snake_case")]
 pub enum AgentStatus {
     Idle,
     Processing,
@@ -39,7 +44,7 @@ pub struct Agent {
     pub metadata: serde_json::Value,
 }
 
-/// Agent task
+/// Agent task — uses canonical TaskStatus from intelligence module
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct AgentTask {
     pub id: Uuid,
@@ -56,16 +61,6 @@ pub struct AgentTask {
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub created_by: Uuid,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TaskStatus {
-    Queued,
-    Running,
-    Completed,
-    Failed,
-    Cancelled,
-    Retrying,
 }
 
 /// Agent message
@@ -103,7 +98,7 @@ pub struct AgentMetrics {
     pub last_updated: DateTime<Utc>,
 }
 
-/// OODA cycle result
+/// OODA cycle result — uses canonical OODAPhase from intelligence module
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OODACycleResult {
     pub cycle_id: Uuid,
@@ -114,14 +109,6 @@ pub struct OODACycleResult {
     pub action: Option<Action>,
     pub duration_ms: u64,
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum OODAPhase {
-    Observe,
-    Orient,
-    Decide,
-    Act,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

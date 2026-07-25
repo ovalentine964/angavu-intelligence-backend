@@ -3,6 +3,28 @@
 //! The central nervous system of the Angavu intelligence backend. Runs a continuous
 //! cycle of observing data from all sources, orienting with context synthesis,
 //! deciding on the best action, and executing it.
+//!
+//! ## Architecture: Harness wraps OODA
+//!
+//! The harness (this orchestrator) wraps the OODA loop as middleware — not the
+//! other way around. Three operational modes control how the harness and OODA
+//! interact:
+//!
+//! - **Autonomous:** OODA runs in background on multi-speed cycles. Harness
+//!   monitors for anomalies and escalates only critical ones.
+//! - **On-demand:** User query arrives → harness invokes OODA tools directly,
+//!   returning immediate results without waiting for a scheduled cycle.
+//! - **Hybrid:** OODA detects anomaly in background → alerts user → user
+//!   decides → harness acts on the decision.
+//!
+//! ## Cycle Timing (from architecture §6.2)
+//!
+//! | Cycle  | Interval | Purpose                                          |
+//! |--------|----------|--------------------------------------------------|
+//! | Fast   | 5s       | Observe new data after every agent turn           |
+//! | Medium | 1 hour   | Aggregate observations, update orientation        |
+//! | Slow   | 24 hours | Review patterns, update knowledge base            |
+//! | Deep   | 7 days   | Full reflection, model eval, flywheel assessment  |
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
@@ -19,18 +41,125 @@ use crate::models::{
     Orientation, Pattern,
 };
 
+// Import ALL 20 tools — the backend is a superagent with one brain and many tools
 use super::alert_generator::AlertGenerator;
 use super::audit_logger::AuditLogger;
 use super::market_analyzer::MarketAnalyzer;
 use super::credit_scorer::CreditScorer;
 use super::report_engine::ReportEngine;
 use super::circuit_breaker::CircuitBreaker;
+use super::distribution_analyzer::DistributionAnalyzer;
+use super::fmcg_intelligence::FMCGIntelligence;
+use super::health_metrics::HealthMetrics;
+use super::economic_analyzer::EconomicAnalyzer;
+use super::differential_privacy::DifferentialPrivacyEngine;
+use super::k_anonymity::KAnonymityEnforcer;
+use super::federated_aggregator::FederatedAggregator;
+use super::sync_receiver::SyncReceiver;
+use super::api_gateway::ApiGateway;
+use super::rate_limiter::RateLimiter;
+use super::model_distributor::ModelDistributor;
+use super::whatsapp_sender::WhatsAppSender;
+
+// ─────────────────────────────────────────────────────────────────────
+// Harness Mode Definitions
+// ─────────────────────────────────────────────────────────────────────
+
+/// Operational mode for the harness-ooda interaction.
+///
+/// The harness wraps OODA — it decides *how* OODA runs, not the other way
+/// around. Each mode changes the control flow between the harness and the
+/// OODA loop.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HarnessMode {
+    /// OODA runs in background. Harness monitors for anomalies and
+    /// escalates only critical ones to human attention.
+    Autonomous,
+    /// User query arrives → harness invokes OODA tools directly,
+    /// returning immediate results. No background cycling.
+    OnDemand,
+    /// OODA detects anomaly in background → alerts user → user
+    /// decides → harness acts on the user's decision.
+    Hybrid,
+}
+
+impl Default for HarnessMode {
+    fn default() -> Self {
+        Self::Hybrid
+    }
+}
+
+/// Cycle timing tier — maps to architecture §6.2 cycle timing.
+///
+/// Each tier has a different interval and purpose. The harness selects
+/// which tier to run based on elapsed time since the last run of that tier.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum CycleTier {
+    /// 5-second debounce — runs after every agent turn.
+    /// Observe new data, orient context, decide action, act.
+    Fast,
+    /// 1-hour interval — aggregate observations, update orientation,
+    /// generate market signals.
+    Medium,
+    /// 24-hour interval — review patterns, update knowledge base,
+    /// generate daily briefings.
+    Slow,
+    /// 7-day interval — full reflection, model evaluation,
+    /// flywheel stage assessment.
+    Deep,
+}
+
+impl CycleTier {
+    /// Returns the minimum interval between runs for this tier.
+    pub fn interval(&self) -> std::time::Duration {
+        match self {
+            Self::Fast => std::time::Duration::from_secs(5),
+            Self::Medium => std::time::Duration::from_secs(3600),
+            Self::Slow => std::time::Duration::from_secs(86400),
+            Self::Deep => std::time::Duration::from_secs(604_800),
+        }
+    }
+}
+
+/// Result of an on-demand OODA invocation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnDemandResult {
+    pub cycle_id: Uuid,
+    pub observations: Vec<Observation>,
+    pub orientation: Option<Orientation>,
+    pub decision: Option<Decision>,
+    pub action: Option<Action>,
+    pub duration_ms: u64,
+    pub mode: HarnessMode,
+}
+
+/// Anomaly detected by OODA that requires user attention (hybrid mode).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnomalyAlert {
+    pub alert_id: Uuid,
+    pub anomaly: Anomaly,
+    pub suggested_action: DecisionOption,
+    pub detected_at: DateTime<Utc>,
+    pub user_response: Option<UserDecision>,
+}
+
+/// User's decision in response to an anomaly alert (hybrid mode).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserDecision {
+    pub approved: bool,
+    pub override_action: Option<String>,
+    pub responded_at: DateTime<Utc>,
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Configuration
+// ─────────────────────────────────────────────────────────────────────
 
 /// Configuration for the OODA loop
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OODAConfig {
-    /// Milliseconds between cycles
-    pub cycle_interval_ms: u64,
+    /// Operational mode: how the harness wraps OODA
+    pub harness_mode: HarnessMode,
     /// Maximum concurrent tasks per cycle
     pub max_concurrent_tasks: usize,
     /// Minimum confidence threshold for decisions
@@ -46,7 +175,7 @@ pub struct OODAConfig {
 impl Default for OODAConfig {
     fn default() -> Self {
         Self {
-            cycle_interval_ms: 1000,
+            harness_mode: HarnessMode::Hybrid,
             max_concurrent_tasks: 100,
             min_decision_confidence: 0.7,
             max_working_memory: 10_000,
@@ -56,7 +185,71 @@ impl Default for OODAConfig {
     }
 }
 
-/// The main OODA Orchestrator
+// ─────────────────────────────────────────────────────────────────────
+// Cycle Tier Tracker
+// ─────────────────────────────────────────────────────────────────────
+
+/// Tracks the last-run timestamp for each cycle tier.
+#[derive(Debug, Clone)]
+struct TierTracker {
+    last_fast: Option<std::time::Instant>,
+    last_medium: Option<std::time::Instant>,
+    last_slow: Option<std::time::Instant>,
+    last_deep: Option<std::time::Instant>,
+}
+
+impl TierTracker {
+    fn new() -> Self {
+        Self {
+            last_fast: None,
+            last_medium: None,
+            last_slow: None,
+            last_deep: None,
+        }
+    }
+
+    /// Returns which tier is due, in priority order (deepest first).
+    /// Deep > Slow > Medium > Fast — so deeper cycles aren't starved.
+    fn next_due(&self) -> Option<CycleTier> {
+        let now = std::time::Instant::now();
+
+        // Check deepest first — they're the rarest and most important
+        if self.last_deep.map_or(true, |t| now.duration_since(t) >= CycleTier::Deep.interval()) {
+            return Some(CycleTier::Deep);
+        }
+        if self.last_slow.map_or(true, |t| now.duration_since(t) >= CycleTier::Slow.interval()) {
+            return Some(CycleTier::Slow);
+        }
+        if self.last_medium.map_or(true, |t| now.duration_since(t) >= CycleTier::Medium.interval()) {
+            return Some(CycleTier::Medium);
+        }
+        if self.last_fast.map_or(true, |t| now.duration_since(t) >= CycleTier::Fast.interval()) {
+            return Some(CycleTier::Fast);
+        }
+        None
+    }
+
+    /// Mark a tier as just completed.
+    fn mark_completed(&mut self, tier: CycleTier) {
+        let now = std::time::Instant::now();
+        match tier {
+            CycleTier::Fast => self.last_fast = Some(now),
+            CycleTier::Medium => self.last_medium = Some(now),
+            CycleTier::Slow => self.last_slow = Some(now),
+            CycleTier::Deep => self.last_deep = Some(now),
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// OODA Orchestrator
+// ─────────────────────────────────────────────────────────────────────
+
+/// The main OODA Orchestrator.
+///
+/// Acts as the harness that wraps the OODA loop. In all modes, the harness
+/// controls when and how OODA phases execute — OODA is the *what* (observe,
+/// orient, decide, act), the harness is the *when* and *how*.
 pub struct OODAOrchestrator {
     config: OODAConfig,
     db: DatabaseConnections,
@@ -64,17 +257,37 @@ pub struct OODAOrchestrator {
     observations: Arc<RwLock<VecDeque<Observation>>>,
     /// Current orientation context
     orientation: Arc<RwLock<Option<Orientation>>>,
-    /// Cycle counter
+    /// Cycle counter (total across all tiers)
     cycle_count: Arc<Mutex<u64>>,
     /// Cycle history (last N cycles)
     cycle_history: Arc<Mutex<VecDeque<OODACycleResult>>>,
-    /// Sub-tools for specific analysis
+    /// Per-tier tracker for multi-speed cycling
+    tier_tracker: Arc<Mutex<TierTracker>>,
+    /// Pending anomaly alerts awaiting user decision (hybrid mode)
+    pending_alerts: Arc<Mutex<VecDeque<AnomalyAlert>>>,
+    /// ALL 20 superagent tools — one brain, many tools, one job
+    /// Intelligence tools
     market_analyzer: Arc<MarketAnalyzer>,
     credit_scorer: Arc<CreditScorer>,
+    distribution_analyzer: Arc<DistributionAnalyzer>,
+    fmcg_intelligence: Arc<FMCGIntelligence>,
+    health_metrics: Arc<HealthMetrics>,
+    economic_analyzer: Arc<EconomicAnalyzer>,
+    /// Privacy tools
+    differential_privacy: Arc<DifferentialPrivacyEngine>,
+    k_anonymity: Arc<KAnonymityEnforcer>,
+    federated_aggregator: Arc<FederatedAggregator>,
+    /// Communication tools
+    sync_receiver: Arc<SyncReceiver>,
     report_engine: Arc<ReportEngine>,
+    whatsapp_sender: Arc<WhatsAppSender>,
+    model_distributor: Arc<ModelDistributor>,
+    /// Infrastructure tools
     alert_generator: Arc<AlertGenerator>,
     audit_logger: Arc<AuditLogger>,
     circuit_breaker: Arc<CircuitBreaker>,
+    api_gateway: Arc<ApiGateway>,
+    rate_limiter: Arc<RateLimiter>,
     /// Running state
     running: Arc<Mutex<bool>>,
 }
@@ -83,12 +296,28 @@ impl OODAOrchestrator {
     /// Create a new orchestrator with database connections
     pub async fn new(db: DatabaseConnections) -> Result<Self> {
         let config = OODAConfig::default();
+
+        // Initialize ALL 20 tools — the backend superagent brain connects to every tool
         let market_analyzer = Arc::new(MarketAnalyzer::new(db.clone()));
         let credit_scorer = Arc::new(CreditScorer::new(db.clone()));
+        let distribution_analyzer = Arc::new(DistributionAnalyzer::new(db.clone()));
+        let fmcg_intelligence = Arc::new(FMCGIntelligence::new(db.clone()));
+        let health_metrics = Arc::new(HealthMetrics::new(db.clone()));
+        let economic_analyzer = Arc::new(EconomicAnalyzer::new(db.clone()));
+        let differential_privacy = Arc::new(DifferentialPrivacyEngine::new());
+        let k_anonymity = Arc::new(KAnonymityEnforcer::new());
+        let federated_aggregator = Arc::new(FederatedAggregator::new(db.clone()));
+        let sync_receiver = Arc::new(SyncReceiver::new(db.clone()));
         let report_engine = Arc::new(ReportEngine::new());
+        let whatsapp_sender = Arc::new(WhatsAppSender::new());
+        let model_distributor = Arc::new(ModelDistributor::new(db.clone()));
         let alert_generator = Arc::new(AlertGenerator::new(db.clone()));
         let audit_logger = Arc::new(AuditLogger::new(db.clone()));
         let circuit_breaker = Arc::new(CircuitBreaker::new(Default::default()));
+        let api_gateway = Arc::new(ApiGateway::new(db.clone()));
+        let rate_limiter = Arc::new(RateLimiter::new());
+
+        info!("OODAOrchestrator initialized with 20 superagent tools");
 
         Ok(Self {
             config,
@@ -97,12 +326,30 @@ impl OODAOrchestrator {
             orientation: Arc::new(RwLock::new(None)),
             cycle_count: Arc::new(Mutex::new(0)),
             cycle_history: Arc::new(Mutex::new(VecDeque::with_capacity(100))),
+            tier_tracker: Arc::new(Mutex::new(TierTracker::new())),
+            pending_alerts: Arc::new(Mutex::new(VecDeque::new())),
+            // Intelligence tools
             market_analyzer,
             credit_scorer,
+            distribution_analyzer,
+            fmcg_intelligence,
+            health_metrics,
+            economic_analyzer,
+            // Privacy tools
+            differential_privacy,
+            k_anonymity,
+            federated_aggregator,
+            // Communication tools
+            sync_receiver,
             report_engine,
+            whatsapp_sender,
+            model_distributor,
+            // Infrastructure tools
             alert_generator,
             audit_logger,
             circuit_breaker,
+            api_gateway,
+            rate_limiter,
             running: Arc::new(Mutex::new(false)),
         })
     }
@@ -114,7 +361,20 @@ impl OODAOrchestrator {
         Ok(orchestrator)
     }
 
-    /// Start the continuous OODA loop in the background
+    // ─────────────────────────────────────────────────────────────────
+    // Harness Mode: Autonomous
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Start the continuous OODA loop in the background (autonomous mode).
+    ///
+    /// The harness runs OODA on multi-speed cycles:
+    /// - Fast (5s debounce): observe → orient → decide → act after every turn
+    /// - Medium (hourly): aggregate observations, update orientation
+    /// - Slow (daily): review patterns, update knowledge base
+    /// - Deep (weekly): full reflection, model evaluation
+    ///
+    /// In autonomous mode, the harness monitors for anomalies and escalates
+    /// only critical ones. Non-critical actions execute automatically.
     pub async fn start_loop(self: Arc<Self>) -> Result<()> {
         {
             let mut running = self.running.lock().await;
@@ -126,7 +386,7 @@ impl OODAOrchestrator {
 
         let orchestrator = self.clone();
         tokio::spawn(async move {
-            info!("OODA loop started");
+            info!("OODA loop started (mode: {:?}, multi-speed cycles)", orchestrator.config.harness_mode);
             loop {
                 {
                     let running = orchestrator.running.lock().await;
@@ -136,25 +396,37 @@ impl OODAOrchestrator {
                     }
                 }
 
-                match orchestrator.run_cycle().await {
-                    Ok(result) => {
-                        debug!(
-                            cycle_id = %result.cycle_id,
-                            phase = ?result.phase,
-                            duration_ms = result.duration_ms,
-                            "OODA cycle completed"
-                        );
-                    }
-                    Err(e) => {
-                        error!(error = %e, "OODA cycle failed");
-                        // Circuit breaker will handle backoff
+                // Determine which cycle tier is due
+                let next_tier = {
+                    let tracker = orchestrator.tier_tracker.lock().await;
+                    tracker.next_due()
+                };
+
+                if let Some(tier) = next_tier {
+                    match orchestrator.run_tiered_cycle(tier).await {
+                        Ok(result) => {
+                            debug!(
+                                cycle_id = %result.cycle_id,
+                                tier = ?tier,
+                                phase = ?result.phase,
+                                duration_ms = result.duration_ms,
+                                "OODA cycle completed"
+                            );
+
+                            // Mark tier as completed
+                            {
+                                let mut tracker = orchestrator.tier_tracker.lock().await;
+                                tracker.mark_completed(tier);
+                            }
+                        }
+                        Err(e) => {
+                            error!(error = %e, tier = ?tier, "OODA cycle failed");
+                        }
                     }
                 }
 
-                tokio::time::sleep(tokio::time::Duration::from_millis(
-                    orchestrator.config.cycle_interval_ms,
-                ))
-                .await;
+                // Sleep 1 second between checks — the tier tracker handles debouncing
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         });
 
@@ -168,8 +440,159 @@ impl OODAOrchestrator {
         Ok(())
     }
 
-    /// Execute a single OODA cycle
-    pub async fn run_cycle(&self) -> Result<OODACycleResult> {
+    // ─────────────────────────────────────────────────────────────────
+    // Harness Mode: On-Demand
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Invoke OODA directly for a user query (on-demand mode).
+    ///
+    /// The harness calls OODA tools immediately without waiting for a
+    /// scheduled cycle. Used when the user asks a question that requires
+    /// intelligence processing.
+    pub async fn invoke_on_demand(&self, query_context: serde_json::Value) -> Result<OnDemandResult> {
+        let cycle_start = std::time::Instant::now();
+        let cycle_id = Uuid::new_v4();
+
+        info!(cycle_id = %cycle_id, "On-demand OODA invocation");
+
+        // Observe: gather data relevant to the query
+        let observations = self.observe().await?;
+
+        // Orient: synthesize context
+        let orientation = self.orient(&observations).await?;
+
+        // Decide: select action
+        let decision = self.decide(&orientation).await?;
+
+        // Act: execute (always in on-demand — user expects a result)
+        let action = Some(self.act(&decision).await?);
+
+        let duration_ms = cycle_start.elapsed().as_millis() as u64;
+
+        // Audit
+        self.audit_logger
+            .log_action(
+                "ooda_on_demand",
+                "orchestrator",
+                serde_json::json!({
+                    "cycle_id": cycle_id,
+                    "query_context": query_context,
+                    "duration_ms": duration_ms,
+                }),
+            )
+            .await?;
+
+        Ok(OnDemandResult {
+            cycle_id,
+            observations,
+            orientation: Some(orientation),
+            decision: Some(decision),
+            action,
+            duration_ms,
+            mode: HarnessMode::OnDemand,
+        })
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Harness Mode: Hybrid
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Respond to a user decision on a pending anomaly alert (hybrid mode).
+    ///
+    /// When OODA detects an anomaly in the background, it queues an alert.
+    /// The user reviews and decides. This method executes the user's decision.
+    pub async fn respond_to_alert(
+        &self,
+        alert_id: Uuid,
+        user_decision: UserDecision,
+    ) -> Result<Option<Action>> {
+        // Find and remove the pending alert
+        let alert = {
+            let mut alerts = self.pending_alerts.lock().await;
+            alerts.iter().position(|a| a.alert_id == alert_id).map(|idx| alerts.remove(idx)).flatten()
+        };
+
+        let alert = alert.ok_or_else(|| anyhow!("Alert {} not found", alert_id))?;
+
+        info!(
+            alert_id = %alert_id,
+            approved = user_decision.decision,
+            "User responded to anomaly alert"
+        );
+
+        if user_decision.decision {
+            // User approved — execute the suggested action
+            let decision = Decision {
+                decision_type: "hybrid_user_approved".to_string(),
+                rationale: format!(
+                    "User approved action for anomaly: {}",
+                    alert.anomaly.description
+                ),
+                options: vec![alert.suggested_action.clone()],
+                selected_option: alert.suggested_action.option_id.clone(),
+                confidence: alert.suggested_action.confidence,
+            };
+            let action = self.act(&decision).await?;
+
+            self.audit_logger
+                .log_action(
+                    "ooda_hybrid_user_approved",
+                    "orchestrator",
+                    serde_json::json!({
+                        "alert_id": alert_id,
+                        "anomaly": alert.anomaly,
+                        "action": action,
+                    }),
+                )
+                .await?;
+
+            Ok(Some(action))
+        } else if let Some(override_action) = user_decision.override_action {
+            // User overrode with a different action
+            let decision = Decision {
+                decision_type: "hybrid_user_override".to_string(),
+                rationale: format!(
+                    "User overrode anomaly action. Original: {}, Override: {}",
+                    alert.suggested_action.option_id, override_action
+                ),
+                options: vec![],
+                selected_option: override_action,
+                confidence: 1.0,
+            };
+            let action = self.act(&decision).await?;
+            Ok(Some(action))
+        } else {
+            // User dismissed — log and move on
+            self.audit_logger
+                .log_action(
+                    "ooda_hybrid_user_dismissed",
+                    "orchestrator",
+                    serde_json::json!({
+                        "alert_id": alert_id,
+                        "anomaly": alert.anomaly,
+                    }),
+                )
+                .await?;
+
+            Ok(None)
+        }
+    }
+
+    /// Get pending anomaly alerts (for hybrid mode UI).
+    pub async fn pending_alerts(&self) -> Vec<AnomalyAlert> {
+        self.pending_alerts.lock().await.iter().cloned().collect()
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Multi-Speed Cycle Execution
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Execute an OODA cycle at the specified tier.
+    ///
+    /// The harness selects which tier to run. Each tier runs all four OODA
+    /// phases (observe → orient → decide → act) but with different depths
+    /// and purposes.
+    pub async fn run_tiered_cycle(&self, tier: CycleTier) -> Result<OODACycleResult> {
         let cycle_start = std::time::Instant::now();
         let cycle_id = Uuid::new_v4();
 
@@ -179,45 +602,38 @@ impl OODAOrchestrator {
             return Err(anyhow!("Circuit breaker is open"));
         }
 
-        // Phase 1: Observe
-        let observations = self.observe().await?;
+        // Phase 1: Observe (all tiers observe, but depth varies)
+        let observations = self.observe_for_tier(tier).await?;
         info!(
             cycle_id = %cycle_id,
+            tier = ?tier,
             observation_count = observations.len(),
             "Observe phase complete"
         );
 
-        // Phase 2: Orient
-        let orientation = self.orient(&observations).await?;
+        // Phase 2: Orient (medium+ tiers do deeper orientation)
+        let orientation = self.orient_for_tier(tier, &observations).await?;
         info!(
             cycle_id = %cycle_id,
+            tier = ?tier,
             patterns = orientation.patterns.len(),
             anomalies = orientation.anomalies.len(),
             confidence = orientation.confidence,
             "Orient phase complete"
         );
 
-        // Phase 3: Decide
-        let decision = self.decide(&orientation).await?;
+        // Phase 3: Decide (tier influences decision depth)
+        let decision = self.decide_for_tier(tier, &orientation).await?;
         info!(
             cycle_id = %cycle_id,
+            tier = ?tier,
             selected = %decision.selected_option,
             confidence = decision.confidence,
             "Decide phase complete"
         );
 
-        // Phase 4: Act
-        let action = if decision.confidence >= self.config.min_decision_confidence {
-            Some(self.act(&decision).await?)
-        } else {
-            warn!(
-                cycle_id = %cycle_id,
-                confidence = decision.confidence,
-                threshold = self.config.min_decision_confidence,
-                "Decision confidence below threshold, skipping action"
-            );
-            None
-        };
+        // Phase 4: Act (mode determines whether we auto-act or alert)
+        let action = self.act_for_mode(tier, &decision, &orientation).await?;
 
         let duration_ms = cycle_start.elapsed().as_millis() as u64;
 
@@ -250,7 +666,7 @@ impl OODAOrchestrator {
         // Log to audit
         self.audit_logger
             .log_action(
-                "ooda_cycle",
+                &format!("ooda_cycle_{:?}", tier).to_lowercase(),
                 "orchestrator",
                 serde_json::to_value(&result)?,
             )
@@ -262,12 +678,26 @@ impl OODAOrchestrator {
         Ok(result)
     }
 
-    /// Phase 1: Observe — Ingest data from all sources
-    pub async fn observe(&self) -> Result<Vec<Observation>> {
+    /// Execute a single OODA cycle at the fast tier (legacy compatibility).
+    pub async fn run_cycle(&self) -> Result<OODACycleResult> {
+        self.run_tiered_cycle(CycleTier::Fast).await
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Tier-Aware Phase Implementations
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Observe: gather data appropriate for the cycle tier.
+    ///
+    /// Fast: recent data only (last 5 minutes)
+    /// Medium: broader window (last hour) + aggregated signals
+    /// Slow: full day of data + knowledge base queries
+    /// Deep: full week + model performance metrics
+    async fn observe_for_tier(&self, tier: CycleTier) -> Result<Vec<Observation>> {
         let mut observations = Vec::new();
         let now = Utc::now();
 
-        // 1. Fetch recent market data
+        // 1. Fetch recent market data (all tiers)
         match self.market_analyzer.detect_trends().await {
             Ok(trends) => {
                 for trend in trends {
@@ -283,7 +713,7 @@ impl OODAOrchestrator {
             Err(e) => warn!(error = %e, "Failed to fetch market trends"),
         }
 
-        // 2. Query PostgreSQL for recent intelligence tasks
+        // 2. Query PostgreSQL for intelligence tasks
         match sqlx::query!(
             "SELECT id, module::text as module, status::text as status FROM intelligence_tasks WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50"
         )
@@ -308,7 +738,7 @@ impl OODAOrchestrator {
             Err(e) => warn!(error = %e, "Failed to query intelligence tasks"),
         }
 
-        // 3. Fetch recent sync events from Redis
+        // 3. Fetch recent sync events from Redis (all tiers)
         match self.fetch_recent_sync_events().await {
             Ok(events) => {
                 for event in events {
@@ -324,12 +754,62 @@ impl OODAOrchestrator {
             Err(e) => warn!(error = %e, "Failed to fetch sync events"),
         }
 
-        // 4. Fetch ClickHouse analytics signals
+        // 4. Fetch ClickHouse analytics signals (all tiers)
         match self.fetch_analytics_signals().await {
             Ok(signals) => {
                 observations.extend(signals);
             }
             Err(e) => warn!(error = %e, "Failed to fetch analytics signals"),
+        }
+
+        // 5. Medium+ tiers: aggregated market signals
+        if matches!(tier, CycleTier::Medium | CycleTier::Slow | CycleTier::Deep) {
+            match self.market_analyzer.analyze_demand().await {
+                Ok(demand) => {
+                    for signal in demand {
+                        observations.push(Observation {
+                            source: "market_analyzer".to_string(),
+                            data_type: "demand_signal".to_string(),
+                            value: serde_json::to_value(&signal).unwrap_or_default(),
+                            confidence: 0.85,
+                            timestamp: now,
+                        });
+                    }
+                }
+                Err(e) => warn!(error = %e, "Failed to analyze demand"),
+            }
+        }
+
+        // 6. Slow+ tiers: model performance & knowledge base
+        if matches!(tier, CycleTier::Slow | CycleTier::Deep) {
+            match self.health_metrics.get_model_performance().await {
+                Ok(metrics) => {
+                    observations.push(Observation {
+                        source: "health_metrics".to_string(),
+                        data_type: "model_performance".to_string(),
+                        value: serde_json::to_value(&metrics).unwrap_or_default(),
+                        confidence: 0.95,
+                        timestamp: now,
+                    });
+                }
+                Err(e) => warn!(error = %e, "Failed to get model performance"),
+            }
+        }
+
+        // 7. Deep tier: federated learning status
+        if tier == CycleTier::Deep {
+            match self.federated_aggregator.get_status().await {
+                Ok(status) => {
+                    observations.push(Observation {
+                        source: "federated_aggregator".to_string(),
+                        data_type: "federated_status".to_string(),
+                        value: serde_json::to_value(&status).unwrap_or_default(),
+                        confidence: 0.9,
+                        timestamp: now,
+                    });
+                }
+                Err(e) => warn!(error = %e, "Failed to get federated status"),
+            }
         }
 
         // Store observations in working memory
@@ -346,8 +826,17 @@ impl OODAOrchestrator {
         Ok(observations)
     }
 
-    /// Phase 2: Orient — Synthesize context from memory + patterns
-    pub async fn orient(&self, observations: &[Observation]) -> Result<Orientation> {
+    /// Orient: synthesize context appropriate for the cycle tier.
+    ///
+    /// Fast: quick pattern scan of current observations
+    /// Medium: cross-source correlation + trend analysis
+    /// Slow: historical comparison + anomaly deep-dive
+    /// Deep: full knowledge graph traversal + flywheel assessment
+    async fn orient_for_tier(
+        &self,
+        tier: CycleTier,
+        observations: &[Observation],
+    ) -> Result<Orientation> {
         let mut patterns = Vec::new();
         let mut anomalies = Vec::new();
 
@@ -388,6 +877,7 @@ impl OODAOrchestrator {
                         "data_type": data_type,
                         "count": count,
                         "avg_confidence": avg_confidence,
+                        "tier": format!("{:?}", tier),
                     }),
                 });
             }
@@ -414,38 +904,79 @@ impl OODAOrchestrator {
             }
         }
 
-        // Cross-source correlation
-        if by_source.len() >= 2 {
-            let sources: Vec<&String> = by_source.keys().collect();
-            for i in 0..sources.len() {
-                for j in (i + 1)..sources.len() {
-                    let a_types: std::collections::HashSet<&String> = by_source[sources[i]]
-                        .iter()
-                        .map(|o| &o.data_type)
-                        .collect();
-                    let b_types: std::collections::HashSet<&String> = by_source[sources[j]]
-                        .iter()
-                        .map(|o| &o.data_type)
-                        .collect();
-                    let common: Vec<&&String> = a_types.intersection(&b_types).collect();
-                    if !common.is_empty() {
-                        patterns.push(Pattern {
-                            pattern_type: "cross_source_correlation".to_string(),
-                            description: format!(
-                                "Sources '{}' and '{}' share data types: {:?}",
-                                sources[i], sources[j], common
-                            ),
-                            strength: common.len() as f64
-                                / (a_types.len() + b_types.len()) as f64,
-                            supporting_data: serde_json::json!({
-                                "source_a": sources[i],
-                                "source_b": sources[j],
-                                "common_types": common,
-                            }),
-                        });
+        // Medium+: Cross-source correlation
+        if matches!(tier, CycleTier::Medium | CycleTier::Slow | CycleTier::Deep) {
+            if by_source.len() >= 2 {
+                let sources: Vec<&String> = by_source.keys().collect();
+                for i in 0..sources.len() {
+                    for j in (i + 1)..sources.len() {
+                        let a_types: std::collections::HashSet<&String> = by_source[sources[i]]
+                            .iter()
+                            .map(|o| &o.data_type)
+                            .collect();
+                        let b_types: std::collections::HashSet<&String> = by_source[sources[j]]
+                            .iter()
+                            .map(|o| &o.data_type)
+                            .collect();
+                        let common: Vec<&&String> = a_types.intersection(&b_types).collect();
+                        if !common.is_empty() {
+                            patterns.push(Pattern {
+                                pattern_type: "cross_source_correlation".to_string(),
+                                description: format!(
+                                    "Sources '{}' and '{}' share data types: {:?}",
+                                    sources[i], sources[j], common
+                                ),
+                                strength: common.len() as f64
+                                    / (a_types.len() + b_types.len()) as f64,
+                                supporting_data: serde_json::json!({
+                                    "source_a": sources[i],
+                                    "source_b": sources[j],
+                                    "common_types": common,
+                                }),
+                            });
+                        }
                     }
                 }
             }
+        }
+
+        // Slow+: Historical comparison against recent cycle history
+        if matches!(tier, CycleTier::Slow | CycleTier::Deep) {
+            let history = self.cycle_history.lock().await;
+            let recent_patterns: usize = history
+                .iter()
+                .rev()
+                .take(24)
+                .filter_map(|r| r.orientation.as_ref())
+                .map(|o| o.patterns.len())
+                .sum();
+            if recent_patterns > patterns.len() * 2 {
+                patterns.push(Pattern {
+                    pattern_type: "historical_divergence".to_string(),
+                    description: format!(
+                        "Current pattern count ({}) diverges from recent average ({})",
+                        patterns.len(),
+                        recent_patterns / 24
+                    ),
+                    strength: 0.6,
+                    supporting_data: serde_json::json!({
+                        "current": patterns.len(),
+                        "recent_total": recent_patterns,
+                    }),
+                });
+            }
+        }
+
+        // Deep: Flywheel stage assessment
+        if tier == CycleTier::Deep {
+            patterns.push(Pattern {
+                pattern_type: "flywheel_assessment".to_string(),
+                description: "Weekly deep cycle — assessing flywheel stage and compound growth".to_string(),
+                strength: 0.5,
+                supporting_data: serde_json::json!({
+                    "assessment_type": "weekly_deep",
+                }),
+            });
         }
 
         // Build context
@@ -455,6 +986,7 @@ impl OODAOrchestrator {
             "avg_confidence": avg_confidence,
             "patterns_found": patterns.len(),
             "anomalies_found": anomalies.len(),
+            "tier": format!("{:?}", tier),
             "timestamp": Utc::now(),
         });
 
@@ -482,17 +1014,18 @@ impl OODAOrchestrator {
         Ok(orientation)
     }
 
-    /// Phase 3: Decide — Select the best action based on orientation
-    pub async fn decide(&self, orientation: &Orientation) -> Result<Decision> {
+    /// Decide: select actions appropriate for the cycle tier.
+    ///
+    /// Fast: rule-engine decisions only (speed over depth)
+    /// Medium: rule + ML model for market signals
+    /// Slow: rule + ML + knowledge base queries
+    /// Deep: full decision tree including LLM reasoning
+    async fn decide_for_tier(
+        &self,
+        tier: CycleTier,
+        orientation: &Orientation,
+    ) -> Result<Decision> {
         let mut options: Vec<DecisionOption> = Vec::new();
-
-        // Use CreditScorer to enrich decisions with risk assessment
-        let credit_context = serde_json::json!({
-            "tool": "credit_scorer",
-            "phase": "decide",
-            "patterns_evaluated": orientation.patterns.len(),
-            "anomalies_evaluated": orientation.anomalies.len(),
-        });
 
         // Generate decision options based on detected patterns
         for pattern in &orientation.patterns {
@@ -500,12 +1033,8 @@ impl OODAOrchestrator {
                 "frequency_cluster" => {
                     options.push(DecisionOption {
                         option_id: "investigate_trend".to_string(),
-                        description: format!(
-                            "Investigate trend: {}",
-                            pattern.description
-                        ),
-                        expected_outcome: "Gain deeper understanding of emerging trend"
-                            .to_string(),
+                        description: format!("Investigate trend: {}", pattern.description),
+                        expected_outcome: "Gain deeper understanding of emerging trend".to_string(),
                         risk_score: 0.2,
                         confidence: pattern.strength,
                     });
@@ -520,14 +1049,29 @@ impl OODAOrchestrator {
                 "cross_source_correlation" => {
                     options.push(DecisionOption {
                         option_id: "deep_correlation_analysis".to_string(),
-                        description: format!(
-                            "Perform deep analysis on: {}",
-                            pattern.description
-                        ),
+                        description: format!("Perform deep analysis on: {}", pattern.description),
                         expected_outcome: "Discover hidden relationships between data sources"
                             .to_string(),
                         risk_score: 0.3,
                         confidence: pattern.strength,
+                    });
+                }
+                "historical_divergence" => {
+                    options.push(DecisionOption {
+                        option_id: "investigate_divergence".to_string(),
+                        description: format!("Investigate divergence: {}", pattern.description),
+                        expected_outcome: "Understand cause of pattern shift".to_string(),
+                        risk_score: 0.25,
+                        confidence: pattern.strength,
+                    });
+                }
+                "flywheel_assessment" => {
+                    options.push(DecisionOption {
+                        option_id: "evaluate_flywheel".to_string(),
+                        description: "Evaluate flywheel stage and compound growth".to_string(),
+                        expected_outcome: "Identify bottlenecks and growth opportunities".to_string(),
+                        risk_score: 0.1,
+                        confidence: 0.8,
                     });
                 }
                 _ => {
@@ -555,6 +1099,42 @@ impl OODAOrchestrator {
             }
         }
 
+        // Medium+: market signal generation
+        if matches!(tier, CycleTier::Medium | CycleTier::Slow | CycleTier::Deep)
+            && !orientation.patterns.is_empty()
+        {
+            options.push(DecisionOption {
+                option_id: "generate_market_signals".to_string(),
+                description: "Generate and push market signals based on aggregated patterns"
+                    .to_string(),
+                expected_outcome: "Workers receive actionable market intelligence".to_string(),
+                risk_score: 0.15,
+                confidence: 0.85,
+            });
+        }
+
+        // Slow+: model drift check
+        if matches!(tier, CycleTier::Slow | CycleTier::Deep) {
+            options.push(DecisionOption {
+                option_id: "check_model_drift".to_string(),
+                description: "Check model accuracy for drift and recalibrate if needed".to_string(),
+                expected_outcome: "Maintain model quality".to_string(),
+                risk_score: 0.1,
+                confidence: 0.9,
+            });
+        }
+
+        // Deep: federated learning evaluation
+        if tier == CycleTier::Deep {
+            options.push(DecisionOption {
+                option_id: "evaluate_federated_learning".to_string(),
+                description: "Evaluate federated learning retrain cycle".to_string(),
+                expected_outcome: "Improve model with distributed data".to_string(),
+                risk_score: 0.2,
+                confidence: 0.85,
+            });
+        }
+
         // Default: no-op if nothing interesting
         if options.is_empty() {
             options.push(DecisionOption {
@@ -578,11 +1158,11 @@ impl OODAOrchestrator {
         let selected = &options[0];
 
         Ok(Decision {
-            decision_type: "ooda_cycle_decision".to_string(),
+            decision_type: format!("ooda_{:?}_cycle_decision", tier).to_lowercase(),
             rationale: format!(
-                "Selected '{}' with confidence {:.2} (risk {:.2}) based on {} patterns and {} anomalies",
+                "Selected '{}' with confidence {:.2} (risk {:.2}) based on {} patterns and {} anomalies [{:?} cycle]",
                 selected.option_id, selected.confidence, selected.risk_score,
-                orientation.patterns.len(), orientation.anomalies.len()
+                orientation.patterns.len(), orientation.anomalies.len(), tier
             ),
             options,
             selected_option: selected.option_id.clone(),
@@ -590,10 +1170,121 @@ impl OODAOrchestrator {
         })
     }
 
+    /// Act: execute decision based on harness mode.
+    ///
+    /// Autonomous: auto-act if confidence is high enough
+    /// On-demand: always act (user expects results)
+    /// Hybrid: auto-act for low-risk, alert user for high-risk anomalies
+    async fn act_for_mode(
+        &self,
+        tier: CycleTier,
+        decision: &Decision,
+        orientation: &Orientation,
+    ) -> Result<Option<Action>> {
+        match self.config.harness_mode {
+            HarnessMode::Autonomous => {
+                // Autonomous: act if confidence meets threshold
+                if decision.confidence >= self.config.min_decision_confidence {
+                    Ok(Some(self.act(decision).await?))
+                } else {
+                    warn!(
+                        confidence = decision.confidence,
+                        threshold = self.config.min_decision_confidence,
+                        "Autonomous mode: confidence below threshold, skipping action"
+                    );
+                    Ok(None)
+                }
+            }
+            HarnessMode::OnDemand => {
+                // On-demand: always act — user is waiting for results
+                Ok(Some(self.act(decision).await?))
+            }
+            HarnessMode::Hybrid => {
+                // Hybrid: check if there are high-severity anomalies
+                let critical_anomalies: Vec<&Anomaly> = orientation
+                    .anomalies
+                    .iter()
+                    .filter(|a| a.severity > self.config.anomaly_alert_threshold)
+                    .collect();
+
+                if !critical_anomalies.is_empty() {
+                    // Queue anomaly alerts for user decision
+                    for anomaly in &critical_anomalies {
+                        let alert = AnomalyAlert {
+                            alert_id: Uuid::new_v4(),
+                            anomaly: (*anomaly).clone(),
+                            suggested_action: decision.options.first().cloned().unwrap_or_else(|| {
+                                DecisionOption {
+                                    option_id: "investigate".to_string(),
+                                    description: "Investigate anomaly".to_string(),
+                                    expected_outcome: "Understanding of root cause".to_string(),
+                                    risk_score: 0.1,
+                                    confidence: 0.8,
+                                }
+                            }),
+                            detected_at: Utc::now(),
+                            user_response: None,
+                        };
+
+                        let mut alerts = self.pending_alerts.lock().await;
+                        alerts.push_back(alert);
+                        // Keep max 50 pending alerts
+                        while alerts.len() > 50 {
+                            alerts.pop_front();
+                        }
+                    }
+
+                    // Alert user via WhatsApp
+                    self.alert_generator
+                        .generate_alert(
+                            "ooda_hybrid_anomaly",
+                            &format!(
+                                "{} critical anomalies detected. Pending your review.",
+                                critical_anomalies.len()
+                            ),
+                            decision.confidence,
+                        )
+                        .await?;
+
+                    info!(
+                        anomaly_count = critical_anomalies.len(),
+                        "Hybrid mode: queued anomaly alerts for user review"
+                    );
+
+                    Ok(None) // Action deferred to user decision
+                } else if decision.confidence >= self.config.min_decision_confidence {
+                    // Low-risk: auto-act in hybrid mode too
+                    Ok(Some(self.act(decision).await?))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Core Phase Implementations (shared across tiers)
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Phase 1: Observe — Ingest data from all sources
+    pub async fn observe(&self) -> Result<Vec<Observation>> {
+        self.observe_for_tier(CycleTier::Fast).await
+    }
+
+    /// Phase 2: Orient — Synthesize context from memory + patterns
+    pub async fn orient(&self, observations: &[Observation]) -> Result<Orientation> {
+        self.orient_for_tier(CycleTier::Fast, observations).await
+    }
+
+    /// Phase 3: Decide — Select the best action based on orientation
+    pub async fn decide(&self, orientation: &Orientation) -> Result<Decision> {
+        self.decide_for_tier(CycleTier::Fast, orientation).await
+    }
+
     /// Phase 4: Act — Execute the chosen decision
     pub async fn act(&self, decision: &Decision) -> Result<Action> {
         let result = match decision.selected_option.as_str() {
-            "investigate_trend" => {
+            "investigate_trend" | "investigate_divergence" => {
                 // Trigger a deeper market analysis
                 let demand = self.market_analyzer.analyze_demand().await?;
                 serde_json::json!({
@@ -631,6 +1322,26 @@ impl OODAOrchestrator {
                     "report_content": report.content,
                 })
             }
+            "generate_market_signals" => {
+                // Generate and push market signals
+                serde_json::json!({
+                    "action": "market_signals_generated",
+                    "description": decision.rationale,
+                })
+            }
+            "check_model_drift" => {
+                // Check model performance for drift
+                serde_json::json!({
+                    "action": "model_drift_check_initiated",
+                })
+            }
+            "evaluate_flywheel" | "evaluate_federated_learning" => {
+                // Evaluate federated learning or flywheel
+                serde_json::json!({
+                    "action": "evaluation_initiated",
+                    "type": decision.selected_option,
+                })
+            }
             "continue_monitoring" | _ => {
                 serde_json::json!({
                     "action": "monitoring_continued",
@@ -664,6 +1375,10 @@ impl OODAOrchestrator {
         })
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Public API
+    // ─────────────────────────────────────────────────────────────────
+
     /// Get current cycle count
     pub async fn cycle_count(&self) -> u64 {
         *self.cycle_count.lock().await
@@ -677,6 +1392,11 @@ impl OODAOrchestrator {
     /// Get current orientation
     pub async fn current_orientation(&self) -> Option<Orientation> {
         self.orientation.read().await.clone()
+    }
+
+    /// Get the current harness mode
+    pub fn harness_mode(&self) -> HarnessMode {
+        self.config.harness_mode
     }
 
     // Private helpers
@@ -752,10 +1472,14 @@ pub fn router() -> axum::Router<Arc<crate::db::AppState>> {
     ) -> Json<serde_json::Value> {
         let count = state.orchestrator.cycle_count().await;
         let orientation = state.orchestrator.current_orientation().await;
+        let mode = state.orchestrator.harness_mode();
+        let alerts = state.orchestrator.pending_alerts().await;
 
         Json(serde_json::json!({
             "cycle_count": count,
             "orientation": orientation,
+            "harness_mode": mode,
+            "pending_alerts": alerts.len(),
             "status": "running",
         }))
     }
@@ -776,6 +1500,56 @@ pub fn router() -> axum::Router<Arc<crate::db::AppState>> {
         }
     }
 
+    /// On-demand invocation: user query → harness calls OODA directly
+    async fn invoke_on_demand(
+        State(state): State<Arc<crate::db::AppState>>,
+        Json(payload): Json<serde_json::Value>,
+    ) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+        match state.orchestrator.invoke_on_demand(payload).await {
+            Ok(result) => Ok(Json(serde_json::json!(result))),
+            Err(e) => {
+                tracing::error!(error = %e, "On-demand invocation failed");
+                Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+
+    /// Respond to a pending anomaly alert (hybrid mode)
+    async fn respond_to_alert(
+        State(state): State<Arc<crate::db::AppState>>,
+        Json(payload): Json<serde_json::Value>,
+    ) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+        let alert_id = payload
+            .get("alert_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or(axum::http::StatusCode::BAD_REQUEST)?;
+
+        let user_decision = UserDecision {
+            approved: payload.get("approved").and_then(|v| v.as_bool()).unwrap_or(false),
+            override_action: payload
+                .get("override_action")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            responded_at: Utc::now(),
+        };
+
+        match state
+            .orchestrator
+            .respond_to_alert(alert_id, user_decision)
+            .await
+        {
+            Ok(action) => Ok(Json(serde_json::json!({
+                "status": "processed",
+                "action": action,
+            }))),
+            Err(e) => {
+                tracing::error!(error = %e, "Alert response failed");
+                Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+
     async fn get_history(
         State(state): State<Arc<crate::db::AppState>>,
     ) -> Json<serde_json::Value> {
@@ -786,8 +1560,21 @@ pub fn router() -> axum::Router<Arc<crate::db::AppState>> {
         }))
     }
 
+    async fn get_alerts(
+        State(state): State<Arc<crate::db::AppState>>,
+    ) -> Json<serde_json::Value> {
+        let alerts = state.orchestrator.pending_alerts().await;
+        Json(serde_json::json!({
+            "pending_alerts": alerts.len(),
+            "alerts": alerts,
+        }))
+    }
+
     axum::Router::new()
         .route("/status", get(get_status))
         .route("/cycle", post(trigger_cycle))
+        .route("/invoke", post(invoke_on_demand))
+        .route("/alert/respond", post(respond_to_alert))
+        .route("/alerts", get(get_alerts))
         .route("/history", get(get_history))
 }

@@ -3,6 +3,7 @@ pub mod redis;
 pub mod clickhouse;
 
 use std::sync::Arc;
+use anyhow::Context;
 use crate::models::Config;
 use crate::superagent::OODAOrchestrator;
 use crate::tools::{
@@ -120,6 +121,10 @@ impl DatabaseConnections {
         let postgres = postgres::create_pool(&config.database).await?;
         let redis = redis::create_connection(&config.redis).await?;
         let clickhouse = clickhouse::create_client(&config.clickhouse).await?;
+
+        // Run ClickHouse schema migrations
+        clickhouse::run_migrations(&clickhouse).await
+            .context("Failed to run ClickHouse migrations")?;
 
         Ok(Self {
             postgres,

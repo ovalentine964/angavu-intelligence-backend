@@ -44,7 +44,7 @@ pub struct ClickHouseConfig {
     pub password: String,
 }
 
-#[derive(Debug, PgTypedQuery, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
     pub jwt_secret: String,
     pub jwt_expiration: u64,

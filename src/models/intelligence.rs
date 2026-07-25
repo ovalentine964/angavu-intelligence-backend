@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Intelligence module types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, sqlx::Type)]
+#[sqlx(type_name = "intelligence_module", rename_all = "snake_case")]
 pub enum IntelligenceModule {
     RevenueForecasting,
     CustomerBehavior,
@@ -13,8 +14,9 @@ pub enum IntelligenceModule {
     ChurnPrediction,
 }
 
-/// OODA Loop phases
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// OODA Loop phases (canonical — used across all OODA cycle code)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "ooda_phase", rename_all = "snake_case")]
 pub enum OODAPhase {
     Observe,
     Orient,
@@ -22,14 +24,17 @@ pub enum OODAPhase {
     Act,
 }
 
-/// Intelligence task status
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Intelligence task status (canonical — used by both intelligence tasks and agent tasks)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "task_status", rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
+    Queued,
     Running,
     Completed,
     Failed,
     Cancelled,
+    Retrying,
 }
 
 /// Intelligence task
