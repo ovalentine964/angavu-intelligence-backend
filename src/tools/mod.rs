@@ -22,6 +22,11 @@ pub mod api_gateway;
 pub mod audit_logger;
 pub mod circuit_breaker;
 pub mod rate_limiter;
+pub mod mobile_money_signal_extractor;
+pub mod composite_index_builder;
+pub mod anomaly_detector;
+pub mod demand_forecaster;
+pub mod scenario_modeler;
 
 // Re-export key types for convenience
 pub use ooda_orchestrator::OODAOrchestrator;
@@ -43,3 +48,8 @@ pub use differential_privacy::DifferentialPrivacyEngine;
 pub use k_anonymity::KAnonymityEnforcer;
 pub use model_distributor::ModelDistributor;
 pub use whatsapp_sender::WhatsAppSender;
+pub use mobile_money_signal_extractor::MobileMoneySignalExtractor;
+pub use composite_index_builder::CompositeIndexBuilder;
+pub use anomaly_detector::AnomalyDetector;
+pub use demand_forecaster::DemandForecaster;
+pub use scenario_modeler::ScenarioModeler;
