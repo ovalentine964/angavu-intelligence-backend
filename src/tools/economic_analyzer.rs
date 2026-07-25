@@ -44,3 +44,57 @@ impl EconomicAnalyzer {
         ((agg.avg_transaction - baseline) / baseline * 100.0).max(-10.0).min(50.0)
     }
 }
+
+// ============================================================
+// Academic Formula Integrations (ECO 101, MAT 121)
+// ============================================================
+
+/// Price Elasticity of Demand (PED).
+///
+/// PED = (% change in quantity) / (% change in price)
+///     = (ΔQ / Q) / (ΔP / P)
+///
+/// Both inputs are already expressed as percentages (e.g. 10.0 for 10%).
+/// Returns the elasticity coefficient (typically negative). |PED| > 1 means
+/// demand is elastic; |PED| < 1 means inelastic.
+pub fn calculate_price_elasticity(
+    price_change_pct: f64,
+    quantity_change_pct: f64,
+) -> f64 {
+    if price_change_pct.abs() < 1e-10 {
+        return 0.0; // Undefined — zero price change
+    }
+    quantity_change_pct / price_change_pct
+}
+
+/// Marginal Cost (MC).
+///
+/// MC = ΔTC / ΔQ
+///
+/// The additional cost of producing one more unit.
+pub fn calculate_marginal_cost(
+    total_cost_delta: f64,
+    quantity_delta: f64,
+) -> f64 {
+    if quantity_delta.abs() < 1e-10 {
+        return 0.0;
+    }
+    total_cost_delta / quantity_delta
+}
+
+/// Break-even analysis.
+///
+/// Break-even quantity = Fixed Costs / (Price − Variable Cost per Unit)
+///
+/// Returns the number of units that must be sold to cover all fixed costs.
+pub fn break_even_analysis(
+    fixed_costs: f64,
+    price: f64,
+    variable_cost_per_unit: f64,
+) -> f64 {
+    let contribution_margin = price - variable_cost_per_unit;
+    if contribution_margin <= 0.0 {
+        return f64::INFINITY; // Cannot break even — margin is zero or negative
+    }
+    fixed_costs / contribution_margin
+}

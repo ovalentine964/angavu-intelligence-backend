@@ -442,6 +442,47 @@ fn coefficient_of_variation(values: &[f64]) -> f64 {
     variance.sqrt() / mean.abs()
 }
 
+// ============================================================
+// Academic Formula Integrations (ECO 422)
+// ============================================================
+
+/// Herfindahl-Hirschman Index (HHI) for market concentration.
+///
+/// HHI = Σ(s_i²) where s_i is each firm's market share as a
+/// fraction (0..1). The result is in [0, 1].
+///
+/// Interpretation (US DOJ guidelines, adapted):
+///   HHI < 0.15  → competitive market
+
+///   0.15 ≤ HHI < 0.25 → moderately concentrated
+///   HHI ≥ 0.25 → highly concentrated
+///
+/// `market_shares` should be fractions that sum to 1.0 (or close to it).
+pub fn herfindahl_index(market_shares: &[f64]) -> f64 {
+    market_shares.iter().map(|s| s * s).sum()
+}
+
+/// Price dispersion — coefficient of variation of prices.
+///
+/// Measures how spread out prices are relative to the mean price.
+///
+///   dispersion = σ / μ
+///
+/// A value of 0 means all prices are identical; higher values mean
+/// greater heterogeneity (potential market inefficiency).
+pub fn price_dispersion(prices: &[f64]) -> f64 {
+    let n = prices.len() as f64;
+    if n < 2.0 {
+        return 0.0;
+    }
+    let mean = prices.iter().sum::<f64>() / n;
+    if mean.abs() < 1e-10 {
+        return 0.0;
+    }
+    let variance = prices.iter().map(|p| (p - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    variance.sqrt() / mean.abs()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -459,5 +500,53 @@ mod tests {
         let values = vec![10.0, 10.0, 10.0];
         let cv = coefficient_of_variation(&values);
         assert!(cv < 0.01); // Should be near zero for constant values
+    }
+
+    // --- Herfindahl-Hirschman Index ---
+
+    #[test]
+    fn test_hhi_monopoly() {
+        // Single firm with 100% share → HHI = 1.0
+        let hhi = herfindahl_index(&[1.0]);
+        assert!((hhi - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hhi_perfect_competition() {
+        // 100 equal firms → HHI = 100 × 0.01² = 0.01
+        let shares: Vec<f64> = vec![0.01; 100];
+        let hhi = herfindahl_index(&shares);
+        assert!((hhi - 0.01).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hhi_duopoly_equal() {
+        // Two equal firms → 0.5² + 0.5² = 0.5
+        let hhi = herfindahl_index(&[0.5, 0.5]);
+        assert!((hhi - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_hhi_unequal() {
+        // 60% + 40% → 0.36 + 0.16 = 0.52
+        let hhi = herfindahl_index(&[0.6, 0.4]);
+        assert!((hhi - 0.52).abs() < 1e-10);
+    }
+
+    // --- Price dispersion ---
+
+    #[test]
+    fn test_price_dispersion_identical() {
+        let prices = vec![100.0, 100.0, 100.0];
+        let d = price_dispersion(&prices);
+        assert!(d < 0.001);
+    }
+
+    #[test]
+    fn test_price_dispersion_spread() {
+        let prices = vec![100.0, 200.0, 300.0];
+        let d = price_dispersion(&prices);
+        // CV of {100,200,300} with mean=200, std≈100 → ~0.5
+        assert!(d > 0.4 && d < 0.6);
     }
 }

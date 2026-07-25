@@ -699,6 +699,11 @@ impl InequalityTracker {
         let last = &rows[rows.len() - 1];
         let gini_change = last.gini - first.gini;
 
+        let first_date = NaiveDate::parse_from_str(&first.snapshot_date, "%Y-%m-%d")
+            .unwrap_or_else(|_| Utc::now().date_naive());
+        let last_date = NaiveDate::parse_from_str(&last.snapshot_date, "%Y-%m-%d")
+            .unwrap_or_else(|_| Utc::now().date_naive());
+
         let direction = if gini_change > self.config.gini_change_alert_threshold {
             TrendDirection::Widening
         } else if gini_change < -self.config.gini_change_alert_threshold {
@@ -710,8 +715,8 @@ impl InequalityTracker {
         Ok(vec![InequalityTrend {
             dimension: dimension_str,
             metric: metric_str,
-            period_start: first.snapshot_date,
-            period_end: last.snapshot_date,
+            period_start: first_date,
+            period_end: last_date,
             gini_start: first.gini,
             gini_end: last.gini,
             gini_change,
@@ -1255,37 +1260,40 @@ impl InequalityTracker {
             SELECT
                 {cc} AS cell_id,
                 {cc} AS cell_label,
-                groupArray(value) AS values,
-                count() AS sample_size
+                value
             FROM inequality_worker_data
             WHERE metric_name = '{metric}'
               AND snapshot_date BETWEEN '{start}' AND '{end}'
-            GROUP BY {cc}
-            HAVING sample_size >= {min}
             ORDER BY cell_id
             "#,
             cc = cell_column,
             metric = metric_str,
             start = range.start,
             end = range.end,
-            min = self.config.min_cell_size,
         );
 
         let rows = self
             .db
             .clickhouse
             .query(&query)
-            .fetch_all::<CellDataRow>()
+            .fetch_all::<ValueRow>()
             .await
             .context("Failed to fetch cell data range from ClickHouse")?;
 
-        Ok(rows
-            .into_iter()
-            .map(|r| CellData {
-                cell_id: r.cell_id,
-                cell_label: r.cell_label,
-                values: r.values,
-            })
+        // Group by cell_id in Rust
+        let mut grouped: HashMap<String, CellData> = HashMap::new();
+        for row in rows {
+            let entry = grouped.entry(row.cell_id.clone()).or_insert_with(|| CellData {
+                cell_id: row.cell_id,
+                cell_label: row.cell_label,
+                values: Vec::new(),
+            });
+            entry.values.push(row.value);
+        }
+
+        Ok(grouped
+            .into_values()
+            .filter(|c| c.values.len() as u32 >= self.config.min_cell_size)
             .collect())
     }
 

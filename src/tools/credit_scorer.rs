@@ -370,6 +370,129 @@ impl ScoreRange {
     }
 }
 
+// ============================================================
+// Academic Formula Integrations (STA 341, ECO 414, STA 341)
+// ============================================================
+
+/// Bayesian credit model using Beta-Bernoulli updating.
+///
+/// Prior: θ ~ Beta(α, β)
+/// Likelihood: s successes, f failures observed
+/// Posterior: θ ~ Beta(α + s, β + f)
+///
+/// Returns (posterior_alpha, posterior_beta, posterior_mean).
+pub fn bayesian_update(
+    alpha: f64,
+    beta: f64,
+    success: f64,
+    failure: f64,
+) -> (f64, f64, f64) {
+    let posterior_alpha = alpha + success;
+    let posterior_beta = beta + failure;
+    let posterior_mean = posterior_alpha / (posterior_alpha + posterior_beta);
+    (posterior_alpha, posterior_beta, posterior_mean)
+}
+
+/// Logistic regression probability of default.
+///
+/// P(default) = 1 / (1 + e^(-Xβ))
+///
+/// `features` is the row vector X, `coefficients` is β.
+/// Returns the predicted probability in (0, 1).
+pub fn logistic_probability(features: &[f64], coefficients: &[f64]) -> f64 {
+    let z: f64 = features
+        .iter()
+        .zip(coefficients.iter())
+        .map(|(x, w)| x * w)
+        .sum();
+    1.0 / (1.0 + (-z).exp())
+}
+
+/// Maximum Likelihood Estimation for a Bernoulli / binomial model.
+///
+/// Given a slice of binary outcomes (1.0 = success, 0.0 = failure),
+/// the MLE of the success probability θ is simply the sample mean:
+///
+///   θ̂ = (1/n) Σ x_i
+///
+/// Returns (theta_hat, log_likelihood).
+pub fn mle_estimate(data: &[f64]) -> (f64, f64) {
+    let n = data.len() as f64;
+    if n == 0.0 {
+        return (0.0, f64::NEG_INFINITY);
+    }
+    let theta_hat = data.iter().sum::<f64>() / n;
+    let theta = theta_hat.clamp(1e-10, 1.0 - 1e-10); // avoid log(0)
+
+    // Log-likelihood: Σ [x_i ln(θ) + (1 - x_i) ln(1 - θ)]
+    let log_likelihood: f64 = data
+        .iter()
+        .map(|&x| x * theta.ln() + (1.0 - x) * (1.0 - theta).ln())
+        .sum();
+
+    (theta_hat, log_likelihood)
+}
+
+/// Confidence interval using the t-distribution (Welch–Satterthwaite
+/// approximation for the degrees of freedom, simplified here to the
+/// normal / z approximation for large n).
+///
+/// CI = estimate ± t_{α/2, df} × SE
+///
+/// For large n this converges to the z-interval; for small n we use
+/// the Abramowitz & Stegun approximation for the inverse-t.
+///
+/// Returns (lower_bound, upper_bound).
+pub fn confidence_interval(
+    estimate: f64,
+    std_error: f64,
+    n: usize,
+    confidence_level: f64,
+) -> (f64, f64) {
+    let df = (n.saturating_sub(1)) as f64;
+    if df < 1.0 || std_error <= 0.0 {
+        return (estimate, estimate);
+    }
+
+    let alpha = 1.0 - confidence_level;
+    let z = normal_quantile(1.0 - alpha / 2.0); // ≈ 1.96 for 95%
+
+    // t-approximation via Abramowitz & Stegun formula 26.7.5:
+    // t_p,ν ≈ z + (z³ + z)/(4ν) + ... (first-order correction)
+    let z3 = z * z * z;
+    let t_approx = z + (z3 + z) / (4.0 * df);
+
+    let margin = t_approx * std_error;
+    (estimate - margin, estimate + margin)
+}
+
+/// Inverse normal CDF (rational approximation, Abramowitz & Stegun 26.2.23).
+/// Accurate to ~4.5 × 10⁻⁴ for 0 < p < 1.
+fn normal_quantile(p: f64) -> f64 {
+    // Map to the upper half via symmetry
+    if p <= 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p >= 1.0 {
+        return f64::INFINITY;
+    }
+    if (p - 0.5).abs() < 1e-15 {
+        return 0.0;
+    }
+
+    let (p_adj, sign) = if p < 0.5 { (1.0 - p, -1.0) } else { (p, 1.0) };
+
+    let t = (-2.0 * (1.0 - p_adj).ln()).sqrt();
+    let c0 = 2.515517;
+    let c1 = 0.802853;
+    let c2 = 0.010328;
+    let d1 = 1.432788;
+    let d2 = 0.189269;
+    let d3 = 0.001308;
+
+    sign * (t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,5 +510,104 @@ mod tests {
     fn test_normalize_factor() {
         assert!((normalize_factor("transaction_volume", 50.0) - 0.5).abs() < 0.01);
         assert!((normalize_factor("consistency", 12.0) - 0.5).abs() < 0.01);
+    }
+
+    // --- Bayesian update ---
+
+    #[test]
+    fn test_bayesian_update_prior_only() {
+        let (a, b, mean) = bayesian_update(2.0, 2.0, 0.0, 0.0);
+        assert!((a - 2.0).abs() < 1e-10);
+        assert!((b - 2.0).abs() < 1e-10);
+        assert!((mean - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_bayesian_update_with_data() {
+        // Prior Beta(1,1), 8 successes, 2 failures → Beta(9,3)
+        let (a, b, mean) = bayesian_update(1.0, 1.0, 8.0, 2.0);
+        assert!((a - 9.0).abs() < 1e-10);
+        assert!((b - 3.0).abs() < 1e-10);
+        assert!((mean - 0.75).abs() < 1e-10);
+    }
+
+    // --- Logistic probability ---
+
+    #[test]
+    fn test_logistic_probability_zero() {
+        // When Xβ = 0, P should be 0.5
+        let p = logistic_probability(&[0.0, 0.0], &[1.0, 1.0]);
+        assert!((p - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_logistic_probability_positive() {
+        // Large positive z → P close to 1
+        let p = logistic_probability(&[10.0, 10.0], &[1.0, 1.0]);
+        assert!(p > 0.9999);
+    }
+
+    #[test]
+    fn test_logistic_probability_negative() {
+        // Large negative z → P close to 0
+        let p = logistic_probability(&[-10.0, -10.0], &[1.0, 1.0]);
+        assert!(p < 0.0001);
+    }
+
+    // --- MLE ---
+
+    #[test]
+    fn test_mle_estimate_all_successes() {
+        let data = vec![1.0, 1.0, 1.0, 1.0];
+        let (theta, _ll) = mle_estimate(&data);
+        assert!((theta - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_mle_estimate_mixed() {
+        let data = vec![1.0, 0.0, 1.0, 0.0, 1.0];
+        let (theta, _ll) = mle_estimate(&data);
+        assert!((theta - 0.6).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_mle_estimate_empty() {
+        let data: Vec<f64> = vec![];
+        let (theta, ll) = mle_estimate(&data);
+        assert!((theta - 0.0).abs() < 1e-10);
+        assert!(ll.is_infinite());
+    }
+
+    // --- Confidence interval ---
+
+    #[test]
+    fn test_confidence_interval_symmetric() {
+        let (lo, hi) = confidence_interval(100.0, 10.0, 100, 0.95);
+        assert!(lo < 100.0);
+        assert!(hi > 100.0);
+        // Margin should be roughly 1.96 × 10 ≈ 19.6
+        assert!((hi - 100.0 - 100.0 + lo).abs() < 2.0); // roughly symmetric
+    }
+
+    #[test]
+    fn test_confidence_interval_zero_se() {
+        let (lo, hi) = confidence_interval(50.0, 0.0, 100, 0.95);
+        assert!((lo - 50.0).abs() < 1e-10);
+        assert!((hi - 50.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_confidence_interval_wider_with_lower_confidence() {
+        let (lo95, hi95) = confidence_interval(100.0, 10.0, 30, 0.95);
+        let (lo99, hi99) = confidence_interval(100.0, 10.0, 30, 0.99);
+        assert!(hi99 - lo99 > hi95 - lo95);
+    }
+
+    // --- Normal quantile ---
+
+    #[test]
+    fn test_normal_quantile_standard() {
+        let z = normal_quantile(0.975);
+        assert!((z - 1.96).abs() < 0.01);
     }
 }
