@@ -76,13 +76,13 @@ impl WhatsAppSender {
     /// - WHATSAPP_FROM_NUMBER: (optional) Sender phone number
     pub fn new() -> Self {
         let api_key = std::env::var("WHATSAPP_API_KEY")
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or_default();
         let phone_number_id = std::env::var("WHATSAPP_PHONE_NUMBER_ID")
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or_default();
         let api_url = std::env::var("WHATSAPP_API_URL")
             .unwrap_or_else(|_| "https://graph.facebook.com/v18.0".to_string());
         let from_number = std::env::var("WHATSAPP_FROM_NUMBER")
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or_default();
 
         Self { api_url, api_key, phone_number_id, from_number }
     }
@@ -108,7 +108,7 @@ impl WhatsAppSender {
     }
 
     /// Send a text message via WhatsApp Business API.
-    pub fn send_text(&self, to: &str, message: &str) -> Result<DeliveryStatus> {
+    pub async fn send_text(&self, to: &str, message: &str) -> Result<DeliveryStatus> {
         if !self.is_configured() {
             return Ok(DeliveryStatus {
                 status: "error".to_string(),
@@ -127,11 +127,11 @@ impl WhatsAppSender {
             }
         });
 
-        self.send_request(&body)
+        self.send_request(&body).await
     }
 
     /// Send a template message (for notifications, reports, etc.).
-    pub fn send_template(
+    pub async fn send_template(
         &self,
         to: &str,
         template_name: &str,
@@ -168,13 +168,13 @@ impl WhatsAppSender {
             }
         });
 
-        self.send_request(&body)
+        self.send_request(&body).await
     }
 
     /// Send a business report as a formatted WhatsApp message.
-    pub fn send_report(&self, phone: &str, report_content: &str) -> Result<DeliveryStatus> {
+    pub async fn send_report(&self, phone: &str, report_content: &str) -> Result<DeliveryStatus> {
         let formatted = self.format_for_whatsapp(report_content);
-        self.send_text(phone, &formatted)
+        self.send_text(phone, &formatted).await
     }
 
     /// Format content for WhatsApp's simplified markdown.
@@ -187,8 +187,8 @@ impl WhatsAppSender {
     }
 
     /// Internal: send HTTP request to WhatsApp Business API.
-    fn send_request(&self, body: &serde_json::Value) -> Result<DeliveryStatus> {
-        let client = reqwest::blocking::Client::new();
+    async fn send_request(&self, body: &serde_json::Value) -> Result<DeliveryStatus> {
+        let client = reqwest::Client::new();
         let url = self.endpoint();
 
         let response = client
@@ -197,12 +197,14 @@ impl WhatsAppSender {
             .header("Content-Type", "application/json")
             .body(body.to_string())
             .send()
+            .await
             .context("Failed to send WhatsApp API request")?;
 
         let status_code = response.status().as_u16();
-        let response_text = response.text().context("Failed to read WhatsApp API response")?;
+        let response_text = response.text().await
+            .context("Failed to read WhatsApp API response")?;
 
-        if status_code >= 200 && status_code < 300 {
+        if (200..300).contains(&status_code) {
             let api_resp: WhatsAppApiResponse = serde_json::from_str(&response_text)
                 .unwrap_or(WhatsAppApiResponse {
                     messaging_product: "whatsapp".to_string(),
@@ -282,10 +284,8 @@ mod tests {
         );
         assert!(configured.is_configured());
 
-        let unconfigured = WhatsAppSender::new();
-        // Will be unconfigured unless env vars are set
-        // Just test the structure works
-        let _ = unconfigured.is_configured();
+        let unconfigured = WhatsAppSender::with_config("", "", "", "");
+        assert!(!unconfigured.is_configured());
     }
 
     #[test]
@@ -299,25 +299,25 @@ mod tests {
         assert_eq!(sender.endpoint(), "https://graph.facebook.com/v18.0/phone123/messages");
     }
 
-    #[test]
-    fn test_send_text_unconfigured() {
+    #[tokio::test]
+    async fn test_send_text_unconfigured() {
         let sender = WhatsAppSender::with_config("", "", "", "");
-        let result = sender.send_text("+254712345678", "test").unwrap();
+        let result = sender.send_text("+254712345678", "test").await.unwrap();
         assert_eq!(result.status, "error");
         assert!(result.error.is_some());
     }
 
-    #[test]
-    fn test_send_template_unconfigured() {
+    #[tokio::test]
+    async fn test_send_template_unconfigured() {
         let sender = WhatsAppSender::with_config("", "", "", "");
-        let result = sender.send_template("+254712345678", "daily_report", &["param1".to_string()]).unwrap();
+        let result = sender.send_template("+254712345678", "daily_report", &["param1".to_string()]).await.unwrap();
         assert_eq!(result.status, "error");
     }
 
-    #[test]
-    fn test_send_report_unconfigured() {
+    #[tokio::test]
+    async fn test_send_report_unconfigured() {
         let sender = WhatsAppSender::with_config("", "", "", "");
-        let result = sender.send_report("+254712345678", "📊 Daily Report\n**Revenue**: $1000").unwrap();
+        let result = sender.send_report("+254712345678", "📊 Daily Report\n**Revenue**: $1000").await.unwrap();
         assert_eq!(result.status, "error");
     }
 
