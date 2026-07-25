@@ -666,25 +666,30 @@ impl InequalityTracker {
         let dimension_str = dimension.to_string();
         let metric_str = metric.to_string();
 
-        let rows = sqlx::query_as::<_, TrendRow>(
+        let query = format!(
             r#"
             SELECT
                 snapshot_date,
                 gini
             FROM inequality_timeseries
-            WHERE dimension = $1
-              AND metric = $2
-              AND snapshot_date BETWEEN $3 AND $4
+            WHERE dimension = '{dim}'
+              AND metric = '{metric}'
+              AND snapshot_date BETWEEN '{from}' AND '{to}'
             ORDER BY snapshot_date ASC
             "#,
-        )
-        .bind(&dimension_str)
-        .bind(&metric_str)
-        .bind(from)
-        .bind(to)
-        .fetch_all(&self.db.clickhouse)
-        .await
-        .context("Failed to fetch inequality trends from ClickHouse")?;
+            dim = dimension_str,
+            metric = metric_str,
+            from = from,
+            to = to,
+        );
+
+        let rows = self
+            .db
+            .clickhouse
+            .query(&query)
+            .fetch_all::<TrendRow>()
+            .await
+            .context("Failed to fetch inequality trends from ClickHouse")?;
 
         if rows.len() < 2 {
             return Ok(vec![]);
@@ -1307,32 +1312,34 @@ impl InequalityTracker {
             r#"
             SELECT
                 {composite_key} AS combo_key,
-                {group_by},
                 avg(value) AS mean_val,
                 median(value) AS median_val,
                 count() AS sample_size
             FROM inequality_worker_data
-            WHERE metric_name = $1
+            WHERE metric_name = '{metric}'
             GROUP BY {group_by}
-            HAVING sample_size >= $2
+            HAVING sample_size >= {min}
             ORDER BY mean_val ASC
             "#,
             composite_key = composite_key,
-            group_by = group_by
+            group_by = group_by,
+            metric = metric_str,
+            min = self.config.min_cell_size,
         );
 
-        #[derive(Debug, sqlx::FromRow)]
+        #[derive(Debug, clickhouse::Row, Deserialize)]
         struct IntersectionalRow {
             combo_key: String,
             mean_val: f64,
             median_val: f64,
-            sample_size: i64,
+            sample_size: u64,
         }
 
-        let rows = sqlx::query_as::<_, IntersectionalRow>(&query)
-            .bind(&metric_str)
-            .bind(self.config.min_cell_size as i64)
-            .fetch_all(&self.db.clickhouse)
+        let rows = self
+            .db
+            .clickhouse
+            .query(&query)
+            .fetch_all::<IntersectionalRow>()
             .await
             .context("Failed to fetch intersectional data from ClickHouse")?;
 
@@ -1399,6 +1406,45 @@ impl InequalityTracker {
     ) -> Result<Vec<InequalityTrend>> {
         let from = as_of - chrono::Duration::days(90);
         self.get_trends(dimension, metric, from, as_of).await
+    }
+
+    /// Fetch previous Gini coefficient for comparison.
+    async fn fetch_previous_gini(
+        &self,
+        dimension: &InequalityDimension,
+        metric: &InequalityMetric,
+        current_date: NaiveDate,
+    ) -> Option<f64> {
+        let dimension_str = dimension.to_string();
+        let metric_str = metric.to_string();
+
+        let query = format!(
+            r#"
+            SELECT gini
+            FROM inequality_timeseries
+            WHERE dimension = '{dim}'
+              AND metric = '{metric}'
+              AND snapshot_date < '{date}'
+            ORDER BY snapshot_date DESC
+            LIMIT 1
+            "#,
+            dim = dimension_str,
+            metric = metric_str,
+            date = current_date,
+        );
+
+        #[derive(clickhouse::Row, Deserialize)]
+        struct GiniRow {
+            gini: f64,
+        }
+
+        self.db
+            .clickhouse
+            .query(&query)
+            .fetch_one::<GiniRow>()
+            .await
+            .ok()
+            .map(|r| r.gini)
     }
 
     /// Compute the additive (non-interaction) disadvantage score for comparison.
