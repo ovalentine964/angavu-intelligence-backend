@@ -27,6 +27,10 @@ pub mod composite_index_builder;
 pub mod anomaly_detector;
 pub mod demand_forecaster;
 pub mod scenario_modeler;
+pub mod policy_impact_analyzer;
+pub mod inequality_tracker;
+pub mod policy_impact_analyzer;
+pub mod inequality_tracker;
 
 // Re-export key types for convenience
 pub use ooda_orchestrator::OODAOrchestrator;
@@ -53,3 +57,7 @@ pub use composite_index_builder::CompositeIndexBuilder;
 pub use anomaly_detector::AnomalyDetector;
 pub use demand_forecaster::DemandForecaster;
 pub use scenario_modeler::ScenarioModeler;
+pub use policy_impact_analyzer::PolicyImpactAnalyzer;
+pub use inequality_tracker::InequalityTracker;
+pub use policy_impact_analyzer::PolicyImpactAnalyzer;
+pub use inequality_tracker::InequalityTracker;
