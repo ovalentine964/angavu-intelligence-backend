@@ -15,17 +15,21 @@ use crate::tools::{
     DifferentialPrivacyEngine, KAnonymityEnforcer, ModelDistributor,
     WhatsAppSender, AlertGenerator, ReportEngine, ApiGateway, AuditLogger,
     CircuitBreaker, RateLimiter,
+    MobileMoneySignalExtractor, CompositeIndexBuilder, AnomalyDetector,
+    DemandForecaster, ScenarioModeler, PolicyImpactAnalyzer, InequalityTracker,
 };
+use crate::tools::anomaly_detector::AnomalyConfig;
+use crate::tools::demand_forecaster::DemandForecastConfig;
 use crate::tools::differential_privacy::DifferentialPrivacyConfig;
 use crate::tools::circuit_breaker::CircuitBreakerConfig;
 
-/// Application state shared across handlers — holds all 20 tools + orchestrator.
+/// Application state shared across handlers — holds all 26 tools + orchestrator.
 pub struct AppState {
     pub db: DatabaseConnections,
     pub orchestrator: Arc<OODAOrchestrator>,
     pub config: Config,
 
-    // ── Tool instances (20 total) ──────────────────────────────────────
+    // ── Tool instances (26 total) ──────────────────────────────────────
     // Analysis & Intelligence
     pub market_analyzer: Arc<MarketAnalyzer>,
     pub credit_scorer: Arc<CreditScorer>,
@@ -53,6 +57,15 @@ pub struct AppState {
     pub audit_logger: Arc<AuditLogger>,
     pub circuit_breaker: Arc<CircuitBreaker>,
     pub rate_limiter: Arc<RateLimiter>,
+
+    // New tools (7 recently wired)
+    pub mobile_money: Arc<MobileMoneySignalExtractor>,
+    pub composite_index: Arc<CompositeIndexBuilder>,
+    pub anomaly_detector: Arc<AnomalyDetector>,
+    pub demand_forecaster: Arc<DemandForecaster>,
+    pub scenario_modeler: Arc<ScenarioModeler>,
+    pub policy_impact: Arc<PolicyImpactAnalyzer>,
+    pub inequality_tracker: Arc<InequalityTracker>,
 
     // Superagent engines (5 new capability modules)
     pub flywheel: Arc<FlywheelEngine>,
@@ -92,6 +105,15 @@ impl AppState {
         let circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig::default()));
         let rate_limiter = Arc::new(RateLimiter::new());
 
+        // New tools (7 recently wired)
+        let mobile_money = Arc::new(MobileMoneySignalExtractor::with_defaults(db.clone()));
+        let composite_index = Arc::new(CompositeIndexBuilder::new(db.clone()));
+        let anomaly_detector = Arc::new(AnomalyDetector::new(AnomalyConfig::default()));
+        let demand_forecaster = Arc::new(DemandForecaster::new(db.clone(), DemandForecastConfig::default()));
+        let scenario_modeler = Arc::new(ScenarioModeler::new(db.clone()));
+        let policy_impact = Arc::new(PolicyImpactAnalyzer::new(db.clone()));
+        let inequality_tracker = Arc::new(InequalityTracker::new(db.clone()));
+
         // Superagent engines
         let flywheel = Arc::new(FlywheelEngine::new());
         let guardrails = Arc::new(GuardrailsEngine::new());
@@ -121,6 +143,13 @@ impl AppState {
             audit_logger,
             circuit_breaker,
             rate_limiter,
+            mobile_money,
+            composite_index,
+            anomaly_detector,
+            demand_forecaster,
+            scenario_modeler,
+            policy_impact,
+            inequality_tracker,
             flywheel,
             guardrails,
             intelligence,

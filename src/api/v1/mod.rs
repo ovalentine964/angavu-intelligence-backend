@@ -58,7 +58,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // .route("/analytics/customers", get(analytics::customer_analytics))
         // .route("/analytics/system", get(analytics::system_analytics))
         
-        // ── Tool endpoints (all 20 tools accessible via API) ──────────
+        // ── Tool endpoints (all 26 tools accessible via API) ──────────
         .route("/tools", get(endpoints::tools::list_tools))
         // Analysis & Intelligence
         .route("/tools/health", get(endpoints::tools::health_metrics))
@@ -84,6 +84,14 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/tools/audit", get(endpoints::tools::audit_status))
         .route("/tools/circuit-breaker", get(endpoints::tools::circuit_breaker_status))
         .route("/tools/rate-limiter", get(endpoints::tools::rate_limiter_status))
+        // New tools (7 recently wired)
+        .route("/tools/mobile-money", get(endpoints::tools::mobile_money_signals))
+        .route("/tools/composite-index", get(endpoints::tools::composite_index_status))
+        .route("/tools/anomaly", get(endpoints::tools::anomaly_detector_status))
+        .route("/tools/demand-forecast", get(endpoints::tools::demand_forecast))
+        .route("/tools/scenario", get(endpoints::tools::scenario_modeler_status))
+        .route("/tools/policy-impact", get(endpoints::tools::policy_impact_status))
+        .route("/tools/inequality", get(endpoints::tools::inequality_tracker_status))
         
         // Billing routes
         .route("/billing/tiers", get(endpoints::billing::list_tiers))

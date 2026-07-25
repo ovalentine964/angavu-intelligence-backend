@@ -48,7 +48,7 @@ use crate::superagent::guardrails::Jurisdiction;
 use crate::superagent::memory::{Layer, ContentType};
 use crate::superagent::sync::Priority as SyncPriority;
 
-// Import ALL 20 tools — the backend is a superagent with one brain and many tools
+// Import ALL 26 tools — the backend is a superagent with one brain and many tools
 use super::alert_generator::AlertGenerator;
 use super::audit_logger::AuditLogger;
 use super::market_analyzer::MarketAnalyzer;
@@ -68,6 +68,13 @@ use super::rate_limiter::RateLimiter;
 use super::model_distributor::ModelDistributor;
 use super::whatsapp_sender::WhatsAppSender;
 use super::differential_privacy::DifferentialPrivacyConfig;
+use super::mobile_money_signal_extractor::MobileMoneySignalExtractor;
+use super::composite_index_builder::CompositeIndexBuilder;
+use super::anomaly_detector::{AnomalyDetector, AnomalyConfig};
+use super::demand_forecaster::{DemandForecaster, DemandForecastConfig};
+use super::scenario_modeler::ScenarioModeler;
+use super::policy_impact_analyzer::PolicyImpactAnalyzer;
+use super::inequality_tracker::InequalityTracker;
 
 // ─────────────────────────────────────────────────────────────────────
 // Harness Mode Definitions
@@ -273,7 +280,7 @@ pub struct OODAOrchestrator {
     tier_tracker: Arc<Mutex<TierTracker>>,
     /// Pending anomaly alerts awaiting user decision (hybrid mode)
     pending_alerts: Arc<Mutex<VecDeque<AnomalyAlert>>>,
-    /// ALL 20 superagent tools — one brain, many tools, one job
+    /// ALL 26 superagent tools — one brain, many tools, one job
     /// Intelligence tools
     market_analyzer: Arc<MarketAnalyzer>,
     credit_scorer: Arc<CreditScorer>,
@@ -296,6 +303,14 @@ pub struct OODAOrchestrator {
     circuit_breaker: Arc<CircuitBreaker>,
     api_gateway: Arc<ApiGateway>,
     rate_limiter: Arc<RateLimiter>,
+    /// New tools (7 recently wired)
+    mobile_money: Arc<MobileMoneySignalExtractor>,
+    composite_index: Arc<CompositeIndexBuilder>,
+    anomaly_detector: Arc<AnomalyDetector>,
+    demand_forecaster: Arc<DemandForecaster>,
+    scenario_modeler: Arc<ScenarioModeler>,
+    policy_impact: Arc<PolicyImpactAnalyzer>,
+    inequality_tracker: Arc<InequalityTracker>,
     /// Superagent engines — the 5 new capability modules
     flywheel: Arc<FlywheelEngine>,
     guardrails: Arc<GuardrailsEngine>,
@@ -311,7 +326,7 @@ impl OODAOrchestrator {
     pub async fn new(db: DatabaseConnections) -> Result<Self> {
         let config = OODAConfig::default();
 
-        // Initialize ALL 20 tools — the backend superagent brain connects to every tool
+        // Initialize ALL 26 tools — the backend superagent brain connects to every tool
         let market_analyzer = Arc::new(MarketAnalyzer::new(db.clone()));
         let credit_scorer = Arc::new(CreditScorer::new(db.clone()));
         let distribution_analyzer = Arc::new(DistributionAnalyzer::new(db.clone()));
@@ -331,6 +346,15 @@ impl OODAOrchestrator {
         let api_gateway = Arc::new(ApiGateway::new(1000));
         let rate_limiter = Arc::new(RateLimiter::new());
 
+        // New tools (7 recently wired)
+        let mobile_money = Arc::new(MobileMoneySignalExtractor::with_defaults(db.clone()));
+        let composite_index = Arc::new(CompositeIndexBuilder::new(db.clone()));
+        let anomaly_detector = Arc::new(AnomalyDetector::new(AnomalyConfig::default()));
+        let demand_forecaster = Arc::new(DemandForecaster::new(db.clone(), DemandForecastConfig::default()));
+        let scenario_modeler = Arc::new(ScenarioModeler::new(db.clone()));
+        let policy_impact = Arc::new(PolicyImpactAnalyzer::new(db.clone()));
+        let inequality_tracker = Arc::new(InequalityTracker::new(db.clone()));
+
         // Superagent engines — the 5 new capability modules
         let flywheel = Arc::new(FlywheelEngine::new());
         let guardrails = Arc::new(GuardrailsEngine::new());
@@ -338,7 +362,7 @@ impl OODAOrchestrator {
         let memory = Arc::new(MemoryEngine::new());
         let sync_engine = Arc::new(SyncEngine::new());
 
-        info!("OODAOrchestrator initialized with 20 superagent tools + 5 superagent engines");
+        info!("OODAOrchestrator initialized with 26 superagent tools + 5 superagent engines");
 
         Ok(Self {
             config,
@@ -371,6 +395,14 @@ impl OODAOrchestrator {
             circuit_breaker,
             api_gateway,
             rate_limiter,
+            // New tools (7 recently wired)
+            mobile_money,
+            composite_index,
+            anomaly_detector,
+            demand_forecaster,
+            scenario_modeler,
+            policy_impact,
+            inequality_tracker,
             // Superagent engines
             flywheel,
             guardrails,

@@ -76,9 +76,9 @@ async fn main() -> Result<()> {
     let db_conns = DatabaseConnections::new(&config).await?;
     info!("Database connections established");
 
-    // Build application state with all 20 tools wired in
+    // Build application state with all 26 tools wired in
     let state = AppState::new(db_conns, config.clone()).await?;
-    info!("All 20 tools + OODA orchestrator initialized");
+    info!("All 26 tools + OODA orchestrator initialized");
 
     // Build router
     let app = build_router(state);
