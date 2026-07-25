@@ -6,6 +6,9 @@ use std::sync::Arc;
 use anyhow::Context;
 use crate::models::Config;
 use crate::superagent::OODAOrchestrator;
+use crate::superagent::{
+    FlywheelEngine, GuardrailsEngine, IntelligenceEngine, MemoryEngine, SyncEngine,
+};
 use crate::tools::{
     MarketAnalyzer, CreditScorer, FederatedAggregator, SyncReceiver,
     DistributionAnalyzer, FMCGIntelligence, HealthMetrics, EconomicAnalyzer,
@@ -50,6 +53,13 @@ pub struct AppState {
     pub audit_logger: Arc<AuditLogger>,
     pub circuit_breaker: Arc<CircuitBreaker>,
     pub rate_limiter: Arc<RateLimiter>,
+
+    // Superagent engines (5 new capability modules)
+    pub flywheel: Arc<FlywheelEngine>,
+    pub guardrails: Arc<GuardrailsEngine>,
+    pub intelligence: Arc<IntelligenceEngine>,
+    pub memory: Arc<MemoryEngine>,
+    pub sync_engine: Arc<SyncEngine>,
 }
 
 impl AppState {
@@ -82,6 +92,13 @@ impl AppState {
         let circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig::default()));
         let rate_limiter = Arc::new(RateLimiter::new());
 
+        // Superagent engines
+        let flywheel = Arc::new(FlywheelEngine::new());
+        let guardrails = Arc::new(GuardrailsEngine::new());
+        let intelligence = Arc::new(IntelligenceEngine::new());
+        let memory = Arc::new(MemoryEngine::new());
+        let sync_engine = Arc::new(SyncEngine::new());
+
         Ok(Arc::new(Self {
             db,
             orchestrator,
@@ -104,6 +121,11 @@ impl AppState {
             audit_logger,
             circuit_breaker,
             rate_limiter,
+            flywheel,
+            guardrails,
+            intelligence,
+            memory,
+            sync_engine,
         }))
     }
 }

@@ -29,7 +29,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
@@ -40,6 +40,13 @@ use crate::models::{
     Action, Anomaly, Decision, DecisionOption, Observation, OODACycleResult, OODAPhase,
     Orientation, Pattern,
 };
+use crate::superagent::{
+    FlywheelEngine, GuardrailsEngine, IntelligenceEngine, MemoryEngine, SyncEngine,
+};
+use crate::superagent::flywheel::ActionType;
+use crate::superagent::guardrails::Jurisdiction;
+use crate::superagent::memory::{Layer, ContentType};
+use crate::superagent::sync::Priority as SyncPriority;
 
 // Import ALL 20 tools — the backend is a superagent with one brain and many tools
 use super::alert_generator::AlertGenerator;
@@ -289,6 +296,12 @@ pub struct OODAOrchestrator {
     circuit_breaker: Arc<CircuitBreaker>,
     api_gateway: Arc<ApiGateway>,
     rate_limiter: Arc<RateLimiter>,
+    /// Superagent engines — the 5 new capability modules
+    flywheel: Arc<FlywheelEngine>,
+    guardrails: Arc<GuardrailsEngine>,
+    intelligence: Arc<IntelligenceEngine>,
+    memory: Arc<MemoryEngine>,
+    sync_engine: Arc<SyncEngine>,
     /// Running state
     running: Arc<Mutex<bool>>,
 }
@@ -318,7 +331,14 @@ impl OODAOrchestrator {
         let api_gateway = Arc::new(ApiGateway::new(1000));
         let rate_limiter = Arc::new(RateLimiter::new());
 
-        info!("OODAOrchestrator initialized with 20 superagent tools");
+        // Superagent engines — the 5 new capability modules
+        let flywheel = Arc::new(FlywheelEngine::new());
+        let guardrails = Arc::new(GuardrailsEngine::new());
+        let intelligence = Arc::new(IntelligenceEngine::new());
+        let memory = Arc::new(MemoryEngine::new());
+        let sync_engine = Arc::new(SyncEngine::new());
+
+        info!("OODAOrchestrator initialized with 20 superagent tools + 5 superagent engines");
 
         Ok(Self {
             config,
@@ -351,6 +371,12 @@ impl OODAOrchestrator {
             circuit_breaker,
             api_gateway,
             rate_limiter,
+            // Superagent engines
+            flywheel,
+            guardrails,
+            intelligence,
+            memory,
+            sync_engine,
             running: Arc::new(Mutex::new(false)),
         })
     }
@@ -815,6 +841,38 @@ impl OODAOrchestrator {
             });
         }
 
+        // Superagent: Guardrails PII masking on observation values
+        for obs in &mut observations {
+            let value_str = serde_json::to_string(&obs.value).unwrap_or_default();
+            if self.guardrails.contains_pii(&value_str) {
+                let masked = self.guardrails.mask_pii(&value_str);
+                if let Ok(masked_value) = serde_json::from_str::<serde_json::Value>(&masked.masked_text) {
+                    obs.value = masked_value;
+                }
+                self.audit_logger
+                    .log_action("guardrails_pii_masked", &obs.source, serde_json::json!({"pii_count": masked.pii_count}))
+                    .await
+                    .ok();
+            }
+        }
+
+        // Superagent: Store observations in 4-layer memory (working layer)
+        for obs in &observations {
+            let tags = vec![obs.source.clone(), obs.data_type.clone()];
+            self.memory
+                .store_with_importance(
+                    Uuid::nil(),
+                    Layer::Working,
+                    &serde_json::to_string(&obs.value).unwrap_or_default(),
+                    ContentType::Structured,
+                    obs.confidence,
+                    tags,
+                    &obs.source,
+                )
+                .await
+                .ok();
+        }
+
         // Store observations in working memory
         {
             let mut working = self.observations.write().await;
@@ -982,6 +1040,50 @@ impl OODAOrchestrator {
             });
         }
 
+        // Superagent: IntelligenceEngine cross-user pattern detection
+        let aggregated: Vec<(String, HashMap<String, f64>)> = observations
+            .iter()
+            .filter_map(|obs| {
+                let mut metrics = HashMap::new();
+                if let Some(val) = obs.value.as_f64() {
+                    metrics.insert(obs.data_type.clone(), val);
+                }
+                metrics.insert("confidence".to_string(), obs.confidence);
+                if metrics.len() > 1 {
+                    Some((obs.source.clone(), metrics))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if let Ok(intel_patterns) = self.intelligence.detect_patterns(&aggregated).await {
+            for ip in &intel_patterns {
+                patterns.push(Pattern {
+                    pattern_type: format!("intelligence_{}", ip.pattern_type),
+                    description: ip.description.clone(),
+                    strength: ip.strength,
+                    supporting_data: ip.supporting_data.clone(),
+                });
+            }
+        }
+
+        // Superagent: Generate actionable insights from intelligence patterns
+        if let Ok(insights) = self.intelligence.generate_insights().await {
+            for insight in &insights {
+                patterns.push(Pattern {
+                    pattern_type: format!("insight_{:?}", insight.insight_type),
+                    description: insight.description.clone(),
+                    strength: insight.confidence,
+                    supporting_data: serde_json::json!({
+                        "insight_id": insight.insight_id,
+                        "recommended_actions": insight.recommended_actions,
+                        "impact_estimate": insight.impact_estimate,
+                    }),
+                });
+            }
+        }
+
         // Build context
         let context = serde_json::json!({
             "observation_count": observations.len(),
@@ -1138,6 +1240,27 @@ impl OODAOrchestrator {
             });
         }
 
+        // Superagent: Guardrails compliance check on high-risk options
+        for option in &mut options {
+            if option.risk_score > 0.5 {
+                let compliance = self.guardrails.check_compliance(
+                    &Jurisdiction::Kenya,
+                    true, // assume consent for system actions
+                    None,
+                    true, // purpose specified
+                    None,
+                );
+                if !compliance.passed {
+                    warn!(
+                        option = %option.option_id,
+                        violations = compliance.violations.len(),
+                        "Guardrails: compliance violations detected for high-risk option"
+                    );
+                    option.risk_score = (option.risk_score * 1.2).min(1.0);
+                }
+            }
+        }
+
         // Default: no-op if nothing interesting
         if options.is_empty() {
             options.push(DecisionOption {
@@ -1178,6 +1301,11 @@ impl OODAOrchestrator {
     /// Autonomous: auto-act if confidence is high enough
     /// On-demand: always act (user expects results)
     /// Hybrid: auto-act for low-risk, alert user for high-risk anomalies
+    ///
+    /// After acting, the superagent engines perform post-action work:
+    /// - FlywheelEngine captures the action as a signal for model improvement
+    /// - MemoryEngine promotes observations to episodic memory
+    /// - SyncEngine queues the result for offline-first distribution
     async fn act_for_mode(
         &self,
         tier: CycleTier,
@@ -1352,6 +1480,49 @@ impl OODAOrchestrator {
             }
         };
 
+        // Superagent: FlywheelEngine — capture action as a signal for model improvement
+        use crate::superagent::flywheel::SignalContext;
+        let flywheel_signal = crate::superagent::flywheel::ActionSignal {
+            signal_id: Uuid::new_v4(),
+            user_id: Uuid::nil(),
+            org_id: Uuid::nil(),
+            action_type: match decision.selected_option.as_str() {
+                "investigate_trend" | "investigate_divergence" => ActionType::ViewReport,
+                "alert_stakeholders" | "anomaly_alert" => ActionType::AcknowledgeAlert,
+                "generate_market_signals" => ActionType::SyncData,
+                "evaluate_flywheel" => ActionType::AchieveGoal,
+                _ => ActionType::Custom(decision.selected_option.clone()),
+            },
+            context: SignalContext {
+                region: "system".to_string(),
+                product_category: None,
+                device_type: "ooda_orchestrator".to_string(),
+                session_duration_secs: None,
+                confidence_score: Some(decision.confidence),
+                metadata: result.clone(),
+            },
+            timestamp: Utc::now(),
+        };
+        if let Err(e) = self.flywheel.capture_signal(flywheel_signal).await {
+            debug!(error = %e, "Flywheel signal capture failed (non-fatal)");
+        }
+
+        // Superagent: SyncEngine — queue the action result for offline-first distribution
+        if let Err(e) = self.sync_engine
+            .queue_sync(
+                "ooda_system",
+                Uuid::nil(),
+                "ooda_action",
+                &decision.selected_option,
+                crate::superagent::sync::SyncOperation::Create,
+                result.clone(),
+                SyncPriority::Normal,
+            )
+            .await
+        {
+            debug!(error = %e, "Sync queue failed (non-fatal)");
+        }
+
         // Audit log the action
         self.audit_logger
             .log_action(
@@ -1400,6 +1571,31 @@ impl OODAOrchestrator {
     /// Get the current harness mode
     pub fn harness_mode(&self) -> HarnessMode {
         self.config.harness_mode
+    }
+
+    /// Get the flywheel engine
+    pub fn flywheel(&self) -> &FlywheelEngine {
+        &self.flywheel
+    }
+
+    /// Get the guardrails engine
+    pub fn guardrails(&self) -> &GuardrailsEngine {
+        &self.guardrails
+    }
+
+    /// Get the intelligence engine
+    pub fn intelligence(&self) -> &IntelligenceEngine {
+        &self.intelligence
+    }
+
+    /// Get the memory engine
+    pub fn memory(&self) -> &MemoryEngine {
+        &self.memory
+    }
+
+    /// Get the sync engine
+    pub fn sync_engine(&self) -> &SyncEngine {
+        &self.sync_engine
     }
 
     // Private helpers

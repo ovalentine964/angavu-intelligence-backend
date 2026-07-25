@@ -28,15 +28,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
 mod billing;
 mod db;
-// mod flywheel;      // TODO: not yet implemented
-// mod guardrails;    // TODO: not yet implemented
-// mod intelligence;  // TODO: not yet implemented
-// mod memory;        // TODO: not yet implemented
 mod models;
-// mod security;      // TODO: not yet implemented
+mod security;
 mod tools;
 mod superagent;
-// mod sync;          // TODO: not yet implemented
 
 use crate::db::{AppState, DatabaseConnections};
 use crate::superagent::OODAOrchestrator;
