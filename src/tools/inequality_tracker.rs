@@ -1167,6 +1167,7 @@ impl InequalityTracker {
     // ─────────────────────────────────────────────────────────────────
 
     /// Fetch per-cell aggregated data from ClickHouse.
+    /// Uses per-worker rows grouped in Rust to avoid ClickHouse array type issues.
     async fn fetch_cell_data(
         &self,
         dimension: &InequalityDimension,
@@ -1193,36 +1194,40 @@ impl InequalityTracker {
             SELECT
                 {cc} AS cell_id,
                 {cc} AS cell_label,
-                groupArray(value) AS values,
-                count() AS sample_size
+                value
             FROM inequality_worker_data
             WHERE metric_name = '{metric}'
               AND snapshot_date = '{date}'
-            GROUP BY {cc}
-            HAVING sample_size >= {min}
             ORDER BY cell_id
             "#,
             cc = cell_column,
             metric = metric_str,
             date = as_of,
-            min = self.config.min_cell_size,
         );
 
         let rows = self
             .db
             .clickhouse
             .query(&query)
-            .fetch_all::<CellDataRow>()
+            .fetch_all::<ValueRow>()
             .await
             .context("Failed to fetch cell data from ClickHouse")?;
 
-        Ok(rows
-            .into_iter()
-            .map(|r| CellData {
-                cell_id: r.cell_id,
-                cell_label: r.cell_label,
-                values: r.values,
-            })
+        // Group by cell_id in Rust
+        let mut grouped: HashMap<String, CellData> = HashMap::new();
+        for row in rows {
+            let entry = grouped.entry(row.cell_id.clone()).or_insert_with(|| CellData {
+                cell_id: row.cell_id,
+                cell_label: row.cell_label,
+                values: Vec::new(),
+            });
+            entry.values.push(row.value);
+        }
+
+        // Filter by minimum cell size
+        Ok(grouped
+            .into_values()
+            .filter(|c| c.values.len() as u32 >= self.config.min_cell_size)
             .collect())
     }
 
@@ -2144,20 +2149,19 @@ struct CellData {
     values: Vec<f64>,
 }
 
-/// ClickHouse row type for cell data queries.
+/// ClickHouse row type for per-worker-value queries.
+/// We fetch individual rows and group in Rust to avoid ClickHouse array type issues.
 #[derive(Debug, clickhouse::Row, Deserialize)]
-struct CellDataRow {
+struct ValueRow {
     cell_id: String,
     cell_label: String,
-    #[serde(default)]
-    values: Vec<f64>,
-    sample_size: u64,
+    value: f64,
 }
 
 /// ClickHouse row type for trend queries.
 #[derive(Debug, clickhouse::Row, Deserialize)]
 struct TrendRow {
-    snapshot_date: NaiveDate,
+    snapshot_date: String,
     gini: f64,
 }
 
