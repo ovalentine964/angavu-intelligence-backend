@@ -8,11 +8,11 @@ license = "Proprietary"
 
 [[bin]]
 name = "angavu-server"
-path = "src/main.rs"
+path = "rust-api/src/main.rs"
 
 [[bin]]
 name = "angavu-migrate"
-path = "src/migrate.rs"
+path = "rust-api/src/migrate.rs"
 
 [dependencies]
 # Web Framework
