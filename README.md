@@ -1,9 +1,15 @@
-# Angavu Intelligence Backend
+<p align="center">
+  <img src=".github/banner.svg" alt="Angavu Intelligence Backend — Rust CFO Platform" width="100%">
+</p>
 
-[![Rust](https://img.shields.io/badge/Rust-1.82+-orange?logo=rust)]()
-[![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)]()
-[![Docker](https://img.shields.io/Docker%20Image-angavu/backend-blue?logo=docker)]()
-[![License](https://img.shields.io/badge/License-Proprietary-red)]()
+<p align="center">
+  <img src="https://img.shields.io/badge/Rust-DEA584?style=flat-square&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/Tools-26+-1B4965?style=flat-square" alt="26+ Tools">
+  <img src="https://img.shields.io/badge/Federated_Learning-E8A838?style=flat-square" alt="Federated Learning">
+  <img src="https://img.shields.io/badge/License-SSPL--1.0-blue?style=flat-square" alt="License">
+</p>
 
 > **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, and a federated learning pipeline.
 

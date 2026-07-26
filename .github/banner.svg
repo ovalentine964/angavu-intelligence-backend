@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A1628"/>
+      <stop offset="50%" stop-color="#0D1F3C"/>
+      <stop offset="100%" stop-color="#050D1A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1B4965"/>
+      <stop offset="100%" stop-color="#E8A838"/>
+    </linearGradient>
+    <linearGradient id="dataFlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1B4965" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#0A1628" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="nodeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B4965"/>
+      <stop offset="100%" stop-color="#E8A838"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Hex grid pattern -->
+  <g opacity="0.03" stroke="#1B4965" stroke-width="0.5" fill="none">
+    <path d="M0,30 L15,0 L45,0 L60,30 L45,60 L15,60 Z"/>
+    <path d="M60,30 L75,0 L105,0 L120,30 L105,60 L75,60 Z"/>
+    <path d="M120,30 L135,0 L165,0 L180,30 L165,60 L135,60 Z"/>
+    <path d="M180,30 L195,0 L225,0 L240,30 L225,60 L195,60 Z"/>
+    <path d="M240,30 L255,0 L285,0 L300,30 L285,60 L255,60 Z"/>
+    <path d="M300,30 L315,0 L345,0 L360,30 L345,60 L315,60 Z"/>
+    <path d="M360,30 L375,0 L405,0 L420,30 L405,60 L375,60 Z"/>
+    <path d="M420,30 L435,0 L465,0 L480,30 L465,60 L435,60 Z"/>
+    <path d="M480,30 L495,0 L525,0 L540,30 L525,60 L495,60 Z"/>
+    <path d="M540,30 L555,0 L585,0 L600,30 L585,60 L555,60 Z"/>
+    <path d="M600,30 L615,0 L645,0 L660,30 L645,60 L615,60 Z"/>
+    <path d="M660,30 L675,0 L705,0 L720,30 L705,60 L675,60 Z"/>
+    <path d="M720,30 L735,0 L765,0 L780,30 L765,60 L735,60 Z"/>
+    <path d="M780,30 L795,0 L825,0 L840,30 L825,60 L795,60 Z"/>
+    <path d="M840,30 L855,0 L885,0 L900,30 L885,60 L855,60 Z"/>
+    <path d="M900,30 L915,0 L945,0 L960,30 L945,60 L915,60 Z"/>
+    <path d="M960,30 L975,0 L1005,0 L1020,30 L1005,60 L975,60 Z"/>
+    <path d="M1020,30 L1035,0 L1065,0 L1080,30 L1065,60 L1035,60 Z"/>
+    <path d="M1080,30 L1095,0 L1125,0 L1140,30 L1125,60 L1095,60 Z"/>
+    <path d="M1140,30 L1155,0 L1185,0 L1200,30 L1185,60 L1155,60 Z"/>
+    <path d="M1200,30 L1215,0 L1245,0 L1260,30 L1245,60 L1215,60 Z"/>
+  </g>
+
+  <!-- Data flow network pattern -->
+  <g opacity="0.15">
+    <!-- Vertical data streams -->
+    <line x1="900" y1="0" x2="900" y2="640" stroke="#1B4965" stroke-width="0.5" stroke-dasharray="4,8"/>
+    <line x1="950" y1="0" x2="950" y2="640" stroke="#1B4965" stroke-width="0.3" stroke-dasharray="2,12"/>
+    <line x1="1000" y1="0" x2="1000" y2="640" stroke="#E8A838" stroke-width="0.3" stroke-dasharray="3,10"/>
+    <line x1="1050" y1="0" x2="1050" y2="640" stroke="#1B4965" stroke-width="0.4" stroke-dasharray="5,6"/>
+    <line x1="1100" y1="0" x2="1100" y2="640" stroke="#1B4965" stroke-width="0.3" stroke-dasharray="2,14"/>
+    <line x1="1150" y1="0" x2="1150" y2="640" stroke="#E8A838" stroke-width="0.2" stroke-dasharray="4,8"/>
+    <line x1="1200" y1="0" x2="1200" y2="640" stroke="#1B4965" stroke-width="0.3" stroke-dasharray="3,10"/>
+
+    <!-- Horizontal connections -->
+    <line x1="880" y1="100" x2="1280" y2="100" stroke="#1B4965" stroke-width="0.3" stroke-dasharray="2,8"/>
+    <line x1="880" y1="200" x2="1280" y2="200" stroke="#1B4965" stroke-width="0.2" stroke-dasharray="4,12"/>
+    <line x1="880" y1="300" x2="1280" y2="300" stroke="#E8A838" stroke-width="0.2" stroke-dasharray="3,10"/>
+    <line x1="880" y1="400" x2="1280" y2="400" stroke="#1B4965" stroke-width="0.3" stroke-dasharray="2,8"/>
+    <line x1="880" y1="500" x2="1280" y2="500" stroke="#1B4965" stroke-width="0.2" stroke-dasharray="4,12"/>
+    <line x1="880" y1="580" x2="1280" y2="580" stroke="#E8A838" stroke-width="0.2" stroke-dasharray="3,10"/>
+  </g>
+
+  <!-- Network nodes (right side) -->
+  <g opacity="0.2">
+    <!-- Hub nodes -->
+    <circle cx="950" cy="100" r="4" fill="#1B4965"/>
+    <circle cx="1050" cy="200" r="5" fill="#E8A838"/>
+    <circle cx="1000" cy="300" r="4" fill="#1B4965"/>
+    <circle cx="1100" cy="400" r="5" fill="#E8A838"/>
+    <circle cx="1050" cy="500" r="4" fill="#1B4965"/>
+    <circle cx="1150" cy="300" r="3" fill="#E8A838"/>
+    <circle cx="1200" cy="150" r="3" fill="#1B4965"/>
+    <circle cx="1180" cy="450" r="3" fill="#E8A838"/>
+    <circle cx="920" cy="250" r="3" fill="#1B4965"/>
+    <circle cx="1250" cy="350" r="3" fill="#E8A838"/>
+    <circle cx="1100" cy="100" r="2.5" fill="#1B4965"/>
+    <circle cx="1000" cy="500" r="2.5" fill="#E8A838"/>
+
+    <!-- Connection lines -->
+    <line x1="950" y1="100" x2="1050" y2="200" stroke="#1B4965" stroke-width="0.8"/>
+    <line x1="1050" y1="200" x2="1000" y2="300" stroke="#E8A838" stroke-width="0.8"/>
+    <line x1="1000" y1="300" x2="1100" y2="400" stroke="#1B4965" stroke-width="0.8"/>
+    <line x1="1100" y1="400" x2="1050" y2="500" stroke="#E8A838" stroke-width="0.8"/>
+    <line x1="1050" y1="200" x2="1150" y2="300" stroke="#1B4965" stroke-width="0.6"/>
+    <line x1="1150" y1="300" x2="1100" y2="400" stroke="#E8A838" stroke-width="0.6"/>
+    <line x1="950" y1="100" x2="1200" y2="150" stroke="#1B4965" stroke-width="0.4"/>
+    <line x1="1200" y1="150" x2="1150" y2="300" stroke="#E8A838" stroke-width="0.4"/>
+    <line x1="1100" y1="400" x2="1180" y2="450" stroke="#1B4965" stroke-width="0.6"/>
+    <line x1="1180" y1="450" x2="1250" y2="350" stroke="#E8A838" stroke-width="0.4"/>
+    <line x1="1000" y1="300" x2="1150" y2="300" stroke="#1B4965" stroke-width="0.5"/>
+    <line x1="1100" y1="100" x2="1050" y2="200" stroke="#E8A838" stroke-width="0.4"/>
+    <line x1="1000" y1="500" x2="1050" y2="500" stroke="#1B4965" stroke-width="0.4"/>
+    <line x1="920" y1="250" x2="1000" y2="300" stroke="#1B4965" stroke-width="0.5"/>
+
+    <!-- Data flow dots (animated feel) -->
+    <circle cx="990" cy="140" r="1.5" fill="#E8A838" opacity="0.8"/>
+    <circle cx="1020" cy="240" r="1.5" fill="#1B4965" opacity="0.8"/>
+    <circle cx="1060" cy="340" r="1.5" fill="#E8A838" opacity="0.8"/>
+    <circle cx="1080" cy="440" r="1.5" fill="#1B4965" opacity="0.8"/>
+    <circle cx="1120" cy="160" r="1.5" fill="#E8A838" opacity="0.6"/>
+    <circle cx="1160" cy="370" r="1.5" fill="#1B4965" opacity="0.6"/>
+  </g>
+
+  <!-- Angavu Eye Logo (top-right corner) -->
+  <g transform="translate(1150, 70)">
+    <path d="M-40,0 A40,40 0 0,1 0,-40" fill="none" stroke="#1B4965" stroke-width="3" opacity="0.8"/>
+    <path d="M40,0 A40,40 0 0,1 0,40" fill="none" stroke="#1B4965" stroke-width="3" opacity="0.8"/>
+    <path d="M-35,0 A35,35 0 0,1 0,-35" fill="none" stroke="#1B4965" stroke-width="2" opacity="0.5"/>
+    <path d="M35,0 A35,35 0 0,1 0,35" fill="none" stroke="#1B4965" stroke-width="2" opacity="0.5"/>
+    <circle cx="0" cy="0" r="18" fill="none" stroke="#E8A838" stroke-width="2.5"/>
+    <circle cx="0" cy="0" r="12" fill="#E8A838" opacity="0.3"/>
+    <circle cx="0" cy="0" r="6" fill="#1B4965"/>
+    <circle cx="0" cy="0" r="3" fill="#0A1628"/>
+    <line x1="0" y1="-12" x2="0" y2="-6" stroke="#E8A838" stroke-width="1" opacity="0.6"/>
+    <line x1="12" y1="0" x2="6" y2="0" stroke="#E8A838" stroke-width="1" opacity="0.6"/>
+    <line x1="0" y1="12" x2="0" y2="6" stroke="#E8A838" stroke-width="1" opacity="0.6"/>
+    <line x1="-12" y1="0" x2="-6" y2="0" stroke="#E8A838" stroke-width="1" opacity="0.6"/>
+    <circle cx="30" cy="-30" r="2" fill="#E8A838" opacity="0.6"/>
+    <circle cx="-30" cy="30" r="2" fill="#E8A838" opacity="0.6"/>
+    <circle cx="35" cy="10" r="1.5" fill="#1B4965" opacity="0.5"/>
+    <circle cx="-35" cy="-10" r="1.5" fill="#1B4965" opacity="0.5"/>
+  </g>
+
+  <text x="1150" y="135" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#E8A838" opacity="0.7" text-anchor="middle" letter-spacing="2">ANGAVU INTELLIGENCE</text>
+
+  <!-- Main content -->
+  <g transform="translate(80, 0)">
+    <rect x="0" y="210" width="60" height="3" fill="url(#accent)" rx="1.5"/>
+
+    <text x="0" y="280" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="62" font-weight="800" fill="#FFFFFF" letter-spacing="-1">Angavu Intelligence</text>
+    <text x="0" y="280" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="62" font-weight="800" fill="#FFFFFF" letter-spacing="-1" opacity="0.1" dx="2" dy="2">Angavu Intelligence</text>
+
+    <text x="0" y="330" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="20" fill="#E8A838" font-weight="400" letter-spacing="0.5">Rust CFO Platform · 20 Superagent Tools · Federated Learning</text>
+
+    <text x="0" y="370" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="16" fill="#FFFFFF" opacity="0.5" letter-spacing="1.5">Africa's Economic Nervous System</text>
+
+    <line x1="0" y1="395" x2="500" y2="395" stroke="#FFFFFF" stroke-width="0.5" opacity="0.15"/>
+
+    <!-- Badges -->
+    <g transform="translate(0, 420)">
+      <g>
+        <rect width="80" height="28" rx="14" fill="#DEA584" opacity="0.15" stroke="#DEA584" stroke-width="0.5" opacity="0.3"/>
+        <text x="40" y="18" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#DEA584" text-anchor="middle" font-weight="600">🦀 Rust</text>
+      </g>
+      <g transform="translate(90, 0)">
+        <rect width="120" height="28" rx="14" fill="#336791" opacity="0.15" stroke="#336791" stroke-width="0.5" opacity="0.3"/>
+        <text x="60" y="18" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#336791" text-anchor="middle" font-weight="600">🐘 PostgreSQL</text>
+      </g>
+      <g transform="translate(220, 0)">
+        <rect width="100" height="28" rx="14" fill="#2496ED" opacity="0.15" stroke="#2496ED" stroke-width="0.5" opacity="0.3"/>
+        <text x="50" y="18" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#2496ED" text-anchor="middle" font-weight="600">🐳 Docker</text>
+      </g>
+      <g transform="translate(330, 0)">
+        <rect width="155" height="28" rx="14" fill="#1B4965" opacity="0.15" stroke="#1B4965" stroke-width="0.5" opacity="0.3"/>
+        <text x="77" y="18" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#E8A838" text-anchor="middle" font-weight="600">🔗 Federated Learning</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Bottom accent bar -->
+  <rect x="0" y="632" width="1280" height="8" fill="url(#accent)" opacity="0.8"/>
+
+  <text x="1200" y="620" font-family="'Segoe UI', Arial, sans-serif" font-size="10" fill="#FFFFFF" opacity="0.25" text-anchor="end" letter-spacing="1">angavu.com</text>
+</svg>
