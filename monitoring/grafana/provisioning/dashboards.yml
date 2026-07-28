@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'Angavu Intelligence'
+    orgId: 1
+    folder: 'Angavu'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
