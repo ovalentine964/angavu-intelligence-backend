@@ -13,3 +13,4 @@ pub mod federated;
 pub mod score_verification;
 pub mod logistic_regression;
 pub mod approval_gate; // Human-in-the-Loop: Credit Decision Approval
+pub mod quantum_traits; // Quantum-upgradeable algorithm trait interfaces

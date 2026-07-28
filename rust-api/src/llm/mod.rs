@@ -4,6 +4,8 @@
 // retry with exponential backoff, and pattern matching fallback
 // =============================================================================
 
+pub mod providers;
+
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -447,6 +449,75 @@ pub struct LlmMetrics {
     pub requests_total: u64,
     pub failures_total: u64,
     pub fallbacks_total: u64,
+}
+
+// ── Model-Agnostic Engine ─────────────────────────────────────────────────────
+
+/// Model-agnostic LLM engine that routes requests to the best available provider.
+/// This is the primary interface for all LLM calls in the system.
+/// "Harness is permanent, model is swappable."
+pub struct ModelAgnosticEngine {
+    registry: providers::ModelRegistry,
+    fallback_engine: LlmClient,
+}
+
+impl ModelAgnosticEngine {
+    pub fn new(config: LlmConfig) -> Result<Self> {
+        let fallback_engine = LlmClient::new(config)?;
+        Ok(Self {
+            registry: providers::ModelRegistry::new(),
+            fallback_engine,
+        })
+    }
+
+    /// Register a model provider
+    pub async fn register_provider(&self, provider: std::sync::Arc<dyn providers::ModelProvider>) {
+        self.registry.register(provider).await;
+    }
+
+    /// Set routing preferences for a task type
+    pub async fn set_routing(&self, task_type: providers::TaskType, provider_order: Vec<String>) {
+        self.registry.set_routing(task_type, provider_order).await;
+    }
+
+    /// Set the default provider
+    pub async fn set_default_provider(&self, provider_id: String) {
+        self.registry.set_default(provider_id).await;
+    }
+
+    /// Query using the best available provider for the task.
+    /// Falls back to the legacy LlmClient if no provider is available.
+    pub async fn query(&self, request: &providers::InferenceRequest) -> LlmResponse {
+        // Try model-agnostic path first
+        if let Some(provider) = self.registry.resolve(request.task_type).await {
+            match provider.infer(request).await {
+                Ok(response) => {
+                    return LlmResponse {
+                        response: response.content,
+                        model: response.model_used,
+                        source: format!("provider:{}", response.provider_id),
+                        latency_ms: response.latency_ms,
+                    };
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Provider {} failed for task {:?}: {}. Falling back.",
+                        provider.id(),
+                        request.task_type,
+                        e
+                    );
+                }
+            }
+        }
+
+        // Fall back to legacy LlmClient
+        self.fallback_engine.query_deepseek_chat(&request.prompt).await
+    }
+
+    /// List all registered providers
+    pub async fn list_providers(&self) -> Vec<providers::ProviderInfo> {
+        self.registry.list_providers().await
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

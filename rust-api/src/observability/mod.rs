@@ -4,6 +4,7 @@
 pub mod metrics;
 pub mod slo;
 pub mod agent_traces;
+pub mod agi_training_data;
 
 pub use metrics::MetricsLayer;
 pub use slo::SloTracker;
