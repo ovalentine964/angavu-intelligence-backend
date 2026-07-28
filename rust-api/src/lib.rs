@@ -5,6 +5,7 @@
 pub mod loops;
 pub mod credit;
 pub mod graph;
+pub mod graphql;
 pub mod orchestrator;
 pub mod gateway;
 pub mod health;

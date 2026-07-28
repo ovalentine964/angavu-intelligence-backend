@@ -1,6 +1,7 @@
 // Angavu Intelligence Backend — Main Entry Point
 // Integrates all modules: orchestrator, gateway, loops, credit, graph, health, service_pricing, webhooks
 
+use angavu_intelligence_backend::graphql;
 use angavu_intelligence_backend::orchestrator::message_bus::{ModuleMessageBus, MessageBusConfig};
 use angavu_intelligence_backend::webhook::{self as webhook_module, WebhookState, MpesaConfig, MpesaEnvironment, webhook_router};
 use angavu_intelligence_backend::orchestrator::OODAOrchestrator;
@@ -147,9 +148,15 @@ async fn main() -> anyhow::Result<()> {
     let approval_router = angavu_intelligence_backend::gateway::human_approval::human_approval_router(approval_state);
     tracing::info!("Human-in-the-Loop approval system initialized (credit decisions, sensitive actions, escalation, reports, chama governance)");
 
+    // ── Initialize GraphQL ──────────────────────────────────────
+    let graphql_schema = graphql::create_schema(pg_pool.clone(), redis_conn.clone()).await;
+    let graphql_routes = graphql::graphql_router(graphql_schema.clone());
+    tracing::info!("GraphQL endpoint initialized at /graphql");
+
     let app = build_gateway_router(gateway_state)
         .merge(webhook_router(webhook_state))
-        .merge(approval_router);
+        .merge(approval_router)
+        .merge(graphql_routes);
 
     // ── Start HTTP Server ───────────────────────────────────────
     let addr = format!("{}:{}", host, port);

@@ -1,0 +1,541 @@
+openapi: 3.1.0
+info:
+  title: Angavu Intelligence Backend API
+  version: 1.0.0
+  description: |
+    Superagent-powered revenue intelligence platform for informal economy workers.
+    
+    ## Authentication
+    All protected endpoints require JWT Bearer tokens.
+    
+    ## k-Anonymity
+    All data queries enforce k-anonymity (k≥10). Cohorts with fewer than 10 members
+    are suppressed from query results.
+    
+    ## Graph Analytics
+    Knowledge graph algorithms (PageRank, community detection, centrality, shortest path)
+    are available via both REST and GraphQL.
+  contact:
+    name: Angavu Intelligence Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000
+    description: Development
+  - url: https://api.angavu.io
+    description: Production
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: INVALID_REQUEST
+            message:
+              type: string
+              example: Missing required field
+            details:
+              type: object
+            request_id:
+              type: string
+
+    WorkerCohort:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cohort_hash:
+          type: string
+          example: sha256:abc123...
+        worker_type:
+          type: string
+          enum: [mama_mboga, boda_boda, jua_kali, farmer, fisherman, vendor, construction, mining]
+        region_id:
+          type: string
+          example: nairobi-eastlands
+        member_count:
+          type: integer
+          minimum: 10
+        avg_daily_revenue:
+          type: number
+          format: double
+        avg_daily_transactions:
+          type: number
+          format: double
+
+    AlamaScore:
+      type: object
+      properties:
+        alama_score:
+          type: number
+          minimum: 300
+          maximum: 850
+        risk_tier:
+          type: string
+          enum: [excellent, good, moderate, high, very_high]
+        default_probability:
+          type: number
+          format: double
+        components:
+          type: object
+          properties:
+            transaction_consistency:
+              type: number
+            revenue_stability:
+              type: number
+            payment_diversity:
+              type: number
+            seasonal_adjustment:
+              type: number
+            peer_comparison:
+              type: number
+        cohort_size:
+          type: integer
+        confidence:
+          type: number
+
+    MarketAnalysis:
+      type: object
+      properties:
+        category:
+          type: string
+        region:
+          type: string
+        avg_price_kes:
+          type: number
+        price_trend:
+          type: string
+          enum: [rising, falling, stable, volatile]
+        price_change_pct:
+          type: number
+        demand_signal:
+          type: string
+          enum: [strong, moderate, weak, declining]
+        supply_status:
+          type: string
+        opportunities:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+
+    OodaCycle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cycle_speed:
+          type: string
+          enum: [fast, hourly, daily, weekly]
+        cycle_number:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [running, completed, failed, cancelled]
+
+    PageRankResult:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        score:
+          type: number
+          format: double
+        label:
+          type: string
+          nullable: true
+
+    Community:
+      type: object
+      properties:
+        id:
+          type: integer
+        members:
+          type: array
+          items:
+            type: string
+            format: uuid
+        internal_edges:
+          type: integer
+        modularity_score:
+          type: number
+
+    ShortestPath:
+      type: object
+      properties:
+        path:
+          type: array
+          items:
+            type: string
+            format: uuid
+        total_weight:
+          type: number
+        hop_count:
+          type: integer
+
+    GraphStats:
+      type: object
+      properties:
+        total_nodes:
+          type: integer
+        total_edges:
+          type: integer
+        node_type_counts:
+          type: array
+          items:
+            type: object
+            properties:
+              node_type:
+                type: string
+              count:
+                type: integer
+
+    SyncPayload:
+      type: object
+      required: [device_id_hash, cohort_hash, timestamp, transactions]
+      properties:
+        device_id_hash:
+          type: string
+        cohort_hash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        transactions:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              amount_kes:
+                type: number
+              count:
+                type: integer
+              payment_channel:
+                type: string
+        sync_cursor:
+          type: string
+        data_version:
+          type: integer
+
+    SyncResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        records_processed:
+          type: integer
+        new_cursor:
+          type: string
+        pull_updates:
+          type: array
+          items:
+            type: object
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /api/v1/tools:
+    get:
+      summary: List available tools
+      operationId: listTools
+      security: []
+      responses:
+        '200':
+          description: Available tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/tools/credit:
+    post:
+      summary: Compute Alama credit score
+      operationId: creditScore
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cohort_hash, worker_type, region]
+              properties:
+                cohort_hash:
+                  type: string
+                worker_type:
+                  type: string
+                region:
+                  type: string
+                transaction_history_months:
+                  type: integer
+                  default: 6
+                include_components:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Credit score computed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlamaScore'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+
+  /api/v1/tools/market:
+    get:
+      summary: Market analysis
+      operationId: marketAnalysis
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: timeframe_days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Market analysis results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketAnalysis'
+
+  /api/v1/sync/anonymized:
+    post:
+      summary: Push anonymized data
+      operationId: syncAnonymized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPayload'
+      responses:
+        '200':
+          description: Sync accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          description: Invalid payload
+        '429':
+          description: Rate limited
+
+  /api/v1/ooda/status:
+    get:
+      summary: Current OODA cycle status
+      operationId: oodaStatus
+      responses:
+        '200':
+          description: OODA status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_cycle:
+                    $ref: '#/components/schemas/OodaCycle'
+                  phases_completed:
+                    type: array
+                    items:
+                      type: object
+                  pipeline_progress:
+                    type: number
+
+  /api/v1/ooda/trigger:
+    post:
+      summary: Trigger OODA cycle
+      operationId: triggerOoda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [speed]
+              properties:
+                speed:
+                  type: string
+                  enum: [fast, hourly, daily, weekly]
+                trigger_source:
+                  type: string
+      responses:
+        '200':
+          description: Cycle started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cycle_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+
+  /api/v1/billing/tiers:
+    get:
+      summary: List billing tiers
+      operationId: listBillingTiers
+      responses:
+        '200':
+          description: Billing tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /observability/slo:
+    get:
+      summary: SLO status
+      operationId: getSloStatus
+      responses:
+        '200':
+          description: SLO status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slos:
+                    type: array
+                    items:
+                      type: object
+                  all_met:
+                    type: boolean
+
+  /graphql:
+    post:
+      summary: GraphQL endpoint
+      operationId: graphqlQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                variables:
+                  type: object
+                operationName:
+                  type: string
+      responses:
+        '200':
+          description: GraphQL response
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/webhooks/mpesa:
+    post:
+      summary: M-Pesa payment callback
+      operationId: mpesaWebhook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Callback processed
+        '401':
+          description: Invalid API key
+
+  /api/v1/approval/credit:
+    post:
+      summary: Request credit decision approval
+      operationId: requestCreditApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cohort_hash:
+                  type: string
+                alama_score:
+                  type: number
+                risk_tier:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Approval request created
+        '403':
+          description: Human approval required

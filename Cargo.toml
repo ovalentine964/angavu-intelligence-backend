@@ -159,6 +159,10 @@ garde = { version = "0.20", features = ["derive"] }
 geo = "0.28"
 geohash = "0.13"
 
+# GraphQL
+async-graphql = { version = "7", features = ["chrono", "uuid", "decimal"] }
+async-graphql-axum = "7"
+
 [dev-dependencies]
 tokio-test = "0.4"
 axum-test = "16"

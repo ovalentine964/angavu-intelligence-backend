@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod pipeline_tests {
-    use super::pipeline::*;
+    use crate::graph::pipeline::*;
 
     #[test]
     fn test_pipeline_dag_topological_order() {
@@ -64,5 +64,62 @@ mod pipeline_tests {
         // But sync_market_data and sync_external should still work
         let node_market = executor.pipeline.nodes.get("sync_market_data").unwrap();
         assert_eq!(node_market.status, PipelineNodeStatus::Pending);
+    }
+
+    #[test]
+    fn test_pipeline_validation() {
+        let dag = PipelineDag::standard_intelligence_pipeline();
+        assert!(dag.validate().is_ok());
+    }
+
+    #[test]
+    fn test_pipeline_node_count() {
+        let dag = PipelineDag::standard_intelligence_pipeline();
+        assert_eq!(dag.nodes.len(), 11); // 3 sync + 1 anonymize + 1 aggregate + 3 analyze + 2 generate + 1 distribute
+    }
+
+    #[test]
+    fn test_pipeline_executor_progress_tracking() {
+        let dag = PipelineDag::standard_intelligence_pipeline();
+        let mut executor = PipelineExecutor::new(dag, 4);
+
+        assert_eq!(executor.progress(), 0.0);
+
+        executor.complete_node("sync_transactions", serde_json::json!({}));
+        assert!(executor.progress() > 0.0);
+        assert!(executor.progress() < 1.0);
+    }
+
+    #[test]
+    fn test_pipeline_executor_retry_logic() {
+        let dag = PipelineDag::standard_intelligence_pipeline();
+        let mut executor = PipelineExecutor::new(dag, 4);
+
+        // First failure → retrying (max_retries = 3 for sync nodes)
+        executor.fail_node("sync_transactions", "timeout".into());
+        let node = executor.pipeline.nodes.get("sync_transactions").unwrap();
+        assert_eq!(node.status, PipelineNodeStatus::Retrying);
+        assert_eq!(node.retry_count, 1);
+
+        // Second failure → still retrying
+        executor.fail_node("sync_transactions", "timeout".into());
+        let node = executor.pipeline.nodes.get("sync_transactions").unwrap();
+        assert_eq!(node.status, PipelineNodeStatus::Retrying);
+        assert_eq!(node.retry_count, 2);
+
+        // Third failure → failed (retries exhausted)
+        executor.fail_node("sync_transactions", "timeout".into());
+        let node = executor.pipeline.nodes.get("sync_transactions").unwrap();
+        assert_eq!(node.status, PipelineNodeStatus::Failed);
+    }
+
+    #[test]
+    fn test_pipeline_node_depth() {
+        let dag = PipelineDag::standard_intelligence_pipeline();
+
+        assert_eq!(dag.node_depth("sync_transactions"), 0);
+        assert_eq!(dag.node_depth("anonymize"), 1);
+        assert_eq!(dag.node_depth("aggregate"), 2);
+        assert_eq!(dag.node_depth("distribute"), 5);
     }
 }
