@@ -1,126 +1,129 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # =============================================================================
-# Database Backup Script for Angavu Intelligence Backend
-# Creates compressed PostgreSQL backups with rotation
+# Angavu Intelligence — PostgreSQL Backup Script
+# Creates compressed pg_dump, uploads to S3-compatible storage
 # =============================================================================
 
 set -euo pipefail
 
-# ── Configuration ──────────────────────────────────────────────────────────
-BACKUP_DIR="${BACKUP_DIR:-/opt/angavu/backups}"
-DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-angavu}"
-DB_USER="${DB_USER:-angavu}"
-RETENTION_DAYS="${RETENTION_DAYS:-30}"
-TIMESTAMP=$(date -u +"%Y%m%d-%H%M%S")
+# Configuration
+BACKUP_DIR="${BACKUP_DIR:-/tmp/angavu-backups}"
+DATABASE_URL="${DATABASE_URL:-postgresql://angavu:angavu_secret@localhost:5432/angavu}"
+S3_BUCKET="${BACKUP_S3_BUCKET:-angavu-backups}"
+S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-}"  # e.g., https://s3.amazonaws.com or Oracle Object Storage
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_FILE="angavu-backup-${TIMESTAMP}.sql.gz"
+CHECKSUM_FILE="${BACKUP_FILE}.sha256"
 
-# ── Functions ──────────────────────────────────────────────────────────────
-log() {
-    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] $*"
-}
+# Parse DATABASE_URL
+DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+DB_NAME=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+DB_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
 
-die() {
-    log "ERROR: $*" >&2
-    exit 1
-}
-
-# ── Main ───────────────────────────────────────────────────────────────────
-log "Starting database backup..."
-log "Database: ${DB_NAME}@${DB_HOST}:${DB_PORT}"
-log "Backup dir: ${BACKUP_DIR}"
+echo "=== Angavu Database Backup ==="
+echo "Timestamp: ${TIMESTAMP}"
+echo "Database:  ${DB_NAME}@${DB_HOST}:${DB_PORT}"
+echo "Output:    ${BACKUP_DIR}/${BACKUP_FILE}"
 
 # Create backup directory
 mkdir -p "${BACKUP_DIR}"
 
-# Check connectivity
-log "Checking database connectivity..."
-PGPASSWORD="${DB_PASSWORD:-}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" \
-    -c "SELECT 1" > /dev/null 2>&1 || die "Cannot connect to database"
+# ── Step 1: pg_dump with compression ─────────────────────────────────────────
+echo "Creating backup..."
+export PGPASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
 
-# Create backup
-log "Creating backup: ${BACKUP_FILE}"
-PGPASSWORD="${DB_PASSWORD:-}" pg_dump \
-    -h "${DB_HOST}" \
-    -p "${DB_PORT}" \
-    -U "${DB_USER}" \
-    -d "${DB_NAME}" \
+pg_dump \
+    -h "$DB_HOST" \
+    -p "$DB_PORT" \
+    -U "$DB_USER" \
+    -d "$DB_NAME" \
     --format=custom \
     --compress=9 \
     --verbose \
     --no-owner \
     --no-privileges \
-    --if-exists \
-    --clean \
-    > "${BACKUP_DIR}/${BACKUP_FILE}" 2>"${BACKUP_DIR}/backup-${TIMESTAMP}.log"
+    --lock-wait-timeout=60000 \
+    -f "${BACKUP_DIR}/${BACKUP_FILE}" 2>&1
 
-# Verify backup
-BACKUP_SIZE=$(du -h "${BACKUP_DIR}/${BACKUP_FILE}" | cut -f1)
-log "Backup size: ${BACKUP_SIZE}"
+unset PGPASSWORD
 
-# Generate checksum
-sha256sum "${BACKUP_DIR}/${BACKUP_FILE}" > "${BACKUP_DIR}/${BACKUP_FILE}.sha256"
-log "Checksum: $(cat "${BACKUP_DIR}/${BACKUP_FILE}.sha256")"
+# ── Step 2: Generate checksum ─────────────────────────────────────────────────
+echo "Generating checksum..."
+sha256sum "${BACKUP_DIR}/${BACKUP_FILE}" > "${BACKUP_DIR}/${CHECKSUM_FILE}"
 
-# Record metadata
-cat > "${BACKUP_DIR}/backup-${TIMESTAMP}.json" <<EOF
-{
-    "timestamp": "${TIMESTAMP}",
-    "file": "${BACKUP_FILE}",
-    "size": "${BACKUP_SIZE}",
-    "database": "${DB_NAME}",
-    "host": "${DB_HOST}",
-    "port": ${DB_PORT},
-    "format": "custom",
-    "compression": 9,
-    "checksum": "$(cut -d' ' -f1 "${BACKUP_DIR}/${BACKUP_FILE}.sha256")",
-    "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-}
-EOF
+# ── Step 3: Verify backup integrity ───────────────────────────────────────────
+echo "Verifying backup..."
+BACKUP_SIZE=$(stat -c%s "${BACKUP_DIR}/${BACKUP_FILE}" 2>/dev/null || stat -f%z "${BACKUP_DIR}/${BACKUP_FILE}")
+MIN_SIZE=1024  # Minimum 1KB
 
-# Rotate old backups
-log "Rotating backups older than ${RETENTION_DAYS} days..."
-DELETED=0
-find "${BACKUP_DIR}" -name "angavu-backup-*.sql.gz" -mtime "+${RETENTION_DAYS}" -print -delete | while read -r f; do
-    log "  Deleted: $f"
-    DELETED=$((DELETED + 1))
-done
-# Also clean up associated files
-find "${BACKUP_DIR}" -name "angavu-backup-*.sha256" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
-find "${BACKUP_DIR}" -name "backup-*.log" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
-find "${BACKUP_DIR}" -name "backup-*.json" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+if [ "$BACKUP_SIZE" -lt "$MIN_SIZE" ]; then
+    echo "ERROR: Backup file too small (${BACKUP_SIZE} bytes). Possible empty backup."
+    exit 1
+fi
 
-TOTAL_BACKUPS=$(find "${BACKUP_DIR}" -name "angavu-backup-*.sql.gz" | wc -l)
-log "Total backups: ${TOTAL_BACKUPS}"
+echo "Backup size: $(numfmt --to=iec-i --suffix=B "$BACKUP_SIZE" 2>/dev/null || echo "${BACKUP_SIZE} bytes")"
 
-log "✅ Backup complete: ${BACKUP_DIR}/${BACKUP_FILE} (${BACKUP_SIZE})"
+# ── Step 4: Upload to S3-compatible storage ───────────────────────────────────
+if [ -n "$S3_BUCKET" ]; then
+    echo "Uploading to S3: s3://${S3_BUCKET}/"
 
-# ── Restore Instructions ──────────────────────────────────────────────────
-cat <<'RESTORE'
+    AWS_ARGS=""
+    if [ -n "$S3_ENDPOINT" ]; then
+        AWS_ARGS="--endpoint-url ${S3_ENDPOINT}"
+    fi
 
-═══════════════════════════════════════════════════════════════
-  RESTORE INSTRUCTIONS
-═══════════════════════════════════════════════════════════════
+    # Upload backup
+    aws s3 cp \
+        "${BACKUP_DIR}/${BACKUP_FILE}" \
+        "s3://${S3_BUCKET}/postgres/${BACKUP_FILE}" \
+        ${AWS_ARGS} \
+        --storage-class STANDARD_IA \
+        --only-show-errors
 
-To restore this backup:
+    # Upload checksum
+    aws s3 cp \
+        "${BACKUP_DIR}/${CHECKSUM_FILE}" \
+        "s3://${S3_BUCKET}/postgres/${CHECKSUM_FILE}" \
+        ${AWS_ARGS} \
+        --only-show-errors
 
-  # Full restore (drops and recreates objects):
-  pg_restore -h <host> -p <port> -U <user> -d <database> \
-    --no-owner --no-privileges --clean --if-exists \
-    <backup-file.sql.gz>
+    echo "Upload complete."
 
-  # Restore to a new database:
-  createdb -h <host> -U <user> angavu_restored
-  pg_restore -h <host> -U <user> -d angavu_restored \
-    --no-owner --no-privileges \
-    <backup-file.sql.gz>
+    # ── Step 5: Clean up old backups ──────────────────────────────────────────
+    echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
+    CUTOFF_DATE=$(date -d "${RETENTION_DAYS} days ago" +%Y%m%d 2>/dev/null || \
+                  date -v-${RETENTION_DAYS}d +%Y%m%d 2>/dev/null || \
+                  echo "")
 
-  # List contents without restoring:
-  pg_restore --list <backup-file.sql.gz>
+    if [ -n "$CUTOFF_DATE" ]; then
+        aws s3 ls "s3://${S3_BUCKET}/postgres/" ${AWS_ARGS} | while read -r line; do
+            FILE_DATE=$(echo "$line" | grep -oP 'angavu-backup-\K\d{8}' || true)
+            if [ -n "$FILE_DATE" ] && [ "$FILE_DATE" -lt "$CUTOFF_DATE" ]; then
+                FILE_NAME=$(echo "$line" | awk '{print $4}')
+                if [ -n "$FILE_NAME" ]; then
+                    echo "  Deleting old backup: ${FILE_NAME}"
+                    aws s3 rm "s3://${S3_BUCKET}/postgres/${FILE_NAME}" ${AWS_ARGS} --only-show-errors
+                fi
+            fi
+        done
+    fi
+fi
 
-  # Verify checksum:
-  sha256sum -c <backup-file.sql.gz.sha256>
+# ── Step 6: Clean up local files older than 7 days ────────────────────────────
+echo "Cleaning up local backups older than 7 days..."
+find "${BACKUP_DIR}" -name "angavu-backup-*.sql.gz*" -mtime +7 -delete 2>/dev/null || true
 
-═══════════════════════════════════════════════════════════════
-RESTORE
+echo ""
+echo "=== Backup Complete ==="
+echo "File:     ${BACKUP_FILE}"
+echo "Size:     $(numfmt --to=iec-i --suffix=B "$BACKUP_SIZE" 2>/dev/null || echo "${BACKUP_SIZE} bytes")"
+echo "Checksum: $(cat "${BACKUP_DIR}/${CHECKSUM_FILE}")"
+echo ""
+
+# Output for CI
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "backup_file=${BACKUP_FILE}" >> "$GITHUB_OUTPUT"
+    echo "backup_size=${BACKUP_SIZE}" >> "$GITHUB_OUTPUT"
+fi

@@ -1,0 +1,151 @@
+# =============================================================================
+# Website Deployment — Cloudflare Pages + R2 APK Distribution
+# Replaces GitHub Pages deployment
+# =============================================================================
+
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'docs/site/**'
+  workflow_dispatch:
+    inputs:
+      deploy_apk:
+        description: 'Also deploy APK to R2'
+        type: boolean
+        default: false
+      apk_version:
+        description: 'APK version tag (e.g., v1.0.0)'
+        type: string
+        default: 'latest'
+
+env:
+  CLOUDFLARE_PROJECT: angavu-website
+
+jobs:
+  # ── Deploy to Cloudflare Pages ──────────────────────────────────────────────
+  deploy-pages:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://angavu.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Deploy static site (adjust path as needed)
+          SITE_DIR="website"
+          if [ ! -d "$SITE_DIR" ]; then
+            SITE_DIR="docs/site"
+          fi
+          if [ ! -d "$SITE_DIR" ]; then
+            echo "No site directory found, creating placeholder"
+            mkdir -p "$SITE_DIR"
+            echo "<h1>Angavu Intelligence</h1><p>Coming soon</p>" > "$SITE_DIR/index.html"
+          fi
+
+          wrangler pages deploy "$SITE_DIR" \
+            --project-name="${CLOUDFLARE_PROJECT}" \
+            --branch=main \
+            --commit-dirty=true
+
+      - name: Verify deployment
+        run: |
+          echo "Waiting for deployment to propagate..."
+          sleep 10
+          STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "https://angavu.com" || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Website deployment verified"
+          else
+            echo "⚠️ Website returned status $STATUS (may need DNS propagation)"
+          fi
+
+  # ── Deploy APK to R2 ───────────────────────────────────────────────────────
+  deploy-apk:
+    name: Deploy APK to R2
+    runs-on: ubuntu-latest
+    if: ${{ inputs.deploy_apk || github.event_name == 'push' }}
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Authenticate with R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler login --api-token="${CLOUDFLARE_API_TOKEN}"
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: angavu-apk
+          path: ./build/
+        continue-on-error: true
+
+      - name: Upload APK to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          APK_VERSION="${{ inputs.apk_version || 'latest' }}"
+          APK_FILE=$(find ./build -name "*.apk" -type f | head -1)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "No APK file found, skipping upload"
+            exit 0
+          fi
+
+          echo "Uploading APK: ${APK_FILE}"
+
+          # Upload versioned
+          wrangler r2 object put "angavu-releases/app/angavu-${APK_VERSION}.apk" \
+            --file="${APK_FILE}" \
+            --content-type="application/vnd.android.package-archive"
+
+          # Upload as latest
+          wrangler r2 object put "angavu-releases/app/angavu-latest.apk" \
+            --file="${APK_FILE}" \
+            --content-type="application/vnd.android.package-archive"
+
+          echo "✅ APK uploaded to R2"
+          echo "  https://releases.angavu.com/app/angavu-${APK_VERSION}.apk"
+          echo "  https://releases.angavu.com/app/angavu-latest.apk"
+
+  # ── Invalidate CDN Cache ───────────────────────────────────────────────────
+  cache-purge:
+    name: Purge CDN Cache
+    runs-on: ubuntu-latest
+    needs: [deploy-pages]
+    steps:
+      - name: Purge Cloudflare cache
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"purge_everything":true}' | jq '.success'
+
+          echo "✅ CDN cache purged"

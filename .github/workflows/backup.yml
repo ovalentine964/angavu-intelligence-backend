@@ -1,0 +1,162 @@
+# =============================================================================
+# Database Backup — Scheduled CI Job (Daily at 02:00 UTC)
+# =============================================================================
+
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_backup:
+        description: 'Force immediate backup'
+        type: boolean
+        default: false
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup PostgreSQL
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.BACKUP_AWS_REGION }}
+
+      - name: Create backup
+        id: backup
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_RETENTION_DAYS: '30'
+        run: |
+          chmod +x scripts/backup-database.sh
+          ./scripts/backup-database.sh
+
+      - name: Verify backup exists in S3
+        env:
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+        run: |
+          AWS_ARGS=""
+          if [ -n "${BACKUP_S3_ENDPOINT}" ]; then
+            AWS_ARGS="--endpoint-url ${BACKUP_S3_ENDPOINT}"
+          fi
+
+          BACKUP_FILE="${{ steps.backup.outputs.backup_file }}"
+          echo "Verifying s3://${BACKUP_S3_BUCKET}/postgres/${BACKUP_FILE}..."
+
+          aws s3 ls "s3://${BACKUP_S3_BUCKET}/postgres/${BACKUP_FILE}" ${AWS_ARGS}
+          echo "✅ Backup verified in S3"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::❌ Database backup failed! Check logs immediately."
+          # Optional: send alert to Slack/PagerDuty/etc.
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "::notice::✅ Database backup completed: ${{ steps.backup.outputs.backup_file }} (${{ steps.backup.outputs.backup_size }} bytes)"
+
+  # ── Test Restore (Weekly) ────────────────────────────────────────────────────
+  test-restore:
+    name: Test Restore (Weekly)
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * 0' || inputs.force_backup  # Sundays only
+    needs: [backup]
+    environment:
+      name: production
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: angavu_restore_test
+          POSTGRES_USER: angavu
+          POSTGRES_PASSWORD: test_restore_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.BACKUP_AWS_REGION }}
+
+      - name: Download latest backup
+        env:
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_DIR: /tmp/angavu-backups
+        run: |
+          mkdir -p ${BACKUP_DIR}
+          AWS_ARGS=""
+          if [ -n "${BACKUP_S3_ENDPOINT}" ]; then
+            AWS_ARGS="--endpoint-url ${BACKUP_S3_ENDPOINT}"
+          fi
+
+          # Find latest backup
+          LATEST=$(aws s3 ls "s3://${BACKUP_S3_BUCKET}/postgres/" ${AWS_ARGS} | \
+                   grep "angavu-backup-" | sort -r | head -1 | awk '{print $4}')
+
+          if [ -z "$LATEST" ]; then
+            echo "ERROR: No backups found"
+            exit 1
+          fi
+
+          echo "Downloading: ${LATEST}"
+          aws s3 cp "s3://${BACKUP_S3_BUCKET}/postgres/${LATEST}" "${BACKUP_DIR}/${LATEST}" ${AWS_ARGS}
+          echo "backup_file=${BACKUP_DIR}/${LATEST}" >> $GITHUB_ENV
+
+      - name: Restore to test database
+        env:
+          DATABASE_URL: postgresql://angavu:test_restore_password@localhost:5432/angavu_restore_test
+          FORCE_RESTORE: 'yes'
+        run: |
+          chmod +x scripts/restore-database.sh
+          ./scripts/restore-database.sh "${{ env.backup_file }}"
+
+      - name: Validate restored data
+        env:
+          PGPASSWORD: test_restore_password
+        run: |
+          echo "Running validation queries..."
+          psql -h localhost -U angavu -d angavu_restore_test -c "
+            SELECT 'users' as table_name, count(*) as row_count FROM users
+            UNION ALL
+            SELECT 'mpesa_transactions', count(*) FROM mpesa_transactions
+            UNION ALL
+            SELECT 'credit_scores', count(*) FROM credit_scores;
+          "
+          echo "✅ Restore test passed"
