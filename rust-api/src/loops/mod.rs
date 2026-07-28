@@ -7,3 +7,4 @@ pub mod pipeline_feedback;
 pub mod credit_feedback;
 pub mod circuit_breaker;
 pub mod metrics;
+pub mod trace_analysis;

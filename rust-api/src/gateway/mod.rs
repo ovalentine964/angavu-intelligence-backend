@@ -6,6 +6,8 @@ pub mod k_anonymity;
 pub mod audit;
 pub mod tool_output_verification;
 pub mod sync_verification;
+pub mod webhook_integration;
+pub mod human_approval;
 
 use axum::{
     extract::{Request, State},

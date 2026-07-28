@@ -1,7 +1,8 @@
 // Angavu Intelligence Backend — Main Entry Point
-// Integrates all modules: orchestrator, gateway, loops, credit, graph, health, service_pricing
+// Integrates all modules: orchestrator, gateway, loops, credit, graph, health, service_pricing, webhooks
 
 use angavu_intelligence_backend::orchestrator::message_bus::{ModuleMessageBus, MessageBusConfig};
+use angavu_intelligence_backend::webhook::{self as webhook_module, WebhookState, MpesaConfig, MpesaEnvironment, webhook_router};
 use angavu_intelligence_backend::orchestrator::OODAOrchestrator;
 use angavu_intelligence_backend::orchestrator::supervisor::OrchestratorConfig;
 use angavu_intelligence_backend::gateway::{GatewayState, build_gateway_router};
@@ -103,7 +104,52 @@ async fn main() -> anyhow::Result<()> {
         sync_state,
     };
 
-    let app = build_gateway_router(gateway_state);
+    // ── Initialize Webhook System ──────────────────────────────
+    let webhook_state = WebhookState {
+        db: pg_pool.clone(),
+        redis: redis_conn.clone(),
+        message_bus: Arc::new(ModuleMessageBus::new(MessageBusConfig::default())),
+        mpesa_config: MpesaConfig {
+            passkey: std::env::var("MPESA_PASSKEY")
+                .unwrap_or_else(|_| "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919".to_string()),
+            shortcode: std::env::var("MPESA_SHORTCODE")
+                .unwrap_or_else(|_| "174379".to_string()),
+            initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD")
+                .unwrap_or_default(),
+            environment: match std::env::var("MPESA_ENVIRONMENT").as_deref() {
+                Ok("production") => MpesaEnvironment::Production,
+                _ => MpesaEnvironment::Sandbox,
+            },
+        },
+        webhook_api_keys: std::env::var("WEBHOOK_API_KEYS")
+            .unwrap_or_else(|_| "default-webhook-key".to_string())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect(),
+    };
+
+    // Run webhook_events table migration
+    sqlx::query(webhook_module::MIGRATION_WEBHOOK_EVENTS)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Webhook events table migration skipped (may already exist)")
+        })
+        .ok();
+
+    tracing::info!("Webhook system initialized (M-Pesa + Market Feed + Generic)");
+
+    // ── Initialize Human-in-the-Loop Approval System ──────────
+    let approval_state = angavu_intelligence_backend::gateway::human_approval::HumanApprovalState {
+        redis: redis_conn.clone(),
+        audit: Arc::new(AuditLogger::new(1024)),
+    };
+    let approval_router = angavu_intelligence_backend::gateway::human_approval::human_approval_router(approval_state);
+    tracing::info!("Human-in-the-Loop approval system initialized (credit decisions, sensitive actions, escalation, reports, chama governance)");
+
+    let app = build_gateway_router(gateway_state)
+        .merge(webhook_router(webhook_state))
+        .merge(approval_router);
 
     // ── Start HTTP Server ───────────────────────────────────────
     let addr = format!("{}:{}", host, port);
