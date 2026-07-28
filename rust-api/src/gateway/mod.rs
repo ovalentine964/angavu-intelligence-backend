@@ -4,6 +4,8 @@ pub mod auth;
 pub mod rate_limit;
 pub mod k_anonymity;
 pub mod audit;
+pub mod tool_output_verification;
+pub mod sync_verification;
 
 use axum::{
     extract::{Request, State},
@@ -24,6 +26,8 @@ pub struct GatewayState {
     pub k_anonymity: Arc<k_anonymity::KAnonymityEnforcer>,
     /// Audit logger
     pub audit: Arc<audit::AuditLogger>,
+    /// Sync state for bidirectional sync
+    pub sync_state: Arc<crate::sync::receiver::SyncState>,
 }
 
 // src/gateway/mod.rs (continued — full router assembly)
@@ -58,6 +62,8 @@ pub fn build_gateway_router(state: GatewayState) -> Router {
         .route("/superagent/status", get(superagent::status))
         .route("/superagent/cycle", post(superagent::trigger_cycle))
         .route("/superagent/invoke", post(superagent::invoke))
+        // Sync endpoint (bidirectional — push + pull)
+        .route("/api/v1/sync/anonymized", post(sync::receiver::handle_sync))
         // Billing endpoints
         .route("/api/v1/billing/tiers", get(billing::list_tiers))
         .route("/api/v1/billing/subscriptions", post(billing::create_subscription))

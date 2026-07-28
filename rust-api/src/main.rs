@@ -93,11 +93,14 @@ async fn main() -> anyhow::Result<()> {
         refresh_token_ttl: 86400 * 30, // 30 days
     };
 
+    let sync_state = Arc::new(angavu_intelligence_backend::sync::receiver::SyncState::new());
+
     let gateway_state = GatewayState {
         jwt_config: Arc::new(jwt_config),
         rate_limiter: Arc::new(RateLimiter::new(10)),
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
         audit: Arc::new(AuditLogger::new(1024)),
+        sync_state,
     };
 
     let app = build_gateway_router(gateway_state);

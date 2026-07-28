@@ -9,6 +9,8 @@ pub mod orchestrator;
 pub mod gateway;
 pub mod health;
 pub mod service_pricing;
+pub mod sync;
+pub mod observability;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
