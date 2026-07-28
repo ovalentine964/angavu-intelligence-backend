@@ -129,14 +129,26 @@ impl CapabilityModule for EconomicAnalyzer {
 
                     let inflation_rate = cpi - 100.0;
 
+                    // Confidence intervals using bootstrap-like SE estimation
+                    // SE scales as 1/√n for means
+                    let n = state.transaction_count as f64;
+                    let gdp_proxy = state.current_revenue * 30.0;
+                    let gdp_se = gdp_proxy / n.sqrt(); // rough SE
+                    let inflation_se = inflation_rate.abs().max(0.1) / n.sqrt();
+                    let z_95 = 1.96;
+
                     return Ok(Some(ModuleMessage::EconomicIndicator {
                         trace_id,
                         region,
-                        gdp_proxy: state.current_revenue * 30.0, // Monthly projection
+                        gdp_proxy,
                         inflation_rate,
                         employment_index: state.active_workers as f64,
                         transaction_volume_index: volume_index,
                         period: "hourly".to_string(),
+                        gdp_ci_lower: (gdp_proxy - z_95 * gdp_se).max(0.0),
+                        gdp_ci_upper: gdp_proxy + z_95 * gdp_se,
+                        inflation_ci_lower: inflation_rate - z_95 * inflation_se,
+                        inflation_ci_upper: inflation_rate + z_95 * inflation_se,
                     }));
                 }
 

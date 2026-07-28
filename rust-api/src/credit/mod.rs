@@ -10,3 +10,5 @@ pub mod extractors;
 pub mod type_features;
 pub mod seasonality_enhanced;
 pub mod federated;
+pub mod score_verification;
+pub mod logistic_regression;

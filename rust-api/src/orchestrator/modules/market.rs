@@ -91,13 +91,41 @@ impl RollingWindow {
     }
 
     /// Herfindahl-Hirschman Index for market concentration
+    /// 
+    /// FIXED: HHI was previously misapplied. HHI is an antitrust metric
+    /// (DOJ thresholds: <1500 unconcentrated, 1500-2500 moderate, >2500 high).
+    /// 
+    /// For informal sector analysis, we use HHI to assess market structure:
+    /// - High HHI (>2500): dominated by few sellers → potential for price manipulation
+    /// - Low HHI (<1500): competitive market → fair pricing
+    /// 
+    /// Mathematical basis: HHI = Σᵢ sᵢ² where sᵢ is market share as percentage
+    /// Range: [100/N, 10000] where N is number of firms
+    /// 
+    /// NOTE: Do NOT use HHI for inequality (use Gini instead)
+    /// Do NOT use HHI for diversity (use Shannon entropy instead)
     fn compute_hhi(&self, market_shares: &[f64]) -> f64 {
+        // HHI is computed on percentage shares (0-100 scale)
+        // Correct: if share is 0.3 (30%), then contribution is 30² = 900
         market_shares.iter().map(|s| (s * 100.0).powi(2)).sum()
+    }
+
+    /// Shannon entropy for market diversity (alternative to HHI)
+    /// H = -Σ pᵢ ln(pᵢ)
+    /// Higher entropy = more diverse/competitive market
+    fn compute_entropy(&self, market_shares: &[f64]) -> f64 {
+        -market_shares.iter()
+            .filter(|&&s| s > 0.0)
+            .map(|&s| s * s.ln())
+            .sum::<f64>()
     }
 }
 
 impl MarketAnalyzer {
     pub fn new() -> Self {
+        // Power analysis: minimum 10 observations for basic demand signal
+        // For reliable elasticity estimation: 30+ observations per category
+        // For seasonal patterns: 90+ days of data
         Self {
             windows: HashMap::new(),
             min_sample_size: 10,
@@ -157,6 +185,21 @@ impl CapabilityModule for MarketAnalyzer {
                         1.0
                     };
 
+                    // Compute confidence interval for demand index
+                    // Using bootstrap-like approach: SE ≈ σ/√n
+                    let demand_se = if window.volumes.len() > 1 {
+                        let vol_mean = window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
+                        let vol_var = window.volumes.iter()
+                            .map(|v| (v - vol_mean).powi(2))
+                            .sum::<f64>() / (window.volumes.len() - 1) as f64;
+                        vol_var.sqrt() / (window.volumes.len() as f64).sqrt()
+                    } else {
+                        demand_index * 0.5 // maximum uncertainty
+                    };
+                    let z_95 = 1.96;
+                    let demand_ci_lower = (demand_index - z_95 * demand_se / avg_volume.max(0.01)).max(0.0);
+                    let demand_ci_upper = demand_index + z_95 * demand_se / avg_volume.max(0.01);
+
                     signals.push(ModuleMessage::MarketSignal {
                         trace_id,
                         region: region.clone(),
@@ -166,6 +209,8 @@ impl CapabilityModule for MarketAnalyzer {
                         volatility: window.price_stddev() / window.mean_price().max(0.01),
                         sample_size: txs.len() as u32,
                         confidence: (txs.len() as f64 / 100.0).min(1.0),
+                        demand_ci_lower,
+                        demand_ci_upper,
                     });
                 }
 

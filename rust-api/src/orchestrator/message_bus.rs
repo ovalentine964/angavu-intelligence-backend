@@ -58,6 +58,9 @@ pub enum ModuleMessage {
         volatility: f64,
         sample_size: u32,
         confidence: f64,
+        /// 95% CI for demand_index
+        demand_ci_lower: f64,
+        demand_ci_upper: f64,
     },
 
     /// CreditScorer output: Alama Score components
@@ -68,6 +71,12 @@ pub enum ModuleMessage {
         risk_level: RiskLevel,
         factors: Vec<CreditFactor>,
         confidence: f64,
+        /// 95% confidence interval lower bound (Alama score units)
+        ci_lower: u32,
+        /// 95% confidence interval upper bound (Alama score units)
+        ci_upper: u32,
+        /// Number of observations used for scoring
+n        n_observations: u32,
     },
 
     /// DistributionAnalyzer output: distribution gaps
@@ -89,6 +98,12 @@ pub enum ModuleMessage {
         price_elasticity: f64,
         demand_forecast_30d: f64,
         competitor_analysis: Vec<CompetitorData>,
+        /// 95% CI for price_elasticity
+        elasticity_ci_lower: f64,
+        elasticity_ci_upper: f64,
+        /// 95% CI for demand_forecast_30d
+        forecast_ci_lower: f64,
+        forecast_ci_upper: f64,
     },
 
     /// HealthMetrics output: worker health economics
@@ -110,6 +125,12 @@ pub enum ModuleMessage {
         employment_index: f64,
         transaction_volume_index: f64,
         period: String,
+        /// 95% CI for gdp_proxy
+        gdp_ci_lower: f64,
+        gdp_ci_upper: f64,
+        /// 95% CI for inflation_rate
+        inflation_ci_lower: f64,
+        inflation_ci_upper: f64,
     },
 
     // ── Cross-Module Signals ────────────────────────────────
