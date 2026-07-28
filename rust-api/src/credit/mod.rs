@@ -12,3 +12,4 @@ pub mod seasonality_enhanced;
 pub mod federated;
 pub mod score_verification;
 pub mod logistic_regression;
+pub mod approval_gate; // Human-in-the-Loop: Credit Decision Approval
