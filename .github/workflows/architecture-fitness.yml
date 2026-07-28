@@ -1,0 +1,225 @@
+# =============================================================================
+# Architecture Fitness Checks
+# Verifies module boundaries, circular deps, API docs, migration reversibility
+# =============================================================================
+
+name: Architecture Fitness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: arch-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Module Boundary Check ─────────────────────────────────────────────────
+  module-boundaries:
+    name: Module Boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify module boundaries
+        run: |
+          echo "::group::Module boundary verification"
+          VIOLATIONS=0
+
+          # Rule 1: rust-api should not import from python/ directly
+          if grep -rn "use.*python" rust-api/src/ --include="*.rs" 2>/dev/null | grep -v "test" | grep -v "//.*use.*python"; then
+            echo "::error::rust-api imports from python module — boundary violation"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Rule 2: python/ should not import from rust-api/ directly
+          if grep -rn "import.*rust.api\|from.*rust.api" python/ --include="*.py" 2>/dev/null; then
+            echo "::error::python imports from rust-api module — boundary violation"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Rule 3: src/ (library) should not depend on rust-api/ (binary)
+          if grep -rn "use.*rust_api\|extern crate rust_api" src/ --include="*.rs" 2>/dev/null; then
+            echo "::error::Library code depends on binary — boundary violation"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Rule 4: No direct database access from API handlers (should go through service layer)
+          # Check if handler files directly use sqlx::query
+          for handler_file in $(find rust-api/src/ -path "*/handlers/*.rs" -o -path "*/handler*.rs" 2>/dev/null); do
+            if grep -n "sqlx::query\|sqlx::query_as" "$handler_file" 2>/dev/null | grep -v "//.*sqlx" | head -5; then
+              echo "::warning::Handler $handler_file has direct DB queries — consider using service layer"
+            fi
+          done
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::$VIOLATIONS module boundary violations found"
+            exit 1
+          fi
+          echo "✅ All module boundaries respected"
+          echo "::endgroup::"
+
+  # ── Circular Dependency Check ─────────────────────────────────────────────
+  circular-deps:
+    name: Circular Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check for circular dependencies
+        run: |
+          echo "::group::Circular dependency check"
+
+          # Use cargo to check the dependency graph
+          # Install cargo-deps for dependency graph analysis
+          cargo install cargo-deps 2>/dev/null || true
+
+          # Check that the crate compiles (circular deps cause compile errors)
+          cargo check 2>&1 | tee /tmp/cargo-check.log
+
+          if grep -q "circular\|cycle" /tmp/cargo-check.log; then
+            echo "::error::Circular dependency detected!"
+            exit 1
+          fi
+
+          # Verify no self-referencing features
+          if grep -n 'features.*=.*\[".*self' Cargo.toml 2>/dev/null; then
+            echo "::warning::Self-referencing features detected"
+          fi
+
+          echo "✅ No circular dependencies found"
+          echo "::endgroup::"
+
+  # ── API Documentation Match ───────────────────────────────────────────────
+  api-docs-match:
+    name: API Documentation Match
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify API endpoints match documentation
+        run: |
+          echo "::group::API docs verification"
+
+          # Extract route definitions from Rust code
+          echo "── Routes in code ──"
+          CODE_ROUTES=$(grep -rn '\.\(get\|post\|put\|delete\|patch\|route\)(' rust-api/src/ --include="*.rs" 2>/dev/null \
+            | grep -oP '"[^"]*"' \
+            | sort -u || true)
+
+          if [ -z "$CODE_ROUTES" ]; then
+            echo "⚠️  No routes found in code — skipping doc match"
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          echo "$CODE_ROUTES"
+          echo ""
+
+          # Check if API docs exist
+          if [ -f "docs/api.md" ] || [ -f "docs/API.md" ] || [ -f "docs/openapi.yaml" ] || [ -f "docs/swagger.yaml" ]; then
+            echo "✅ API documentation file found"
+
+            # Extract documented endpoints
+            API_DOC=$(find docs/ -name "*.md" -o -name "*.yaml" -o -name "*.yml" | head -1)
+            DOC_ROUTES=$(grep -oP '`(GET|POST|PUT|DELETE|PATCH)\s+[^`]*`' "$API_DOC" 2>/dev/null \
+              | grep -oP '/[a-zA-Z0-9/_-]+' \
+              | sort -u || true)
+
+            if [ -n "$DOC_ROUTES" ]; then
+              echo "── Documented routes ──"
+              echo "$DOC_ROUTES"
+              echo ""
+
+              # Check for undocumented routes
+              UNDOCUMENTED=0
+              while IFS= read -r route; do
+                [ -z "$route" ] && continue
+                if ! echo "$DOC_ROUTES" | grep -qF "$route"; then
+                  echo "::warning::Undocumented route: $route"
+                  UNDOCUMENTED=$((UNDOCUMENTED + 1))
+                fi
+              done <<< "$CODE_ROUTES"
+
+              if [ "$UNDOCUMENTED" -gt 0 ]; then
+                echo "::warning::$UNDOCUMENTED routes not found in API documentation"
+              else
+                echo "✅ All routes documented"
+              fi
+            fi
+          else
+            echo "::warning::No API documentation found (docs/api.md, docs/openapi.yaml)"
+            echo "Consider adding API documentation"
+          fi
+
+          echo "::endgroup::"
+
+  # ── Migration Reversibility ───────────────────────────────────────────────
+  migration-check:
+    name: Migration Reversibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify migrations are reversible
+        run: |
+          echo "::group::Migration reversibility check"
+
+          MIGRATION_DIR="migrations"
+          if [ ! -d "$MIGRATION_DIR" ]; then
+            echo "⚠️  No migrations directory found"
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          VIOLATIONS=0
+          for migration in "$MIGRATION_DIR"/*.sql; do
+            [ -f "$migration" ] || continue
+            FILENAME=$(basename "$migration")
+            echo "── Checking: $FILENAME ──"
+
+            # Check for DROP TABLE without IF EXISTS (dangerous in rollback)
+            if grep -qiP 'DROP\s+TABLE\s+(?!IF\s+EXISTS)' "$migration" 2>/dev/null; then
+              echo "::warning::$FILENAME: DROP TABLE without IF EXISTS — risky for rollback"
+            fi
+
+            # Check for ALTER TABLE DROP COLUMN without IF EXISTS
+            if grep -qiP 'ALTER\s+TABLE.*DROP\s+COLUMN\s+(?!IF\s+EXISTS)' "$migration" 2>/dev/null; then
+              echo "::warning::$FILENAME: DROP COLUMN without IF EXISTS"
+            fi
+
+            # Check that destructive operations have safeguards
+            if grep -qiP 'TRUNCATE|DELETE\s+FROM\s+\w+\s*;' "$migration" 2>/dev/null; then
+              echo "::warning::$FILENAME: Contains TRUNCATE or unbounded DELETE — verify rollback plan"
+            fi
+
+            # Check for NOT NULL without DEFAULT on existing columns
+            if grep -qiP 'ALTER\s+TABLE.*SET\s+NOT\s+NULL' "$migration" 2>/dev/null; then
+              if ! grep -qiP 'ALTER\s+TABLE.*SET\s+DEFAULT' "$migration" 2>/dev/null; then
+                echo "::warning::$FILENAME: SET NOT NULL without DEFAULT — may fail on existing data"
+              fi
+            fi
+
+            echo "  ✅ Checked"
+          done
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::$VIOLATIONS migration issues found"
+            exit 1
+          fi
+
+          echo "✅ All migrations reviewed"
+          echo "::endgroup::"

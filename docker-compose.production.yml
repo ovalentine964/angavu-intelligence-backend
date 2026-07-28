@@ -1,0 +1,457 @@
+# =============================================================================
+# Angavu Intelligence Backend — Production Infrastructure
+# Scaled for 100K+ users: PostgreSQL replication, Redis cluster, ClickHouse,
+# Nginx load balancer, 3+ API replicas
+# =============================================================================
+
+version: "3.9"
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql://angavu:${POSTGRES_PASSWORD:-angavu_secret}@pg-primary:5432/angavu
+  REDIS_URL: redis://redis-cluster-1:6379/0
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_DB: angavu
+  RUST_LOG: info
+  ANGAVU_HOST: 0.0.0.0
+  ANGAVU_PORT: 8000
+
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    <<: *common-env
+    DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    QWEN_API_KEY: ${QWEN_API_KEY:-}
+    JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-32-bytes-key-here!!!!}
+  depends_on:
+    pg-primary:
+      condition: service_healthy
+    redis-cluster-1:
+      condition: service_healthy
+    clickhouse:
+      condition: service_healthy
+  volumes:
+    - apilogs:/app/logs
+  deploy:
+    resources:
+      limits:
+        memory: 2G
+        cpus: "1.5"
+      reservations:
+        memory: 512M
+        cpus: "0.5"
+
+services:
+  # ── PostgreSQL 16 Primary ───────────────────────────────────────────────────
+  pg-primary:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: angavu
+      POSTGRES_USER: angavu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-angavu_secret}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg-primary-data:/var/lib/postgresql/data
+      - ./scripts/pg-init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=5
+      - -c
+      - wal_keep_size=256MB
+      - -c
+      - hot_standby=on
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - random_page_cost=1.1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U angavu -d angavu"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: "2"
+        reservations:
+          memory: 2G
+          cpus: "1"
+
+  # ── PostgreSQL 16 Replica ───────────────────────────────────────────────────
+  pg-replica:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      PGUSER: angavu
+      PGPASSWORD: ${POSTGRES_PASSWORD:-angavu_secret}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pg-replica-data:/var/lib/postgresql/data
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+          export PGPASSWORD="${POSTGRES_PASSWORD:-angavu_secret}"
+          until pg_basebackup -h pg-primary -U angavu -D /var/lib/postgresql/data -Fp -Xs -P -R; do
+            echo "Waiting for primary..."
+            sleep 5
+          done
+        fi
+        exec postgres -c hot_standby=on -c max_connections=100 -c shared_buffers=1GB
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U angavu -d angavu"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: "1"
+        reservations:
+          memory: 512M
+
+  # ── Redis Cluster Nodes ─────────────────────────────────────────────────────
+  redis-cluster-1:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:16379:16379"
+    volumes:
+      - redis-data-1:/data
+    command: >
+      redis-server
+      --port 6379
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --cluster-announce-port 6379
+      --cluster-announce-bus-port 16379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1.2G
+        reservations:
+          memory: 256M
+
+  redis-cluster-2:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+      - "127.0.0.1:16380:16379"
+    volumes:
+      - redis-data-2:/data
+    command: >
+      redis-server
+      --port 6379
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --cluster-announce-port 6380
+      --cluster-announce-bus-port 16380
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1.2G
+        reservations:
+          memory: 256M
+
+  redis-cluster-3:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6381:6379"
+      - "127.0.0.1:16381:16379"
+    volumes:
+      - redis-data-3:/data
+    command: >
+      redis-server
+      --port 6379
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --cluster-announce-port 6381
+      --cluster-announce-bus-port 16381
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1.2G
+        reservations:
+          memory: 256M
+
+  # ── Redis Cluster Init ──────────────────────────────────────────────────────
+  redis-cluster-init:
+    image: redis:7-alpine
+    restart: "no"
+    depends_on:
+      redis-cluster-1:
+        condition: service_healthy
+      redis-cluster-2:
+        condition: service_healthy
+      redis-cluster-3:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for Redis nodes...' &&
+        sleep 5 &&
+        redis-cli --cluster create
+          redis-cluster-1:6379
+          redis-cluster-2:6379
+          redis-cluster-3:6379
+          --cluster-replicas 0
+          --cluster-yes &&
+        echo 'Redis cluster initialized!'
+      "
+
+  # ── ClickHouse 24 (OLAP Analytics) ──────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: angavu
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "1"
+        reservations:
+          memory: 1G
+
+  # ── API Replicas (3+) ───────────────────────────────────────────────────────
+  api-1:
+    <<: *api-common
+    container_name: angavu-api-1
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  api-2:
+    <<: *api-common
+    container_name: angavu-api-2
+    ports:
+      - "127.0.0.1:8002:8000"
+
+  api-3:
+    <<: *api-common
+    container_name: angavu-api-3
+    ports:
+      - "127.0.0.1:8003:8000"
+
+  # ── Nginx Load Balancer ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.production.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api-1
+      - api-2
+      - api-3
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ── Prometheus (Metrics & Alerting) ──────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.production.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/rules/alerts.yml:ro
+      - promdata:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # ── Grafana (Dashboards) ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-angavu_grafana}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SERVER_ROOT_URL: 'https://grafana.angavu.com'
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ── Alertmanager ─────────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Node Exporter ────────────────────────────────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Redis Exporter ──────────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9121:9121"
+    environment:
+      REDIS_ADDR: redis://redis-cluster-1:6379
+    depends_on:
+      - redis-cluster-1
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  # ── PostgreSQL Exporter ─────────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://angavu:${POSTGRES_PASSWORD:-angavu_secret}@pg-primary:5432/angavu?sslmode=disable"
+    depends_on:
+      - pg-primary
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+volumes:
+  pg-primary-data:
+  pg-replica-data:
+  redis-data-1:
+  redis-data-2:
+  redis-data-3:
+  chdata:
+  apilogs:
+  promdata:
+  grafanadata:

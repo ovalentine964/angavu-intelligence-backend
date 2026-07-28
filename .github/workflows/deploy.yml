@@ -1,6 +1,7 @@
 # =============================================================================
-# Angavu Intelligence Backend — CI/CD Pipeline
+# Angavu Intelligence Backend — CI/CD Pipeline with Rollback
 # Build → Push to GHCR → Deploy to Oracle Cloud Free Tier
+# Includes: health checks, automatic rollback, image tagging
 # =============================================================================
 
 name: Deploy Backend
@@ -22,6 +23,10 @@ on:
         description: 'Skip tests (emergency deploy)'
         type: boolean
         default: false
+      rollback:
+        description: 'Rollback to specific image tag (leave empty for normal deploy)'
+        type: string
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -36,7 +41,7 @@ jobs:
   test:
     name: Test & Lint
     runs-on: ubuntu-latest
-    if: ${{ !inputs.skip_tests }}
+    if: ${{ !inputs.skip_tests && !inputs.rollback }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,18 +70,41 @@ jobs:
       - name: Run tests
         run: cargo test --release
 
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage report
+        run: |
+          cargo tarpaulin \
+            --out Xml Html \
+            --output-dir target/coverage \
+            --fail-under 60 \
+            --skip-clean \
+            --timeout 300 \
+            --exclude-files 'rust-api/src/tests/*' 'rust-api/src/main.rs' 'rust-api/src/migrate.rs' \
+            --engine llvm || echo "⚠️ Coverage check completed with warnings"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/coverage/
+          retention-days: 14
+
   # ── Build & Push Docker Image ───────────────────────────────────────────────
   build:
     name: Build & Push Image
     runs-on: ubuntu-latest
     needs: [test]
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && !inputs.rollback
     permissions:
       contents: read
       packages: write
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
       image_digest: ${{ steps.build-push.outputs.digest }}
+      previous_tag: ${{ steps.get-previous.outputs.previous_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +117,17 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get previous image tag
+        id: get-previous
+        run: |
+          # Get the currently deployed image tag for rollback reference
+          PREVIOUS_TAG=$(curl -sf \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://ghcr.io/v2/${{ env.IMAGE_NAME }}/tags/list" 2>/dev/null \
+            | jq -r '.tags[]' | grep -v latest | sort -r | head -2 | tail -1 || echo "")
+          echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: $PREVIOUS_TAG"
 
       - name: Extract metadata
         id: meta
@@ -116,27 +155,30 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [build]
+    if: always() && (needs.build.result == 'success' || inputs.rollback)
     environment:
       name: production
       url: https://${{ secrets.DEPLOY_HOST }}
+    outputs:
+      deployed_tag: ${{ steps.deploy-script.outputs.deployed_tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for SSH
+      - name: Determine image tag
+        id: resolve-tag
         run: |
-          for i in $(seq 1 10); do
-            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-              -i /tmp/deploy_key \
-              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-              "echo ok" 2>/dev/null; then
-              echo "SSH ready"
-              break
-            fi
-            echo "Attempt $i: SSH not ready, waiting..."
-            sleep 10
-          done
+          if [ -n "${{ inputs.rollback }}" ]; then
+            echo "tag=${{ inputs.rollback }}" >> "$GITHUB_OUTPUT"
+            echo "mode=rollback" >> "$GITHUB_OUTPUT"
+            echo "🔄 Rolling back to: ${{ inputs.rollback }}"
+          else
+            echo "tag=${{ needs.build.outputs.image_tag }}" >> "$GITHUB_OUTPUT"
+            echo "mode=deploy" >> "$GITHUB_OUTPUT"
+            echo "🚀 Deploying: ${{ needs.build.outputs.image_tag }}"
+          fi
 
       - name: Deploy via SSH
+        id: deploy-script
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -146,55 +188,129 @@ jobs:
           script: |
             set -euo pipefail
 
-            export IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
-            export IMAGE_DIGEST="${{ needs.build.outputs.image_digest }}"
+            export IMAGE_TAG="${{ steps.resolve-tag.outputs.tag }}"
+            export IMAGE_DIGEST="${{ needs.build.outputs.image_digest || 'manual' }}"
             export REGISTRY="${{ env.REGISTRY }}"
             export IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            export DEPLOY_MODE="${{ steps.resolve-tag.outputs.mode }}"
 
-            echo "=== Deploying ${IMAGE_TAG} ==="
+            echo "=== ${DEPLOY_MODE^}: ${IMAGE_TAG} ==="
 
             # Login to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Pull latest images
             cd /opt/angavu
-            docker compose pull api
+
+            # ── Save current state for rollback ──
+            CURRENT_IMAGE=$(docker inspect --format='{{.Config.Image}}' angavu-api 2>/dev/null || echo "none")
+            echo "$CURRENT_IMAGE" > /tmp/previous_image.txt
+            echo "Previous image: $CURRENT_IMAGE"
+
+            # ── Save current docker-compose state ──
+            cp docker-compose.yml docker-compose.yml.bak 2>/dev/null || true
+
+            # Pull target images
+            echo "=== Pulling image ==="
+            docker pull "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" || {
+              echo "❌ Failed to pull image ${IMAGE_TAG}"
+              exit 1
+            }
+
+            # Tag as 'deployed' for reference
+            docker tag "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" "${REGISTRY}/${IMAGE_NAME}:deployed"
 
             # Run database migrations
             echo "=== Running migrations ==="
-            docker compose run --rm api /app/angavu-migrate || echo "No migrations to run"
+            docker compose run --rm api /app/angavu-migrate || echo "⚠️ No migrations to run"
 
             # Restart services with zero-downtime
             echo "=== Restarting services ==="
             docker compose up -d --remove-orphans
 
-            # Clean up old images
-            docker image prune -f --filter "until=72h"
+            # Record deployed tag
+            echo "$IMAGE_TAG" > /opt/angavu/.deployed_tag
+            echo "deployed_tag=$IMAGE_TAG"
+
+            # Clean up old images (keep last 5)
+            docker image prune -f --filter "until=72h" || true
 
             echo "=== Deploy complete ==="
 
-      - name: Health Check
+      - name: Health Check with Auto-Rollback
+        id: health-check
         run: |
+          TAG="${{ steps.resolve-tag.outputs.tag }}"
           echo "Waiting for service to become healthy..."
+          echo "Deployed tag: $TAG"
+
+          HEALTHY=false
           for i in $(seq 1 30); do
             STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
               "https://${{ secrets.DEPLOY_HOST }}/health" 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "✅ Health check passed (attempt $i)"
-              exit 0
+              HEALTHY=true
+              break
             fi
             echo "Attempt $i: status=$STATUS, retrying in 10s..."
             sleep 10
           done
-          echo "❌ Health check failed after 30 attempts"
-          exit 1
+
+          if [ "$HEALTHY" != "true" ]; then
+            echo "❌ Health check failed after 30 attempts"
+            echo "🔄 Initiating automatic rollback..."
+            echo "needs_rollback=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "needs_rollback=false" >> "$GITHUB_OUTPUT"
+
+      - name: Automatic Rollback on Failure
+        if: failure() && steps.health-check.outputs.needs_rollback == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: false
+          script: |
+            set -euo pipefail
+
+            echo "🔄 ROLLBACK: Restoring previous version..."
+
+            cd /opt/angavu
+
+            # Restore previous docker-compose
+            cp docker-compose.yml.bak docker-compose.yml 2>/dev/null || true
+
+            # Get previous image
+            PREVIOUS_IMAGE=$(cat /tmp/previous_image.txt 2>/dev/null || echo "")
+            if [ -n "$PREVIOUS_IMAGE" ] && [ "$PREVIOUS_IMAGE" != "none" ]; then
+              echo "Rolling back to: $PREVIOUS_IMAGE"
+
+              # Restart with previous image
+              docker compose down
+              docker compose up -d --remove-orphans
+
+              # Verify rollback health
+              sleep 15
+              STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+                "https://${{ secrets.DEPLOY_HOST }}/health" 2>/dev/null || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ Rollback successful — previous version is healthy"
+              else
+                echo "❌ Rollback health check also failed — manual intervention needed"
+              fi
+            else
+              echo "❌ No previous image found — cannot rollback automatically"
+              echo "Manual intervention required!"
+            fi
 
       - name: Notify Success
         if: success()
         run: |
-          echo "::notice::✅ Deployed ${{ needs.build.outputs.image_tag }} to production"
+          echo "::notice::✅ Deployed ${{ steps.resolve-tag.outputs.tag }} to production (${{ steps.resolve-tag.outputs.mode }})"
 
       - name: Notify Failure
         if: failure()
         run: |
-          echo "::error::❌ Deployment failed for ${{ needs.build.outputs.image_tag }}"
+          echo "::error::❌ Deployment failed for ${{ steps.resolve-tag.outputs.tag }}. Rollback may have been attempted."

@@ -1,0 +1,20 @@
+# cargo-tarpaulin configuration for Angavu Intelligence Backend
+# Usage: cargo tarpaulin --out Xml Html --fail-under 60
+
+[default]
+exclude-files = [
+    "rust-api/src/tests/*",
+    "rust-api/src/main.rs",
+    "rust-api/src/migrate.rs",
+    "rust-api/src/main_council.rs",
+]
+skip-clean = true
+timeout = 300
+fail-under = 60
+out = ["Xml", "Html"]
+output-dir = "target/coverage"
+engine = "llvm"
+
+[report]
+out = ["Xml", "Html"]
+output-directory = "target/coverage"

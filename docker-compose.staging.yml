@@ -1,0 +1,143 @@
+# =============================================================================
+# Angavu Intelligence Backend — Staging Environment
+# Single-node setup that mirrors production topology at reduced scale
+# =============================================================================
+
+version: "3.9"
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql://angavu:${POSTGRES_PASSWORD:-angavu_staging}@postgres:5432/angavu_staging
+  REDIS_URL: redis://redis:6379/0
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_DB: angavu_staging
+  RUST_LOG: debug
+  ANGAVU_HOST: 0.0.0.0
+  ANGAVU_PORT: 8000
+  ANGAVU_ENV: staging
+
+services:
+  # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: angavu_staging
+      POSTGRES_USER: angavu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-angavu_staging}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/staging-seed.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U angavu -d angavu_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16379:6379"
+    volumes:
+      - redisdata:/data
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+        reservations:
+          memory: 64M
+
+  # ── ClickHouse 24 ───────────────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18123:8123"
+      - "127.0.0.1:19000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: angavu_staging
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ── API (single replica for staging) ────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      <<: *common-env
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-staging-secret-do-not-use-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-staging-32-bytes-key-do-not-prod!!}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - apilogs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # ── Nginx (staging) ─────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  pgdata:
+  redisdata:
+  chdata:
+  apilogs:

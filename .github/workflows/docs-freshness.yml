@@ -1,0 +1,154 @@
+# =============================================================================
+# Documentation Freshness Checks
+# Verifies docs are updated with code changes, checks for stale TODOs
+# =============================================================================
+
+name: Documentation Freshness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Docs Updated With Code ────────────────────────────────────────────────
+  docs-sync:
+    name: Documentation Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if docs updated with code changes
+        run: |
+          echo "::group::Documentation sync check"
+
+          PR_BASE="${{ github.event.pull_request.base.sha }}"
+          PR_HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # Check if code files changed
+          CODE_CHANGED=$(git diff --name-only "$PR_BASE".."$PR_HEAD" -- \
+            'src/' 'rust-api/' 'python/' 'Cargo.toml' 2>/dev/null | wc -l || echo "0")
+
+          # Check if doc files changed
+          DOCS_CHANGED=$(git diff --name-only "$PR_BASE".."$PR_HEAD" -- \
+            'docs/' 'README.md' 'CONTRIBUTING.md' 'SECURITY.md' 2>/dev/null | wc -l || echo "0")
+
+          echo "Code files changed: $CODE_CHANGED"
+          echo "Doc files changed: $DOCS_CHANGED"
+
+          if [ "$CODE_CHANGED" -gt 5 ] && [ "$DOCS_CHANGED" -eq 0 ]; then
+            echo "::warning::Significant code changes ($CODE_CHANGED files) but no documentation updates. Consider updating docs/README if needed."
+          elif [ "$CODE_CHANGED" -gt 0 ] && [ "$DOCS_CHANGED" -eq 0 ]; then
+            echo "ℹ️  Code changed but no docs updated — verify if docs need updating"
+          else
+            echo "✅ Documentation appears in sync"
+          fi
+
+          echo "::endgroup::"
+
+  # ── Stale TODO/FIXME Check ────────────────────────────────────────────────
+  stale-todos:
+    name: Stale TODO/FIXME Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for stale TODOs
+        run: |
+          echo "::group::TODO/FIXME scan"
+
+          echo "── TODO/FIXME/HACK/XXX annotations ──"
+
+          # Count by type
+          TODO_COUNT=$(grep -rn "TODO" src/ rust-api/ python/ --include="*.rs" --include="*.py" 2>/dev/null | grep -v "test" | wc -l || echo "0")
+          FIXME_COUNT=$(grep -rn "FIXME" src/ rust-api/ python/ --include="*.rs" --include="*.py" 2>/dev/null | grep -v "test" | wc -l || echo "0")
+          HACK_COUNT=$(grep -rn "HACK\|XXX" src/ rust-api/ python/ --include="*.rs" --include="*.py" 2>/dev/null | grep -v "test" | wc -l || echo "0")
+
+          echo "TODO: $TODO_COUNT"
+          echo "FIXME: $FIXME_COUNT"
+          echo "HACK/XXX: $HACK_COUNT"
+          echo ""
+
+          # Check for very old TODOs (with dates)
+          echo "── TODOs with dates ──"
+          grep -rn "TODO.*20[0-9][0-9]\|FIXME.*20[0-9][0-9]" src/ rust-api/ python/ --include="*.rs" --include="*.py" 2>/dev/null | head -20 || echo "No dated TODOs found"
+
+          # Check for TODOs referencing specific people
+          echo ""
+          echo "── Assigned TODOs ──"
+          grep -rn "TODO(@\|FIXME(@" src/ rust-api/ python/ --include="*.rs" --include="*.py" 2>/dev/null | head -20 || echo "No assigned TODOs found"
+
+          TOTAL=$((TODO_COUNT + FIXME_COUNT + HACK_COUNT))
+          if [ "$TOTAL" -gt 30 ]; then
+            echo "::warning::High number of TODO/FIXME annotations ($TOTAL). Consider a cleanup pass."
+          elif [ "$TOTAL" -gt 0 ]; then
+            echo "ℹ️  Found $TOTAL annotations — review periodically"
+          else
+            echo "✅ No TODO/FIXME annotations found"
+          fi
+
+          echo "::endgroup::"
+
+  # ── README Freshness ──────────────────────────────────────────────────────
+  readme-check:
+    name: README Freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify README completeness
+        run: |
+          echo "::group::README completeness check"
+
+          if [ ! -f "README.md" ]; then
+            echo "::error::README.md not found!"
+            exit 1
+          fi
+
+          ISSUES=0
+
+          # Check for required sections
+          REQUIRED_SECTIONS=("install" "usage" "api" "deploy" "contribut")
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if ! grep -qi "$section" README.md; then
+              echo "::warning::README missing section: $section"
+              ISSUES=$((ISSUES + 1))
+            fi
+          done
+
+          # Check for broken internal links
+          for link in $(grep -oP '\[.*?\]\(\K[^)]+' README.md 2>/dev/null | grep -v "^http" | grep -v "^#"); do
+            if [ ! -f "$link" ] && [ ! -d "$link" ]; then
+              echo "::warning::README has broken internal link: $link"
+              ISSUES=$((ISSUES + 1))
+            fi
+          done
+
+          # Check README size (shouldn't be too small)
+          LINES=$(wc -l < README.md)
+          if [ "$LINES" -lt 10 ]; then
+            echo "::warning::README is very short ($LINES lines) — consider expanding"
+          fi
+
+          if [ "$ISSUES" -eq 0 ]; then
+            echo "✅ README looks good ($LINES lines)"
+          fi
+
+          echo "::endgroup::"
