@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/Tools-26+-1B4965?style=flat-square" alt="26+ Tools">
   <img src="https://img.shields.io/badge/Federated_Learning-E8A838?style=flat-square" alt="Federated Learning">
-  <img src="https://img.shields.io/badge/License-SSPL--1.0-blue?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License">
 </p>
 
 > **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, and a federated learning pipeline.

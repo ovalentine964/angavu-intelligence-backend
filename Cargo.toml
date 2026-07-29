@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Angavu Intelligence Team"]
 description = "Angavu Intelligence Backend - Superagent-powered revenue intelligence platform"
-license = "Proprietary"
+license = "Apache-2.0"
 
 [[bin]]
 name = "angavu-server"
