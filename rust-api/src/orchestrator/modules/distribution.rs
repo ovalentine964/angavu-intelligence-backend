@@ -2,12 +2,17 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// DistributionAnalyzer: FMCG distribution gap analysis
 ///
 /// Identifies regions where product supply doesn't meet demand.
 /// Consumes MarketSignal outputs to detect supply-demand mismatches.
+///
+/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Supply/demand indices
+/// are lost on process restart. For production, wire to PostgreSQL.
+/// See: TODO(DistributionAnalyzer-Persistence)
 pub struct DistributionAnalyzer {
     /// Supply index per (region, product) — from transaction volume
     supply_index: HashMap<String, f64>,
@@ -105,6 +110,35 @@ impl CapabilityModule for DistributionAnalyzer {
                 Ok(None)
             }
             _ => Ok(None),
+        }
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            supply_index: HashMap<String, f64>,
+            demand_index: HashMap<String, f64>,
+            gap_history: HashMap<String, Vec<f64>>,
+        }
+        bincode::serialize(&Snapshot {
+            supply_index: self.supply_index.clone(),
+            demand_index: self.demand_index.clone(),
+            gap_history: self.gap_history.clone(),
+        }).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            supply_index: HashMap<String, f64>,
+            demand_index: HashMap<String, f64>,
+            gap_history: HashMap<String, Vec<f64>>,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            self.supply_index = snap.supply_index;
+            self.demand_index = snap.demand_index;
+            self.gap_history = snap.gap_history;
+            tracing::info!(keys = self.supply_index.len(), "DistributionAnalyzer state restored");
         }
     }
 }

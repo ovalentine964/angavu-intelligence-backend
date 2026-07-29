@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// MarketAnalyzer: Demand pattern analysis, Soko Pulse generation
@@ -11,6 +12,10 @@ use std::collections::HashMap;
 /// - Price trends and volatility
 /// - Seasonal patterns
 /// - Market concentration (HHI)
+///
+/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Data is lost on
+/// process restart. For production, wire to PostgreSQL (table: market_windows)
+/// or Redis for persistence. See: TODO(MarketAnalyzer-Persistence)
 pub struct MarketAnalyzer {
     /// Rolling window of recent aggregates per (region, product) key
     windows: HashMap<String, RollingWindow>,
@@ -18,6 +23,7 @@ pub struct MarketAnalyzer {
     min_sample_size: u32,
 }
 
+#[derive(Serialize, Deserialize)]
 struct RollingWindow {
     prices: Vec<f64>,
     volumes: Vec<f64>,
@@ -227,5 +233,31 @@ impl CapabilityModule for MarketAnalyzer {
 
     async fn shutdown(&self) {
         tracing::info!("MarketAnalyzer shutting down, {} windows active", self.windows.len());
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            windows: HashMap<String, RollingWindow>,
+            min_sample_size: u32,
+        }
+        let snap = Snapshot {
+            windows: self.windows.clone(),
+            min_sample_size: self.min_sample_size,
+        };
+        bincode::serialize(&snap).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            windows: HashMap<String, RollingWindow>,
+            min_sample_size: u32,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            self.windows = snap.windows;
+            self.min_sample_size = snap.min_sample_size;
+            tracing::info!(count = self.windows.len(), "MarketAnalyzer state restored");
+        }
     }
 }

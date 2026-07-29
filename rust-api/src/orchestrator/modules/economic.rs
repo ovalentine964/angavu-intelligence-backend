@@ -2,12 +2,17 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// EconomicAnalyzer: GDP estimation, inflation tracking from informal sector data
 ///
 /// Aggregates transaction data into macroeconomic indicators.
 /// Compares with official KNBS data when available.
+///
+/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Regional economic
+/// state is lost on process restart. For production, wire to PostgreSQL
+/// (table: regional_economic_state). See: TODO(EconomicAnalyzer-Persistence)
 pub struct EconomicAnalyzer {
     /// Regional economic state
     regional_state: HashMap<String, RegionalEconomicState>,
@@ -15,6 +20,7 @@ pub struct EconomicAnalyzer {
     baseline_cpi: HashMap<String, f64>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 struct RegionalEconomicState {
     /// Current period transaction volume
     current_volume: f64,
@@ -175,6 +181,31 @@ impl CapabilityModule for EconomicAnalyzer {
                 Ok(None)
             }
             _ => Ok(None),
+        }
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            regional_state: HashMap<String, RegionalEconomicState>,
+            baseline_cpi: HashMap<String, f64>,
+        }
+        bincode::serialize(&Snapshot {
+            regional_state: self.regional_state.clone(),
+            baseline_cpi: self.baseline_cpi.clone(),
+        }).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            regional_state: HashMap<String, RegionalEconomicState>,
+            baseline_cpi: HashMap<String, f64>,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            self.regional_state = snap.regional_state;
+            self.baseline_cpi = snap.baseline_cpi;
+            tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state restored");
         }
     }
 }

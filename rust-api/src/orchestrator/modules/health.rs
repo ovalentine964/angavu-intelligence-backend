@@ -2,17 +2,23 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// HealthMetrics: Worker health economics
 ///
 /// Analyzes income stability, work patterns, and health risk factors.
 /// Outputs health assessments for insurance eligibility and health savings advice.
+///
+/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Income profiles are
+/// lost on process restart. For production, wire to PostgreSQL (table: worker_income_profiles).
+/// See: TODO(HealthMetrics-Persistence)
 pub struct HealthMetrics {
     /// Worker income profiles (by hashed ID)
     income_profiles: HashMap<String, IncomeProfile>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 struct IncomeProfile {
     daily_incomes: Vec<f64>,
     active_days: u32,
@@ -128,6 +134,31 @@ impl CapabilityModule for HealthMetrics {
                 }));
             }
             _ => Ok(None),
+        }
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            profiles: Vec<(String, IncomeProfile)>,
+        }
+        let profiles: Vec<(String, IncomeProfile)> = self.income_profiles
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect();
+        bincode::serialize(&Snapshot { profiles }).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            profiles: Vec<(String, IncomeProfile)>,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            for (id, profile) in snap.profiles {
+                self.income_profiles.insert(id, profile);
+            }
+            tracing::info!(count = self.income_profiles.len(), "HealthMetrics state restored");
         }
     }
 }

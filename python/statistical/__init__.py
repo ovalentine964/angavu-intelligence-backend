@@ -19,6 +19,9 @@ from .nonparametric import (
     PowerAnalysis,
 )
 
+# CLI runner for Rust backend bridge
+from . import nonparametric_runner
+
 __all__ = [
     "BootstrapInference",
     "DifferentialPrivacy",
@@ -28,4 +31,5 @@ __all__ = [
     "MarketConcentration",
     "PermutationTest",
     "PowerAnalysis",
+    "nonparametric_runner",
 ]

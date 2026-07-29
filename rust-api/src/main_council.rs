@@ -1,7 +1,15 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// DEPRECATED: This file is NOT compiled (not listed in Cargo.toml).
+// The canonical entry point is main.rs (binary: angavu-server).
+// This file is kept for historical reference only.
+// ═══════════════════════════════════════════════════════════════════════════
+//
 // src/main.rs
-
-mod orchestrator;
-mod gateway;
+//
+// mod orchestrator;
+// mod gateway;
+//
+// ... (original code preserved below for reference)
 
 use orchestrator::message_bus::{ModuleMessageBus, MessageBusConfig};
 use orchestrator::OODAOrchestrator;
@@ -72,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
             interval.tick().await;
             let entries = bus_clone.flush_audit().await;
             if !entries.is_empty() {
-                tracing::debug!(count = entries.len, "Audit buffer flushed");
+                tracing::debug!(count = entries.len(), "Audit buffer flushed");
             }
         }
     });

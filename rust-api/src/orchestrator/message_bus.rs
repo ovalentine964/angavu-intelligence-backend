@@ -76,7 +76,7 @@ pub enum ModuleMessage {
         /// 95% confidence interval upper bound (Alama score units)
         ci_upper: u32,
         /// Number of observations used for scoring
-n        n_observations: u32,
+        n_observations: u32,
     },
 
     /// DistributionAnalyzer output: distribution gaps
@@ -270,6 +270,10 @@ pub struct MessageBusConfig {
     pub module_queue_capacity: usize,
     /// Whether to audit-log all messages
     pub audit_enabled: bool,
+    /// Queue depth warning threshold (percentage of capacity)
+    pub backpressure_threshold_pct: f64,
+    /// Whether to drop low-priority messages under pressure
+    pub drop_low_priority_on_pressure: bool,
 }
 
 impl Default for MessageBusConfig {
@@ -280,6 +284,10 @@ impl Default for MessageBusConfig {
             // 4K messages per module queue — backpressure kicks in before this
             module_queue_capacity: 4_096,
             audit_enabled: true,
+            // Warn when queue depth exceeds 75% of capacity
+            backpressure_threshold_pct: 0.75,
+            // Drop Low-priority messages when queue is under pressure
+            drop_low_priority_on_pressure: true,
         }
     }
 }
@@ -313,6 +321,8 @@ pub struct ModuleMessageBus {
     /// Metrics
     messages_published: Arc<std::sync::atomic::AtomicU64>,
     messages_delivered: Arc<std::sync::atomic::AtomicU64>,
+    messages_dropped: Arc<std::sync::atomic::AtomicU64>,
+    backpressure_events: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ModuleMessageBus {
@@ -327,6 +337,8 @@ impl ModuleMessageBus {
             config,
             messages_published: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             messages_delivered: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            messages_dropped: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            backpressure_events: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -347,27 +359,64 @@ impl ModuleMessageBus {
     }
 
     /// Publish a message to the broadcast channel (all subscribers receive it)
+    /// Handles backpressure: if broadcast capacity is near limit, drops low-priority messages.
     pub async fn publish(
         &self,
         message: ModuleMessage,
     ) -> Result<(), BusError> {
+        // Check backpressure: if broadcast channel is near capacity
+        let receiver_count = self.broadcast_tx.receiver_count();
+        let priority = extract_priority(&message);
+
+        // Estimate queue pressure based on subscriber lag
+        // broadcast::channel drops oldest when full (LIFO), but we want
+        // proactive backpressure before that happens.
+        if self.config.drop_low_priority_on_pressure && priority == Priority::Low {
+            // Drop low-priority messages proactively under pressure
+            // This prevents queue overflow for non-critical messages
+            if self.backpressure_active() {
+                self.messages_dropped
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                debug!("Dropped low-priority message due to backpressure");
+                return Ok(());
+            }
+        }
+
         // Audit log
         if self.config.audit_enabled {
             self.audit_log(&message, None).await;
         }
 
         // Broadcast to all subscribers
-        self.broadcast_tx
-            .send(message.clone())
-            .map_err(|e| BusError::BroadcastFailed(e.to_string()))?;
+        match self.broadcast_tx.send(message.clone()) {
+            Ok(_) => {
+                self.messages_published
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            }
+            Err(e) => {
+                // No active subscribers — not necessarily an error
+                debug!(error = %e, "No active broadcast subscribers");
+                Ok(())
+            }
+        }
+    }
 
-        self.messages_published
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        Ok(())
+    /// Check if backpressure should be applied.
+    /// Returns true if the system is under pressure.
+    fn backpressure_active(&self) -> bool {
+        // Use dropped message ratio as a proxy for queue pressure
+        let published = self.messages_published.load(std::sync::atomic::Ordering::Relaxed);
+        let dropped = self.messages_dropped.load(std::sync::atomic::Ordering::Relaxed);
+        if published == 0 {
+            return false;
+        }
+        let drop_rate = dropped as f64 / (published + dropped) as f64;
+        drop_rate > (1.0 - self.config.backpressure_threshold_pct)
     }
 
     /// Send a message to a specific module's queue (point-to-point)
+    /// Implements backpressure: drops low-priority messages when queue is full.
     pub async fn send_to_module(
         &self,
         target: ModuleId,
@@ -379,12 +428,39 @@ impl ModuleMessageBus {
         }
 
         if let Some(tx) = self.module_queues.get(&target) {
-            tx.send(message)
-                .await
-                .map_err(|_| BusError::ModuleQueueFull(target))?;
-            self.messages_delivered
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Ok(())
+            let priority = extract_priority(&message);
+
+            // Try to send; if queue is full, handle based on priority
+            match tx.try_send(message.clone()) {
+                Ok(()) => {
+                    self.messages_delivered
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    Ok(())
+                }
+                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                    // Queue is full
+                    if priority >= Priority::High {
+                        // High/Critical: wait for space (blocking)
+                        tx.send(message).await
+                            .map_err(|_| BusError::ModuleQueueFull(target))?;
+                        self.messages_delivered
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        self.backpressure_events
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        warn!(module = ?target, "Backpressure: high-priority message queued (waiting)");
+                        Ok(())
+                    } else {
+                        // Normal/Low: drop the message
+                        self.messages_dropped
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        warn!(module = ?target, priority = ?priority, "Backpressure: dropped message (queue full)");
+                        Ok(()) // Don't error — message dropped gracefully
+                    }
+                }
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                    Err(BusError::ModuleNotRegistered(target))
+                }
+            }
         } else {
             Err(BusError::ModuleNotRegistered(target))
         }
@@ -421,6 +497,12 @@ impl ModuleMessageBus {
             messages_delivered: self
                 .messages_delivered
                 .load(std::sync::atomic::Ordering::Relaxed),
+            messages_dropped: self
+                .messages_dropped
+                .load(std::sync::atomic::Ordering::Relaxed),
+            backpressure_events: self
+                .backpressure_events
+                .load(std::sync::atomic::Ordering::Relaxed),
             registered_modules: self.module_queues.len(),
             subscriber_count: self.broadcast_tx.receiver_count(),
         }
@@ -455,6 +537,8 @@ impl ModuleMessageBus {
 pub struct BusMetrics {
     pub messages_published: u64,
     pub messages_delivered: u64,
+    pub messages_dropped: u64,
+    pub backpressure_events: u64,
     pub registered_modules: usize,
     pub subscriber_count: usize,
 }

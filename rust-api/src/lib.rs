@@ -13,6 +13,8 @@ pub mod service_pricing;
 pub mod sync;
 pub mod observability;
 pub mod webhook;
+pub mod statistical;
+pub mod rag;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

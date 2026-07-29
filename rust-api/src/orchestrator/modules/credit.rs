@@ -2,11 +2,16 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 
 /// CreditScorer: Alama Score computation (300-850), risk assessment
 ///
 /// Uses Bayesian inference + feature engineering from transaction history.
 /// Consumes MarketSignal outputs (market conditions affect credit risk).
+///
+/// ⚠️  LIMITATION: All state is held in-memory DashMap. Worker features are
+/// lost on process restart. For production, wire to PostgreSQL (table: worker_features)
+/// for persistence. See: TODO(CreditScorer-Persistence)
 pub struct CreditScorer {
     /// Worker feature stores (by hashed ID)
     worker_features: dashmap::DashMap<String, WorkerFeatures>,
@@ -14,6 +19,7 @@ pub struct CreditScorer {
     model: CreditModel,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 struct WorkerFeatures {
     total_transactions: u64,
     daily_avg_revenue: f64,
@@ -251,6 +257,31 @@ impl CapabilityModule for CreditScorer {
                 Ok(None) // No direct output, but internal state updated
             }
             _ => Ok(None),
+        }
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            workers: Vec<(String, WorkerFeatures)>,
+        }
+        let workers: Vec<(String, WorkerFeatures)> = self.worker_features
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect();
+        bincode::serialize(&Snapshot { workers }).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            workers: Vec<(String, WorkerFeatures)>,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            for (id, features) in snap.workers {
+                self.worker_features.insert(id, features);
+            }
+            tracing::info!(count = self.worker_features.len(), "CreditScorer state restored");
         }
     }
 }

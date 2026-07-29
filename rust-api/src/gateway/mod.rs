@@ -37,8 +37,161 @@ pub struct GatewayState {
 use axum::{
     Router,
     middleware,
+    response::IntoResponse,
     routing::{get, post},
+    Json,
 };
+use serde_json::json;
+
+// ═══════════════════════════════════════════════════════════
+//  STUB HANDLER MODULES — Phase 1: 501 Not Implemented
+//  These will be replaced with real implementations as the
+//  platform matures. Each returns a structured 501 response
+//  so API consumers can handle gracefully.
+// ═══════════════════════════════════════════════════════════
+
+/// Tool API handlers — credit scoring, market analysis, etc.
+mod tools {
+    use super::*;
+
+    pub async fn credit_score(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "credit_score",
+            "message": "Credit scoring API is being implemented. Use /sync/anonymized for Alama Score updates."
+        })))
+    }
+
+    pub async fn market_analysis() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "market_analysis",
+            "message": "Market analysis API is being implemented. Use GraphQL /graphql for knowledge graph queries."
+        })))
+    }
+
+    pub async fn demand_forecast() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "demand_forecast",
+            "message": "Demand forecast API is being implemented."
+        })))
+    }
+
+    pub async fn economic_indicators(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "economic_indicators",
+            "message": "Economic indicators API is being implemented."
+        })))
+    }
+
+    pub async fn distribution_gaps() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "distribution_gaps",
+            "message": "Distribution gap analysis API is being implemented."
+        })))
+    }
+
+    pub async fn fmcg_report() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "fmcg_report",
+            "message": "FMCG intelligence report API is being implemented."
+        })))
+    }
+
+    pub async fn privacy_noise(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "privacy_noise",
+            "message": "Privacy noise injection API is being implemented."
+        })))
+    }
+
+    pub async fn anonymize(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "anonymize",
+            "message": "Data anonymization API is being implemented."
+        })))
+    }
+
+    pub async fn federated_status() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "federated_status",
+            "message": "Federated learning status API is being implemented."
+        })))
+    }
+
+    pub async fn generate_report(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "tool": "generate_report",
+            "message": "Report generation API is being implemented."
+        })))
+    }
+}
+
+/// Superagent API handlers — OODA orchestrator control plane
+mod superagent {
+    use super::*;
+
+    pub async fn status() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "superagent/status",
+            "message": "Superagent status API is being implemented. Use /health for basic health checks."
+        })))
+    }
+
+    pub async fn trigger_cycle(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "superagent/cycle",
+            "message": "Manual OODA cycle trigger is being implemented."
+        })))
+    }
+
+    pub async fn invoke(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "superagent/invoke",
+            "message": "Superagent invocation API is being implemented."
+        })))
+    }
+}
+
+/// Billing API handlers — subscription tiers, API keys
+mod billing {
+    use super::*;
+
+    pub async fn list_tiers() -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "billing/tiers",
+            "message": "Billing tier listing is being implemented."
+        })))
+    }
+
+    pub async fn create_subscription(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "billing/subscriptions",
+            "message": "Subscription creation API is being implemented."
+        })))
+    }
+
+    pub async fn create_api_key(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
+        (StatusCode::NOT_IMPLEMENTED, Json(json!({
+            "error": "not_implemented",
+            "endpoint": "billing/api-keys",
+            "message": "API key management is being implemented."
+        })))
+    }
+}
 
 /// Build the full API gateway router with all middleware
 pub fn build_gateway_router(state: GatewayState) -> Router {

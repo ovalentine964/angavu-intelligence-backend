@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::orchestrator::message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// FMCGIntelligence: Manufacturer intelligence products
@@ -11,6 +12,10 @@ use std::collections::HashMap;
 /// - Price elasticity estimation
 /// - Demand forecasting
 /// - Competitive positioning
+///
+/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Brand data and
+/// elasticity data are lost on process restart. For production, wire to
+/// PostgreSQL (table: fmcg_brand_data). See: TODO(FMCGIntelligence-Persistence)
 pub struct FMCGIntelligence {
     /// Brand market data per (category, region)
     brand_data: HashMap<String, BrandTracker>,
@@ -18,6 +23,7 @@ pub struct FMCGIntelligence {
     elasticity_data: HashMap<String, Vec<(f64, f64)>>, // (price, quantity)
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 struct BrandTracker {
     brand_volumes: HashMap<String, f64>,
     total_volume: f64,
@@ -233,6 +239,31 @@ impl CapabilityModule for FMCGIntelligence {
                 Ok(None)
             }
             _ => Ok(None),
+        }
+    }
+
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        #[derive(Serialize)]
+        struct Snapshot {
+            brand_data: HashMap<String, BrandTracker>,
+            elasticity_data: HashMap<String, Vec<(f64, f64)>>,
+        }
+        bincode::serialize(&Snapshot {
+            brand_data: self.brand_data.clone(),
+            elasticity_data: self.elasticity_data.clone(),
+        }).ok()
+    }
+
+    fn restore_state(&mut self, data: &[u8]) {
+        #[derive(Deserialize)]
+        struct Snapshot {
+            brand_data: HashMap<String, BrandTracker>,
+            elasticity_data: HashMap<String, Vec<(f64, f64)>>,
+        }
+        if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
+            self.brand_data = snap.brand_data;
+            self.elasticity_data = snap.elasticity_data;
+            tracing::info!(brands = self.brand_data.len(), "FMCGIntelligence state restored");
         }
     }
 }

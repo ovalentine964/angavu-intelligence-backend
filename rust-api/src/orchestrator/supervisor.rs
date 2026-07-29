@@ -5,6 +5,7 @@ use dashmap::DashMap;
 use std::collections::HashMap;
 use tokio::task::JoinHandle;
 use std::time::Instant;
+use std::path::PathBuf;
 
 /// The concrete OODA orchestrator implementation
 pub struct OODAOrchestrator {
@@ -20,10 +21,20 @@ pub struct OODAOrchestrator {
     last_restart: Arc<DashMap<ModuleId, DateTime<Utc>>>,
     /// Shutdown signal
     shutdown_tx: Arc<RwLock<Option<tokio::sync::broadcast::Sender<()>>>>,
+    /// Persistent state store for module snapshots
+    state_store: Arc<modules::ModuleStateStore>,
 }
 
 impl OODAOrchestrator {
     pub fn new(config: OrchestratorConfig, bus: Arc<ModuleMessageBus>) -> Self {
+        Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"))
+    }
+
+    pub fn with_state_dir(
+        config: OrchestratorConfig,
+        bus: Arc<ModuleMessageBus>,
+        state_dir: PathBuf,
+    ) -> Self {
         let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
 
         let state = OrchestratorState {
@@ -43,6 +54,7 @@ impl OODAOrchestrator {
             module_handles: Arc::new(DashMap::new()),
             last_restart: Arc::new(DashMap::new()),
             shutdown_tx: Arc::new(RwLock::new(Some(shutdown_tx))),
+            state_store: Arc::new(modules::ModuleStateStore::new(state_dir)),
         }
     }
 
@@ -50,16 +62,54 @@ impl OODAOrchestrator {
     pub async fn start_modules(&self) -> Result<(), OrchestratorError> {
         info!("Starting capability modules...");
 
-        let modules: Vec<(ModuleId, Box<dyn CapabilityModule>)> = vec![
-            (ModuleId::MarketAnalyzer, Box::new(modules::market::MarketAnalyzer::new())),
-            (ModuleId::CreditScorer, Box::new(modules::credit::CreditScorer::new())),
-            (ModuleId::DistributionAnalyzer, Box::new(modules::distribution::DistributionAnalyzer::new())),
-            (ModuleId::FMCGIntelligence, Box::new(modules::fmcg::FMCGIntelligence::new())),
-            (ModuleId::HealthMetrics, Box::new(modules::health::HealthMetrics::new())),
-            (ModuleId::EconomicAnalyzer, Box::new(modules::economic::EconomicAnalyzer::new())),
+        let store = self.state_store.clone();
+
+        let modules_with_state: Vec<(ModuleId, Box<dyn CapabilityModule>)> = vec![
+            (ModuleId::MarketAnalyzer, {
+                let mut m = modules::market::MarketAnalyzer::new();
+                if let Some(data) = store.load(ModuleId::MarketAnalyzer).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
+            (ModuleId::CreditScorer, {
+                let mut m = modules::credit::CreditScorer::new();
+                if let Some(data) = store.load(ModuleId::CreditScorer).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
+            (ModuleId::DistributionAnalyzer, {
+                let mut m = modules::distribution::DistributionAnalyzer::new();
+                if let Some(data) = store.load(ModuleId::DistributionAnalyzer).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
+            (ModuleId::FMCGIntelligence, {
+                let mut m = modules::fmcg::FMCGIntelligence::new();
+                if let Some(data) = store.load(ModuleId::FMCGIntelligence).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
+            (ModuleId::HealthMetrics, {
+                let mut m = modules::health::HealthMetrics::new();
+                if let Some(data) = store.load(ModuleId::HealthMetrics).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
+            (ModuleId::EconomicAnalyzer, {
+                let mut m = modules::economic::EconomicAnalyzer::new();
+                if let Some(data) = store.load(ModuleId::EconomicAnalyzer).await {
+                    m.restore_state(&data);
+                }
+                Box::new(m)
+            }),
         ];
 
-        for (module_id, module) in modules {
+        for (module_id, module) in modules_with_state {
             self.spawn_module(module_id, module).await?;
         }
 
@@ -75,6 +125,7 @@ impl OODAOrchestrator {
     ) -> Result<(), OrchestratorError> {
         let rx = self.bus.register_module(module_id);
         let bus = Arc::clone(&self.bus);
+        let state_store = Arc::clone(&self.state_store);
         let mut shutdown_rx = self.shutdown_tx.read().await.as_ref()
             .unwrap()
             .subscribe();
@@ -83,6 +134,13 @@ impl OODAOrchestrator {
             info!(module = ?module_id, "Module task started");
 
             let mut rx = rx;
+            let mut messages_since_snapshot: u64 = 0;
+            let snapshot_interval: u64 = 100; // snapshot every 100 messages
+            let mut snapshot_timer = tokio::time::interval(
+                std::time::Duration::from_secs(300) // or every 5 minutes
+            );
+            snapshot_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
             loop {
                 tokio::select! {
                     // Process incoming messages
@@ -120,10 +178,29 @@ impl OODAOrchestrator {
                                 "Slow module processing"
                             );
                         }
+
+                        // Periodic state snapshot (every N messages)
+                        messages_since_snapshot += 1;
+                        if messages_since_snapshot >= snapshot_interval {
+                            if let Some(state) = module.snapshot_state() {
+                                state_store.save(module_id, &state).await;
+                            }
+                            messages_since_snapshot = 0;
+                        }
+                    }
+                    // Periodic timer-based snapshot (every 5 min)
+                    _ = snapshot_timer.tick() => {
+                        if let Some(state) = module.snapshot_state() {
+                            state_store.save(module_id, &state).await;
+                        }
                     }
                     // Shutdown signal
                     _ = shutdown_rx.recv() => {
                         info!(module = ?module_id, "Module shutting down gracefully");
+                        // Final snapshot before shutdown
+                        if let Some(state) = module.snapshot_state() {
+                            state_store.save(module_id, &state).await;
+                        }
                         module.shutdown().await;
                         break;
                     }

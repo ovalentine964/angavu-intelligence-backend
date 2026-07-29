@@ -9,9 +9,20 @@
 //   5. Ensure output size is within limits
 
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 /// Maximum tool output size (characters) before truncation
 const MAX_OUTPUT_SIZE: usize = 10_000;
+
+/// Pre-compiled regex for financial amount extraction.
+/// Compiled once via OnceLock; reused on every call.
+fn amount_regex() -> &'static regex::Regex {
+    static REGEX: OnceLock<regex::Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        regex::Regex::new(r"(?i)(?:ksh|kes|/=)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:ksh|kes)")
+            .expect("invalid amount regex")
+    })
+}
 
 /// Patterns that should never appear in tool outputs (potential injection)
 const INJECTION_PATTERNS: &[&str] = &[
@@ -112,8 +123,7 @@ pub fn verify_tool_output(
     }
 
     // ── Check 4: Financial amount plausibility ───────────────
-    let amount_pattern = regex::Regex::new(r"(?i)(?:ksh|kes|/=)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:ksh|kes)").unwrap();
-    for cap in amount_pattern.captures_iter(output) {
+    for cap in amount_regex().captures_iter(output) {
         let amount_str = cap.get(1).or(cap.get(2)).unwrap().as_str();
         let amount_str = amount_str.replace(",", "");
         if let Ok(amount) = amount_str.parse::<f64>() {

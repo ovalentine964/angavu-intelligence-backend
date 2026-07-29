@@ -164,30 +164,30 @@ pub async fn route_to_ooda(
     use crate::orchestrator::message_bus::*;
 
     let module_id = match &event.event_type {
-        // M-Pesa payment events → Finance module (fast loop)
+        // M-Pesa payment events → Credit module (fast loop)
         WebhookEventType::MpesaStkCallback
-        | WebhookEventType::MpesaC2BConfirmation => ModuleId::Credit,
+        | WebhookEventType::MpesaC2BConfirmation => ModuleId::CreditScorer,
 
         // Market events → Market module (hourly loop)
         WebhookEventType::MarketPriceUpdate
         | WebhookEventType::MarketSupplyAlert
-        | WebhookEventType::MarketDemandShift => ModuleId::Market,
+        | WebhookEventType::MarketDemandShift => ModuleId::MarketAnalyzer,
 
         // Default → orchestrator decides
         _ => ModuleId::Orchestrator,
     };
 
-    let message = ModuleMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        source: ModuleId::Gateway,
-        target: module_id.clone(),
-        message_type: MessageType::Event,
-        payload: event.payload.clone(),
+    // Route via the message bus using a TransactionBatch as the carrier.
+    // The orchestrator will dispatch to the correct module based on the message type.
+    let message = ModuleMessage::TransactionBatch {
+        trace_id: uuid::Uuid::parse_str(&event.event_id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
+        worker_id_hash: format!("webhook:{}", event.event_id),
+        transactions: vec![],
+        region: "webhook".to_string(),
         timestamp: chrono::Utc::now(),
-        trace_id: event.event_id.clone(),
     };
 
-    if let Err(e) = message_bus.send(message).await {
+    if let Err(e) = message_bus.publish(message).await {
         error!(
             event_id = %event.event_id,
             target = ?module_id,
