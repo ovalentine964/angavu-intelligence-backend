@@ -21,17 +21,21 @@ use tracing::{info, warn};
 use super::{WebhookEvent, WebhookEventType, WebhookSource, WebhookState, WebhookResponse, route_to_ooda, store_webhook_event};
 
 /// Generic webhook payload.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, garde::Validate)]
 pub struct GenericWebhookPayload {
     /// Event type identifier (e.g., "sms.delivery_report", "logistics.status_update")
+    #[garde(length(min = 1, max = 128))]
     pub event_type: String,
     /// Event payload (arbitrary JSON)
     pub data: serde_json::Value,
     /// Optional event ID for idempotency
+    #[garde(length(max = 128))]
     pub event_id: Option<String>,
     /// Source system identifier
+    #[garde(length(max = 64))]
     pub source: Option<String>,
     /// Timestamp from source system
+    #[garde(length(max = 64))]
     pub timestamp: Option<String>,
 }
 
@@ -44,6 +48,28 @@ pub async fn handle_generic_webhook(
     headers: HeaderMap,
     Json(payload): Json<GenericWebhookPayload>,
 ) -> impl IntoResponse {
+    // S15: Rate limiting by IP
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .unwrap_or("unknown")
+        .trim();
+
+    if let Err(retry_after) = state.ip_rate_limiter.check(client_ip) {
+        warn!(ip = %client_ip, "Webhook rate limit exceeded");
+        let mut response = axum::response::IntoResponse::into_response(
+            (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+                "success": false,
+                "message": "Rate limit exceeded. Try again later."
+            })))
+        );
+        if let Ok(val) = retry_after.as_secs().to_string().parse() {
+            response.headers_mut().insert("Retry-After", val);
+        }
+        return response;
+    }
+
     // Validate API key
     let api_key = headers
         .get("X-Webhook-Key")
@@ -60,6 +86,19 @@ pub async fn handle_generic_webhook(
             Json(serde_json::json!({
                 "success": false,
                 "message": "Invalid API key"
+            }))
+        ).into_response();
+    }
+
+    // S8: Validate input payload
+    use garde::Validate;
+    if let Err(e) = payload.validate() {
+        warn!("Webhook validation failed: {}", e);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "message": format!("Validation failed: {}", e)
             }))
         ).into_response();
     }

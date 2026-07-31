@@ -75,7 +75,7 @@ impl WorkerTypeFeatureExtractor for MpesaAgentFeatureExtractor {
                 .filter(|tx| tx.category == TransactionCategory::Commission)
                 .map(|tx| tx.amount).collect();
             if comms.is_empty() { 0.0 } else {
-                let mut s = comms.clone(); s.sort_by(|a,b| a.partial_cmp(b).unwrap());
+                let mut s = comms.clone(); s.sort_by(|a,b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 s[s.len()/2]
             }
         };

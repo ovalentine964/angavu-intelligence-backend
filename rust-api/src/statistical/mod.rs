@@ -15,6 +15,9 @@
 
 pub mod nonparametric_bridge;
 pub mod types;
+/// S10: Differential privacy implementation using the Laplace mechanism
+pub mod differential_privacy;
 
 pub use nonparametric_bridge::NonparametricBridge;
 pub use types::*;
+pub use differential_privacy::DifferentialPrivacyEngine;

@@ -62,7 +62,7 @@ Include:
 2. **Application** — Axum middleware, input validation
 3. **Authentication** — JWT with RS256, short-lived tokens
 4. **Encryption** — AES-256-GCM at rest, TLS in transit
-5. **Privacy** — k-anonymity (k≥10), differential privacy (ε=0.1)
+5. **Privacy** — k-anonymity (k≥10) enforced on all aggregate queries; differential privacy planned (ε target: 0.1, not yet implemented)
 6. **PQC** — Post-quantum ready (ML-KEM-768)
 
 ### Data Protection

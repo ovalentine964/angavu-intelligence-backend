@@ -8,6 +8,8 @@ pub mod tool_output_verification;
 pub mod sync_verification;
 pub mod webhook_integration;
 pub mod human_approval;
+pub mod error;
+pub mod tools_impl;
 
 use axum::{
     extract::{Request, State},
@@ -44,94 +46,54 @@ use axum::{
 use serde_json::json;
 
 // ═══════════════════════════════════════════════════════════
-//  STUB HANDLER MODULES — Phase 1: 501 Not Implemented
-//  These will be replaced with real implementations as the
-//  platform matures. Each returns a structured 501 response
-//  so API consumers can handle gracefully.
+//  STUB HANDLER MODULES — Unified ErrorResponse format
+//  Each returns {"error": {"code": ..., "message": ...}}
 // ═══════════════════════════════════════════════════════════
+
+use error::ErrorResponse;
 
 /// Tool API handlers — credit scoring, market analysis, etc.
 mod tools {
     use super::*;
 
     pub async fn credit_score(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "credit_score",
-            "message": "Credit scoring API is being implemented. Use /sync/anonymized for Alama Score updates."
-        })))
+        ErrorResponse::not_implemented("Credit scoring API")
     }
 
     pub async fn market_analysis() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "market_analysis",
-            "message": "Market analysis API is being implemented. Use GraphQL /graphql for knowledge graph queries."
-        })))
+        ErrorResponse::not_implemented("Market analysis API")
     }
 
     pub async fn demand_forecast() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "demand_forecast",
-            "message": "Demand forecast API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Demand forecast API")
     }
 
     pub async fn economic_indicators(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "economic_indicators",
-            "message": "Economic indicators API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Economic indicators API")
     }
 
     pub async fn distribution_gaps() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "distribution_gaps",
-            "message": "Distribution gap analysis API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Distribution gap analysis API")
     }
 
     pub async fn fmcg_report() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "fmcg_report",
-            "message": "FMCG intelligence report API is being implemented."
-        })))
+        ErrorResponse::not_implemented("FMCG intelligence report API")
     }
 
     pub async fn privacy_noise(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "privacy_noise",
-            "message": "Privacy noise injection API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Privacy noise injection API")
     }
 
     pub async fn anonymize(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "anonymize",
-            "message": "Data anonymization API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Data anonymization API")
     }
 
     pub async fn federated_status() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "federated_status",
-            "message": "Federated learning status API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Federated learning status API")
     }
 
     pub async fn generate_report(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "tool": "generate_report",
-            "message": "Report generation API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Report generation API")
     }
 }
 
@@ -140,27 +102,15 @@ mod superagent {
     use super::*;
 
     pub async fn status() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "superagent/status",
-            "message": "Superagent status API is being implemented. Use /health for basic health checks."
-        })))
+        ErrorResponse::not_implemented("Superagent status API")
     }
 
     pub async fn trigger_cycle(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "superagent/cycle",
-            "message": "Manual OODA cycle trigger is being implemented."
-        })))
+        ErrorResponse::not_implemented("OODA cycle trigger")
     }
 
     pub async fn invoke(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "superagent/invoke",
-            "message": "Superagent invocation API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Superagent invocation API")
     }
 }
 
@@ -169,61 +119,98 @@ mod billing {
     use super::*;
 
     pub async fn list_tiers() -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "billing/tiers",
-            "message": "Billing tier listing is being implemented."
-        })))
+        ErrorResponse::not_implemented("Billing tier listing")
     }
 
     pub async fn create_subscription(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "billing/subscriptions",
-            "message": "Subscription creation API is being implemented."
-        })))
+        ErrorResponse::not_implemented("Subscription creation")
     }
 
     pub async fn create_api_key(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        (StatusCode::NOT_IMPLEMENTED, Json(json!({
-            "error": "not_implemented",
-            "endpoint": "billing/api-keys",
-            "message": "API key management is being implemented."
-        })))
+        ErrorResponse::not_implemented("API key management")
     }
 }
 
-/// Build the full API gateway router with all middleware
-pub fn build_gateway_router(state: GatewayState) -> Router {
+/// Build the full API gateway router with all middleware.
+/// S6: Accepts additional routers that should also be protected by JWT auth.
+pub fn build_gateway_router(state: GatewayState, additional_protected_routers: Vec<Router>) -> Router {
+    // S14: CORS configuration — allow same-origin + configured origins
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::AllowOrigin::predicate(
+            |origin: &axum::http::HeaderValue, _request_parts: &axum::http::request::Parts| {
+                // Allow requests with no origin (mobile apps, curl, server-to-server)
+                if origin.is_empty() {
+                    return true;
+                }
+                // In production, check against ALLOWED_ORIGINS env var
+                if let Ok(allowed) = std::env::var("ALLOWED_ORIGINS") {
+                    if let Ok(origin_str) = origin.to_str() {
+                        return allowed.split(',').any(|o| o.trim() == origin_str);
+                    }
+                }
+                // Default: allow localhost for development
+                if let Ok(origin_str) = origin.to_str() {
+                    return origin_str.starts_with("http://localhost")
+                        || origin_str.starts_with("https://localhost");
+                }
+                false
+            },
+        ))
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::HeaderName::from_static("x-webhook-key"),
+            axum::http::header::HeaderName::from_static("x-request-id"),
+        ])
+        .expose_headers([
+            axum::http::header::HeaderName::from_static("x-ratelimit-remaining"),
+            axum::http::header::HeaderName::from_static("retry-after"),
+        ])
+        .max_age(std::time::Duration::from_secs(3600));
+
     // Public routes (no auth required)
     let public_routes = Router::new()
         .route("/health", get(health_check))
         .route("/api/v1/tools", get(list_tools));
 
     // Protected routes (auth + rate limit + audit required)
-    let protected_routes = Router::new()
-        // Tools endpoints
-        .route("/api/v1/tools/credit", post(tools::credit_score))
-        .route("/api/v1/tools/market", get(tools::market_analysis))
-        .route("/api/v1/tools/market/demand", get(tools::demand_forecast))
-        .route("/api/v1/tools/economic", post(tools::economic_indicators))
-        .route("/api/v1/tools/distribution", get(tools::distribution_gaps))
-        .route("/api/v1/tools/fmcg", get(tools::fmcg_report))
+    let mut protected_routes = Router::new()
+        // Tools endpoints — D1: top 5 critical endpoints implemented
+        .route("/api/v1/tools/credit-scores", post(tools_impl::compute_credit_score))
+        .route("/api/v1/tools/market-analyses", get(tools_impl::get_market_analysis))
+        .route("/api/v1/tools/demand-forecasts", get(tools_impl::get_demand_forecast))
+        .route("/api/v1/tools/economic-indicators", post(tools::economic_indicators))
+        .route("/api/v1/tools/distribution-gaps", get(tools::distribution_gaps))
+        .route("/api/v1/tools/fmcg-reports", get(tools::fmcg_report))
         .route("/api/v1/tools/privacy/noise", post(tools::privacy_noise))
-        .route("/api/v1/tools/anonymize", post(tools::anonymize))
-        .route("/api/v1/tools/federated", get(tools::federated_status))
-        .route("/api/v1/tools/report", post(tools::generate_report))
+        .route("/api/v1/tools/anonymization", post(tools::anonymize))
+        .route("/api/v1/tools/federated-learning/status", get(tools_impl::get_federated_status))
+        .route("/api/v1/tools/reports", post(tools::generate_report))
         // Superagent endpoints
-        .route("/superagent/status", get(superagent::status))
-        .route("/superagent/cycle", post(superagent::trigger_cycle))
-        .route("/superagent/invoke", post(superagent::invoke))
-        // Sync endpoint (bidirectional — push + pull)
+        .route("/api/v1/superagent/status", get(superagent::status))
+        .route("/api/v1/superagent/cycles", post(superagent::trigger_cycle))
+        .route("/api/v1/superagent/invocations", post(superagent::invoke))
+        // Sync endpoint
         .route("/api/v1/sync/anonymized", post(sync::receiver::handle_sync))
-        // Billing endpoints
-        .route("/api/v1/billing/tiers", get(billing::list_tiers))
+        // Billing endpoints — D1: tiers listing implemented
+        .route("/api/v1/billing/tiers", get(tools_impl::list_billing_tiers))
         .route("/api/v1/billing/subscriptions", post(billing::create_subscription))
-        .route("/api/v1/billing/api-keys", post(billing::create_api_key))
-        // Apply middleware stack (order matters — outermost runs first)
+        .route("/api/v1/billing/api-keys", post(billing::create_api_key));
+
+    // S6: Merge additional protected routers (approval, GraphQL) inside auth layer
+    for router in additional_protected_routers {
+        protected_routes = protected_routes.merge(router);
+    }
+
+    // Apply middleware stack to all protected routes
+    protected_routes = protected_routes
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::jwt_auth_middleware,
@@ -240,6 +227,7 @@ pub fn build_gateway_router(state: GatewayState) -> Router {
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(cors)
         .with_state(state)
 }
 

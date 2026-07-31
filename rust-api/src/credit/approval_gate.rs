@@ -205,7 +205,8 @@ impl CreditApprovalGate {
             }],
         };
 
-        let mut pending = self.pending_decisions.lock().unwrap();
+        let mut pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending.insert(decision_id.clone(), decision);
 
         ApprovalRequest {
@@ -224,7 +225,8 @@ impl CreditApprovalGate {
         approved: bool,
         user_comment: Option<&str>,
     ) -> Result<ApprovalStatus, String> {
-        let mut pending = self.pending_decisions.lock().unwrap();
+        let mut pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let decision = pending
             .get_mut(decision_id)
             .ok_or_else(|| "Decision not found".to_string())?;
@@ -270,13 +272,15 @@ impl CreditApprovalGate {
 
     /// Get the status of a pending decision.
     pub fn get_decision(&self, decision_id: &str) -> Option<CreditDecision> {
-        let pending = self.pending_decisions.lock().unwrap();
+        let pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending.get(decision_id).cloned()
     }
 
     /// Get all pending decisions for a worker.
     pub fn get_pending_for_worker(&self, worker_id: &str) -> Vec<CreditDecision> {
-        let pending = self.pending_decisions.lock().unwrap();
+        let pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending
             .values()
             .filter(|d| d.worker_id == worker_id && d.status == ApprovalStatus::Pending)
@@ -286,7 +290,8 @@ impl CreditApprovalGate {
 
     /// Expire stale decisions (cleanup).
     pub fn expire_stale(&self) -> usize {
-        let mut pending = self.pending_decisions.lock().unwrap();
+        let mut pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -310,7 +315,8 @@ impl CreditApprovalGate {
 
     /// Get audit trail for a decision.
     pub fn get_audit_trail(&self, decision_id: &str) -> Option<Vec<AuditEntry>> {
-        let pending = self.pending_decisions.lock().unwrap();
+        let pending = self.pending_decisions.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending
             .get(decision_id)
             .map(|d| d.audit_trail.clone())

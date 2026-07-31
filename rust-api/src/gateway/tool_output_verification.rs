@@ -124,7 +124,10 @@ pub fn verify_tool_output(
 
     // ── Check 4: Financial amount plausibility ───────────────
     for cap in amount_regex().captures_iter(output) {
-        let amount_str = cap.get(1).or(cap.get(2)).unwrap().as_str();
+        let amount_str = match cap.get(1).or(cap.get(2)) {
+            Some(m) => m.as_str(),
+            None => continue,
+        };
         let amount_str = amount_str.replace(",", "");
         if let Ok(amount) = amount_str.parse::<f64>() {
             if amount < 0.0 {

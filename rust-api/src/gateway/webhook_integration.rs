@@ -7,6 +7,8 @@ use axum::Router;
 use std::sync::Arc;
 
 use crate::webhook::{self, WebhookState, MpesaConfig, MpesaEnvironment};
+use crate::gateway::rate_limit::IpRateLimiter;
+use std::sync::Arc;
 
 /// Create the webhook state from environment variables and shared resources.
 pub fn create_webhook_state(
@@ -16,7 +18,10 @@ pub fn create_webhook_state(
 ) -> WebhookState {
     let mpesa_config = MpesaConfig {
         passkey: std::env::var("MPESA_PASSKEY")
-            .unwrap_or_else(|_| "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919".to_string()),
+            .unwrap_or_else(|_| {
+                tracing::error!("MPESA_PASSKEY environment variable is not set");
+                String::new()
+            }),
         shortcode: std::env::var("MPESA_SHORTCODE")
             .unwrap_or_else(|_| "174379".to_string()),
         initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD")
@@ -28,9 +33,13 @@ pub fn create_webhook_state(
     };
 
     let webhook_api_keys: Vec<String> = std::env::var("WEBHOOK_API_KEYS")
-        .unwrap_or_else(|_| "default-webhook-key".to_string())
+        .unwrap_or_else(|_| {
+            tracing::warn!("WEBHOOK_API_KEYS not set — generating random key");
+            uuid::Uuid::new_v4().to_string()
+        })
         .split(',')
         .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
         .collect();
 
     WebhookState {
@@ -39,5 +48,6 @@ pub fn create_webhook_state(
         message_bus,
         mpesa_config,
         webhook_api_keys,
+        ip_rate_limiter: Arc::new(IpRateLimiter::new(60)), // 60 req/min per IP
     }
 }

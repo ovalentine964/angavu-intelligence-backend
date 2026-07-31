@@ -183,7 +183,10 @@ pub fn verify_sync_batch(transactions: &[AnonymizedTransactionIn]) -> SyncBatchV
     // Check that no raw phone numbers or names leaked through
     for (i, tx) in transactions.iter().enumerate() {
         // Phone number pattern (Kenyan: 07xx, +254, etc.)
-        let phone_pattern = regex::Regex::new(r"(?:\+?254|0)[17]\d{8}").unwrap();
+        let phone_pattern = match regex::Regex::new(r"(?:\+?254|0)[17]\d{8}") {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
         if phone_pattern.is_match(&tx.category) || phone_pattern.is_match(&tx.payment_method) {
             issues.push(SyncBatchIssue {
                 issue_type: SyncBatchIssueType::PiiDetected,

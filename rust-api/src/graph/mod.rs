@@ -6,6 +6,7 @@ pub mod federated;
 pub mod ooda;
 pub mod pipeline;
 pub mod knowledge_graph;
+pub mod pg_knowledge_graph;
 pub mod harness_graph;
 
 use async_trait::async_trait;

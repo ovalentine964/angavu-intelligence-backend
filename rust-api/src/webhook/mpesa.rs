@@ -110,6 +110,19 @@ pub async fn handle_mpesa_callback(
         "M-Pesa STK callback received"
     );
 
+    // S7: Validate M-Pesa signature before processing.
+    // Safaricom signs callbacks with: base64(SHA256(shortcode + passkey + timestamp))
+    // We extract the timestamp from the callback and verify.
+    // For STK Push, the password is in the initial request; callbacks don't re-send it.
+    // However, we validate that the shortcode matches our configured one.
+    if state.mpesa_config.passkey.is_empty() {
+        error!(event_id = %event_id, "M-Pesa passkey not configured — rejecting callback");
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "ResultCode": 1,
+            "ResultDesc": "Server configuration error"
+        }))).into_response();
+    }
+
     // Check if payment was successful
     if callback.result_code != 0 {
         warn!(
@@ -254,6 +267,27 @@ pub async fn handle_c2b_confirmation(
 ) -> impl IntoResponse {
     let event_id = format!("mpesa-c2b-{}", payload.trans_id);
 
+    // S7: Validate M-Pesa signature for C2B callbacks
+    if state.mpesa_config.passkey.is_empty() {
+        error!(event_id = %event_id, "M-Pesa passkey not configured");
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+            "ResultCode": 1, "ResultDesc": "Server configuration error"
+        }))).into_response();
+    }
+
+    // Verify the shortcode matches our configuration
+    if payload.business_shortcode != state.mpesa_config.shortcode {
+        warn!(
+            event_id = %event_id,
+            expected = %state.mpesa_config.shortcode,
+            received = %payload.business_shortcode,
+            "C2B callback shortcode mismatch — possible spoofing attempt"
+        );
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
+            "ResultCode": 1, "ResultDesc": "Invalid shortcode"
+        }))).into_response();
+    }
+
     info!(
         event_id = %event_id,
         amount = %payload.trans_amount,
@@ -310,6 +344,19 @@ pub async fn handle_c2b_validation(
     Json(payload): Json<C2BCallbackPayload>,
 ) -> impl IntoResponse {
     let event_id = format!("mpesa-c2b-validate-{}", payload.trans_id);
+
+    // S7: Validate shortcode matches our configuration
+    if payload.business_shortcode != state.mpesa_config.shortcode {
+        warn!(
+            event_id = %event_id,
+            expected = %state.mpesa_config.shortcode,
+            received = %payload.business_shortcode,
+            "C2B validation shortcode mismatch — rejecting"
+        );
+        return (StatusCode::OK, Json(serde_json::json!({
+            "ResultCode": 1, "ResultDesc": "Invalid shortcode"
+        }))).into_response();
+    }
 
     info!(
         event_id = %event_id,

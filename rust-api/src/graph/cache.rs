@@ -209,17 +209,32 @@ impl GraphCache {
         ];
 
         for pattern in &patterns {
-            let keys: Vec<String> = redis::cmd("KEYS")
-                .arg(pattern)
-                .query_async(&mut conn)
-                .await
-                .unwrap_or_default();
+            // S13: Use SCAN instead of KEYS to avoid blocking Redis
+            let mut cursor: u64 = 0;
+            loop {
+                let result: (u64, Vec<String>) = redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(pattern)
+                    .arg("COUNT")
+                    .arg(100)
+                    .query_async(&mut conn)
+                    .await
+                    .unwrap_or((0, vec![]));
 
-            if !keys.is_empty() {
-                redis::cmd("DEL")
-                    .arg(&keys)
-                    .query_async::<()>(&mut conn)
-                    .await?;
+                cursor = result.0;
+                let keys = result.1;
+
+                if !keys.is_empty() {
+                    redis::cmd("DEL")
+                        .arg(&keys)
+                        .query_async::<()>(&mut conn)
+                        .await?;
+                }
+
+                if cursor == 0 {
+                    break;
+                }
             }
         }
 

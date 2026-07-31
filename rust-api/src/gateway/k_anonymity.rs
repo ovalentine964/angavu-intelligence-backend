@@ -3,12 +3,17 @@
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
+/// Standard minimum k-anonymity threshold across the entire system.
+/// All cohort queries, FL aggregation, and market intelligence must
+/// represent at least this many individuals before results are shown.
+pub const MIN_K_ANONYMITY: usize = 10;
+
 /// Enforces k-anonymity on all query results
 ///
 /// Any aggregate result must represent at least k individuals.
 /// If a query result has fewer than k contributors, it is suppressed.
 pub struct KAnonymityEnforcer {
-    /// Minimum cohort size
+    /// Minimum cohort size (always >= MIN_K_ANONYMITY)
     k: usize,
     /// Per-query cohort tracking
     cohort_sizes: DashMap<String, u32>,
@@ -25,9 +30,14 @@ pub struct KAnonymityResult<T> {
 impl KAnonymityEnforcer {
     pub fn new(k: usize) -> Self {
         Self {
-            k,
+            k: k.max(MIN_K_ANONYMITY), // Enforce system-wide minimum
             cohort_sizes: DashMap::new(),
         }
+    }
+
+    /// Create enforcer with the standard minimum k=10.
+    pub fn standard() -> Self {
+        Self::new(MIN_K_ANONYMITY)
     }
 
     /// Check if a query result meets k-anonymity requirements
@@ -82,11 +92,11 @@ impl KAnonymityEnforcer {
                     .min_by_key(|k| cohort_distance(&small_key, k))
                     .cloned();
 
-                if let Some(target) = nearest {
-                    cohorts.entry(target).or_default().extend(members);
+                if let Some(target) = nearest.clone() {
+                    cohorts.entry(target.clone()).or_default().extend(members);
                     tracing::info!(
                         merged = %small_key,
-                        into = %nearest.unwrap(),
+                        into = %target,
                         "Merged small cohort for k-anonymity"
                     );
                 }

@@ -49,9 +49,9 @@ pub async fn run_analysis(
         }
         Err(e) => {
             tracing::error!("Analysis failed: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Analysis failed: {}", e)
-            }))).into_response()
+            crate::gateway::error::ErrorResponse::internal()
+                .with_details(serde_json::json!({"analysis_error": e.to_string()}))
+                .into_response()
         }
     }
 }
@@ -77,9 +77,9 @@ pub async fn get_recommendations(
         }))).into_response(),
         Err(e) => {
             tracing::error!("Failed to get recommendations: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to get recommendations: {}", e)
-            }))).into_response()
+            crate::gateway::error::ErrorResponse::internal()
+                .with_details(serde_json::json!({"recommendations_error": e.to_string()}))
+                .into_response()
         }
     }
 }
@@ -109,9 +109,9 @@ pub async fn get_trace_stats(
         }))).into_response(),
         Err(e) => {
             tracing::error!("Failed to get trace stats: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                "error": format!("Failed to get stats: {}", e)
-            }))).into_response()
+            crate::gateway::error::ErrorResponse::internal()
+                .with_details(serde_json::json!({"trace_stats_error": e.to_string()}))
+                .into_response()
         }
     }
 }

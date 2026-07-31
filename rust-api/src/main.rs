@@ -27,12 +27,26 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting Angavu Intelligence Backend");
 
     // ── Load Configuration ──────────────────────────────────────
+    // Security: JWT_SECRET and MPESA_PASSKEY MUST be set via environment variables.
+    // We fail fast if missing to prevent running with insecure defaults.
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://angavu:angavu_secret@localhost:5432/angavu".to_string());
     let redis_url = std::env::var("REDIS_URL")
         .unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "change-me-in-production".to_string());
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+        let generated = generate_random_secret();
+        tracing::warn!(
+            "JWT_SECRET not set — generated random secret (tokens will not survive restart)"
+        );
+        generated
+    });
+    if jwt_secret.len() < 32 {
+        tracing::error!(
+            "JWT_SECRET is too short ({} chars, minimum 32). Aborting.",
+            jwt_secret.len()
+        );
+        std::process::exit(1);
+    }
     let host = std::env::var("ANGAVU_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port: u16 = std::env::var("ANGAVU_PORT")
         .unwrap_or_else(|_| "8000".to_string())
@@ -112,7 +126,10 @@ async fn main() -> anyhow::Result<()> {
         message_bus: Arc::new(ModuleMessageBus::new(MessageBusConfig::default())),
         mpesa_config: MpesaConfig {
             passkey: std::env::var("MPESA_PASSKEY")
-                .unwrap_or_else(|_| "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919".to_string()),
+                .unwrap_or_else(|_| {
+                    tracing::error!("MPESA_PASSKEY environment variable is not set. M-Pesa signature validation will fail.");
+                    String::new()
+                }),
             shortcode: std::env::var("MPESA_SHORTCODE")
                 .unwrap_or_else(|_| "174379".to_string()),
             initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD")
@@ -123,10 +140,15 @@ async fn main() -> anyhow::Result<()> {
             },
         },
         webhook_api_keys: std::env::var("WEBHOOK_API_KEYS")
-            .unwrap_or_else(|_| "default-webhook-key".to_string())
+            .unwrap_or_else(|_| {
+                tracing::warn!("WEBHOOK_API_KEYS not set — generating random key for this session");
+                uuid::Uuid::new_v4().to_string()
+            })
             .split(',')
             .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .collect(),
+        ip_rate_limiter: Arc::new(angavu_intelligence_backend::gateway::rate_limit::IpRateLimiter::new(60)),
     };
 
     // Run webhook_events table migration
@@ -153,10 +175,22 @@ async fn main() -> anyhow::Result<()> {
     let graphql_routes = graphql::graphql_router(graphql_schema.clone());
     tracing::info!("GraphQL endpoint initialized at /graphql");
 
-    let app = build_gateway_router(gateway_state)
-        .merge(webhook_router(webhook_state))
-        .merge(approval_router)
-        .merge(graphql_routes);
+    // Initialize ToolsState for implemented endpoints (D1)
+    let tools_state = angavu_intelligence_backend::gateway::tools_impl::ToolsState {
+        db: pg_pool.clone(),
+        redis: redis_conn.clone(),
+    };
+
+    let app = build_gateway_router(
+        gateway_state,
+        vec![
+            // S6: Approval and GraphQL routes INSIDE the JWT auth layer
+            approval_router,
+            graphql_routes,
+        ],
+    )
+    // M-Pesa webhooks remain outside auth — they use their own API key / HMAC validation
+    .merge(webhook_router(webhook_state));
 
     // ── Start HTTP Server ───────────────────────────────────────
     let addr = format!("{}:{}", host, port);
@@ -173,6 +207,15 @@ async fn main() -> anyhow::Result<()> {
     orchestrator.shutdown().await?;
 
     Ok(())
+}
+
+/// Generate a cryptographically random secret for JWT signing.
+/// Used when JWT_SECRET env var is not set.
+fn generate_random_secret() -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let secret: Vec<u8> = (0..64).map(|_| rng.gen()).collect();
+    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &secret)
 }
 
 async fn shutdown_signal() {

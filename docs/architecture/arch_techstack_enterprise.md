@@ -579,7 +579,7 @@ The llama.cpp + sherpa-onnx + DeepSeek + Qwen combination covers all bases:
 - **Status:** Accepted
 - **Context:** Target users have intermittent connectivity; 2GB RAM budget phones
 - **Decision:** Qwen 0.8B via llama.cpp on-device, DeepSeek/Qwen 7B cloud fallback
-- **Consequences:** Large APK size (~65MB lite, ~700MB full); mitigated by tiered downloads
+- **Consequences:** Large APK size (~20MB without models, ~555MB with bundled models); mitigated by tiered downloads (models fetched on first launch via WorkManager)
 
 ### ADR-005: sherpa-onnx Unified Voice Pipeline
 - **Status:** Accepted

@@ -39,11 +39,15 @@ pub struct HumanApprovalState {
 // ─── Request / Response Types ────────────────────────────────
 
 /// Request to create a pending approval
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, garde::Validate)]
 pub struct CreateApprovalRequest {
-    pub action_type: String,       // "credit_decision", "transaction", "loan_application", etc.
+    #[garde(pattern("transaction|loan_application|credit_decision|tax_filing|chama_withdrawal|group_contribution|large_expense|report_delivery"))]
+    pub action_type: String,
+    #[garde(range(min = 0.0))]
     pub amount: Option<f64>,
+    #[garde(length(min = 1, max = 1000))]
     pub description: String,
+    #[garde(length(min = 1, max = 128))]
     pub user_id: String,
     pub metadata: Option<serde_json::Value>,
 }
@@ -58,12 +62,15 @@ pub struct ApprovalCreatedResponse {
 }
 
 /// Request to resolve an approval
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, garde::Validate)]
 pub struct ResolveApprovalRequest {
+    #[garde(length(min = 1, max = 128))]
     pub confirmation_id: String,
     pub approved: bool,
+    #[garde(length(max = 2000))]
     pub user_comment: Option<String>,
-    pub corrected_content: Option<String>,  // for report edits
+    #[garde(length(max = 10000))]
+    pub corrected_content: Option<String>,
 }
 
 /// Response when approval is resolved
@@ -167,21 +174,28 @@ pub async fn create_approval(
     State(state): State<HumanApprovalState>,
     Json(req): Json<CreateApprovalRequest>,
 ) -> impl IntoResponse {
+    // S8: Validate input
+    use garde::Validate;
+    if let Err(e) = req.validate() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Validation failed",
+                "details": e.to_string()
+            })),
+        )
+            .into_response();
+    }
+
     let action_type = match ApprovalActionType::from_str(&req.action_type) {
         Some(t) => t,
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "Invalid action type",
-                    "valid_types": [
-                        "transaction", "loan_application", "credit_decision",
-                        "tax_filing", "chama_withdrawal", "group_contribution",
-                        "large_expense", "report_delivery"
-                    ]
-                })),
-            )
-                .into_response();
+            return super::error::ErrorResponse::bad_request(
+                format!(
+                    "Invalid action type '{}'. Valid types: transaction, loan_application, credit_decision, tax_filing, chama_withdrawal, group_contribution, large_expense, report_delivery",
+                    req.action_type
+                )
+            ).into_response();
         }
     };
 
@@ -260,6 +274,19 @@ pub async fn resolve_approval(
     State(state): State<HumanApprovalState>,
     Json(req): Json<ResolveApprovalRequest>,
 ) -> impl IntoResponse {
+    // S8: Validate input
+    use garde::Validate;
+    if let Err(e) = req.validate() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Validation failed",
+                "details": e.to_string()
+            })),
+        )
+            .into_response();
+    }
+
     let key = format!("approval:{}", req.confirmation_id);
 
     // Fetch pending approval from Redis
@@ -271,16 +298,13 @@ pub async fn resolve_approval(
         .unwrap_or(None);
 
     let pending: PendingApproval = match data {
-        Some(d) => serde_json::from_str(&d).unwrap(),
+        Some(d) => serde_json::from_str(&d)
+            .map_err(|e| super::error::ErrorResponse::bad_request(
+                &format!("Invalid approval data: {}", e)
+            ).into_response())?,
         None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApprovalResolvedResponse {
-                    confirmation_id: req.confirmation_id,
-                    status: "not_found".to_string(),
-                    message: "Confirmation request not found or already expired.".to_string(),
-                }),
-            )
+            return super::error::ErrorResponse::not_found("Approval request")
+                .with_request_id(&req.confirmation_id)
                 .into_response();
         }
     };
@@ -288,7 +312,7 @@ pub async fn resolve_approval(
     // Check expiry
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
 
     if now > pending.expires_at {
@@ -299,15 +323,11 @@ pub async fn resolve_approval(
             .await
             .unwrap_or(());
 
-        return (
-            StatusCode::GONE,
-            Json(ApprovalResolvedResponse {
-                confirmation_id: req.confirmation_id,
-                status: "expired".to_string(),
-                message: "Muda umekwisha. Kitendo hiki kimefutwa kwa usalama wako.".to_string(),
-            }),
+        return super::error::ErrorResponse::expired(
+            "Muda umekwisha. Kitendo hiki kimefutwa kwa usalama wako."
         )
-            .into_response();
+        .with_request_id(&req.confirmation_id)
+        .into_response();
     }
 
     // Delete the approval (one-time use)
@@ -372,27 +392,41 @@ pub async fn list_pending(
     let pattern = "approval:*";
     let mut conn = state.redis.clone();
 
-    // Scan for all approval keys
-    let keys: Vec<String> = redis::cmd("KEYS")
-        .arg(pattern)
-        .query_async(&mut conn)
-        .await
-        .unwrap_or_default();
-
+    // S13: Use SCAN instead of KEYS to avoid blocking Redis
     let mut pending = Vec::new();
-    for key in keys {
-        let data: Option<String> = redis::cmd("GET")
-            .arg(&key)
+    let mut cursor: u64 = 0;
+    loop {
+        let result: (u64, Vec<String>) = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(pattern)
+            .arg("COUNT")
+            .arg(100)
             .query_async(&mut conn)
             .await
-            .unwrap_or(None);
+            .unwrap_or((0, vec![]));
 
-        if let Some(d) = data {
-            if let Ok(approval) = serde_json::from_str::<PendingApproval>(&d) {
-                if approval.user_id == user_id {
-                    pending.push(approval);
+        cursor = result.0;
+        let keys = result.1;
+
+        for key in keys {
+            let data: Option<String> = redis::cmd("GET")
+                .arg(&key)
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(None);
+
+            if let Some(d) = data {
+                if let Ok(approval) = serde_json::from_str::<PendingApproval>(&d) {
+                    if approval.user_id == user_id {
+                        pending.push(approval);
+                    }
                 }
             }
+        }
+
+        if cursor == 0 {
+            break;
         }
     }
 

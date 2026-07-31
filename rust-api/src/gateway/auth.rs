@@ -92,7 +92,7 @@ pub async fn jwt_auth_middleware(
     // Check expiration
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
     if claims.exp < now {
         return Err(StatusCode::UNAUTHORIZED);

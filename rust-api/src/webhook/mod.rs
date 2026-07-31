@@ -48,6 +48,8 @@ pub struct WebhookState {
     pub message_bus: Arc<crate::orchestrator::message_bus::ModuleMessageBus>,
     pub mpesa_config: MpesaConfig,
     pub webhook_api_keys: Vec<String>,
+    /// S15: Per-IP rate limiter for webhook endpoints
+    pub ip_rate_limiter: Arc<crate::gateway::rate_limit::IpRateLimiter>,
 }
 
 /// M-Pesa configuration for callback validation.

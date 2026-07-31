@@ -409,7 +409,7 @@ impl LogisticRegression {
         let mut indexed: Vec<(f64, u8)> = y_scores.iter().zip(y_true.iter())
             .map(|(&s, &y)| (s, y))
             .collect();
-        indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut auc = 0.0;
         let mut tp = 0.0;
@@ -488,7 +488,7 @@ impl LogisticRegression {
         let mut indexed: Vec<(f64, u8)> = probs.iter().zip(y_true.iter())
             .map(|(&p, &y)| (p, y))
             .collect();
-        indexed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        indexed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
         let group_size = n / n_groups;
         let mut chi_sq = 0.0;
@@ -548,7 +548,7 @@ impl LogisticRegression {
         let mut indexed: Vec<(f64, u8)> = y_scores.iter().zip(y_true.iter())
             .map(|(&s, &y)| (s, y))
             .collect();
-        indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut points = vec![(0.0, 0.0)];
         let mut tp = 0.0;

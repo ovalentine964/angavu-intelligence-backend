@@ -1,16 +1,51 @@
 // src/gateway/rate_limit.rs
 
+use axum::{
+    extract::Request,
+    http::StatusCode,
+    middleware::Next,
+    response::Response,
+};
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Semaphore;
 
-/// Token-bucket rate limiter per buyer
+/// Token-bucket rate limiter per buyer (used by authenticated routes)
 pub struct RateLimiter {
     /// Per-key token buckets
     buckets: Arc<DashMap<String, TokenBucket>>,
     /// Default requests per minute for unknown keys
     default_rpm: u32,
+}
+
+/// S15: Per-IP rate limiter for unauthenticated endpoints (webhooks, approvals)
+pub struct IpRateLimiter {
+    buckets: Arc<DashMap<String, TokenBucket>>,
+    rpm: u32,
+}
+
+impl IpRateLimiter {
+    pub fn new(rpm: u32) -> Self {
+        Self {
+            buckets: Arc::new(DashMap::new()),
+            rpm,
+        }
+    }
+
+    /// Check if a request from this IP is allowed.
+    pub fn check(&self, ip: &str) -> Result<u32, Duration> {
+        let mut bucket = self.buckets
+            .entry(ip.to_string())
+            .or_insert_with(|| {
+                TokenBucket::new(self.rpm as f64, self.rpm as f64 / 60.0)
+            });
+
+        if bucket.try_consume() {
+            Ok(bucket.tokens as u32)
+        } else {
+            Err(bucket.retry_after())
+        }
+    }
 }
 
 struct TokenBucket {
@@ -99,19 +134,23 @@ pub async fn rate_limit_middleware(
     match state.rate_limiter.check(&claims.key_id, rpm) {
         Ok(remaining) => {
             let mut response = next.run(request).await;
-            response.headers_mut().insert(
-                "X-RateLimit-Remaining",
-                remaining.to_string().parse().unwrap(),
-            );
+            if let Ok(val) = remaining.to_string().parse() {
+                response.headers_mut().insert(
+                    "X-RateLimit-Remaining",
+                    val,
+                );
+            }
             Ok(response)
         }
         Err(retry_after) => {
             let mut response = Response::new(axum::body::Body::empty());
             *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
-            response.headers_mut().insert(
-                "Retry-After",
-                retry_after.as_secs().to_string().parse().unwrap(),
-            );
+            if let Ok(val) = retry_after.as_secs().to_string().parse() {
+                response.headers_mut().insert(
+                    "Retry-After",
+                    val,
+                );
+            }
             Ok(response)
         }
     }

@@ -10,14 +10,15 @@ use std::collections::HashMap;
 /// Aggregates transaction data into macroeconomic indicators.
 /// Compares with official KNBS data when available.
 ///
-/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Regional economic
-/// state is lost on process restart. For production, wire to PostgreSQL
-/// (table: regional_economic_state). See: TODO(EconomicAnalyzer-Persistence)
+/// State is persisted to PostgreSQL (table: economic_analyzer_state) for
+/// survival across process restarts.
 pub struct EconomicAnalyzer {
     /// Regional economic state
     regional_state: HashMap<String, RegionalEconomicState>,
     /// Baseline prices for CPI computation (set from last sync with KNBS)
     baseline_cpi: HashMap<String, f64>,
+    /// Database pool for state persistence
+    pool: Option<sqlx::PgPool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -43,7 +44,75 @@ impl EconomicAnalyzer {
         Self {
             regional_state: HashMap::new(),
             baseline_cpi: HashMap::new(),
+            pool: None,
         }
+    }
+
+    /// Create with database pool for state persistence.
+    pub fn with_pool(pool: sqlx::PgPool) -> Self {
+        Self {
+            regional_state: HashMap::new(),
+            baseline_cpi: HashMap::new(),
+            pool: Some(pool),
+        }
+    }
+
+    /// Load persisted state from PostgreSQL on startup.
+    pub async fn load_state(&mut self) -> Result<(), String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        let rows = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT region, state_json, baseline_cpi_json FROM economic_analyzer_state"
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("Failed to load economic state: {}", e))?;
+
+        for (region, state_json, cpi_json) in rows {
+            if let Ok(state) = serde_json::from_str::<RegionalEconomicState>(&state_json) {
+                self.regional_state.insert(region, state);
+            }
+            if let Ok(cpi) = serde_json::from_str::<HashMap<String, f64>>(&cpi_json) {
+                self.baseline_cpi = cpi;
+            }
+        }
+
+        tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state loaded from PostgreSQL");
+        Ok(())
+    }
+
+    /// Persist current state to PostgreSQL.
+    pub async fn persist_state(&self) -> Result<(), String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        for (region, state) in &self.regional_state {
+            let state_json = serde_json::to_string(state).unwrap_or_default();
+            let cpi_json = serde_json::to_string(&self.baseline_cpi).unwrap_or_default();
+
+            sqlx::query(
+                "INSERT INTO economic_analyzer_state (region, state_json, baseline_cpi_json, updated_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (region) DO UPDATE SET
+                    state_json = EXCLUDED.state_json,
+                    baseline_cpi_json = EXCLUDED.baseline_cpi_json,
+                    updated_at = NOW()"
+            )
+            .bind(region)
+            .bind(&state_json)
+            .bind(&cpi_json)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to persist economic state: {}", e))?;
+        }
+
+        tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state persisted to PostgreSQL");
+        Ok(())
     }
 
     /// Compute Consumer Price Index (Laspeyres-style)

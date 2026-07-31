@@ -69,7 +69,7 @@ impl BodaBodaFeatureExtractor {
         }
 
         let mut sorted = fuel_txns.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         sorted[sorted.len() / 2] // median
     }
 
@@ -135,7 +135,7 @@ impl BodaBodaFeatureExtractor {
         }
 
         let mut revenues: Vec<f64> = daily_revenue.values().copied().collect();
-        revenues.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        revenues.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         revenues[revenues.len() / 2]
     }
 

@@ -108,7 +108,10 @@ async fn get_trace_stats(
         Some(logger) => {
             match logger.get_trace_stats(hours).await {
                 Ok(stats) => Ok(Json(serde_json::json!(stats))),
-                Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                Err(e) => {
+                    tracing::error!("Trace stats error: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }
         }
         None => Ok(Json(serde_json::json!({

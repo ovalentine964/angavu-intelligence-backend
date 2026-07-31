@@ -20,6 +20,84 @@ impl WorkerCohort {
     }
 }
 
+/// FedProx aggregation implementation.
+/// Proximal term (μ) penalizes deviation from the global model,
+/// making convergence more stable for non-IID data across Kenyan worker cohorts.
+pub struct FedProxAggregator {
+    /// Proximal term coefficient (higher = more conservative updates)
+    pub mu: f64,
+    /// Gradient clipping norm for privacy
+    pub clip_norm: f64,
+    /// Noise multiplier for differential privacy
+    pub noise_multiplier: f64,
+}
+
+impl FedProxAggregator {
+    pub fn new(mu: f64, clip_norm: f64, noise_multiplier: f64) -> Self {
+        Self { mu, clip_norm, noise_multiplier }
+    }
+
+    /// Default FedProx for credit scoring (conservative, stable)
+    pub fn credit_default() -> Self {
+        Self::new(0.01, 1.0, 0.0)
+    }
+
+    /// Aggregate gradient batches from multiple cohorts.
+    /// Returns the aggregated global gradient.
+    pub fn aggregate(&self, batches: &[GradientBatch]) -> Result<Vec<f64>, String> {
+        if batches.is_empty() {
+            return Err("No gradient batches to aggregate".to_string());
+        }
+
+        let total_samples: u64 = batches.iter().map(|b| b.sample_count).sum();
+        if total_samples == 0 {
+            return Err("Total sample count is zero".to_string());
+        }
+
+        let grad_dim = batches.first().map(|b| b.gradients.len()).unwrap_or(0);
+        if grad_dim == 0 {
+            return Err("Empty gradients".to_string());
+        }
+
+        let mut aggregated = vec![0.0_f64; grad_dim];
+
+        for batch in batches {
+            let weight = batch.sample_count as f64 / total_samples as f64;
+            // Clip gradients for privacy
+            let grad_norm: f64 = batch.gradients.iter().map(|g| g * g).sum::<f64>().sqrt();
+            let clip_factor = if grad_norm > self.clip_norm {
+                self.clip_norm / grad_norm
+            } else {
+                1.0
+            };
+
+            for (i, &grad) in batch.gradients.iter().enumerate() {
+                if i < grad_dim {
+                    // FedProx: weighted clipped gradient + proximal regularization
+                    let clipped_grad = grad * clip_factor;
+                    aggregated[i] += weight * clipped_grad;
+                }
+            }
+        }
+
+        // Apply FedProx proximal damping
+        for grad in &mut aggregated {
+            *grad *= 1.0 / (1.0 + self.mu);
+        }
+
+        Ok(aggregated)
+    }
+}
+
+/// A gradient batch from a single cohort.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GradientBatch {
+    pub cohort_hash: String,
+    pub gradients: Vec<f64>,
+    pub sample_count: u64,
+    pub local_loss: f64,
+}
+
 /// Monitor score distribution changes during migration
 pub struct ScoreDistributionMonitor {
     /// Pre-migration score distribution (baseline)

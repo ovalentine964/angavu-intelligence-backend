@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Angavu Intelligence Backend API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Superagent-powered revenue intelligence platform for informal economy workers.
     
@@ -15,6 +15,19 @@ info:
     ## Graph Analytics
     Knowledge graph algorithms (PageRank, community detection, centrality, shortest path)
     are available via both REST and GraphQL.
+    
+    ## Error Format
+    All errors follow a unified `ErrorResponse` structure:
+    ```json
+    {
+      "error": {
+        "code": "BAD_REQUEST",
+        "message": "Human-readable description",
+        "details": {},
+        "request_id": "uuid"
+      }
+    }
+    ```
   contact:
     name: Angavu Intelligence Team
   license:
@@ -37,7 +50,7 @@ components:
       bearerFormat: JWT
       
   schemas:
-    Error:
+    ErrorResponse:
       type: object
       required: [error]
       properties:
@@ -48,13 +61,17 @@ components:
             code:
               type: string
               example: INVALID_REQUEST
+              description: Machine-readable error code (UPPER_SNAKE_CASE)
             message:
               type: string
               example: Missing required field
+              description: Human-readable error message
             details:
               type: object
+              description: Optional structured details (field validation errors, etc.)
             request_id:
               type: string
+              description: Request correlation ID for debugging
 
     WorkerCohort:
       type: object
@@ -85,7 +102,7 @@ components:
       type: object
       properties:
         alama_score:
-          type: number
+          type: integer
           minimum: 300
           maximum: 850
         risk_tier:
@@ -128,7 +145,7 @@ components:
           type: number
         demand_signal:
           type: string
-          enum: [strong, moderate, weak, declining]
+          enum: [strong, moderate, weak, unknown]
         supply_status:
           type: string
         opportunities:
@@ -139,6 +156,82 @@ components:
           type: array
           items:
             type: string
+
+    DemandForecast:
+      type: object
+      properties:
+        category:
+          type: string
+        region:
+          type: string
+        forecast_horizon_days:
+          type: integer
+        predicted_demand:
+          type: string
+          enum: [increasing, decreasing, stable, insufficient_data]
+        confidence:
+          type: number
+        daily_forecast:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              predicted_transactions:
+                type: number
+              lower_bound:
+                type: number
+              upper_bound:
+                type: number
+        seasonal_pattern:
+          type: string
+
+    FederatedStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, idle]
+        active_nodes:
+          type: integer
+        current_round:
+          type: integer
+        model_version:
+          type: string
+        last_aggregation:
+          type: string
+          format: date-time
+          nullable: true
+        privacy_budget_remaining:
+          type: number
+        participating_cohorts:
+          type: integer
+
+    BillingTier:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        name_sw:
+          type: string
+        price_kes_month:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        api_calls_per_day:
+          type: integer
+          description: -1 means unlimited
+        credit_reports_per_month:
+          type: integer
+          description: -1 means unlimited
+        is_active:
+          type: boolean
 
     OodaCycle:
       type: object
@@ -263,7 +356,55 @@ components:
           items:
             type: object
 
+    ApprovalCreated:
+      type: object
+      properties:
+        confirmation_id:
+          type: string
+        prompt:
+          type: string
+        timeout_seconds:
+          type: integer
+        action_type:
+          type: string
+
+    ApprovalResolved:
+      type: object
+      properties:
+        confirmation_id:
+          type: string
+        status:
+          type: string
+          enum: [approved, rejected, expired, not_found]
+        message:
+          type: string
+
+    SloStatus:
+      type: object
+      properties:
+        slos:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              target_percent:
+                type: number
+              current_value:
+                type: number
+              is_met:
+                type: boolean
+              error_budget_remaining_percent:
+                type: number
+        all_met:
+          type: boolean
+
 paths:
+  # ── Public Endpoints (no auth) ──────────────────────────
+
   /health:
     get:
       summary: Health check
@@ -296,10 +437,15 @@ paths:
                     items:
                       type: string
 
-  /api/v1/tools/credit:
+  # ── Tools Endpoints (D1: implemented) ───────────────────
+
+  /api/v1/tools/credit-scores:
     post:
       summary: Compute Alama credit score
-      operationId: creditScore
+      description: |
+        Computes a credit score (300-850) from anonymized cohort transaction data.
+        Enforces k-anonymity (k≥10). Returns component breakdown for explainability.
+      operationId: computeCreditScore
       requestBody:
         required: true
         content:
@@ -332,14 +478,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: k-Anonymity violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Rate limited
 
-  /api/v1/tools/market:
+  /api/v1/tools/market-analyses:
     get:
       summary: Market analysis
-      operationId: marketAnalysis
+      description: |
+        Returns price trends, demand signals, and opportunities for a given
+        product category and region.
+      operationId: getMarketAnalysis
       parameters:
         - name: category
           in: query
@@ -364,6 +519,162 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarketAnalysis'
 
+  /api/v1/tools/demand-forecasts:
+    get:
+      summary: Demand forecast
+      description: |
+        Predicts future transaction volume based on historical patterns.
+        Returns daily forecasts with confidence intervals.
+      operationId: getDemandForecast
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: horizon_days
+          in: query
+          schema:
+            type: integer
+            default: 14
+      responses:
+        '200':
+          description: Demand forecast
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandForecast'
+
+  /api/v1/tools/economic-indicators:
+    post:
+      summary: Economic indicators (Coming Soon)
+      operationId: getEconomicIndicators
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tools/distribution-gaps:
+    get:
+      summary: Distribution gap analysis (Coming Soon)
+      operationId: getDistributionGaps
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tools/fmcg-reports:
+    get:
+      summary: FMCG intelligence report (Coming Soon)
+      operationId: getFmcgReport
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tools/privacy/noise:
+    post:
+      summary: Privacy noise injection (Coming Soon)
+      operationId: injectPrivacyNoise
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tools/anonymization:
+    post:
+      summary: Data anonymization (Coming Soon)
+      operationId: anonymizeData
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tools/federated-learning/status:
+    get:
+      summary: Federated learning status
+      description: Returns the current state of the federated learning system.
+      operationId: getFederatedStatus
+      responses:
+        '200':
+          description: Federated learning status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FederatedStatus'
+
+  /api/v1/tools/reports:
+    post:
+      summary: Report generation (Coming Soon)
+      operationId: generateReport
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Superagent Endpoints ────────────────────────────────
+
+  /api/v1/superagent/status:
+    get:
+      summary: Superagent status (Coming Soon)
+      operationId: getSuperagentStatus
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/superagent/cycles:
+    post:
+      summary: Trigger OODA cycle (Coming Soon)
+      operationId: triggerOodaCycle
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/superagent/invocations:
+    post:
+      summary: Superagent invocation (Coming Soon)
+      operationId: invokeSuperagent
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Sync Endpoint ───────────────────────────────────────
+
   /api/v1/sync/anonymized:
     post:
       summary: Push anonymized data
@@ -383,8 +694,55 @@ paths:
                 $ref: '#/components/schemas/SyncResponse'
         '400':
           description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Rate limited
+
+  # ── Billing Endpoints (D1: tiers implemented) ───────────
+
+  /api/v1/billing/tiers:
+    get:
+      summary: List billing tiers
+      description: Returns available subscription tiers with pricing and features.
+      operationId: listBillingTiers
+      responses:
+        '200':
+          description: Billing tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillingTier'
+
+  /api/v1/billing/subscriptions:
+    post:
+      summary: Create subscription (Coming Soon)
+      operationId: createSubscription
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/billing/api-keys:
+    post:
+      summary: Create API key (Coming Soon)
+      operationId: createApiKey
+      responses:
+        '501':
+          description: Not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── OODA Routes ─────────────────────────────────────────
 
   /api/v1/ooda/status:
     get:
@@ -438,21 +796,9 @@ paths:
                   status:
                     type: string
 
-  /api/v1/billing/tiers:
-    get:
-      summary: List billing tiers
-      operationId: listBillingTiers
-      responses:
-        '200':
-          description: Billing tiers
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
+  # ── Observability Routes ────────────────────────────────
 
-  /observability/slo:
+  /api/v1/observability/slo:
     get:
       summary: SLO status
       operationId: getSloStatus
@@ -462,14 +808,85 @@ paths:
           content:
             application/json:
               schema:
+                $ref: '#/components/schemas/SloStatus'
+
+  /api/v1/observability/slo/breached:
+    get:
+      summary: Currently breached SLOs
+      operationId: getBreachedSlos
+      responses:
+        '200':
+          description: Breached SLOs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/v1/observability/traces/stats:
+    get:
+      summary: Agent trace statistics
+      operationId: getTraceStats
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+      responses:
+        '200':
+          description: Trace statistics
+          content:
+            application/json:
+              schema:
                 type: object
-                properties:
-                  slos:
-                    type: array
-                    items:
-                      type: object
-                  all_met:
-                    type: boolean
+
+  # ── Trace Analysis Routes ───────────────────────────────
+
+  /api/v1/traces/analyze:
+    post:
+      summary: Run trace analysis
+      operationId: runTraceAnalysis
+      parameters:
+        - name: window_hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+      responses:
+        '200':
+          description: Analysis report
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/traces/recommendations:
+    get:
+      summary: Get latest recommendations
+      operationId: getRecommendations
+      responses:
+        '200':
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/traces/stats:
+    get:
+      summary: Trace collection statistics
+      operationId: getTraceCollectionStats
+      responses:
+        '200':
+          description: Trace stats
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ── GraphQL ─────────────────────────────────────────────
 
   /graphql:
     post:
@@ -497,6 +914,8 @@ paths:
               schema:
                 type: object
 
+  # ── Webhook Endpoints ───────────────────────────────────
+
   /api/v1/webhooks/mpesa:
     post:
       summary: M-Pesa payment callback
@@ -515,27 +934,157 @@ paths:
         '401':
           description: Invalid API key
 
-  /api/v1/approval/credit:
+  /api/v1/webhooks/mpesa/confirmation:
     post:
-      summary: Request credit decision approval
-      operationId: requestCreditApproval
+      summary: M-Pesa C2B confirmation
+      operationId: mpesaC2bConfirmation
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+      responses:
+        '200':
+          description: Confirmation processed
+
+  /api/v1/webhooks/mpesa/validation:
+    post:
+      summary: M-Pesa C2B validation
+      operationId: mpesaC2bValidation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Validation result
+
+  /api/v1/webhooks/market:
+    post:
+      summary: Market data feed webhook
+      operationId: marketFeedWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Feed processed
+
+  /api/v1/webhooks/generic:
+    post:
+      summary: Generic webhook receiver
+      operationId: genericWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  # ── Human Approval Endpoints ────────────────────────────
+
+  /api/v1/approval/create:
+    post:
+      summary: Create pending approval
+      operationId: createApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_type, description, user_id]
               properties:
-                cohort_hash:
+                action_type:
                   type: string
-                alama_score:
+                  enum: [transaction, loan_application, credit_decision, tax_filing, chama_withdrawal, group_contribution, large_expense, report_delivery]
+                amount:
                   type: number
-                risk_tier:
+                description:
                   type: string
-                reason:
+                user_id:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Approval created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalCreated'
+        '400':
+          description: Invalid action type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/approval/resolve:
+    post:
+      summary: Resolve pending approval
+      operationId: resolveApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation_id, approved]
+              properties:
+                confirmation_id:
+                  type: string
+                approved:
+                  type: boolean
+                user_comment:
+                  type: string
+                corrected_content:
                   type: string
       responses:
         '200':
-          description: Approval request created
-        '403':
-          description: Human approval required
+          description: Approval resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResolved'
+        '404':
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Approval expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/approval/pending/{user_id}:
+    get:
+      summary: List pending approvals for user
+      operationId: listPendingApprovals
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalCreated'
