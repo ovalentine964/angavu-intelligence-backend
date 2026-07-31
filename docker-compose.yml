@@ -102,8 +102,8 @@ services:
       <<: *common-env
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-32-bytes-key-here!!!!}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
     depends_on:
       postgres:
         condition: service_healthy

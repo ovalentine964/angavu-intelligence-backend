@@ -24,8 +24,8 @@ x-api-common: &api-common
     <<: *common-env
     DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     QWEN_API_KEY: ${QWEN_API_KEY:-}
-    JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-    ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-32-bytes-key-here!!!!}
+    JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
   depends_on:
     pg-primary:
       condition: service_healthy
@@ -58,15 +58,23 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pg-primary-data:/var/lib/postgresql/data
+      - pg-wal-archive:/var/lib/postgresql/wal_archive
       - ./scripts/pg-init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+      - ./scripts/pg-archive-wal.sh:/scripts/pg-archive-wal.sh:ro
     command:
       - postgres
       - -c
       - wal_level=replica
       - -c
+      - archive_mode=on
+      - -c
+      - archive_command=/scripts/pg-archive-wal.sh %p %f
+      - -c
+      - archive_timeout=300
+      - -c
       - max_wal_senders=5
       - -c
-      - wal_keep_size=256MB
+      - wal_keep_size=512MB
       - -c
       - hot_standby=on
       - -c
@@ -96,6 +104,30 @@ services:
         reservations:
           memory: 2G
           cpus: "1"
+
+  # ── PostgreSQL Automatic Failover Watcher ──────────────────────────────────
+  pg-failover-watcher:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    entrypoint: ["bash", "/scripts/pg-failover-watcher.sh"]
+    environment:
+      PG_PRIMARY_HOST: pg-primary
+      PG_REPLICA_HOST: pg-replica
+      PG_CHECK_INTERVAL: "10"
+      PG_FAILURE_THRESHOLD: "3"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-angavu_secret}
+    volumes:
+      - ./scripts/pg-failover-watcher.sh:/scripts/pg-failover-watcher.sh:ro
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+      pg-replica:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
 
   # ── PostgreSQL 16 Replica ───────────────────────────────────────────────────
   pg-replica:
@@ -448,6 +480,7 @@ services:
 volumes:
   pg-primary-data:
   pg-replica-data:
+  pg-wal-archive:
   redis-data-1:
   redis-data-2:
   redis-data-3:

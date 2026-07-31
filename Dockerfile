@@ -48,19 +48,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root user
 RUN groupadd -r angavu && useradd -r -g angavu -d /app -s /sbin/nologin angavu
 
-# Install Python LLM dependencies in runtime
-COPY python/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt && \
-    rm /tmp/requirements.txt
-
 WORKDIR /app
 
 # Copy Rust binaries
 COPY --from=rust-builder /build/target/release/angavu-server /app/angavu-server
 COPY --from=rust-builder /build/target/release/angavu-migrate /app/angavu-migrate
 
-# Copy Python LLM inference code
-COPY python/ /app/python/
+# Copy Python LLM environment from build stage (avoids re-installing deps)
+COPY --from=python-llm /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=python-llm /usr/local/bin /usr/local/bin
+COPY --from=python-llm /app/python /app/python
 
 # Copy configuration and scripts
 COPY scripts/ /app/scripts/

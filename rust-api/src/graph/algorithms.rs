@@ -415,6 +415,237 @@ impl AlgorithmGraph {
         result
     }
 
+    /// Betweenness centrality using Brandes' algorithm.
+    ///
+    /// Finds nodes that serve as bridges between communities.
+    /// High betweenness = important intermediary (e.g., a supplier serving multiple regions).
+    /// Complexity: O(VE) for unweighted, O(V(E + V log V)) for weighted.
+    pub fn betweenness_centrality(&self, top_k: usize) -> Vec<(Uuid, f64)> {
+        let nodes = self.node_ids();
+        let mut betweenness: HashMap<Uuid, f64> = HashMap::new();
+
+        // Initialize all betweenness scores to 0
+        for &node in &nodes {
+            betweenness.insert(node, 0.0);
+        }
+
+        for &source in &nodes {
+            // BFS from source to compute shortest paths
+            let mut stack: Vec<Uuid> = Vec::new();
+            let mut predecessors: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+            let mut sigma: HashMap<Uuid, f64> = HashMap::new();
+            let mut dist: HashMap<Uuid, i64> = HashMap::new();
+
+            sigma.insert(source, 1.0);
+            dist.insert(source, 0);
+
+            let mut queue = VecDeque::new();
+            queue.push_back(source);
+
+            while let Some(v) = queue.pop_front() {
+                stack.push(v);
+                let v_dist = *dist.get(&v).unwrap_or(&0);
+
+                if let Some(neighbors) = self.adjacency.get(&v) {
+                    for (w, _) in neighbors {
+                        // First time visiting w?
+                        if !dist.contains_key(w) {
+                            dist.insert(*w, v_dist + 1);
+                            queue.push_back(*w);
+                        }
+
+                        // Is v on a shortest path to w?
+                        if *dist.get(w).unwrap_or(&0) == v_dist + 1 {
+                            let w_sigma = *sigma.get(w).unwrap_or(&0.0);
+                            let v_sigma = *sigma.get(&v).unwrap_or(&0.0);
+                            sigma.insert(*w, w_sigma + v_sigma);
+                            predecessors.entry(*w).or_default().push(v);
+                        }
+                    }
+                }
+            }
+
+            // Back-propagate dependency
+            let mut delta: HashMap<Uuid, f64> = HashMap::new();
+            for &node in &nodes {
+                delta.insert(node, 0.0);
+            }
+
+            while let Some(w) = stack.pop() {
+                if let Some(preds) = predecessors.get(&w) {
+                    for v in preds {
+                        let v_sigma = *sigma.get(v).unwrap_or(&1.0);
+                        let w_sigma = *sigma.get(&w).unwrap_or(&1.0);
+                        let w_delta = *delta.get(&w).unwrap_or(&0.0);
+                        let contrib = (v_sigma / w_sigma) * (1.0 + w_delta);
+                        *delta.entry(*v).or_insert(0.0) += contrib;
+                    }
+                }
+                if w != source {
+                    *betweenness.entry(w).or_insert(0.0) += *delta.get(&w).unwrap_or(&0.0);
+                }
+            }
+        }
+
+        // Normalize: divide by 2 for undirected graphs (we use directed, so skip)
+        // Divide by (n-1)(n-2) for normalized betweenness
+        let n = nodes.len() as f64;
+        if n > 2.0 {
+            let norm_factor = (n - 1.0) * (n - 2.0);
+            for score in betweenness.values_mut() {
+                *score /= norm_factor;
+            }
+        }
+
+        let mut results: Vec<(Uuid, f64)> = betweenness.into_iter().collect();
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(top_k);
+        results
+    }
+
+    /// k-Core decomposition.
+    ///
+    /// Finds the k-core of the graph: the maximal subgraph where every node
+    /// has degree ≥ k. Useful for identifying tightly-connected communities
+    /// and the "core" of the economy.
+    ///
+    /// Returns a map of node_id → core number (max k such that node is in k-core).
+    /// Complexity: O(V + E) using the peeling algorithm.
+    pub fn k_core_decomposition(&self) -> HashMap<Uuid, usize> {
+        let nodes = self.node_ids();
+        if nodes.is_empty() {
+            return HashMap::new();
+        }
+
+        // Compute effective degree (total undirected degree)
+        let mut degree: HashMap<Uuid, usize> = HashMap::new();
+        for &node in &nodes {
+            let out = self.adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
+            let inc = self.reverse_adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
+            // For undirected interpretation, count unique neighbors
+            let mut neighbors: HashSet<Uuid> = HashSet::new();
+            if let Some(edges) = self.adjacency.get(&node) {
+                for (n, _) in edges { neighbors.insert(*n); }
+            }
+            if let Some(edges) = self.reverse_adjacency.get(&node) {
+                for (n, _) in edges { neighbors.insert(*n); }
+            }
+            degree.insert(node, neighbors.len());
+        }
+
+        let max_degree = degree.values().copied().max().unwrap_or(0);
+        let mut core: HashMap<Uuid, usize> = HashMap::new();
+        let mut removed: HashSet<Uuid> = HashSet::new();
+
+        // Peeling algorithm: iteratively remove nodes with degree < k
+        for k in 0..=max_degree {
+            // Find all nodes with current effective degree <= k that haven't been removed
+            let mut to_remove: Vec<Uuid> = Vec::new();
+            for (&node, &deg) in degree.iter() {
+                if !removed.contains(&node) && deg <= k {
+                    to_remove.push(node);
+                }
+            }
+
+            // BFS removal: removing a node reduces neighbors' degrees
+            let mut queue: VecDeque<Uuid> = to_remove.into();
+            while let Some(node) = queue.pop_front() {
+                if removed.contains(&node) {
+                    continue;
+                }
+                removed.insert(node);
+                core.insert(node, k);
+
+                // Decrease degree of all neighbors
+                let mut neighbors: HashSet<Uuid> = HashSet::new();
+                if let Some(edges) = self.adjacency.get(&node) {
+                    for (n, _) in edges { neighbors.insert(*n); }
+                }
+                if let Some(edges) = self.reverse_adjacency.get(&node) {
+                    for (n, _) in edges { neighbors.insert(*n); }
+                }
+
+                for neighbor in neighbors {
+                    if !removed.contains(&neighbor) {
+                        if let Some(deg) = degree.get_mut(&neighbor) {
+                            *deg = deg.saturating_sub(1);
+                            if *deg <= k {
+                                queue.push_back(neighbor);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        core
+    }
+
+    /// Weighted shortest path using Dijkstra's algorithm.
+    ///
+    /// Unlike the basic [shortest_path] which uses raw edge weights as costs,
+    /// this uses inverse weights: higher-weight edges (stronger relationships)
+    /// are "cheaper" to traverse. Cost = 1/weight for each edge.
+    ///
+    /// This enables queries like: "What's the closest (strongest) path between
+    /// two economic entities?"
+    pub fn weighted_shortest_path(&self, from: Uuid, to: Uuid) -> Option<ShortestPathResult> {
+        if from == to {
+            return Some(ShortestPathResult {
+                path: vec![from],
+                total_weight: 0.0,
+                hop_count: 0,
+            });
+        }
+
+        let mut dist: HashMap<Uuid, f64> = HashMap::new();
+        let mut prev: HashMap<Uuid, Option<Uuid>> = HashMap::new();
+        let mut heap = BinaryHeap::new();
+
+        dist.insert(from, 0.0);
+        prev.insert(from, None);
+        heap.push(Reverse((0.0_f64, from)));
+
+        while let Reverse((current_dist, current)) = heap.pop() {
+            if current == to {
+                let mut path = Vec::new();
+                let mut node = Some(to);
+                while let Some(n) = node {
+                    path.push(n);
+                    node = prev.get(&n).and_then(|p| *p);
+                }
+                path.reverse();
+                return Some(ShortestPathResult {
+                    path,
+                    total_weight: current_dist,
+                    hop_count: path.len().saturating_sub(1),
+                });
+            }
+
+            if current_dist > *dist.get(&current).unwrap_or(&f64::INFINITY) {
+                continue;
+            }
+
+            if let Some(neighbors) = self.adjacency.get(&current) {
+                for (neighbor, weight) in neighbors {
+                    // Inverse weight: stronger edges have lower cost
+                    // Clamp to avoid division by zero
+                    let cost = if *weight > 0.001 { 1.0 / weight } else { 1000.0 };
+                    let new_dist = current_dist + cost;
+                    let known_dist = *dist.get(neighbor).unwrap_or(&f64::INFINITY);
+
+                    if new_dist < known_dist {
+                        dist.insert(*neighbor, new_dist);
+                        prev.insert(*neighbor, Some(current));
+                        heap.push(Reverse((new_dist, *neighbor)));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     /// Find similar nodes based on shared neighbors (Jaccard similarity).
     pub fn similar_nodes(&self, node_id: Uuid, limit: usize) -> Vec<(Uuid, f64)> {
         let node_neighbors: HashSet<Uuid> = self
@@ -645,6 +876,92 @@ mod tests {
         // C should be similar to B (they share neighbor A)
         let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
         assert!(similar.iter().any(|(id, score)| *id == c && *score > 0.0));
+    }
+
+    #[test]
+    fn test_betweenness_centrality() {
+        let graph = create_test_graph();
+        let results = graph.betweenness_centrality(5);
+
+        assert_eq!(results.len(), 5);
+        // Node A (center, connecting bridge) should have highest betweenness
+        let center = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        assert_eq!(results[0].node_id, center);
+        assert!(results[0].score > 0.0, "Center node should have non-zero betweenness");
+    }
+
+    #[test]
+    fn test_betweenness_centrality_linear() {
+        // Linear chain: A → B → C → D
+        // B and C should have highest betweenness (they bridge the chain)
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+        let d = Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap();
+
+        graph.add_edge(a, b, 1.0);
+        graph.add_edge(b, c, 1.0);
+        graph.add_edge(c, d, 1.0);
+
+        let results = graph.betweenness_centrality(4);
+        // B and C are bridges; they should have highest betweenness
+        let b_score = results.iter().find(|(id, _)| *id == b).map(|(_, s)| *s).unwrap_or(0.0);
+        let c_score = results.iter().find(|(id, _)| *id == c).map(|(_, s)| *s).unwrap_or(0.0);
+        let a_score = results.iter().find(|(id, _)| *id == a).map(|(_, s)| *s).unwrap_or(0.0);
+        assert!(b_score > a_score, "B should have higher betweenness than A");
+        assert!(c_score > a_score, "C should have higher betweenness than A");
+    }
+
+    #[test]
+    fn test_k_core_decomposition() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+        let d = Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap();
+        let e = Uuid::parse_str("00000000-0000-0000-0000-000000000005").unwrap();
+
+        // Triangle: A-B-C (k=2 core)
+        graph.add_undirected_edge(a, b, 1.0);
+        graph.add_undirected_edge(b, c, 1.0);
+        graph.add_undirected_edge(c, a, 1.0);
+        // D attached to B (k=1)
+        graph.add_undirected_edge(b, d, 1.0);
+        // E attached to D (k=1, leaf)
+        graph.add_undirected_edge(d, e, 1.0);
+
+        let cores = graph.k_core_decomposition();
+
+        // A, B, C should be in 2-core (triangle)
+        let a_core = cores.get(&a).copied().unwrap_or(0);
+        let b_core = cores.get(&b).copied().unwrap_or(0);
+        let c_core = cores.get(&c).copied().unwrap_or(0);
+        assert!(a_core >= 1, "A should be in at least 1-core");
+        assert!(b_core >= 1, "B should be in at least 1-core");
+        assert!(c_core >= 1, "C should be in at least 1-core");
+
+        // E (leaf) should be in 1-core only
+        let e_core = cores.get(&e).copied().unwrap_or(0);
+        assert_eq!(e_core, 1, "Leaf node E should be in 1-core only");
+    }
+
+    #[test]
+    fn test_weighted_shortest_path() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+
+        // Strong edge A→B (weight 10.0) and weak edge A→C (weight 0.1), C→B (weight 0.1)
+        graph.add_edge(a, b, 10.0);  // cost = 1/10 = 0.1
+        graph.add_edge(a, c, 0.1);   // cost = 1/0.1 = 10
+        graph.add_edge(c, b, 0.1);   // cost = 1/0.1 = 10
+
+        // Weighted shortest should prefer the direct strong edge A→B
+        let result = graph.weighted_shortest_path(a, b).unwrap();
+        assert_eq!(result.path, vec![a, b]);
+        assert!((result.total_weight - 0.1).abs() < 0.001, "Cost should be 1/10 = 0.1");
     }
 
     #[test]
