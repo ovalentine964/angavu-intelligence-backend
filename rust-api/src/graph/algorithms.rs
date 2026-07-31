@@ -700,19 +700,230 @@ impl Default for AlgorithmGraph {
     }
 }
 
+// ── Graph Reasoner ──────────────────────────────────────────────────────────
+
+/// Graph-based reasoning engine that traverses the knowledge graph
+/// to generate actionable insights for the OODA Orient phase.
+pub struct GraphReasoner {
+    graph: AlgorithmGraph,
+    embeddings: HashMap<Uuid, Vec<f64>>,
+}
+
+/// Reasoning result about a product.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductReasoning {
+    pub product_id: Uuid,
+    pub suppliers: Vec<Uuid>,
+    pub alternatives: Vec<Uuid>,
+    pub markets: Vec<Uuid>,
+    pub cheapest_alternative_path: Option<ShortestPathResult>,
+    pub community_peers: Vec<Uuid>,
+}
+
+/// Reasoning result about credit risk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreditReasoning {
+    pub cohort_id: Uuid,
+    pub pagerank_score: f64,
+    pub peer_cohorts: Vec<Uuid>,
+    pub similar_cohorts: Vec<(Uuid, f64)>,
+    pub bridge_nodes: Vec<(Uuid, f64)>,
+}
+
+/// Structural context for the OODA Orient phase.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientContext {
+    pub community_id: Option<u32>,
+    pub community_members: Vec<Uuid>,
+    pub local_pagerank: f64,
+    pub betweenness_score: f64,
+    pub k_core_level: usize,
+    pub nearby_anomalies: Vec<Uuid>,
+}
+
+impl GraphReasoner {
+    pub fn new(graph: AlgorithmGraph, embeddings: HashMap<Uuid, Vec<f64>>) -> Self {
+        Self { graph, embeddings }
+    }
+
+    /// Reason about a product: find suppliers, alternatives, price trends.
+    pub fn reason_about_product(&self, product_id: Uuid) -> ProductReasoning {
+        let neighborhood = self.graph.neighborhood(product_id, 3);
+        let neighbor_ids: Vec<Uuid> = neighborhood.iter().map(|(id, _)| *id).collect();
+
+        // Classify neighbors by label prefix
+        let suppliers: Vec<Uuid> = neighbor_ids.iter()
+            .filter(|id| {
+                self.graph.node_labels.get(id)
+                    .map(|l| l.starts_with("supply:"))
+                    .unwrap_or(false)
+            })
+            .copied()
+            .collect();
+
+        let alternatives: Vec<Uuid> = neighbor_ids.iter()
+            .filter(|id| {
+                self.graph.node_labels.get(id)
+                    .map(|l| l.starts_with("product:"))
+                    .unwrap_or(false)
+            })
+            .copied()
+            .collect();
+
+        let markets: Vec<Uuid> = neighbor_ids.iter()
+            .filter(|id| {
+                self.graph.node_labels.get(id)
+                    .map(|l| l.starts_with("market:"))
+                    .unwrap_or(false)
+            })
+            .copied()
+            .collect();
+
+        // Find shortest path to cheapest alternative (highest-weight = strongest relationship)
+        let cheapest_alternative_path = alternatives.iter()
+            .filter_map(|alt| self.graph.weighted_shortest_path(product_id, *alt))
+            .min_by(|a, b| a.total_weight.partial_cmp(&b.total_weight).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Find community peers
+        let communities = self.graph.detect_communities();
+        let community_peers = communities.iter()
+            .find(|c| c.members.contains(&product_id))
+            .map(|c| c.members.iter().copied().filter(|id| *id != product_id).collect())
+            .unwrap_or_default();
+
+        ProductReasoning {
+            product_id,
+            suppliers,
+            alternatives,
+            markets,
+            cheapest_alternative_path,
+            community_peers,
+        }
+    }
+
+    /// Reason about credit risk: find contributing factors and similar cohorts.
+    pub fn reason_about_credit(&self, cohort_id: Uuid) -> CreditReasoning {
+        let pagerank = self.graph.pagerank(30, 0.85);
+        let pagerank_score = pagerank.iter()
+            .find(|r| r.node_id == cohort_id)
+            .map(|r| r.score)
+            .unwrap_or(0.0);
+
+        let communities = self.graph.detect_communities();
+        let peer_cohorts = communities.iter()
+            .find(|c| c.members.contains(&cohort_id))
+            .map(|c| c.members.iter().copied().filter(|id| *id != cohort_id).collect())
+            .unwrap_or_default();
+
+        let similar_cohorts = self.graph.similar_nodes(cohort_id, 5);
+
+        let bridge_nodes = self.graph.betweenness_centrality(10);
+
+        CreditReasoning {
+            cohort_id,
+            pagerank_score,
+            peer_cohorts,
+            similar_cohorts,
+            bridge_nodes,
+        }
+    }
+
+    /// Generate structural context for the OODA Orient phase.
+    /// This feeds community membership, centrality, and k-core level
+    /// into the decision-making process.
+    pub fn orient_context(&self, node_id: Uuid) -> OrientContext {
+        let communities = self.graph.detect_communities();
+        let community = communities.iter().find(|c| c.members.contains(&node_id));
+
+        let community_id = community.map(|c| c.id);
+        let community_members = community
+            .map(|c| c.members.iter().copied().filter(|id| *id != node_id).collect())
+            .unwrap_or_default();
+
+        let pagerank = self.graph.pagerank(30, 0.85);
+        let local_pagerank = pagerank.iter()
+            .find(|r| r.node_id == node_id)
+            .map(|r| r.score)
+            .unwrap_or(0.0);
+
+        let betweenness = self.graph.betweenness_centrality(100);
+        let betweenness_score = betweenness.iter()
+            .find(|(id, _)| *id == node_id)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0);
+
+        let k_cores = self.graph.k_core_decomposition();
+        let k_core_level = k_cores.get(&node_id).copied().unwrap_or(0);
+
+        OrientContext {
+            community_id,
+            community_members,
+            local_pagerank,
+            betweenness_score,
+            k_core_level,
+            nearby_anomalies: Vec::new(), // populated by drift detection integration
+        }
+    }
+
+    /// Predict missing edges using embedding similarity.
+    /// Returns (node_a, node_b, similarity) for pairs above threshold.
+    pub fn predict_missing_edges(&self, threshold: f64) -> Vec<(Uuid, Uuid, f64)> {
+        let mut predictions = Vec::new();
+        let nodes: Vec<Uuid> = self.embeddings.keys().copied().collect();
+
+        for i in 0..nodes.len() {
+            for j in (i + 1)..nodes.len() {
+                let a = &nodes[i];
+                let b = &nodes[j];
+
+                // Skip if edge already exists
+                if self.graph.adjacency.get(a)
+                    .map_or(false, |edges| edges.iter().any(|(n, _)| n == b))
+                {
+                    continue;
+                }
+
+                if let (Some(emb_a), Some(emb_b)) = (self.embeddings.get(a), self.embeddings.get(b)) {
+                    let sim = cosine_similarity(emb_a, emb_b);
+                    if sim > threshold {
+                        predictions.push((*a, *b, sim));
+                    }
+                }
+            }
+        }
+
+        predictions.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        predictions
+    }
+}
+
+/// Compute cosine similarity between two vectors.
+pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (norm_a * norm_b)
+}
+
 /// Build an AlgorithmGraph from PostgreSQL knowledge graph tables.
-/// This is used by the GraphQL and REST endpoints.
+/// Loads ALL 12 node types and ALL edges for full graph analytics.
 pub async fn build_graph_from_db(
     pool: &sqlx::PgPool,
     max_depth: Option<u32>,
 ) -> anyhow::Result<AlgorithmGraph> {
     let mut graph = AlgorithmGraph::new();
 
-    // Load edges
+    // 1. Load ALL edges (not just those with sample_size >= 10)
     let edges = sqlx::query!(
         "SELECT source_id, target_id, weight, edge_type
          FROM kg_edges
-         WHERE sample_size >= 10"
+         WHERE valid_until IS NULL OR valid_until > NOW()"
     )
     .fetch_all(pool)
     .await?;
@@ -721,32 +932,135 @@ pub async fn build_graph_from_db(
         graph.add_edge(edge.source_id, edge.target_id, edge.weight.unwrap_or(1.0));
     }
 
-    // Load node labels from worker cohorts
+    // 2. Load ALL node types with labels
+
+    // Worker cohorts
     let cohorts = sqlx::query!(
-        "SELECT id, cohort_hash, worker_type FROM kg_worker_cohorts"
+        "SELECT id, worker_type, region_id FROM kg_worker_cohorts"
     )
     .fetch_all(pool)
     .await?;
-
-    for cohort in &cohorts {
-        graph.set_label(
-            cohort.id,
-            format!("cohort:{}:{}", cohort.worker_type, cohort.cohort_hash),
-        );
+    for c in &cohorts {
+        graph.set_label(c.id, format!("cohort:{}:{}", c.worker_type, c.region_id));
     }
 
-    // Load node labels from product categories
+    // Product categories
     let products = sqlx::query!(
-        "SELECT id, category_code, category_name FROM kg_product_categories"
+        "SELECT id, category_code FROM kg_product_categories"
     )
     .fetch_all(pool)
     .await?;
+    for p in &products {
+        graph.set_label(p.id, format!("product:{}", p.category_code));
+    }
 
-    for product in &products {
-        graph.set_label(product.id, format!("product:{}", product.category_code));
+    // Regional markets
+    let markets = sqlx::query!(
+        "SELECT id, region_code FROM kg_regional_markets"
+    )
+    .fetch_all(pool)
+    .await?;
+    for m in &markets {
+        graph.set_label(m.id, format!("market:{}", m.region_code));
+    }
+
+    // Credit risk profiles
+    let credit = sqlx::query!(
+        "SELECT id, risk_tier FROM kg_credit_risk_profiles"
+    )
+    .fetch_all(pool)
+    .await?;
+    for c in &credit {
+        graph.set_label(c.id, format!("credit:{}", c.risk_tier));
+    }
+
+    // Supply chain entities
+    let supply = sqlx::query!(
+        "SELECT id, entity_type, entity_name FROM kg_supply_chain_entities"
+    )
+    .fetch_all(pool)
+    .await?;
+    for s in &supply {
+        graph.set_label(s.id, format!("supply:{}:{}", s.entity_type, s.entity_name));
+    }
+
+    // Economic indicators
+    let indicators = sqlx::query!(
+        "SELECT id, indicator_code FROM kg_economic_indicators"
+    )
+    .fetch_all(pool)
+    .await?;
+    for i in &indicators {
+        graph.set_label(i.id, format!("indicator:{}", i.indicator_code));
+    }
+
+    // Financial products
+    let financial = sqlx::query!(
+        "SELECT id, product_type FROM kg_financial_products"
+    )
+    .fetch_all(pool)
+    .await?;
+    for f in &financial {
+        graph.set_label(f.id, format!("financial:{}", f.product_type));
+    }
+
+    // Demand signals (active only)
+    let signals = sqlx::query!(
+        "SELECT id, signal_type FROM kg_demand_signals WHERE expires_at IS NULL OR expires_at > NOW()"
+    )
+    .fetch_all(pool)
+    .await?;
+    for s in &signals {
+        graph.set_label(s.id, format!("signal:{}", s.signal_type));
     }
 
     Ok(graph)
+}
+
+/// Build AlgorithmGraph from PostgreSQL with embeddings loaded for vector similarity.
+pub async fn build_graph_with_embeddings(
+    pool: &sqlx::PgPool,
+) -> anyhow::Result<(AlgorithmGraph, HashMap<Uuid, Vec<f64>>)> {
+    let graph = build_graph_from_db(pool, None).await?;
+    let mut embeddings: HashMap<Uuid, Vec<f64>> = HashMap::new();
+
+    // Load embeddings from cohorts
+    let cohort_embs = sqlx::query!(
+        "SELECT id, embedding FROM kg_worker_cohorts WHERE embedding IS NOT NULL"
+    )
+    .fetch_all(pool)
+    .await?;
+    for row in &cohort_embs {
+        if let Some(ref emb) = row.embedding {
+            embeddings.insert(row.id, emb.clone());
+        }
+    }
+
+    // Load embeddings from products
+    let product_embs = sqlx::query!(
+        "SELECT id, embedding FROM kg_product_categories WHERE embedding IS NOT NULL"
+    )
+    .fetch_all(pool)
+    .await?;
+    for row in &product_embs {
+        if let Some(ref emb) = row.embedding {
+            embeddings.insert(row.id, emb.clone());
+        }
+    }
+
+    // Load embeddings from markets
+    let market_embs = sqlx::query!(
+        "SELECT id, embedding FROM kg_regional_markets WHERE embedding IS NOT NULL"
+    )
+    .fetch_all(pool)
+    .await?;
+    for row in &market_embs {
+        if let Some(ref emb) = row.embedding {
+            embeddings.insert(row.id, emb.clone());
+        }
+    }
+
+    Ok((graph, embeddings))
 }
 
 #[cfg(test)]

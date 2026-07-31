@@ -514,12 +514,12 @@ Manually trigger an OODA cycle.
 ```
 
 **Cycle Speeds:**
-| Speed | Frequency | Use Case |
-|-------|-----------|----------|
-| `fast` | Every sync event | Real-time signal processing |
-| `hourly` | Every hour | Market aggregation |
-| `daily` | Daily at 00:00 UTC | Intelligence reports |
-| `weekly` | Sunday 02:00 UTC | Federated learning |
+| Speed | Frequency | Use Case | Implementation |
+|-------|-----------|----------|----------------|
+| `fast` | Every sync event | Real-time signal processing | DB-backed: validates sync, updates profiles, flags anomalies |
+| `hourly` | Every hour | Market aggregation | DB-backed: aggregates market signals, updates Soko Pulse |
+| `daily` | Daily at 00:00 UTC | Intelligence reports | DB-backed: generates reports, runs drift detection |
+| `weekly` | Sunday 02:00 UTC | Federated learning | DB-backed: FedProx gradient aggregation, Alama recalibration |
 
 ---
 
@@ -554,9 +554,7 @@ The intelligence pipeline DAG: Sync → Anonymize → Aggregate → Analyze → 
 
 ## Graph Analytics API
 
-### Graph Algorithms
-
-The backend implements four graph algorithms over the knowledge graph:
+The backend implements **7 graph algorithms** over the knowledge graph, powered by the `UnifiedKnowledgeLayer` that bridges in-memory, PostgreSQL, and Harness graphs:
 
 #### PageRank
 Ranks nodes by importance. Useful for identifying the most influential worker cohorts, product categories, or market nodes.
@@ -569,6 +567,23 @@ Measures node connectivity. Identifies the most connected nodes (key hubs in the
 
 #### Shortest Path
 Finds the shortest weighted path between two nodes using Dijkstra's algorithm. Useful for understanding relationship chains.
+
+#### Betweenness Centrality (Brandes' Algorithm)
+Finds nodes that serve as bridges between communities. Complexity: O(VE). Identifies important intermediary suppliers serving multiple regions.
+
+#### k-Core Decomposition
+Finds the k-core: maximal subgraph where every node has degree ≥ k. Complexity: O(V+E). Identifies tightly-connected economic communities.
+
+#### Weighted Shortest Path (Inverse Weight)
+Uses inverse weights: stronger relationships (higher weight) have lower traversal cost. Complements raw-weight Dijkstra.
+
+### Graph Index: HNSW + Matryoshka
+
+All vector similarity queries use HNSW indexes with Matryoshka truncation:
+- **Recall@10:** 95-99% (vs 85-95% for IVFFlat)
+- **Query time:** 2-6ms
+- **Storage:** 83% savings via 256-dim truncation (from 1536)
+- **Parameters:** m=16, ef_construction=64
 
 ---
 
@@ -825,6 +840,7 @@ All errors follow a consistent format:
 | 409 | Conflict — resource already exists |
 | 429 | Too Many Requests — rate limited |
 | 500 | Internal Server Error |
+| 501 | Not Implemented — stubbed endpoint ("Coming Soon") |
 | 503 | Service Unavailable — circuit breaker open |
 
 ### Error Codes

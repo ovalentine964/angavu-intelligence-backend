@@ -531,6 +531,91 @@ impl KnowledgeGraph {
     pub fn edges(&self) -> &[MemoryEdge] {
         &self.edges
     }
+
+    /// Get mutable access to nodes (for confidence decay)
+    pub fn nodes_mut(&mut self) -> &mut HashMap<Uuid, MemoryNode> {
+        &mut self.nodes
+    }
+
+    /// Apply confidence decay to all semantic and procedural memories.
+    /// Prevents confidence inflation by reducing confidence of entries
+    /// that haven't been reinforced recently.
+    ///
+    /// - `half_life_days`: confidence halves every N days since last update
+    /// - `min_confidence`: floor value to prevent total erasure
+    pub fn apply_confidence_decay(&mut self, half_life_days: f64, min_confidence: f64) -> usize {
+        let now = Utc::now();
+        let mut decayed = 0;
+
+        for node in self.nodes.values_mut() {
+            match node {
+                MemoryNode::Semantic(ref mut m) => {
+                    if let Some(last_verified) = m.last_verified {
+                        let days = (now - last_verified).num_days() as f64;
+                        if days > 0.0 {
+                            let decay_factor = 0.5_f64.powf(days / half_life_days);
+                            let new_confidence = (m.confidence * decay_factor).max(min_confidence);
+                            if new_confidence < m.confidence {
+                                m.confidence = new_confidence;
+                                decayed += 1;
+                            }
+                        }
+                    }
+                }
+                MemoryNode::Procedural(ref mut m) => {
+                    // Decay procedural memory success_rate based on staleness
+                    // Use average_duration_ms as a proxy for last activity
+                    // (in production, add a last_used field)
+                    if m.success_rate > min_confidence {
+                        // Conservative decay: 2% per day of inactivity
+                        // Since we don't have last_used, apply a small fixed decay
+                        let new_rate = (m.success_rate * 0.98).max(min_confidence);
+                        if new_rate < m.success_rate {
+                            m.success_rate = new_rate;
+                            decayed += 1;
+                        }
+                    }
+                }
+                MemoryNode::Episodic(_) => {
+                    // Episodic memories don't decay — they're historical records
+                }
+            }
+        }
+
+        // Update stats
+        self.stats.semantic_count = self.nodes.values()
+            .filter(|n| matches!(n, MemoryNode::Semantic(_)))
+            .count() as u64;
+
+        decayed
+    }
+
+    /// Prune semantic memories that have decayed below a confidence threshold.
+    /// Returns the number of pruned nodes.
+    pub fn prune_low_confidence(&mut self, threshold: f64) -> usize {
+        let pruned_ids: Vec<Uuid> = self.nodes.iter()
+            .filter_map(|(id, node)| match node {
+                MemoryNode::Semantic(m) if m.confidence < threshold => Some(*id),
+                _ => None,
+            })
+            .collect();
+
+        let count = pruned_ids.len();
+        for id in &pruned_ids {
+            self.nodes.remove(id);
+            // Remove from indexes
+            self.concept_index.values_mut().for_each(|ids| ids.retain(|i| i != id));
+            self.entity_index.values_mut().for_each(|ids| ids.retain(|i| i != id));
+        }
+        // Remove edges involving pruned nodes
+        self.edges.retain(|e| {
+            !pruned_ids.contains(&e.source_id()) && !pruned_ids.contains(&e.target_id())
+        });
+
+        self.stats.total_nodes = self.nodes.len() as u64;
+        self.stats.total_edges = self.edges.len() as u64;
+        count
+    }
 }
 
 // ── Memory Consolidation ─────────────────────────────────────────────────────
@@ -582,6 +667,75 @@ impl MemoryConsolidator {
                 status: NodeStatus::Completed,
             })
             .collect()
+    }
+
+    /// Consolidate with domain-specific category inference.
+    /// Examines the content of episodes to assign better semantic categories.
+    pub fn consolidate_with_categories(
+        episodes: &[EpisodicMemory],
+        min_occurrences: usize,
+    ) -> Vec<SemanticMemory> {
+        let mut by_type: HashMap<String, Vec<&EpisodicMemory>> = HashMap::new();
+        for ep in episodes {
+            by_type.entry(format!("{:?}", ep.event_type)).or_default().push(ep);
+        }
+
+        let mut results = Vec::new();
+
+        // Consolidate transaction patterns
+        if let Some(tx_episodes) = by_type.get("Transaction") {
+            let mut outcome_counts: HashMap<String, usize> = HashMap::new();
+            for ep in *tx_episodes {
+                let outcome = ep.outcome.as_deref().unwrap_or("unknown").to_string();
+                *outcome_counts.entry(outcome).or_insert(0) += 1;
+            }
+            for (outcome, count) in outcome_counts {
+                if count >= min_occurrences {
+                    results.push(SemanticMemory {
+                        id: Uuid::new_v4(),
+                        concept: format!("transaction_outcome_{}", outcome.to_lowercase().replace(' ', "_")),
+                        category: SemanticCategory::DomainKnowledge,
+                        statement: format!(
+                            "Transaction pattern: {} occurred {} times out of {} total transactions",
+                            outcome, count, tx_episodes.len()
+                        ),
+                        confidence: (count as f64 / (count as f64 + 10.0)).min(0.95),
+                        source: "consolidation".to_string(),
+                        last_verified: Some(Utc::now()),
+                        contradiction_count: 0,
+                        embedding: None,
+                        status: NodeStatus::Completed,
+                    });
+                }
+            }
+        }
+
+        // Consolidate learning events
+        if let Some(learn_episodes) = by_type.get("Learning") {
+            if learn_episodes.len() >= min_occurrences {
+                let descriptions: Vec<&str> = learn_episodes.iter().map(|e| e.description.as_str()).collect();
+                results.push(SemanticMemory {
+                    id: Uuid::new_v4(),
+                    concept: "learning_pattern".to_string(),
+                    category: SemanticCategory::CausalRelation,
+                    statement: format!(
+                        "Learning pattern from {} events: {}",
+                        learn_episodes.len(),
+                        descriptions.iter().take(3).cloned().collect::<Vec<_>>().join("; ")
+                    ),
+                    confidence: (learn_episodes.len() as f64 / (learn_episodes.len() as f64 + 10.0)).min(0.95),
+                    source: "consolidation".to_string(),
+                    last_verified: Some(Utc::now()),
+                    contradiction_count: 0,
+                    embedding: None,
+                    status: NodeStatus::Completed,
+                });
+            }
+        }
+
+        // Fall back to generic consolidation for remaining types
+        results.extend(Self::consolidate_episodes(episodes, min_occurrences));
+        results
     }
 }
 

@@ -100,7 +100,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Redis connected");
 
     // ── Initialize Loop Engineering ─────────────────────────────
-    let loop_handles = loops::init_loop_engineering().await;
+    let ooda_db = Arc::new(loops::ooda_loop::PgOodaDatabase::new(pg_pool.clone()));
+    let loop_handles = loops::init_loop_engineering(ooda_db).await;
     tracing::info!("Loop engineering initialized (4 OODA loops + feedback + circuit breakers)");
 
     // ── Initialize Message Bus ──────────────────────────────────

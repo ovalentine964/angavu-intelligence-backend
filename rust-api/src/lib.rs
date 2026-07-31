@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use loops::ooda_loop::{OodaSupervisor, LoopConfig};
+use loops::ooda_loop::{OodaSupervisor, LoopConfig, OodaDatabase};
 use loops::drift_detection::{DriftDetector, DriftConfig};
 use loops::pipeline_feedback::{PipelineFeedbackChannel, PipelineFeedbackLoop};
 use loops::circuit_breaker::CircuitBreakerRegistry;
@@ -28,7 +28,7 @@ use loops::metrics::LoopMetrics;
 
 /// Initialize and start all loop engineering components.
 /// Call this from the application's main/startup function.
-pub async fn init_loop_engineering() -> LoopEngineeringHandles {
+pub async fn init_loop_engineering(db: Arc<dyn OodaDatabase>) -> LoopEngineeringHandles {
     info!("Initializing Loop Engineering subsystem...");
 
     // 1. Shared metrics
@@ -52,6 +52,7 @@ pub async fn init_loop_engineering() -> LoopEngineeringHandles {
         metrics.clone(),
         drift_detector.clone(),
         pipeline_feedback.clone(),
+        db,
     ));
 
     // 6. Start pipeline feedback loop
