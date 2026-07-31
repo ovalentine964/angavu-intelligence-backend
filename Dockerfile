@@ -13,14 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 COPY Cargo.toml Cargo.lock* ./
 # Cache dependency builds
-RUN mkdir src && echo 'fn main(){}' > src/main.rs && \
-    echo 'fn main(){}' > src/migrate.rs && \
+RUN mkdir -p rust-api/src && echo 'fn main(){}' > rust-api/src/main.rs && \
+    echo 'fn main(){}' > rust-api/src/migrate.rs && \
     cargo build --release 2>/dev/null || true && \
-    rm -rf src
+    rm -rf rust-api/src
 
-COPY src/ ./src/
+COPY rust-api/src/ ./rust-api/src/
 # Touch source files so cargo detects changes and rebuilds
-RUN touch src/main.rs src/migrate.rs && \
+RUN touch rust-api/src/main.rs rust-api/src/migrate.rs && \
     cargo build --release && \
     strip target/release/angavu-server && \
     strip target/release/angavu-migrate

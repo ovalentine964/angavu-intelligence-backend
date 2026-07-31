@@ -8,7 +8,7 @@ use tokio::sync::{broadcast, RwLock};
 use tokio::time::interval;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use tracing::{info, warn, error, instrument};
+use tracing::{info, warn, error, instrument, Instrument};
 use uuid::Uuid;
 
 use super::metrics::LoopMetrics;
@@ -433,6 +433,17 @@ impl OodaSupervisor {
     }
 
     async fn execute_fast_cycle(&self, event: SyncEvent, iteration: u64) -> OodaCycle {
+        let span = tracing::info_span!(
+            "ooda_fast_cycle",
+            cycle_id = tracing::field::Empty,
+            loop_speed = "fast",
+            iteration = iteration,
+            device_id = %event.device_id,
+            worker_id = %event.worker_id,
+            region = %event.region,
+        );
+        let _guard = span.enter();
+
         let mut cycle = OodaCycle {
             cycle_id: Uuid::new_v4(),
             loop_speed: LoopSpeed::Fast,
@@ -446,8 +457,10 @@ impl OodaSupervisor {
             error_count: 0,
             max_iterations: self.config.max_fast_iterations,
         };
+        span.record("cycle_id", &cycle.cycle_id.to_string());
 
         // OBSERVE: Ingest sync event
+        tracing::info!(phase = "observe", "OODA fast cycle: observing sync event");
         cycle.observations.push(Observation {
             source: format!("device:{}", event.device_id),
             data: serde_json::to_value(&event).unwrap_or_default(),
@@ -457,6 +470,7 @@ impl OodaSupervisor {
 
         // ORIENT: Validate and classify incoming data
         cycle.phase = OodaPhase::Orient;
+        tracing::info!(phase = "orient", "OODA fast cycle: orienting — validating sync event");
         let validation = self.validate_sync_event(&event);
         if !validation.is_valid {
             cycle.error_count += 1;
@@ -468,6 +482,7 @@ impl OodaSupervisor {
 
         // DECIDE: Determine actions based on observations
         cycle.phase = OodaPhase::Decide;
+        tracing::info!(phase = "decide", valid = validation.is_valid, "OODA fast cycle: deciding actions");
         let actions = self.decide_fast_actions(&event, &validation);
         cycle.decision = Some(Decision {
             action_type: "fast_sync_process".to_string(),
@@ -482,6 +497,7 @@ impl OodaSupervisor {
 
         // ACT: Execute decisions
         cycle.phase = OodaPhase::Act;
+        tracing::info!(phase = "act", action_count = actions.len(), "OODA fast cycle: executing actions");
         let start = std::time::Instant::now();
         let mut results = Vec::new();
         for action in &actions {
@@ -536,6 +552,14 @@ impl OodaSupervisor {
     }
 
     async fn execute_medium_cycle(&self, iteration: u64) -> OodaCycle {
+        let span = tracing::info_span!(
+            "ooda_medium_cycle",
+            cycle_id = tracing::field::Empty,
+            loop_speed = "medium",
+            iteration = iteration,
+        );
+        let _guard = span.enter();
+
         let mut cycle = OodaCycle {
             cycle_id: Uuid::new_v4(),
             loop_speed: LoopSpeed::Medium,
@@ -552,6 +576,8 @@ impl OodaSupervisor {
 
         // OBSERVE: Collect hourly market signals from database
         cycle.phase = OodaPhase::Observe;
+        span.record("cycle_id", &cycle.cycle_id.to_string());
+        tracing::info!(phase = "observe", "OODA medium cycle: collecting market signals");
         let (aggregates, signals) = match (
             self.db.get_hourly_transaction_aggregates().await,
             self.db.aggregate_hourly_market_signals().await,
@@ -659,6 +685,14 @@ impl OodaSupervisor {
     }
 
     async fn execute_slow_cycle(&self, iteration: u64) -> OodaCycle {
+        let span = tracing::info_span!(
+            "ooda_slow_cycle",
+            cycle_id = tracing::field::Empty,
+            loop_speed = "slow",
+            iteration = iteration,
+        );
+        let _guard = span.enter();
+
         let mut cycle = OodaCycle {
             cycle_id: Uuid::new_v4(),
             loop_speed: LoopSpeed::Slow,
@@ -675,6 +709,8 @@ impl OodaSupervisor {
 
         // OBSERVE: Gather daily aggregates + model metrics
         cycle.phase = OodaPhase::Observe;
+        span.record("cycle_id", &cycle.cycle_id.to_string());
+        tracing::info!(phase = "observe", "OODA slow cycle: gathering daily intelligence");
         let report_data = self.db.get_daily_report_data().await;
         let model_metrics = self.db.get_model_metrics().await;
 
@@ -819,6 +855,14 @@ impl OodaSupervisor {
     }
 
     async fn execute_deep_cycle(&self, iteration: u64) -> OodaCycle {
+        let span = tracing::info_span!(
+            "ooda_deep_cycle",
+            cycle_id = tracing::field::Empty,
+            loop_speed = "deep",
+            iteration = iteration,
+        );
+        let _guard = span.enter();
+
         let mut cycle = OodaCycle {
             cycle_id: Uuid::new_v4(),
             loop_speed: LoopSpeed::Deep,
@@ -835,6 +879,8 @@ impl OodaSupervisor {
 
         // OBSERVE: Collect FL gradients and economic indicator state
         cycle.phase = OodaPhase::Observe;
+        span.record("cycle_id", &cycle.cycle_id.to_string());
+        tracing::info!(phase = "observe", "OODA deep cycle: collecting FL gradients and economic indicators");
         let gradient_batches = self.db.get_fl_gradient_batches().await;
         let eco_freshness = self.db.get_economic_indicator_freshness().await;
         let cohort_health = self.db.get_cohort_health().await;
