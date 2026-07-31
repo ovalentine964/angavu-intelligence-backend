@@ -15,6 +15,14 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+// Consolidated circuit breaker: delegates to the canonical implementation
+// from loops::circuit_breaker, eliminating the duplicate.
+use crate::loops::circuit_breaker::{
+    CircuitBreaker as CanonicalCircuitBreaker,
+    CircuitBreakerConfig,
+    FallbackStrategy,
+};
+
 // ── Configuration ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -52,82 +60,41 @@ impl Default for LlmConfig {
 
 // ── Circuit Breaker ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
-enum CircuitState {
-    Closed,    // Normal operation
-    Open,      // Failing, reject requests
-    HalfOpen,  // Testing recovery
-}
-
+/// Async wrapper around the canonical CircuitBreaker from loops module.
+/// Consolidates the LLM-specific circuit breaker with the canonical implementation,
+/// maintaining the async API the LLM client expects.
 pub struct CircuitBreaker {
-    state: RwLock<CircuitState>,
-    failure_count: AtomicU32,
-    last_failure: RwLock<Option<Instant>>,
-    threshold: u32,
-    recovery_duration: Duration,
+    inner: tokio::sync::Mutex<CanonicalCircuitBreaker>,
 }
 
 impl CircuitBreaker {
     pub fn new(threshold: u32, recovery_secs: u64) -> Self {
         Self {
-            state: RwLock::new(CircuitState::Closed),
-            failure_count: AtomicU32::new(0),
-            last_failure: RwLock::new(None),
-            threshold,
-            recovery_duration: Duration::from_secs(recovery_secs),
+            inner: tokio::sync::Mutex::new(CanonicalCircuitBreaker::new(
+                "llm".to_string(),
+                CircuitBreakerConfig {
+                    failure_threshold: threshold,
+                    open_timeout: Duration::from_secs(recovery_secs),
+                    ..Default::default()
+                },
+                FallbackStrategy::CachedData { max_age_seconds: 3600 },
+            )),
         }
     }
 
     pub async fn is_available(&self) -> bool {
-        let state = self.state.read().await;
-        match *state {
-            CircuitState::Closed => true,
-            CircuitState::Open => {
-                // Check if recovery time has elapsed
-                if let Some(last) = *self.last_failure.read().await {
-                    if last.elapsed() >= self.recovery_duration {
-                        drop(state);
-                        let mut state = self.state.write().await;
-                        *state = CircuitState::HalfOpen;
-                        info!("Circuit breaker: Open → HalfOpen (testing recovery)");
-                        return true;
-                    }
-                }
-                false
-            }
-            CircuitState::HalfOpen => true,
-        }
+        let mut cb = self.inner.lock().await;
+        cb.check().is_ok()
     }
 
     pub async fn record_success(&self) {
-        let prev_count = self.failure_count.swap(0, Ordering::SeqCst);
-        let mut state = self.state.write().await;
-        if *state == CircuitState::HalfOpen {
-            info!("Circuit breaker: HalfOpen → Closed (recovered)");
-        }
-        *state = CircuitState::Closed;
-        if prev_count > 0 {
-            debug!("Circuit breaker: reset failure count from {}", prev_count);
-        }
+        let mut cb = self.inner.lock().await;
+        cb.record_success(0);
     }
 
     pub async fn record_failure(&self) {
-        let count = self.failure_count.fetch_add(1, Ordering::SeqCst) + 1;
-        *self.last_failure.write().await = Some(Instant::now());
-
-        if count >= self.threshold {
-            let mut state = self.state.write().await;
-            *state = CircuitState::Open;
-            warn!(
-                "Circuit breaker: Closed → Open ({} failures >= threshold {})",
-                count, self.threshold
-            );
-        }
-    }
-
-    #[cfg(test)]
-    pub async fn state(&self) -> CircuitState {
-        self.state.read().await.clone()
+        let mut cb = self.inner.lock().await;
+        cb.record_failure("llm_error", true);
     }
 }
 

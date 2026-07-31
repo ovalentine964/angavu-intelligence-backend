@@ -28,7 +28,7 @@ mod benchmarks {
 
     fn bench_circuit_breaker(c: &mut Criterion) {
         c.bench_function("circuit_breaker_should_allow", |b| {
-            let mut cb = CircuitBreaker::new(5, 60);
+            let mut cb = make_node_circuit_breaker("bench", 5, 60);
             b.iter(|| {
                 black_box(&mut cb).should_allow();
             });
