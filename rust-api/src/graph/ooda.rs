@@ -8,6 +8,13 @@
 //! - Weekly: federated learning, full retrain evaluation
 
 use chrono::{DateTime, Utc};
+
+// Re-export the canonical CircuitBreaker from loops module to avoid duplication.
+// This consolidates the 3 duplicate implementations into 1 canonical source.
+pub use crate::loops::circuit_breaker::CircuitBreaker;
+pub use crate::loops::circuit_breaker::CircuitState;
+pub use crate::loops::circuit_breaker::CircuitBreakerConfig;
+pub use crate::loops::circuit_breaker::FallbackStrategy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -119,99 +126,18 @@ pub enum ComparisonOp {
     LessThanOrEqual,
 }
 
-/// Per-node circuit breaker for fault isolation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CircuitBreaker {
-    pub state: CircuitState,
-    pub failure_count: u32,
-    pub failure_threshold: u32,
-    pub success_count: u32,
-    pub recovery_threshold: u32,
-    pub last_failure_at: Option<DateTime<Utc>>,
-    pub open_until: Option<DateTime<Utc>>,
-    pub open_duration_secs: u64,
-}
-
-impl CircuitBreaker {
-    pub fn new(failure_threshold: u32, open_duration_secs: u64) -> Self {
-        Self {
-            state: CircuitState::Closed,
-            failure_count: 0,
+/// Helper: Create a simple per-node circuit breaker with default config.
+/// Delegates to the canonical CircuitBreaker from the loops module.
+pub fn make_node_circuit_breaker(service_name: &str, failure_threshold: u32, open_timeout_secs: u64) -> CircuitBreaker {
+    CircuitBreaker::new(
+        service_name.to_string(),
+        CircuitBreakerConfig {
             failure_threshold,
-            success_count: 0,
-            recovery_threshold: 3,
-            last_failure_at: None,
-            open_until: None,
-            open_duration_secs,
-        }
-    }
-
-    /// Record a success. Transitions half_open → closed if enough successes.
-    pub fn record_success(&mut self) {
-        match self.state {
-            CircuitState::HalfOpen => {
-                self.success_count += 1;
-                if self.success_count >= self.recovery_threshold {
-                    self.state = CircuitState::Closed;
-                    self.failure_count = 0;
-                    self.success_count = 0;
-                }
-            }
-            CircuitState::Closed => {
-                self.failure_count = 0;
-            }
-            CircuitState::Open => {
-                // Ignore success while open (shouldn't happen)
-            }
-        }
-    }
-
-    /// Record a failure. Transitions closed → open if threshold exceeded.
-    pub fn record_failure(&mut self) {
-        self.failure_count += 1;
-        self.last_failure_at = Some(Utc::now());
-
-        match self.state {
-            CircuitState::Closed => {
-                if self.failure_count >= self.failure_threshold {
-                    self.state = CircuitState::Open;
-                    self.open_until = Some(
-                        Utc::now() + chrono::Duration::seconds(self.open_duration_secs as i64),
-                    );
-                }
-            }
-            CircuitState::HalfOpen => {
-                // Any failure in half-open goes back to open
-                self.state = CircuitState::Open;
-                self.success_count = 0;
-                self.open_until = Some(
-                    Utc::now() + chrono::Duration::seconds(self.open_duration_secs as i64),
-                );
-            }
-            CircuitState::Open => {
-                // Already open, extend timeout
-            }
-        }
-    }
-
-    /// Check if requests should pass through.
-    pub fn should_allow(&mut self) -> bool {
-        match self.state {
-            CircuitState::Closed => true,
-            CircuitState::Open => {
-                // Check if open duration has elapsed
-                if let Some(until) = self.open_until {
-                    if Utc::now() >= until {
-                        self.state = CircuitState::HalfOpen;
-                        self.success_count = 0;
-                        return true;
-                    }
-                }
-                false
-            }
-            CircuitState::HalfOpen => true,
-        }
-    }
+            open_timeout: std::time::Duration::from_secs(open_timeout_secs),
+            ..Default::default()
+        },
+        FallbackStrategy::FailFast { error: "Circuit breaker open".to_string() },
+    )
 }
 
 /// A complete OODA cycle instance.

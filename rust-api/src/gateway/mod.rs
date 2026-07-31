@@ -57,82 +57,85 @@ use serde_json::json;
 
 use error::ErrorResponse;
 
-/// Tool API handlers — credit scoring, market analysis, etc.
+/// Tool API handlers — stubs for endpoints not yet implemented.
+/// These return 501 NOT_IMPLEMENTED with a clear "Coming Soon" message.
 mod tools {
     use super::*;
 
-    pub async fn credit_score(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Credit scoring API")
+    pub async fn credit_score() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Credit scoring API — Coming Soon")
     }
 
     pub async fn market_analysis() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Market analysis API")
+        ErrorResponse::not_implemented("Market analysis API — Coming Soon")
     }
 
     pub async fn demand_forecast() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Demand forecast API")
+        ErrorResponse::not_implemented("Demand forecast API — Coming Soon")
     }
 
-    pub async fn economic_indicators(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Economic indicators API")
+    pub async fn economic_indicators() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Economic indicators API — Coming Soon")
     }
 
     pub async fn distribution_gaps() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Distribution gap analysis API")
+        ErrorResponse::not_implemented("Distribution gap analysis API — Coming Soon")
     }
 
     pub async fn fmcg_report() -> impl IntoResponse {
-        ErrorResponse::not_implemented("FMCG intelligence report API")
+        ErrorResponse::not_implemented("FMCG intelligence report API — Coming Soon")
     }
 
-    pub async fn privacy_noise(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Privacy noise injection API")
+    pub async fn privacy_noise() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Privacy noise injection API — Coming Soon")
     }
 
-    pub async fn anonymize(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Data anonymization API")
+    pub async fn anonymize() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Data anonymization API — Coming Soon")
     }
 
     pub async fn federated_status() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Federated learning status API")
+        ErrorResponse::not_implemented("Federated learning status API — Coming Soon")
     }
 
-    pub async fn generate_report(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Report generation API")
+    pub async fn generate_report() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Report generation API — Coming Soon")
     }
 }
 
-/// Superagent API handlers — OODA orchestrator control plane
+/// Superagent API handlers — OODA orchestrator control plane.
+/// These return 501 NOT_IMPLEMENTED with a clear "Coming Soon" message.
 mod superagent {
     use super::*;
 
     pub async fn status() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Superagent status API")
+        ErrorResponse::not_implemented("Superagent status API — Coming Soon")
     }
 
-    pub async fn trigger_cycle(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("OODA cycle trigger")
+    pub async fn trigger_cycle() -> impl IntoResponse {
+        ErrorResponse::not_implemented("OODA cycle trigger — Coming Soon")
     }
 
-    pub async fn invoke(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Superagent invocation API")
+    pub async fn invoke() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Superagent invocation API — Coming Soon")
     }
 }
 
-/// Billing API handlers — subscription tiers, API keys
+/// Billing API handlers — stubs for endpoints not yet implemented.
+/// These return 501 NOT_IMPLEMENTED with a clear "Coming Soon" message.
 mod billing {
     use super::*;
 
     pub async fn list_tiers() -> impl IntoResponse {
-        ErrorResponse::not_implemented("Billing tier listing")
+        ErrorResponse::not_implemented("Billing tier listing — Coming Soon")
     }
 
-    pub async fn create_subscription(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("Subscription creation")
+    pub async fn create_subscription() -> impl IntoResponse {
+        ErrorResponse::not_implemented("Subscription creation — Coming Soon")
     }
 
-    pub async fn create_api_key(Json(_payload): Json<serde_json::Value>) -> impl IntoResponse {
-        ErrorResponse::not_implemented("API key management")
+    pub async fn create_api_key() -> impl IntoResponse {
+        ErrorResponse::not_implemented("API key management — Coming Soon")
     }
 }
 

@@ -12,6 +12,14 @@
 </p>
 
 > **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, and a federated learning pipeline.
+>
+> **Key claims (with citations):**
+> - Kenya's informal sector employs **83.4% of the workforce** (Kenya National Bureau of Statistics, 2023 Economic Survey) [1]
+> - Mobile money (M-Pesa) processed **KES 35.5 trillion** in 2023 (Central Bank of Kenya, 2023) [2]
+> - k-Anonymity (k≥10) prevents re-identification in cohort-level data releases (Sweeney, 2002) [3]
+> - Federated learning enables privacy-preserving model training across devices (McMahan et al., 2017) [4]
+> - HNSW indexes achieve 95-99% recall@10 vs 85-95% for IVFFlat (Malkov & Yashunin, 2018) [5]
+> - Brandes' algorithm computes betweenness centrality in O(VE) time (Brandes, 2001) [6]
 
 **Built by [Angavu Intelligence Ltd.](https://ovalentine964.github.io/angavu-intelligence/)** — Migori, Kenya
 
@@ -233,3 +241,27 @@ curl http://localhost:8000/health
 - 🌐 [Website](https://ovalentine964.github.io/angavu-intelligence/)
 - 📧 hello@angavuintelligence.com
 - 📍 Migori, Kenya
+
+---
+
+## References
+
+[1] Kenya National Bureau of Statistics. (2023). *Economic Survey 2023*. Nairobi: KNBS. The informal sector accounts for 83.4% of total employment.
+
+[2] Central Bank of Kenya. (2023). *Mobile Payments Statistics — Annual Report 2023*. M-Pesa processed KES 35.5 trillion across 1.6 billion transactions.
+
+[3] Sweeney, L. (2002). k-Anonymity: A Model for Protecting Privacy. *International Journal of Uncertainty, Fuzziness and Knowledge-Based Systems*, 10(5), 557-570. https://doi.org/10.1142/S0218488502001648
+
+[4] McMahan, B., Moore, E., Ramage, D., Hampson, S., & y Arcas, B. A. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. *Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (AISTATS)*. arXiv:1602.05629
+
+[5] Malkov, Y. A., & Yashunin, D. A. (2018). Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 42(4), 824-836. arXiv:1603.09320
+
+[6] Brandes, U. (2001). A faster algorithm for betweenness centrality. *Journal of Mathematical Sociology*, 25(2), 163-177. https://doi.org/10.1080/0022250X.2001.9990249
+
+[7] Dwork, C., & Roth, A. (2014). The Algorithmic Foundations of Differential Privacy. *Foundations and Trends in Theoretical Computer Science*, 9(3-4), 211-407. https://doi.org/10.1561/0400000042
+
+[8] Kairouz, P., et al. (2021). Advances and Open Problems in Federated Learning. *Foundations and Trends in Machine Learning*, 14(1-2), 1-210. arXiv:1912.04977
+
+[9] Brier, G. W. (1950). Verification of Forecasts Expressed in Terms of Probability. *Monthly Weather Review*, 78(1), 1-3. https://doi.org/10.1175/1520-0493(1950)078<0001:VOFEIT>2.0.CO;2
+
+[10] Banerjee, A., Duflo, E., Glennerster, R., & Kinnan, C. (2015). The Miracle of Microfinance? Evidence from a Randomized Evaluation. *American Economic Journal: Applied Economics*, 7(1), 22-53. https://doi.org/10.1257/app.20130533

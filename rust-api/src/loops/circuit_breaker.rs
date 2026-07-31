@@ -208,6 +208,16 @@ impl CircuitBreaker {
         }
     }
 
+    /// Check if requests should pass through (compatibility method for graph/pipeline).
+    pub fn should_allow(&mut self) -> bool {
+        self.maybe_transition();
+        match self.state {
+            CircuitState::Closed => true,
+            CircuitState::Open => false,
+            CircuitState::HalfOpen => true,
+        }
+    }
+
     /// Get current state.
     pub fn state(&self) -> CircuitState {
         self.state

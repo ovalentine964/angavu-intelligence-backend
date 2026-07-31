@@ -8,6 +8,7 @@ pub mod pipeline;
 pub mod knowledge_graph;
 pub mod pg_knowledge_graph;
 pub mod harness_graph;
+pub mod unified_graph;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
