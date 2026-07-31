@@ -121,7 +121,7 @@ impl WorkerTypeDetector {
 
         // Select highest scoring type
         let (best_type, best_score) = scores.iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(t, s)| (*t, *s))
             .unwrap_or((WorkerType::Generic, 0.0));
 

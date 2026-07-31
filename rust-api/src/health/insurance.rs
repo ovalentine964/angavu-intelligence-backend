@@ -131,7 +131,7 @@ impl InsuranceEligibilityEngine {
         }
 
         // Sort eligible by match score (best match first)
-        eligible.sort_by(|a, b| b.match_score.partial_cmp(&a.match_score).unwrap());
+        eligible.sort_by(|a, b| b.match_score.partial_cmp(&a.match_score).unwrap_or(std::cmp::Ordering::Equal));
 
         let recommended = eligible.first().cloned();
 
@@ -275,7 +275,7 @@ impl RiskExplanation {
 
         let top_risks: Vec<TopRisk> = occupation_risk.hazard_scores
             .iter()
-            .sorted_by(|a, b| b.risk_contribution.partial_cmp(&a.risk_contribution).unwrap())
+            .sorted_by(|a, b| b.risk_contribution.partial_cmp(&a.risk_contribution).unwrap_or(std::cmp::Ordering::Equal))
             .take(3)
             .enumerate()
             .map(|(i, hs)| TopRisk {

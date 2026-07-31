@@ -382,7 +382,18 @@ pub async fn get_demand_forecast(
                 .sqrt();
 
             // Simple moving average forecast
-            let last_date = rows.last().unwrap().0;
+            let last_date = match rows.last() {
+                Some(row) => row.0,
+                None => return Json(DemandForecastResponse {
+                    category: query.category,
+                    region: query.region,
+                    forecast_horizon_days: horizon,
+                    predicted_demand: "insufficient_data".to_string(),
+                    confidence: 0.1,
+                    daily_forecast: vec![],
+                    seasonal_pattern: "weekly".to_string(),
+                }).into_response(),
+            };
             let forecasts: Vec<DailyForecast> = (1..=horizon)
                 .map(|day| {
                     let date = last_date + chrono::Duration::days(day as i64);

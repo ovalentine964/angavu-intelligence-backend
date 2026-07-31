@@ -1,0 +1,76 @@
+# =============================================================================
+# Angavu Intelligence Backend — Oracle Cloud Free Tier (ARM64)
+# Optimized for ARM Ampere A1 (4 OCPU, 24GB RAM)
+#
+# Build for ARM64:
+#   docker buildx build --platform linux/arm64 -t angavu-backend:latest -f Dockerfile.oracle .
+#
+# Key optimizations vs main Dockerfile:
+#   - No ClickHouse dependency (removed to save RAM)
+#   - No monitoring stack (Prometheus/Grafana exporters removed)
+#   - Smaller runtime image
+#   - ARM64-native compilation
+# =============================================================================
+
+# ── Stage 1: Build Rust binary (ARM64) ──────────────────────────────────────
+FROM --platform=$TARGETPLATFORM rust:1.82-bookworm AS rust-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev libpq-dev protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock* ./
+# Cache dependency builds
+RUN mkdir -p rust-api/src && echo 'fn main(){}' > rust-api/src/main.rs && \
+    echo 'fn main(){}' > rust-api/src/migrate.rs && \
+    cargo build --release 2>/dev/null || true && \
+    rm -rf rust-api/src
+
+COPY rust-api/src/ ./rust-api/src/
+# Touch source files so cargo detects changes and rebuilds
+RUN touch rust-api/src/main.rs rust-api/src/migrate.rs && \
+    cargo build --release && \
+    strip target/release/angavu-server && \
+    strip target/release/angavu-migrate
+
+# ── Stage 2: Minimal runtime image ──────────────────────────────────────────
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 libssl3 ca-certificates curl dumb-init && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r angavu && useradd -r -g angavu -d /app -s /sbin/nologin angavu
+
+WORKDIR /app
+
+# Copy Rust binaries
+COPY --from=rust-builder /build/target/release/angavu-server /app/angavu-server
+COPY --from=rust-builder /build/target/release/angavu-migrate /app/angavu-migrate
+
+# Copy configuration and scripts
+COPY scripts/ /app/scripts/
+RUN chmod +x /app/scripts/*.sh 2>/dev/null || true
+
+# Create directories for runtime data
+RUN mkdir -p /app/config /app/data /app/logs && \
+    chown -R angavu:angavu /app
+
+USER angavu
+
+# Environment defaults (overridable at runtime)
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1 \
+    ANGAVU_HOST=0.0.0.0 \
+    ANGAVU_PORT=8000 \
+    ANALYTICS_BACKEND=postgresql
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["/app/angavu-server", "--host", "0.0.0.0", "--port", "8000"]

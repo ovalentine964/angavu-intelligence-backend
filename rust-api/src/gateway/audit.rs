@@ -11,6 +11,8 @@ pub struct AuditLogger {
     buffer: Arc<RwLock<Vec<AuditLogEntry>>>,
     /// Maximum buffer size before forced flush
     max_buffer_size: usize,
+    /// PostgreSQL connection pool for persistent storage
+    pool: Option<sqlx::PgPool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +40,16 @@ impl AuditLogger {
         Self {
             buffer: Arc::new(RwLock::new(Vec::with_capacity(max_buffer_size))),
             max_buffer_size,
+            pool: None,
+        }
+    }
+
+    /// Create an AuditLogger with PostgreSQL persistence.
+    pub fn with_pool(max_buffer_size: usize, pool: sqlx::PgPool) -> Self {
+        Self {
+            buffer: Arc::new(RwLock::new(Vec::with_capacity(max_buffer_size))),
+            max_buffer_size,
+            pool: Some(pool),
         }
     }
 
@@ -56,20 +68,54 @@ impl AuditLogger {
         let entries: Vec<AuditLogEntry> = std::mem::take(&mut *buffer);
         let count = entries.len();
 
-        // In production: INSERT INTO audit_log VALUES (...)
-        // Using sqlx::query! or similar
-        tracing::debug!(count = count, "Audit log flushed to database");
+        tracing::debug!(count = count, "Audit log flush started");
 
-        // For now, just log structured entries
-        for entry in &entries {
-            tracing::info!(
-                org_id = %entry.org_id,
-                endpoint = %entry.endpoint,
-                method = %entry.method,
-                status = entry.status_code,
-                latency_ms = entry.response_time_ms,
-                "API audit"
-            );
+        // Persist to PostgreSQL if pool is available
+        if let Some(ref pool) = self.pool {
+            for entry in &entries {
+                let result = sqlx::query(
+                    r#"
+                    INSERT INTO audit_log (
+                        id, timestamp, org_id, key_id, endpoint, method,
+                        status_code, response_time_ms, ip_address, user_agent,
+                        k_anonymity_suppressed, query_hash, rate_limit_remaining
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT (id) DO NOTHING
+                    "#,
+                )
+                .bind(entry.id)
+                .bind(entry.timestamp)
+                .bind(&entry.org_id)
+                .bind(&entry.key_id)
+                .bind(&entry.endpoint)
+                .bind(&entry.method)
+                .bind(entry.status_code as i32)
+                .bind(entry.response_time_ms as i64)
+                .bind(&entry.ip_address)
+                .bind(&entry.user_agent)
+                .bind(entry.k_anonymity_suppressed)
+                .bind(&entry.query_hash)
+                .bind(entry.rate_limit_remaining as i32)
+                .execute(pool)
+                .await;
+
+                if let Err(e) = result {
+                    tracing::error!(error = %e, entry_id = %entry.id, "Failed to persist audit log entry");
+                }
+            }
+            tracing::debug!(count = count, "Audit log flushed to PostgreSQL");
+        } else {
+            // Fallback: structured logging only
+            for entry in &entries {
+                tracing::info!(
+                    org_id = %entry.org_id,
+                    endpoint = %entry.endpoint,
+                    method = %entry.method,
+                    status = entry.status_code,
+                    latency_ms = entry.response_time_ms,
+                    "API audit (not persisted — no DB pool)"
+                );
+            }
         }
     }
 }
@@ -121,3 +167,29 @@ pub async fn audit_middleware(
 
     Ok(response)
 }
+
+/// SQL migration to create the audit_log table.
+pub const AUDIT_LOG_MIGRATION: &str = r#"
+CREATE TABLE IF NOT EXISTS audit_log (
+    id UUID PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    org_id VARCHAR(100) NOT NULL,
+    key_id VARCHAR(100) NOT NULL,
+    endpoint TEXT NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    status_code SMALLINT NOT NULL,
+    response_time_ms BIGINT NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    k_anonymity_suppressed BOOLEAN NOT NULL DEFAULT FALSE,
+    query_hash VARCHAR(64),
+    rate_limit_remaining INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_org_id ON audit_log(org_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_endpoint ON audit_log(endpoint);
+CREATE INDEX IF NOT EXISTS idx_audit_log_status ON audit_log(status_code);
+"#;
+

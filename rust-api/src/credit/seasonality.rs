@@ -118,7 +118,7 @@ impl SeasonalityDetector {
         }
 
         // Sort by strength
-        detected.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
+        detected.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
 
         self.detected_periods = detected.clone();
 

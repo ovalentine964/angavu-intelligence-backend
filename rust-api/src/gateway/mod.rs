@@ -10,6 +10,7 @@ pub mod webhook_integration;
 pub mod human_approval;
 pub mod error;
 pub mod tools_impl;
+pub mod graph_sync;
 
 use axum::{
     extract::{Request, State},

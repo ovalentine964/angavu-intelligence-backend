@@ -202,7 +202,7 @@ pub async fn create_approval(
     let confirmation_id = Uuid::new_v4().to_string();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
     let timeout = action_type.timeout_seconds();
     let expires_at = now + timeout;

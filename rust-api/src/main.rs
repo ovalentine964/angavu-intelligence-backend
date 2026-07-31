@@ -154,7 +154,7 @@ async fn main() -> anyhow::Result<()> {
         jwt_config: Arc::new(jwt_config),
         rate_limiter: Arc::new(RateLimiter::new(10)),
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
-        audit: Arc::new(AuditLogger::new(1024)),
+        audit: Arc::new(AuditLogger::with_pool(1024, pg_pool.clone())),
         sync_state,
         db: pg_pool.clone(),
         redis: redis_conn.clone(),
@@ -192,6 +192,15 @@ async fn main() -> anyhow::Result<()> {
         ip_rate_limiter: Arc::new(angavu_intelligence_backend::gateway::rate_limit::IpRateLimiter::new(60)),
     };
 
+    // Run audit_log table migration
+    sqlx::query(angavu_intelligence_backend::gateway::audit::AUDIT_LOG_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Audit log table migration skipped (may already exist)")
+        })
+        .ok();
+
     // Run webhook_events table migration
     sqlx::query(webhook_module::MIGRATION_WEBHOOK_EVENTS)
         .execute(&pg_pool)
@@ -206,7 +215,7 @@ async fn main() -> anyhow::Result<()> {
     // ── Initialize Human-in-the-Loop Approval System ──────────
     let approval_state = angavu_intelligence_backend::gateway::human_approval::HumanApprovalState {
         redis: redis_conn.clone(),
-        audit: Arc::new(AuditLogger::new(1024)),
+        audit: Arc::new(AuditLogger::with_pool(1024, pg_pool.clone())),
     };
     let approval_router = angavu_intelligence_backend::gateway::human_approval::human_approval_router(approval_state);
     tracing::info!("Human-in-the-Loop approval system initialized (credit decisions, sensitive actions, escalation, reports, chama governance)");
