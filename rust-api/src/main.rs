@@ -14,14 +14,53 @@ use angavu_intelligence_backend::gateway::audit::AuditLogger;
 use angavu_intelligence_backend::loops;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use opentelemetry::trace::TracerProvider;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
+    // Initialize tracing with optional OpenTelemetry OTLP exporter
+    let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok();
+
+    let otel_tracer = if let Some(ref endpoint) = otlp_endpoint {
+        match opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(endpoint),
+            )
+            .with_trace_config(
+                opentelemetry_sdk::trace::Config::default()
+                    .with_resource(opentelemetry_sdk::Resource::new(vec![
+                        opentelemetry::KeyValue::new("service.name", "angavu-intelligence-backend"),
+                        opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                    ])),
+            )
+            .install_batch(opentelemetry_sdk::runtime::Tokio)
+        {
+            Ok(tracer) => {
+                tracing::info!(endpoint = %endpoint, "OpenTelemetry OTLP exporter initialized");
+                Some(tracer)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to initialize OTLP exporter — falling back to local tracing only");
+                None
+            }
+        }
+    } else {
+        tracing::info!("OTEL_EXPORTER_OTLP_ENDPOINT not set — tracing is local only");
+        None
+    };
+
+    let otel_layer = otel_tracer.map(|tracer| {
+        tracing_opentelemetry::layer().with_tracer(tracer)
+    });
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "angavu=info,tower_http=info".into()))
         .with(tracing_subscriber::fmt::layer())
+        .with(otel_layer)
         .init();
 
     tracing::info!("Starting Angavu Intelligence Backend");

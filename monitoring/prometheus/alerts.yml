@@ -33,31 +33,31 @@ groups:
           description: "Current p95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
           runbook: "Check database query performance, Redis connectivity, and CPU usage"
 
-      # API availability < 99.5% over 30 days (SLO burn)
+      # API availability < 99.9% over 30 days (SLO burn)
       - alert: SLOAvailabilityBurn
         expr: |
           (1 - sum(rate(http_requests_total{status=~"5.."}[30d]))
-              / sum(rate(http_requests_total[30d]))) < 0.995
+              / sum(rate(http_requests_total[30d]))) < 0.999
         for: 1h
         labels:
           severity: critical
           team: backend
         annotations:
-          summary: "API availability SLO breach (target: 99.5%)"
+          summary: "API availability SLO breach (target: 99.9%)"
           description: "Current availability: {{ $value | humanizePercentage }}"
 
-      # Error budget exhaustion (5% monthly budget)
+      # Error budget exhaustion (0.1% monthly budget for 99.9% SLO)
       - alert: ErrorBudgetExhausted
         expr: |
           sum(rate(http_requests_total{status=~"5.."}[30d]))
-          / sum(rate(http_requests_total[30d])) > 0.05
+          / sum(rate(http_requests_total[30d])) > 0.001
         for: 30m
         labels:
           severity: critical
           team: backend
         annotations:
-          summary: "Monthly error budget exhausted"
-          description: "Error rate {{ $value | humanizePercentage }} exceeds 5% monthly budget"
+          summary: "Monthly error budget exhausted (99.9% SLO)"
+          description: "Error rate {{ $value | humanizePercentage }} exceeds 0.1% monthly budget"
 
   - name: sync_alerts
     rules:
@@ -74,17 +74,17 @@ groups:
           summary: "Sync failure rate > 5%"
           description: "Current sync failure rate: {{ $value | humanizePercentage }}"
 
-      # Sync success rate < 95% (SLO breach)
+      # Sync success rate < 99% (SLO breach)
       - alert: SyncSLOBreach
         expr: |
           sum(rate(sync_operations_total{status="success"}[1h]))
-          / sum(rate(sync_operations_total[1h])) < 0.95
+          / sum(rate(sync_operations_total[1h])) < 0.99
         for: 1h
         labels:
-          severity: warning
+          severity: critical
           team: backend
         annotations:
-          summary: "Sync success rate SLO breach (target: 95%)"
+          summary: "Sync success rate SLO breach (target: 99%)"
           description: "Current sync success rate: {{ $value | humanizePercentage }}"
 
       # No sync operations in 30 minutes (pipeline stall)

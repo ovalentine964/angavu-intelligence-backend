@@ -38,8 +38,13 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "postgresql://angavu:angavu_secret@localhost:5432/angavu".to_string());
     let redis_url = std::env::var("REDIS_URL")
         .unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "change-me-in-production".to_string());
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+        tracing::warn!("JWT_SECRET not set — generating random secret (tokens will not survive restart)");
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let secret: Vec<u8> = (0..64).map(|_| rng.gen()).collect();
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &secret)
+    });
     let host = std::env::var("ANGAVU_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port: u16 = std::env::var("ANGAVU_PORT")
         .unwrap_or_else(|_| "8000".to_string())

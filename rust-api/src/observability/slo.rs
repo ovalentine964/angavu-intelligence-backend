@@ -47,7 +47,7 @@ impl SloTracker {
             SloDefinition {
                 name: "api_availability".to_string(),
                 description: "API availability (non-5xx responses)".to_string(),
-                target_percent: 99.5,
+                target_percent: 99.9,
                 window_days: 30,
                 metric_query: "(1 - rate(http_requests_total{status=~\"5..\"}[30d]) / rate(http_requests_total[30d])) * 100".to_string(),
                 severity: SloSeverity::Critical,
@@ -55,10 +55,10 @@ impl SloTracker {
             SloDefinition {
                 name: "sync_success_rate".to_string(),
                 description: "Sync pipeline success rate".to_string(),
-                target_percent: 95.0,
+                target_percent: 99.0,
                 window_days: 7,
                 metric_query: "rate(sync_operations_total{status=\"success\"}[7d]) / rate(sync_operations_total[7d]) * 100".to_string(),
-                severity: SloSeverity::Warning,
+                severity: SloSeverity::Critical,
             },
             SloDefinition {
                 name: "intent_classification_accuracy".to_string(),
