@@ -117,6 +117,8 @@ async fn main() -> anyhow::Result<()> {
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
         audit: Arc::new(AuditLogger::new(1024)),
         sync_state,
+        db: pg_pool.clone(),
+        redis: redis_conn.clone(),
     };
 
     // ── Initialize Webhook System ──────────────────────────────
@@ -174,12 +176,6 @@ async fn main() -> anyhow::Result<()> {
     let graphql_schema = graphql::create_schema(pg_pool.clone(), redis_conn.clone()).await;
     let graphql_routes = graphql::graphql_router(graphql_schema.clone());
     tracing::info!("GraphQL endpoint initialized at /graphql");
-
-    // Initialize ToolsState for implemented endpoints (D1)
-    let tools_state = angavu_intelligence_backend::gateway::tools_impl::ToolsState {
-        db: pg_pool.clone(),
-        redis: redis_conn.clone(),
-    };
 
     let app = build_gateway_router(
         gateway_state,

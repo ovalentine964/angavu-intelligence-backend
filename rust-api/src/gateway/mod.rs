@@ -32,6 +32,10 @@ pub struct GatewayState {
     pub audit: Arc<audit::AuditLogger>,
     /// Sync state for bidirectional sync
     pub sync_state: Arc<crate::sync::receiver::SyncState>,
+    /// Database pool for implemented tool endpoints (D1)
+    pub db: sqlx::PgPool,
+    /// Redis connection for implemented tool endpoints (D1)
+    pub redis: redis::aio::ConnectionManager,
 }
 
 // src/gateway/mod.rs (continued — full router assembly)

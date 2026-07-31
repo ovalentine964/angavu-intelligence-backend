@@ -5,16 +5,9 @@
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 use super::error::ErrorResponse;
-
-/// Shared state for implemented tool endpoints
-#[derive(Clone)]
-pub struct ToolsState {
-    pub db: sqlx::PgPool,
-    pub redis: redis::aio::ConnectionManager,
-}
+use super::GatewayState;
 
 // ═══════════════════════════════════════════════════════════
 //  1. POST /api/v1/tools/credit-scores
@@ -51,7 +44,7 @@ pub struct ScoreComponents {
 
 /// POST /api/v1/tools/credit-scores
 pub async fn compute_credit_score(
-    State(state): State<ToolsState>,
+    State(state): State<GatewayState>,
     Json(req): Json<CreditScoreRequest>,
 ) -> impl IntoResponse {
     // Validate cohort exists and meets k-anonymity threshold
@@ -231,7 +224,7 @@ pub struct MarketAnalysisResponse {
 
 /// GET /api/v1/tools/market-analyses
 pub async fn get_market_analysis(
-    State(state): State<ToolsState>,
+    State(state): State<GatewayState>,
     axum::extract::Query(query): axum::extract::Query<MarketAnalysisQuery>,
 ) -> impl IntoResponse {
     let timeframe = query.timeframe_days.unwrap_or(30);
@@ -358,7 +351,7 @@ pub struct DailyForecast {
 
 /// GET /api/v1/tools/demand-forecasts
 pub async fn get_demand_forecast(
-    State(state): State<ToolsState>,
+    State(state): State<GatewayState>,
     axum::extract::Query(query): axum::extract::Query<DemandForecastQuery>,
 ) -> impl IntoResponse {
     let horizon = query.horizon_days.unwrap_or(14);
@@ -462,7 +455,7 @@ pub struct BillingTier {
 
 /// GET /api/v1/billing/tiers
 pub async fn list_billing_tiers(
-    State(state): State<ToolsState>,
+    State(state): State<GatewayState>,
 ) -> impl IntoResponse {
     let tiers: Result<Vec<(String, String, String, i32, serde_json::Value, i32, i32, bool)>, _> =
         sqlx::query_as(
@@ -563,7 +556,7 @@ pub struct FederatedStatusResponse {
 
 /// GET /api/v1/tools/federated-learning/status
 pub async fn get_federated_status(
-    State(state): State<ToolsState>,
+    State(state): State<GatewayState>,
 ) -> impl IntoResponse {
     // Query federated learning state
     let fl_state: Result<(i64, i64, String, Option<chrono::NaiveDateTime>, f64, i64), _> =
