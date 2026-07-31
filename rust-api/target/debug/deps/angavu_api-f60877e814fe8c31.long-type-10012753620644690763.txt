@@ -1,2 +1,0 @@
-fn(AuthContext, axum::Json<JsonValue>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {batch_sync}
-fn(AuthContext, axum::Json<JsonValue>) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {batch_sync}: Handler<_, _>

@@ -134,9 +134,89 @@ Push anonymized data from devices. Supports bidirectional sync (push + pull).
 
 ---
 
+## Graph Sync API
+
+### POST /api/v1/sync/graph
+
+Device-server graph sync. Push node/edge/fact deltas to the knowledge graph with k-anonymity enforcement.
+
+**Headers:**
+- `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "device_id_hash": "sha256:abc123...",
+  "cohort_hash": "sha256:def456...",
+  "last_sync_timestamp": 1700000000000,
+  "current_timestamp": 1700000060000,
+  "node_deltas": [
+    {
+      "id": "uuid",
+      "type": "PRODUCT",
+      "label": "Tomatoes",
+      "properties": {},
+      "updated_at": 1700000000000,
+      "operation": "UPSERT"
+    }
+  ],
+  "edge_deltas": [
+    {
+      "from_id": "uuid1",
+      "to_id": "uuid2",
+      "relation": "SUPPLIES",
+      "properties": {},
+      "weight": 0.8,
+      "updated_at": 1700000000000,
+      "operation": "UPSERT"
+    }
+  ],
+  "fact_deltas": [
+    {
+      "subject": "tomatoes",
+      "predicate": "category",
+      "object": "vegetables",
+      "confidence": 0.95,
+      "source": "device",
+      "updated_at": 1700000000000,
+      "operation": "UPSERT"
+    }
+  ],
+  "stats": {
+    "transaction_count_today": 15,
+    "total_revenue_today": 5000.0,
+    "product_count": 8,
+    "customer_count": 0,
+    "dominant_product_category": "vegetables",
+    "worker_type_detected": "mama_mboga"
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "server_timestamp": 1700000060000,
+  "deltas_applied": 3,
+  "market_signals": [],
+  "price_updates": [],
+  "demand_signals": [],
+  "cohort_insights": [],
+  "error": null
+}
+```
+
+**k-Anonymity:** Rejected if cohort has < 10 members. PII (customer nodes, phone numbers, names) is rejected.
+
+**Safe node types:** PRODUCT, SUPPLIER only. CUSTOMER and TRANSACTION are rejected.
+**Safe edge types:** SUPPLIES, BELONGS_TO, PRICED_AT, LOCATED_AT, ALTERNATIVE_TO, COMPLEMENTS, SUBCATEGORY_OF.
+
+---
+
 ## Tools API
 
-### POST /api/v1/tools/credit
+### POST /api/v1/tools/credit-scores
 
 Compute credit score (Alama Score) for a cohort.
 
@@ -170,7 +250,7 @@ Compute credit score (Alama Score) for a cohort.
 }
 ```
 
-### GET /api/v1/tools/market
+### GET /api/v1/tools/market-analyses
 
 Market analysis for a product category and region.
 
@@ -199,7 +279,7 @@ Market analysis for a product category and region.
 }
 ```
 
-### GET /api/v1/tools/market/demand
+### GET /api/v1/tools/demand-forecasts
 
 Demand forecast for a product category.
 
@@ -223,7 +303,7 @@ Demand forecast for a product category.
 }
 ```
 
-### POST /api/v1/tools/economic
+### POST /api/v1/tools/economic-indicators
 
 Compute economic indicators for a region.
 
@@ -262,7 +342,7 @@ Compute economic indicators for a region.
 }
 ```
 
-### GET /api/v1/tools/distribution
+### GET /api/v1/tools/distribution-gaps
 
 Distribution gap analysis.
 
@@ -286,7 +366,7 @@ Distribution gap analysis.
 }
 ```
 
-### GET /api/v1/tools/fmcg
+### GET /api/v1/tools/fmcg-reports
 
 FMCG intelligence report.
 
@@ -338,7 +418,7 @@ Add differential privacy noise to a value.
 }
 ```
 
-### POST /api/v1/tools/anonymize
+### POST /api/v1/tools/anonymization
 
 Anonymize a data record.
 
@@ -355,7 +435,7 @@ Anonymize a data record.
 }
 ```
 
-### GET /api/v1/tools/federated
+### GET /api/v1/tools/federated-learning/status
 
 Federated learning status.
 
@@ -372,7 +452,7 @@ Federated learning status.
 }
 ```
 
-### POST /api/v1/tools/report
+### POST /api/v1/tools/reports
 
 Generate an intelligence report.
 
@@ -849,7 +929,7 @@ curl -X POST http://localhost:8000/graphql \
 ### cURL: Market Analysis
 
 ```bash
-curl "http://localhost:8000/api/v1/tools/market?category=vegetables&region=nairobi-eastlands" \
+curl "http://localhost:8000/api/v1/tools/market-analyses?category=vegetables&region=nairobi-eastlands" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -59,16 +59,17 @@ test/description        — Test additions
 #### Error Handling
 
 ```rust
-// Good: Descriptive error types
-#[derive(Debug, thiserror::Error)]
-pub enum ApiError {
-    #[error("User not found: {0}")]
-    NotFound(String),
-    #[error("Unauthorized: {0}")]
-    Unauthorized(String),
-}
+// Good: Use unified ErrorResponse for all API responses
+use crate::gateway::error::ErrorResponse;
 
-// Bad: Generic unwrap
+// Convenience constructors:
+ErrorResponse::bad_request("Missing field: cohort_hash")
+ErrorResponse::unauthorized("Invalid token")
+ErrorResponse::k_anonymity_violation(7, 10)  // actual_size, minimum_size
+ErrorResponse::not_implemented("Feature — Coming Soon")
+ErrorResponse::rate_limited(30)  // retry_after_seconds
+
+// Bad: Generic unwrap or ad-hoc error JSON
 let value = something.unwrap();
 ```
 
@@ -95,6 +96,13 @@ cargo test --test integration
 # With logging
 RUST_LOG=debug cargo test -- --nocapture
 ```
+
+**Test requirements for PRs:**
+- All existing tests must pass
+- New features require unit tests
+- API changes require integration tests
+- Use `cargo clippy -- -D warnings` (zero warnings)
+- Use `cargo audit` for dependency vulnerabilities
 
 ### 4. Commit Convention
 
@@ -128,6 +136,36 @@ chore: update dependencies
 8. **Merge** after approval
 
 ## 🏗️ Architecture Guidelines
+
+### Module Structure
+
+The backend is organized into these key modules:
+
+```
+rust-api/src/
+├── gateway/        — API routing, auth, rate limiting, error handling, audit, CORS
+│   ├── mod.rs          — Gateway router builder
+│   ├── error.rs        — Unified ErrorResponse struct
+│   ├── tools_impl.rs   — Implemented tool endpoints
+│   ├── human_approval.rs — Approval workflow
+│   ├── graph_sync.rs   — Device↔server graph sync
+│   └── audit.rs        — Persistent audit logging
+├── graph/          — Knowledge graph (in-memory, PostgreSQL, unified)
+│   ├── unified_graph.rs — UnifiedKnowledgeLayer bridging 3 graphs
+│   ├── pg_knowledge_graph.rs — PostgreSQL-backed graph
+│   └── algorithms.rs   — PageRank, community detection, betweenness, k-core, shortest path
+├── loops/          — OODA loop implementations (fast/medium/slow/deep)
+│   ├── ooda_loop.rs    — Full DB-backed OODA with OTel spans
+│   └── circuit_breaker.rs — Canonical circuit breaker (single source of truth)
+├── credit/         — Credit scoring, federated learning, seasonality
+├── statistical/    — Differential privacy (Laplace mechanism)
+├── observability/  — SLO tracking, metrics
+├── llm/            — LLM inference (uses canonical CircuitBreaker via async wrapper)
+├── health/         — Insurance, occupation hazards
+├── orchestrator/   — OODA orchestrator, economic analyzer
+├── webhook/        — M-Pesa, market, generic webhook handlers
+└── routes/         — Trace analysis, additional routes
+```
 
 ### Adding a New Revenue Engine
 
@@ -194,7 +232,7 @@ Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 📄 License
 
-By contributing, you agree that your contributions will be owned by the Angavu Intelligence Team and used in accordance with the project's proprietary license.
+By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
 
 ## 🙏 Thank You
 

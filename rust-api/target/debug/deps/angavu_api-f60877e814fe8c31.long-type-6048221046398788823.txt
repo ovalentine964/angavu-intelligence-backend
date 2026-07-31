@@ -1,2 +1,0 @@
-fn(State<AppState>, AuthContext) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {track_outcomes}
-fn(State<AppState>, AuthContext) -> impl std::future::Future<Output = Result<axum::Json<JsonValue>, AppError>> {track_outcomes}: Handler<_, _>

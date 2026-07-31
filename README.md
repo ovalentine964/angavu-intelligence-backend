@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License">
 </p>
 
-> **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, and a federated learning pipeline.
+> **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, a federated learning pipeline, and a unified knowledge graph.
 >
 > **Key claims (with citations):**
 > - Kenya's informal sector employs **83.4% of the workforce** (Kenya National Bureau of Statistics, 2023 Economic Survey) [1]
@@ -34,11 +34,13 @@
 OODAOrchestrator (Continuous Intelligence Loop)
 ├── 26 Rust Tools (analysis, privacy, infrastructure, monitoring)
 ├── 6 Superagent Modules (flywheel, guardrails, intelligence, memory, sync)
+├── UnifiedKnowledgeLayer (in-memory + PostgreSQL + Harness graph bridge)
 ├── Billing Engine (4 tiers, API keys, invoicing)
-└── REST API (Axum + WebSocket)
+├── REST API (Axum + WebSocket + GraphQL)
+└── OpenTelemetry Distributed Tracing (4 OODA cycle spans)
 ```
 
-**Tech Stack:** Rust (Axum + Tokio) · PostgreSQL 16 + pgvector · ClickHouse 24 · Redis 7 · Docker · Nginx
+**Tech Stack:** Rust (Axum + Tokio) · PostgreSQL 16 + pgvector (HNSW) · ClickHouse 24 · Redis 7 · Docker · Nginx · OpenTelemetry
 
 ---
 
@@ -62,9 +64,9 @@ OODAOrchestrator (Continuous Intelligence Loop)
 ### Privacy & Security
 | Tool | Purpose |
 |------|---------|
-| `DifferentialPrivacyEngine` | ε-differential privacy with calibrated noise injection |
-| `KAnonymityEnforcer` | k≥10 anonymity cohort enforcement |
-| `FederatedAggregator` | Privacy-preserving federated model updates |
+| `DifferentialPrivacyEngine` | ε-differential privacy with Laplace mechanism (ε=0.1 default), privacy budget tracking |
+| `KAnonymityEnforcer` | k≥10 anonymity cohort enforcement (MIN_K_ANONYMITY constant) |
+| `FederatedAggregator` | Privacy-preserving FedProx gradient aggregation (μ=0.01 proximal term) |
 | `ModelDistributor` | Secure model distribution to edge devices |
 
 ### Infrastructure
@@ -93,6 +95,7 @@ OODAOrchestrator (Continuous Intelligence Loop)
 | `IntelligenceEngine` | LLM-powered insight generation and reasoning |
 | `MemoryEngine` | 5-layer memory hierarchy (working → knowledge) |
 | `SyncEngine` | Bidirectional device-cloud synchronization |
+| `UnifiedKnowledgeLayer` | Bridges 3 disconnected knowledge graphs (in-memory, PostgreSQL, Harness) into single interface with cross-reference indices |
 
 ---
 
@@ -170,15 +173,15 @@ Features: API key management, usage metering, invoice generation, subscription l
 | POST | `/billing/invoices/{id}/finalize` | Finalize invoice |
 | POST | `/billing/invoices/{id}/pay` | Pay invoice |
 
-### Superagent (`/superagent`)
+### Superagent (`/api/v1/superagent`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/superagent/status` | Orchestrator status |
-| POST | `/superagent/cycle` | Trigger OODA cycle |
-| POST | `/superagent/invoke` | Invoke superagent |
-| POST | `/superagent/alert/respond` | Respond to alert |
-| GET | `/superagent/alerts` | List alerts |
-| GET | `/superagent/history` | Cycle history |
+| GET | `/api/v1/superagent/status` | Orchestrator status |
+| POST | `/api/v1/superagent/cycles` | Trigger OODA cycle |
+| POST | `/api/v1/superagent/invocations` | Invoke superagent |
+| POST | `/api/v1/superagent/alert/respond` | Respond to alert |
+| GET | `/api/v1/superagent/alerts` | List alerts |
+| GET | `/api/v1/superagent/history` | Cycle history |
 
 ### WebSocket
 | Endpoint | Description |
@@ -201,9 +204,36 @@ Features: API key management, usage metering, invoice generation, subscription l
 ## Infrastructure
 
 - **Dockerfile** — Multi-stage build (Rust builder → Python LLM → minimal runtime)
+- **Dockerfile.oracle** — ARM64-optimized for Oracle Free Tier (4 OCPU, 24GB RAM). No Python/ClickHouse/monitoring.
 - **docker-compose.yml** — Full stack: PostgreSQL 16, Redis 7, ClickHouse 24, Nginx, API
+- **docker-compose.oracle.yml** — Resource-constrained for Oracle Free Tier (PG 8GB, Redis 1GB, API 4GB)
+- **docker-compose.production.yml** — Production with WAL archiving, automated failover, replication
 - **nginx/nginx.conf** — Reverse proxy with rate limiting, SSL termination, WebSocket support
 - **.github/workflows/deploy.yml** — CI/CD: test → build → push GHCR → deploy to Oracle Cloud
+- **OpenTelemetry** — Distributed tracing for OODA loops (OTLP exporter, Jaeger/Tempo compatible)
+
+### Oracle Free Tier Deployment
+
+```bash
+# SSH into Oracle ARM Ampere A1 instance
+ssh ubuntu@your-oracle-ip
+
+# Clone and configure
+git clone https://github.com/ovalentine964/angavu-intelligence-backend.git
+cd angavu-intelligence-backend
+cp .env.oracle.example .env.oracle
+nano .env.oracle  # set passwords and secrets
+
+# Deploy
+chmod +x scripts/deploy-oracle.sh
+./scripts/deploy-oracle.sh
+
+# Verify
+./scripts/deploy-oracle.sh --status
+curl http://localhost:8000/health
+```
+
+See [`scripts/deploy-oracle.sh`](scripts/deploy-oracle.sh) for full deployment automation with health checks, backup rotation, and zero-downtime updates.
 
 ---
 
@@ -231,6 +261,10 @@ curl http://localhost:8000/health
 - [Revenue Models](docs/research/research_revenue_models.md)
 - [Tech Stack](docs/architecture/arch_techstack_enterprise.md)
 - [Federated Pipeline](docs/architecture/growth_federated_pipeline.md)
+- [API Documentation](docs/API.md)
+- [OpenAPI Spec](docs/openapi.yaml)
+- [DPIA (Kenya DPA Compliance)](docs/compliance/DPIA.md)
+- [SLO Definitions](docs/slo-definitions.md)
 
 ---
 
