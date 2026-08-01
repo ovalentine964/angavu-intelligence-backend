@@ -94,6 +94,10 @@ pub mod control_charts_bridge;
 pub mod time_series_bridge;
 /// ECO 311/414: Phillips curve, IS-LM, Solow growth, Taylor rule, Okun's law, Fisher equation, money multiplier
 pub mod macro_bridge;
+/// Advanced economics: DSGE, rational expectations, Edgeworth box, Pareto efficiency, Stiglitz-Weiss, endogenous growth, Ricardian equivalence, NKPC, Arrow's theorem, revenue equivalence
+pub mod advanced_economics_bridge;
+/// Cross-cutting models: voice emotion, cultural sensitivity, health risk, wage gap, care economy, property rights, citizen monitoring, decentralization, practical validation, internship tracking
+pub mod cross_cutting_bridge;
 
 pub use nonparametric_bridge::NonparametricBridge;
 pub use extended_nonparametric_bridge::ExtendedNonparametricBridge;
