@@ -19,7 +19,7 @@ path = "rust-api/src/migrate.rs"
 axum = { version = "0.7", features = ["macros", "ws", "json", "headers"] }
 axum-extra = { version = "0.9", features = ["cookie", "typed-routing"] }
 tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression", "limit", "timeout"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-br", "limit", "timeout"] }
 hyper = { version = "1.0", features = ["full"] }
 
 # Async Runtime

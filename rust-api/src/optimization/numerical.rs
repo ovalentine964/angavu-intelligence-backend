@@ -260,7 +260,7 @@ impl CubicSpline {
         let idx = if x >= self.x[n - 1] {
             n - 2
         } else {
-            match self.x.binary_by(|xi| xi.partial_cmp(&x).unwrap()) {
+            match self.x.binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less)) {
                 Ok(i) => i.min(n - 2),
                 Err(i) => i.max(1) - 1,
             }
@@ -289,12 +289,12 @@ pub fn bilinear_interpolation(
     }
 
     // Find interval
-    let x_idx = match x_data.binary_by(|xi| xi.partial_cmp(&x).unwrap()) {
+    let x_idx = match x_data.binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less)) {
         Ok(i) => i,
         Err(i) => i.max(1) - 1,
     }.min(nx - 2);
 
-    let y_idx = match y_data.binary_by(|yi| yi.partial_cmp(&y).unwrap()) {
+    let y_idx = match y_data.binary_search_by(|yi| yi.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Less)) {
         Ok(i) => i,
         Err(i) => i.max(1) - 1,
     }.min(ny - 2);

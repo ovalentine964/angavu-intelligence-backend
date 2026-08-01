@@ -107,7 +107,7 @@ impl MM1Queue {
             return None;
         }
         let mu_minus_lambda = self.service_rate - self.arrival_rate;
-        Some(-Math::ln(1.0 - percentile) / mu_minus_lambda)
+        Some(-(1.0 - percentile).ln() / mu_minus_lambda)
     }
 }
 
@@ -236,12 +236,7 @@ fn factorial(n: usize) -> f64 {
     }
 }
 
-/// Helper module for math functions.
-mod Math {
-    pub fn ln(x: f64) -> f64 {
-        x.ln()
-    }
-}
+
 
 #[cfg(test)]
 mod tests {
