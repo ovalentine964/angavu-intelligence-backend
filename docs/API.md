@@ -1,6 +1,6 @@
 # Angavu Intelligence Backend — API Documentation
 
-**Version:** 1.0.0  
+**Version:** 0.3.0  
 **Base URL:** `https://api.angavu.io` (production) / `http://localhost:8000` (development)  
 **Authentication:** JWT Bearer tokens  
 **Content-Type:** `application/json`
@@ -45,6 +45,7 @@ Authorization: Bearer <access_token>
   "aud": "angavu-api",
   "iat": 1700000000,
   "exp": 1700003600,
+  "jti": "uuid-v4",
   "tier": "partner",
   "permissions": ["read", "write"]
 }
@@ -54,8 +55,20 @@ Authorization: Bearer <access_token>
 
 | Token Type | TTL |
 |-----------|-----|
-| Access Token | 1 hour |
-| Refresh Token | 30 days |
+| Access Token | 15 minutes |
+| Refresh Token | 30 days (one-time use) |
+
+### Auth Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/auth/token` | Public | Issue access + refresh token pair |
+| POST | `/api/v1/auth/refresh` | Public | Exchange refresh token for new pair (one-time use) |
+| POST | `/api/v1/auth/logout` | Protected | Revoke current access token (Redis blacklist) |
+
+### Token Revocation
+
+All tokens carry a UUID v4 `jti` claim. Revoked tokens are stored in Redis with TTL matching the token's remaining lifetime. The auth middleware checks the blacklist on every request.
 
 ---
 
@@ -809,6 +822,48 @@ Approve a pending request.
 ### POST /api/v1/approval/{id}/reject
 
 Reject a pending request.
+
+---
+
+## New Endpoints (v0.3)
+
+### Credit Explainability
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/tools/credit/{id}/explain` | SHAP-based credit score explanation with feature contributions |
+| POST | `/api/v1/tools/fairness/audit` | Run fairness audit (demographic parity, equalized odds, predictive parity) |
+
+### Health & Observability
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/health` | No | Liveness check (Docker HEALTHCHECK) |
+| GET | `/health/ready` | No | Readiness check (PostgreSQL + Redis + ClickHouse) |
+| GET | `/health/detailed` | No | Full diagnostics (pool stats, memory, CPU, uptime) |
+| GET | `/observability/traces/stats` | Yes | Agent trace statistics |
+
+### Privacy (Working Implementations)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/tools/privacy/noise` | Inject Laplace/Gaussian differential privacy noise (was 501 stub) |
+| POST | `/api/v1/tools/anonymization` | Apply k-anonymity + DP noise (was 501 stub) |
+
+### Data Retention
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/retention/policies` | List data retention policies |
+| POST | `/api/v1/retention/erasure` | Request right-to-erasure (Kenya DPA 2019) |
+
+### Market Intelligence (PostgreSQL-backed)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/tools/market-analyses` | Market analysis with k-anonymity + DP noise (PostgreSQL-backed) |
+| GET | `/api/v1/tools/demand-forecasts` | Demand forecast with Laplace DP noise on predictions |
+| GET | `/api/v1/tools/service-prices` | Aggregated service pricing intelligence |
 
 ---
 

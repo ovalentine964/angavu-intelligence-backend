@@ -6,12 +6,14 @@
   <img src="https://img.shields.io/badge/Rust-DEA584?style=flat-square&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/Tools-26+-1B4965?style=flat-square" alt="26+ Tools">
+  <img src="https://img.shields.io/badge/Tools-35+-1B4965?style=flat-square" alt="35+ Tools">
   <img src="https://img.shields.io/badge/Federated_Learning-E8A838?style=flat-square" alt="Federated Learning">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License">
 </p>
 
-> **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 26 tools, 6 superagent modules, 15 revenue engines, a federated learning pipeline, and a unified knowledge graph.
+> **Africa's Economic Nervous System.** Rust-powered backend that transforms anonymized worker data into economic intelligence — 35+ tools, 7 superagent modules, 15 revenue engines, a federated learning pipeline, and a unified knowledge graph.
+>
+> **New in v0.3 (26+ Councils):** SHAP explainability (EU AI Act), fairness testing, privacy budget (ε-DP), k-anonymity enforcement, data retention & right-to-erasure, OpenTelemetry distributed tracing, CI/CD pipeline, inequality tracker (Gini/Theil/Palma), model registry with A/B testing, classical algorithm implementations, response compression, security headers, JWT revocation, usage alerts, structured JSON logging.
 >
 > **Key claims (with citations):**
 > - Kenya's informal sector employs **83.4% of the workforce** (Kenya National Bureau of Statistics, 2023 Economic Survey) [1]
@@ -32,51 +34,63 @@
 
 ```
 OODAOrchestrator (Continuous Intelligence Loop)
-├── 26 Rust Tools (analysis, privacy, infrastructure, monitoring)
-├── 6 Superagent Modules (flywheel, guardrails, intelligence, memory, sync)
+├── 35+ Rust Tools (analysis, privacy, security, infrastructure, monitoring, credit explainability)
+├── 7 Superagent Modules (flywheel, guardrails, intelligence, memory, sync, unified knowledge, service price discovery)
 ├── UnifiedKnowledgeLayer (in-memory + PostgreSQL + Harness graph bridge)
-├── Billing Engine (4 tiers, API keys, invoicing)
+├── Billing Engine (4 tiers, API keys, invoicing, usage metering, M-Pesa)
 ├── REST API (Axum + WebSocket + GraphQL)
-└── OpenTelemetry Distributed Tracing (4 OODA cycle spans)
+├── OpenTelemetry Distributed Tracing (26 instrumented spans)
+├── CI/CD Pipeline (8-job GitHub Actions)
+└── Structured JSON Logging (correlation IDs)
 ```
 
 **Tech Stack:** Rust (Axum + Tokio) · PostgreSQL 16 + pgvector (HNSW) · ClickHouse 24 · Redis 7 · Docker · Nginx · OpenTelemetry
 
 ---
 
-## Tool Inventory — 26 Tools + 6 Superagent Modules
+## Tool Inventory — 35+ Tools + 7 Superagent Modules
 
 ### Intelligence & Analysis
 | Tool | Purpose |
 |------|---------|
 | `OODAOrchestrator` | Continuous Observe-Orient-Decide-Act intelligence loop |
-| `MarketAnalyzer` | Aggregated demand pattern analysis across worker cohorts |
+| `MarketAnalyzer` | Aggregated demand pattern analysis across worker cohorts (PostgreSQL-backed) |
 | `CreditScorer` | Alama Score (300–850) — credit scoring for informal economy |
 | `DemandForecaster` | Time-series demand forecasting for products and markets |
 | `EconomicAnalyzer` | Macro/micro economic indicator computation |
-| `FMCGIntelligence` | Fast-moving consumer goods market intelligence |
+| `FMCGIntelligence` | Fast-moving consumer goods market intelligence (PostgreSQL-backed) |
 | `CompositeIndexBuilder` | Multi-factor composite economic indices |
 | `AnomalyDetector` | Statistical anomaly detection in transaction streams |
 | `ScenarioModeler` | What-if scenario simulation and stress testing |
 | `PolicyImpactAnalyzer` | Government policy impact measurement |
-| `InequalityTracker` | Gini, Theil, and distributional inequality metrics |
+| `InequalityTracker` | Gini, Theil, Palma, D9/D1 ratio, median/mean income, trend analysis |
+| `ServicePriceDiscoveryEngine` | Service pricing intelligence from broadcast aggregation |
 
 ### Privacy & Security
 | Tool | Purpose |
 |------|---------|
-| `DifferentialPrivacyEngine` | ε-differential privacy with Laplace mechanism (ε=0.1 default), privacy budget tracking |
-| `KAnonymityEnforcer` | k≥10 anonymity cohort enforcement (MIN_K_ANONYMITY constant) |
-| `FederatedAggregator` | Privacy-preserving FedProx gradient aggregation (μ=0.01 proximal term) |
+| `DifferentialPrivacyEngine` | ε-differential privacy with Laplace mechanism (ε=0.1 default), privacy budget tracking, working noise injection API |
+| `KAnonymityEnforcer` | k≥10 anonymity cohort enforcement (MIN_K_ANONYMITY constant), wired into market_analysis + demand_forecast endpoints |
+| `FederatedAggregator` | Privacy-preserving FedProx gradient aggregation (μ=0.01 proximal term), Gaussian noise + gradient clipping + convergence monitoring |
 | `ModelDistributor` | Secure model distribution to edge devices |
+| `SHAPExplainer` | **NEW:** Shapley value computation for credit score explainability (EU AI Act compliance) |
+| `FairnessTester` | **NEW:** Demographic parity, equalized odds, predictive parity testing with Z-test |
+| `ClassicalCreditScorer` | **NEW:** IRLS logistic regression with Ridge regularization |
+| `SimulatedAnnealingOptimizer` | **NEW:** Quantum-inspired optimization for QUBO problems |
+| `DataRetentionEngine` | **NEW:** 10-category retention policies with right-to-erasure (Kenya DPA 2019) |
 
 ### Infrastructure
 | Tool | Purpose |
 |------|---------|
-| `ApiGateway` | REST API gateway with auth and routing |
+| `ApiGateway` | REST API gateway with auth, compression (gzip/brotli/deflate), and routing |
 | `CircuitBreaker` | Fault isolation and cascade failure prevention |
 | `RateLimiter` | Token-bucket rate limiting per API key |
 | `AuditLogger` | Immutable audit trail for all operations |
 | `SyncReceiver` | Device data reception and conflict resolution |
+| `SecurityHeaders` | **NEW:** HSTS, X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy, Permissions-Policy |
+| `ModelRegistry` | **NEW:** Model versioning, A/B testing, algorithm tier selection |
+| `TelemetryModule` | **NEW:** OpenTelemetry spans (26 instrumented functions), structured JSON logging, correlation IDs |
+| `HealthChecker` | **NEW:** 3-tier health endpoints (liveness, readiness, detailed) with DB/Redis/ClickHouse checks |
 
 ### Monitoring & Reporting
 | Tool | Purpose |
@@ -96,6 +110,7 @@ OODAOrchestrator (Continuous Intelligence Loop)
 | `MemoryEngine` | 5-layer memory hierarchy (working → knowledge) |
 | `SyncEngine` | Bidirectional device-cloud synchronization |
 | `UnifiedKnowledgeLayer` | Bridges 3 disconnected knowledge graphs (in-memory, PostgreSQL, Harness) into single interface with cross-reference indices |
+| `ServicePriceDiscoveryEngine` | **NEW:** Aggregates service price broadcasts into market signals (k-anonymity enforced, PostgreSQL-backed) |
 
 ---
 
@@ -114,6 +129,12 @@ The platform implements peer-reviewed statistical and econometric methods:
 | **Interrupted Time Series (ITS)** | PolicyImpactAnalyzer | Pre/post policy impact measurement |
 | **Difference-in-Differences (DiD)** | PolicyImpactAnalyzer | Quasi-experimental treatment effect estimation |
 | **Herfindahl-Hirschman Index (HHI)** | MarketAnalyzer | Market concentration and competition analysis |
+| **Shapley Values (SHAP)** | SHAPExplainer | Feature attribution for credit score explainability |
+| **Iteratively Reweighted Least Squares (IRLS)** | ClassicalCreditScorer | Logistic regression training with Ridge regularization |
+| **Simulated Annealing** | SimulatedAnnealingOptimizer | Quantum-inspired optimization for routing & matching |
+| **Gini Coefficient** | InequalityTracker | Income/expenditure concentration measurement |
+| **Theil Index (GE(1))** | InequalityTracker | Decomposable inequality (within/between groups) |
+| **Palma Ratio** | InequalityTracker | Top 10% / bottom 40% income share |
 
 ---
 
@@ -210,7 +231,7 @@ Features: API key management, usage metering, invoice generation, subscription l
 - **docker-compose.production.yml** — Production with WAL archiving, automated failover, replication
 - **nginx/nginx.conf** — Reverse proxy with rate limiting, SSL termination, WebSocket support
 - **.github/workflows/deploy.yml** — CI/CD: test → build → push GHCR → deploy to Oracle Cloud
-- **OpenTelemetry** — Distributed tracing for OODA loops (OTLP exporter, Jaeger/Tempo compatible)
+- **OpenTelemetry** — Distributed tracing for OODA loops and all critical paths (26 instrumented spans, OTLP exporter, Jaeger/Tempo compatible). Structured JSON logging with correlation IDs.
 
 ### Oracle Free Tier Deployment
 
