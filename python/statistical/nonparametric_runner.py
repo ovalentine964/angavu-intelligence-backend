@@ -27,6 +27,13 @@ try:
         PermutationTest,
         PowerAnalysis,
     )
+    from nonparametric_advanced import (
+        SignTest,
+        RunsTest,
+        MoodsMedianTest,
+        NonparametricCI,
+        NonparametricEffectSize,
+    )
 except ImportError:
     from python.statistical.nonparametric import (
         BootstrapInference,
@@ -36,6 +43,13 @@ except ImportError:
         MarketConcentration,
         PermutationTest,
         PowerAnalysis,
+    )
+    from python.statistical.nonparametric_advanced import (
+        SignTest,
+        RunsTest,
+        MoodsMedianTest,
+        NonparametricCI,
+        NonparametricEffectSize,
     )
 
 
@@ -123,6 +137,62 @@ def dispatch(method: str, args: dict) -> dict:
             "gini": gini_result["gini"],
             "gini_interpretation": gini_result["interpretation"],
         }
+
+    # === Advanced non-parametric methods (nonparametric_advanced.py) ===
+
+    elif method == "sign_test":
+        data = np.array(args["data"], dtype=float)
+        return SignTest.one_sample(
+            data,
+            hypothesized_median=args.get("hypothesized_median", 0.0),
+            alternative=args.get("alternative", "two-sided"),
+        )
+
+    elif method == "sign_test_paired":
+        s1 = np.array(args["sample1"], dtype=float)
+        s2 = np.array(args["sample2"], dtype=float)
+        return SignTest.paired(s1, s2, alternative=args.get("alternative", "two-sided"))
+
+    elif method == "runs_test":
+        data = np.array(args["data"], dtype=float)
+        return RunsTest.test(data, cutoff=args.get("cutoff"))
+
+    elif method == "moods_median_test":
+        groups = [np.array(g, dtype=float) for g in args["groups"]]
+        return MoodsMedianTest.test(*groups)
+
+    elif method == "nonparametric_ci":
+        data = np.array(args["data"], dtype=float)
+        stat_name = args.get("statistic", "median")
+        stat_fn = {"mean": np.mean, "median": np.median, "std": np.std}.get(stat_name, np.median)
+        return NonparametricCI.bootstrap_ci(
+            data, stat_fn,
+            method=args.get("ci_method", "bca"),
+            confidence=args.get("confidence", 0.95),
+        )
+
+    elif method == "median_ci":
+        data = np.array(args["data"], dtype=float)
+        return NonparametricCI.median_ci(
+            data,
+            confidence=args.get("confidence", 0.95),
+            method=args.get("ci_method", "exact"),
+        )
+
+    elif method == "cliffs_delta":
+        s1 = np.array(args["sample1"], dtype=float)
+        s2 = np.array(args["sample2"], dtype=float)
+        return NonparametricEffectSize.cliffs_delta(s1, s2)
+
+    elif method == "rank_biserial":
+        s1 = np.array(args["sample1"], dtype=float)
+        s2 = np.array(args["sample2"], dtype=float)
+        return NonparametricEffectSize.rank_biserial_correlation(s1, s2)
+
+    elif method == "vargha_delaney_a":
+        s1 = np.array(args["sample1"], dtype=float)
+        s2 = np.array(args["sample2"], dtype=float)
+        return NonparametricEffectSize.varga_delaney_a(s1, s2)
 
     else:
         return {"error": f"Unknown method: {method}", "method": method}

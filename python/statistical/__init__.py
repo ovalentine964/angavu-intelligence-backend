@@ -20,6 +20,22 @@ from .nonparametric import (
     PowerAnalysis,
 )
 
+from .nonparametric_advanced import (
+    SignTest,
+    RunsTest,
+    MoodsMedianTest,
+    NonparametricCI,
+    NonparametricEffectSize,
+)
+
+from .spc_full import (
+    XbarChart,
+    RChart,
+    PChart,
+    CChart,
+    AcceptanceSampling,
+)
+
 from .econometrics import (
     OLSRegression,
     HeteroskedasticityTests,
@@ -40,6 +56,24 @@ from .international_economics import (
     MarketStructureAnalyzer,
 )
 
+from .time_series_models import (
+    ARIMAModel,
+    SARIMAModel,
+    ETSModel,
+    StructuralBreakTests,
+)
+
+from .macro_models import (
+    PhillipsCurve,
+    ISLMModel,
+    SolowGrowthModel,
+    DemographicModels,
+    TaylorRule,
+    OkunsLaw,
+    FisherEquation,
+    MoneyMultiplier,
+)
+
 # CLI runners for Rust backend bridge
 # Note: runners are standalone scripts (use absolute imports),
 # invoked via subprocess from Rust. Not imported as modules.
@@ -56,6 +90,16 @@ __all__ = [
     "MarketConcentration",
     "PermutationTest",
     "PowerAnalysis",
+    "SignTest",
+    "RunsTest",
+    "MoodsMedianTest",
+    "NonparametricCI",
+    "NonparametricEffectSize",
+    "XbarChart",
+    "RChart",
+    "PChart",
+    "CChart",
+    "AcceptanceSampling",
     "OLSRegression",
     "HeteroskedasticityTests",
     "IV2SLS",
@@ -70,7 +114,23 @@ __all__ = [
     "CrossBorderTradeAdvisor",
     "FiscalPolicyAnalyzer",
     "MarketStructureAnalyzer",
+    # Time series models (STA 244)
+    "ARIMAModel",
+    "SARIMAModel",
+    "ETSModel",
+    "StructuralBreakTests",
+    # Macroeconomic models (ECO 311/414)
+    "PhillipsCurve",
+    "ISLMModel",
+    "SolowGrowthModel",
+    "DemographicModels",
+    "TaylorRule",
+    "OkunsLaw",
+    "FisherEquation",
+    "MoneyMultiplier",
     "nonparametric_runner",
     "econometrics_runner",
     "international_economics_runner",
+    "time_series_runner",
+    "macro_runner",
 ]

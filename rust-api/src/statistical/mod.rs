@@ -57,6 +57,22 @@
 ///   - CUSUMChart: Cumulative sum chart for small shift detection
 ///   - EWMAChart: Exponentially weighted moving average chart
 ///   - ProcessCapability: Cp, Cpk indices for model quality
+///
+/// Available methods from python/statistical/time_series_models.py (STA 244):
+///   - ARIMAModel: Full ARIMA(p,d,q) with identification, estimation, diagnostics
+///   - SARIMAModel: Seasonal ARIMA with seasonal orders
+///   - ETSModel: Exponential smoothing state space (30 variants)
+///   - StructuralBreakTests: Chow, CUSUM, Bai-Perron tests
+///
+/// Available methods from python/statistical/macro_models.py (ECO 311/414):
+///   - PhillipsCurve: Inflation-unemployment relationship with NAIRU estimation
+///   - ISLMModel: Goods market + money market equilibrium
+///   - SolowGrowthModel: Capital accumulation, steady state, golden rule
+///   - DemographicModels: Life tables, cohort-component population projection
+///   - TaylorRule: Monetary policy rule with reaction function estimation
+///   - OkunsLaw: GDP-unemployment relationship
+///   - FisherEquation: Nominal vs real interest rates
+///   - MoneyMultiplier: Money supply creation process
 
 pub mod nonparametric_bridge;
 /// STA 442/443: Extended non-parametric methods (Friedman, KS, AD, LOESS, BCa, Splines)
@@ -74,6 +90,10 @@ pub mod distributions_bridge;
 pub mod stationarity_bridge;
 /// STA 346: CUSUM, EWMA control charts, process capability (Cp, Cpk)
 pub mod control_charts_bridge;
+/// STA 244: ARIMA, SARIMA, ETS, structural break tests (Chow, CUSUM, Bai-Perron)
+pub mod time_series_bridge;
+/// ECO 311/414: Phillips curve, IS-LM, Solow growth, Taylor rule, Okun's law, Fisher equation, money multiplier
+pub mod macro_bridge;
 
 pub use nonparametric_bridge::NonparametricBridge;
 pub use extended_nonparametric_bridge::ExtendedNonparametricBridge;
