@@ -17,10 +17,12 @@ pub mod observability;
 pub mod webhook;
 pub mod billing;
 pub mod statistical;
+pub mod behavioral;
 pub mod rag;
 pub mod telemetry;
 pub mod llm;
 pub mod agent;
+pub mod optimization;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

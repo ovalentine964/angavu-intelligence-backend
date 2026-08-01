@@ -17,15 +17,26 @@ import traceback
 import numpy as np
 
 # Import from the existing nonparametric module
-from nonparametric import (
-    BootstrapInference,
-    KernelDensityEstimator,
-    KruskalWallisTest,
-    MannWhitneyTest,
-    MarketConcentration,
-    PermutationTest,
-    PowerAnalysis,
-)
+try:
+    from nonparametric import (
+        BootstrapInference,
+        KernelDensityEstimator,
+        KruskalWallisTest,
+        MannWhitneyTest,
+        MarketConcentration,
+        PermutationTest,
+        PowerAnalysis,
+    )
+except ImportError:
+    from python.statistical.nonparametric import (
+        BootstrapInference,
+        KernelDensityEstimator,
+        KruskalWallisTest,
+        MannWhitneyTest,
+        MarketConcentration,
+        PermutationTest,
+        PowerAnalysis,
+    )
 
 
 def dispatch(method: str, args: dict) -> dict:

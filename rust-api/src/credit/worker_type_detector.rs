@@ -270,3 +270,241 @@ pub struct TransactionMetadata {
     /// Fraction of income from irregular event-based payments
     pub event_income_frequency: f64,
 }
+
+// ═══════════════════════════════════════════════════════════════
+// k-means Clustering Enhancement for Worker Type Detection
+// ═══════════════════════════════════════════════════════════════
+
+/// k-means clustering for unsupervised worker type discovery.
+///
+/// Uses Lloyd's algorithm with k-means++ initialization to cluster
+/// worker profiles into behavioral groups without labels.
+/// Complements the rule-based `WorkerTypeDetector` by discovering
+/// natural groupings in the data.
+///
+/// Academic reference: STA 343 (Multivariate Analysis)
+/// Algorithm: Lloyd's k-means with k-means++ initialization
+///   1. Initialize centroids via k-means++ (distance-weighted sampling)
+///   2. Assign each point to nearest centroid
+///   3. Update centroids to cluster means
+///   4. Repeat until convergence
+pub struct KMeansClusterer {
+    k: usize,
+    max_iterations: usize,
+    tolerance: f64,
+}
+
+impl KMeansClusterer {
+    /// Create a new k-means clusterer.
+    ///
+    /// # Arguments
+    /// * `k` - Number of clusters
+    /// * `max_iterations` - Maximum iterations (default 100)
+    /// * `tolerance` - Convergence tolerance (default 1e-6)
+    pub fn new(k: usize, max_iterations: usize, tolerance: f64) -> Self {
+        Self { k, max_iterations, tolerance }
+    }
+
+    /// Fit k-means to feature matrix (n workers × p features).
+    ///
+    /// Returns cluster assignments and centroids.
+    pub fn fit(&self, data: &[Vec<f64>]) -> KMeansResult {
+        let n = data.len();
+        let p = data[0].len();
+        let k = self.k.min(n);
+
+        // k-means++ initialization
+        let mut centroids = self.kmeans_pp_init(data, k);
+        let mut assignments = vec![0usize; n];
+
+        for _iter in 0..self.max_iterations {
+            // Assignment step
+            let mut changed = false;
+            for i in 0..n {
+                let nearest = (0..k)
+                    .min_by(|&a, &b| {
+                        euclidean_dist(&data[i], &centroids[a])
+                            .partial_cmp(&euclidean_dist(&data[i], &centroids[b]))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .unwrap_or(0);
+                if nearest != assignments[i] {
+                    assignments[i] = nearest;
+                    changed = true;
+                }
+            }
+
+            if !changed {
+                break;
+            }
+
+            // Update step
+            for c in 0..k {
+                let members: Vec<usize> = (0..n).filter(|&i| assignments[i] == c).collect();
+                if !members.is_empty() {
+                    for j in 0..p {
+                        centroids[c][j] = members.iter().map(|&i| data[i][j]).sum::<f64>()
+                            / members.len() as f64;
+                    }
+                }
+            }
+        }
+
+        // Compute WCSS
+        let wcss: f64 = (0..n)
+            .map(|i| euclidean_dist_sq(&data[i], &centroids[assignments[i]]))
+            .sum();
+
+        // Cluster sizes
+        let mut cluster_sizes = vec![0usize; k];
+        for &a in &assignments {
+            cluster_sizes[a] += 1;
+        }
+
+        KMeansResult {
+            k,
+            assignments,
+            centroids,
+            cluster_sizes,
+            wcss,
+            iterations: self.max_iterations,
+        }
+    }
+
+    /// k-means++ initialization: distance-weighted centroid selection.
+    fn kmeans_pp_init(&self, data: &[Vec<f64>], k: usize) -> Vec<Vec<f64>> {
+        let n = data.len();
+        let p = data[0].len();
+        let mut centroids = Vec::with_capacity(k);
+
+        // First centroid: random (use index 0 as seed)
+        centroids.push(data[0].clone());
+
+        for _ in 1..k {
+            // Compute distances to nearest existing centroid
+            let dists: Vec<f64> = data
+                .iter()
+                .map(|point| {
+                    centroids
+                        .iter()
+                        .map(|c| euclidean_dist_sq(point, c))
+                        .fold(f64::INFINITY, f64::min)
+                })
+                .collect();
+
+            // Select proportional to distance²
+            let total: f64 = dists.iter().sum();
+            if total < 1e-15 {
+                // All points are the same, pick next index
+                centroids.push(data[centroids.len() % n].clone());
+                continue;
+            }
+
+            // Deterministic: pick the point with maximum distance
+            let max_idx = dists
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            centroids.push(data[max_idx].clone());
+        }
+
+        centroids
+    }
+}
+
+/// Result from k-means clustering.
+#[derive(Debug, Clone)]
+pub struct KMeansResult {
+    pub k: usize,
+    pub assignments: Vec<usize>,
+    pub centroids: Vec<Vec<f64>>,
+    pub cluster_sizes: Vec<usize>,
+    pub wcss: f64,
+    pub iterations: usize,
+}
+
+impl KMeansResult {
+    /// Get the cluster assignment for a specific worker.
+    pub fn cluster_of(&self, worker_idx: usize) -> Option<usize> {
+        self.assignments.get(worker_idx).copied()
+    }
+
+    /// Get all worker indices in a specific cluster.
+    pub fn members_of(&self, cluster: usize) -> Vec<usize> {
+        self.assignments
+            .iter()
+            .enumerate()
+            .filter(|(_, &c)| c == cluster)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Compute silhouette score for cluster quality assessment.
+    /// Returns value in [-1, 1] where higher is better.
+    pub fn silhouette_score(&self, data: &[Vec<f64>]) -> f64 {
+        let n = data.len();
+        if n < 2 || self.k < 2 {
+            return 0.0;
+        }
+
+        let mut total_score = 0.0;
+        for i in 0..n {
+            let my_cluster = self.assignments[i];
+
+            // a(i): mean distance to same cluster
+            let same_cluster: Vec<usize> = (0..n)
+                .filter(|&j| j != i && self.assignments[j] == my_cluster)
+                .collect();
+            let a_i = if same_cluster.is_empty() {
+                0.0
+            } else {
+                same_cluster.iter().map(|&j| euclidean_dist(&data[i], &data[j])).sum::<f64>()
+                    / same_cluster.len() as f64
+            };
+
+            // b(i): min mean distance to other clusters
+            let b_i = (0..self.k)
+                .filter(|&c| c != my_cluster)
+                .map(|c| {
+                    let others: Vec<usize> = (0..n)
+                        .filter(|&j| self.assignments[j] == c)
+                        .collect();
+                    if others.is_empty() {
+                        f64::INFINITY
+                    } else {
+                        others.iter().map(|&j| euclidean_dist(&data[i], &data[j])).sum::<f64>()
+                            / others.len() as f64
+                    }
+                })
+                .fold(f64::INFINITY, f64::min);
+
+            let s_i = if a_i.max(b_i) > 0.0 {
+                (b_i - a_i) / a_i.max(b_i)
+            } else {
+                0.0
+            };
+            total_score += s_i;
+        }
+
+        total_score / n as f64
+    }
+}
+
+/// Euclidean distance between two points.
+fn euclidean_dist(a: &[f64], b: &[f64]) -> f64 {
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).powi(2))
+        .sum::<f64>()
+        .sqrt()
+}
+
+/// Squared Euclidean distance.
+fn euclidean_dist_sq(a: &[f64], b: &[f64]) -> f64 {
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).powi(2))
+        .sum()
+}

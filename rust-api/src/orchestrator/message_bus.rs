@@ -20,6 +20,14 @@ pub enum ModuleId {
     CollectiveIntelligence,
     ApiGateway,
     ServicePriceDiscovery,
+    GenderInequality,
+    OccupationHazardMatrix,
+    HealthEconomics,
+    TradeGravity,
+    FiscalImpact,
+    MarketConcentration,
+    PropertyRights,
+    GovernanceQuality,
 }
 
 /// Priority levels for task scheduling

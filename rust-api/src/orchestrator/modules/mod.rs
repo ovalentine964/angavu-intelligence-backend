@@ -8,6 +8,14 @@ pub mod health;
 pub mod economic;
 pub mod service_price_discovery;
 pub mod inequality; // P1: Inequality tracker (Gini, Palma, Theil) for economic analysis
+pub mod gender_inequality; // Gender-disaggregated Gini, Theil, wage gap
+pub mod occupation_hazard_matrix; // Formal risk scoring per worker type
+pub mod health_economics; // QALY/DALY calculations
+pub mod trade_gravity; // Gravity model for trade flow prediction
+pub mod fiscal_impact; // Policy impact on informal workers
+pub mod market_concentration; // HHI, concentration ratios by sector
+pub mod property_rights; // Informal property documentation scoring
+pub mod governance_quality; // Institutional quality measurement
 
 use super::message_bus::{ModuleMessage, ModuleId};
 use std::collections::HashMap;
