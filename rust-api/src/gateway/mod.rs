@@ -472,8 +472,9 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
         .route("/api/v1/superagent/status", get(superagent::status))
         .route("/api/v1/superagent/cycles", post(superagent::trigger_cycle))
         .route("/api/v1/superagent/invocations", post(superagent::invoke))
-        // Sync endpoint
+        // Sync endpoints
         .route("/api/v1/sync/anonymized", post(sync::receiver::handle_sync))
+        .route("/api/v1/sync/graph", post(graph_sync::handle_graph_sync))
         // Billing endpoints — fully implemented
         .route("/api/v1/billing/tiers", get(tools_impl::list_billing_tiers))
         .route("/api/v1/billing/subscriptions", post(billing::create_subscription))

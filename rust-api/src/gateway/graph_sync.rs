@@ -107,6 +107,31 @@ pub struct ServerDelta {
     pub timestamp: i64,
 }
 
+/// Axum handler for POST /api/v1/sync/graph
+/// Receives graph sync messages from devices and returns market signals.
+pub async fn handle_graph_sync(
+    axum::extract::State(gateway): axum::extract::State<super::GatewayState>,
+    axum::extract::Json(message): axum::extract::Json<GraphSyncMessage>,
+) -> axum::response::Json<ServerSyncResponse> {
+    let result = process_sync(&gateway.db, message, &gateway.k_anonymity).await;
+    match result {
+        Ok(response) => axum::response::Json(response),
+        Err(e) => {
+            tracing::error!(error = %e, "Graph sync failed");
+            axum::response::Json(ServerSyncResponse {
+                success: false,
+                server_timestamp: chrono::Utc::now().timestamp_millis(),
+                deltas_applied: 0,
+                market_signals: vec![],
+                price_updates: vec![],
+                demand_signals: vec![],
+                cohort_insights: vec![],
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
 /// Process a graph sync message from a device.
 ///
 /// Steps:

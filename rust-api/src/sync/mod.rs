@@ -30,8 +30,11 @@ pub const CURRENT_MODEL_VERSION: &str = "2.1.0";
 pub const MIN_MODEL_VERSION: &str = "1.5.0";
 
 // ─── Incoming Sync Payload (from device) ───
+// Kotlin serialization uses camelCase by default, so we rename all fields
+// to match the app's JSON format.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncRequest {
     /// Anonymous device fingerprint
     pub device_id: String,
@@ -58,6 +61,7 @@ pub struct SyncRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnonymizedTransaction {
     pub amount_bucket: String,
     pub category: String,
@@ -71,6 +75,7 @@ pub struct AnonymizedTransaction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnonymizedPattern {
     pub pattern_type: String,
     pub confidence: f64,
@@ -78,6 +83,7 @@ pub struct AnonymizedPattern {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnomalyStats {
     pub total_transactions_analyzed: u32,
     pub anomaly_count: u32,
@@ -88,6 +94,7 @@ pub struct AnomalyStats {
 // ─── Sync Response (returned to device) ───
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncResponse {
     /// Overall status: "ok", "partial", "error"
     pub status: String,
@@ -118,6 +125,7 @@ pub struct SyncResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AlamaScoreUpdate {
     /// Updated Alama Score (300-850)
     pub score: u16,
@@ -130,6 +138,7 @@ pub struct AlamaScoreUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScoreFactorUpdate {
     pub name: String,
     pub impact: f64,
@@ -138,6 +147,7 @@ pub struct ScoreFactorUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelDelta {
     /// Target model version
     pub target_version: String,
@@ -154,6 +164,7 @@ pub struct ModelDelta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MarketIntelligence {
     /// Ward-specific data
     pub ward: String,
@@ -168,6 +179,7 @@ pub struct MarketIntelligence {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PriceTrend {
     pub category: String,
     pub current_avg_price: f64,
@@ -176,6 +188,7 @@ pub struct PriceTrend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DemandSignal {
     pub category: String,
     pub demand_level: String, // "high", "medium", "low"
@@ -183,6 +196,7 @@ pub struct DemandSignal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncAlert {
     pub alert_type: String, // "score_change", "market_shift", "model_update", "verification_issue"
     pub severity: String,   // "info", "warning", "critical"
@@ -193,6 +207,7 @@ pub struct SyncAlert {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FreshnessMetadata {
     /// Server timestamp when data was last updated
     pub server_timestamp: i64,
@@ -205,6 +220,7 @@ pub struct FreshnessMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VerificationResult {
     /// Whether all transactions passed verification
     pub all_valid: bool,
@@ -219,6 +235,7 @@ pub struct VerificationResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RejectionReason {
     pub transaction_index: usize,
     pub reason: String,
