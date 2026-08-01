@@ -8,6 +8,25 @@ use std::collections::{HashMap, HashSet, VecDeque, BinaryHeap};
 use std::cmp::Reverse;
 use uuid::Uuid;
 
+/// Wrapper for f64 that implements Ord using total_cmp.
+/// Enables using f64 in BinaryHeap priority queues.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct OrderedF64(f64);
+
+impl Eq for OrderedF64 {}
+
+impl Ord for OrderedF64 {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+impl PartialOrd for OrderedF64 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// An in-memory graph for algorithm execution.
 /// Built from knowledge graph edges and used for analytics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -638,6 +657,166 @@ impl AlgorithmGraph {
                         dist.insert(*neighbor, new_dist);
                         prev.insert(*neighbor, Some(current));
                         heap.push(Reverse((new_dist, *neighbor)));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// A* Search Algorithm — Informed shortest path with heuristic.
+    ///
+    /// Combines Dijkstra's algorithm with a heuristic function to guide
+    /// search toward the goal. Guarantees optimal path when the heuristic
+    /// is admissible (never overestimates).
+    ///
+    /// Use cases:
+    /// - Geographic route optimization (BodaBodaRouter, FishTripPlanner)
+    /// - Cost-optimized supply chain paths
+    /// - Nearest market/supplier discovery
+    ///
+    /// Complexity: O(E log V) with a good heuristic, degrades to Dijkstra's O(E log V).
+    pub fn a_star(
+        &self,
+        from: Uuid,
+        to: Uuid,
+        heuristic: impl Fn(Uuid) -> f64,
+    ) -> Option<ShortestPathResult> {
+        if from == to {
+            return Some(ShortestPathResult {
+                path: vec![from],
+                total_weight: 0.0,
+                hop_count: 0,
+            });
+        }
+
+        // g_score: actual cost from start
+        let mut g_score: HashMap<Uuid, f64> = HashMap::new();
+        // f_score: g_score + heuristic (estimated total cost)
+        let mut f_score: HashMap<Uuid, f64> = HashMap::new();
+        let mut prev: HashMap<Uuid, Option<Uuid>> = HashMap::new();
+        let mut heap = BinaryHeap::new();
+        let mut closed: HashSet<Uuid> = HashSet::new();
+
+        g_score.insert(from, 0.0);
+        f_score.insert(from, heuristic(from));
+        prev.insert(from, None);
+        heap.push(Reverse((OrderedF64(heuristic(from)), from)));
+
+        while let Reverse((OrderedF64(current_f), current)) = heap.pop() {
+            if current == to {
+                // Reconstruct path
+                let mut path = Vec::new();
+                let mut node = Some(to);
+                while let Some(n) = node {
+                    path.push(n);
+                    node = prev.get(&n).and_then(|p| *p);
+                }
+                path.reverse();
+                let total_weight = *g_score.get(&to).unwrap_or(&f64::INFINITY);
+                return Some(ShortestPathResult {
+                    path,
+                    total_weight,
+                    hop_count: path.len().saturating_sub(1),
+                });
+            }
+
+            if closed.contains(&current) {
+                continue;
+            }
+            closed.insert(current);
+
+            // Skip if we already found a better path to this node
+            if current_f > *f_score.get(&current).unwrap_or(&f64::INFINITY) {
+                continue;
+            }
+
+            if let Some(neighbors) = self.adjacency.get(&current) {
+                for (neighbor, weight) in neighbors {
+                    if closed.contains(neighbor) {
+                        continue;
+                    }
+
+                    let tentative_g = *g_score.get(&current).unwrap_or(&f64::INFINITY) + weight;
+                    let known_g = *g_score.get(neighbor).unwrap_or(&f64::INFINITY);
+
+                    if tentative_g < known_g {
+                        g_score.insert(*neighbor, tentative_g);
+                        let f = tentative_g + heuristic(*neighbor);
+                        f_score.insert(*neighbor, f);
+                        prev.insert(*neighbor, Some(current));
+                        heap.push(Reverse((OrderedF64(f), *neighbor)));
+                    }
+                }
+            }
+        }
+
+        None // No path found
+    }
+
+    /// Greedy Best-First Search — Heuristic-only pathfinding.
+    ///
+    /// Always expands the node closest to the goal according to the heuristic.
+    /// Faster than A* but does NOT guarantee optimal paths.
+    ///
+    /// Use cases:
+    /// - Quick approximate routing when optimality isn't critical
+    /// - Nearest-neighbor discovery
+    pub fn greedy_best_first(
+        &self,
+        from: Uuid,
+        to: Uuid,
+        heuristic: impl Fn(Uuid) -> f64,
+    ) -> Option<ShortestPathResult> {
+        if from == to {
+            return Some(ShortestPathResult {
+                path: vec![from],
+                total_weight: 0.0,
+                hop_count: 0,
+            });
+        }
+
+        let mut prev: HashMap<Uuid, Option<Uuid>> = HashMap::new();
+        let mut visited: HashSet<Uuid> = HashSet::new();
+        let mut heap = BinaryHeap::new();
+        let mut total_weight: HashMap<Uuid, f64> = HashMap::new();
+
+        prev.insert(from, None);
+        total_weight.insert(from, 0.0);
+        heap.push(Reverse((OrderedF64(heuristic(from)), from)));
+
+        while let Reverse((_, current)) = heap.pop() {
+            if current == to {
+                let mut path = Vec::new();
+                let mut node = Some(to);
+                while let Some(n) = node {
+                    path.push(n);
+                    node = prev.get(&n).and_then(|p| *p);
+                }
+                path.reverse();
+                return Some(ShortestPathResult {
+                    path,
+                    total_weight: *total_weight.get(&to).unwrap_or(&0.0),
+                    hop_count: path.len().saturating_sub(1),
+                });
+            }
+
+            if visited.contains(&current) {
+                continue;
+            }
+            visited.insert(current);
+
+            if let Some(neighbors) = self.adjacency.get(&current) {
+                for (neighbor, weight) in neighbors {
+                    if !visited.contains(neighbor) {
+                        let new_weight = *total_weight.get(&current).unwrap_or(&0.0) + weight;
+                        let known = *total_weight.get(neighbor).unwrap_or(&f64::INFINITY);
+                        if new_weight < known {
+                            total_weight.insert(*neighbor, new_weight);
+                            prev.insert(*neighbor, Some(current));
+                            heap.push(Reverse((OrderedF64(heuristic(*neighbor)), *neighbor)));
+                        }
                     }
                 }
             }
@@ -1285,5 +1464,89 @@ mod tests {
         assert!(graph.pagerank(10, 0.85).is_empty());
         assert!(graph.detect_communities().is_empty());
         assert!(graph.degree_centrality(10).is_empty());
+    }
+
+    #[test]
+    fn test_a_star_basic() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+        let d = Uuid::parse_str("00000000-0000-0000-0000-000000000004").unwrap();
+
+        // A → B (weight 1), A → C (weight 5), B → D (weight 1), C → D (weight 1)
+        graph.add_edge(a, b, 1.0);
+        graph.add_edge(a, c, 5.0);
+        graph.add_edge(b, d, 1.0);
+        graph.add_edge(c, d, 1.0);
+
+        // Zero heuristic = Dijkstra
+        let result = graph.a_star(a, d, |_| 0.0).unwrap();
+        assert_eq!(result.path, vec![a, b, d]);
+        assert!((result.total_weight - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_a_star_with_heuristic() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+
+        graph.add_edge(a, b, 2.0);
+        graph.add_edge(a, c, 3.0);
+        graph.add_edge(b, c, 1.0);
+
+        // Heuristic: closer to C means lower value
+        let distances = std::collections::HashMap::from([
+            (a, 3.0),
+            (b, 1.0),
+            (c, 0.0),
+        ]);
+        let result = graph.a_star(a, c, |n| *distances.get(&n).unwrap_or(&0.0)).unwrap();
+        assert_eq!(result.path, vec![a, b, c]);
+        assert!((result.total_weight - 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_a_star_same_node() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        graph.add_edge(a, a, 1.0);
+
+        let result = graph.a_star(a, a, |_| 0.0).unwrap();
+        assert_eq!(result.path, vec![a]);
+        assert_eq!(result.total_weight, 0.0);
+    }
+
+    #[test]
+    fn test_a_star_no_path() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        graph.add_edge(a, a, 1.0);
+
+        let result = graph.a_star(a, b, |_| 0.0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_greedy_best_first() {
+        let mut graph = AlgorithmGraph::new();
+        let a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
+        let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
+
+        graph.add_edge(a, b, 1.0);
+        graph.add_edge(a, c, 2.0);
+        graph.add_edge(b, c, 1.0);
+
+        let distances = std::collections::HashMap::from([
+            (a, 2.0),
+            (b, 1.0),
+            (c, 0.0),
+        ]);
+        let result = graph.greedy_best_first(a, c, |n| *distances.get(&n).unwrap_or(&0.0));
+        assert!(result.is_some());
     }
 }

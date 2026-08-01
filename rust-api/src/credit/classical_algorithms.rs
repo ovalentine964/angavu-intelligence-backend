@@ -566,6 +566,356 @@ impl SearchAlgorithm for ClassicalSearchEngine {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  Decision Tree Classifier — CART Algorithm
+// ═══════════════════════════════════════════════════════════
+
+/// A node in the decision tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TreeNode {
+    /// Leaf node: predicts a class probability
+    Leaf {
+        probability: f64,
+        sample_count: usize,
+    },
+    /// Internal node: splits on a feature
+    Split {
+        feature_idx: usize,
+        threshold: f64,
+        left: Box<TreeNode>,
+        right: Box<TreeNode>,
+        gain: f64,
+        sample_count: usize,
+    },
+}
+
+/// CART Decision Tree Classifier for credit scoring.
+/// Uses Gini impurity for splits, supports max depth and min samples.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionTreeClassifier {
+    root: Option<TreeNode>,
+    max_depth: usize,
+    min_samples_split: usize,
+    min_samples_leaf: usize,
+    feature_names: Vec<String>,
+}
+
+impl DecisionTreeClassifier {
+    pub fn new(max_depth: usize, min_samples_split: usize, min_samples_leaf: usize) -> Self {
+        Self {
+            root: None,
+            max_depth,
+            min_samples_split,
+            min_samples_leaf,
+            feature_names: Vec::new(),
+        }
+    }
+
+    /// Compute Gini impurity for a set of labels.
+    /// Gini = 1 - Σ(p_i^2) where p_i is fraction of class i.
+    fn gini(labels: &[u8]) -> f64 {
+        if labels.is_empty() {
+            return 0.0;
+        }
+        let n = labels.len() as f64;
+        let count_1 = labels.iter().filter(|&&l| l == 1).count() as f64;
+        let count_0 = n - count_1;
+        let p0 = count_0 / n;
+        let p1 = count_1 / n;
+        1.0 - (p0 * p0 + p1 * p1)
+    }
+
+    /// Find the best split for a dataset using Gini impurity.
+    fn best_split(
+        features: &[Vec<f64>],
+        labels: &[u8],
+        indices: &[usize],
+    ) -> Option<(usize, f64, f64)> {
+        if indices.len() < 2 {
+            return None;
+        }
+
+        let parent_gini = Self::gini(
+            &indices.iter().map(|&i| labels[i]).collect::<Vec<_>>(),
+        );
+
+        let n_features = features[0].len();
+        let mut best_gain = 0.0_f64;
+        let mut best_feature = 0;
+        let mut best_threshold = 0.0;
+
+        for feat_idx in 0..n_features {
+            // Get unique thresholds (midpoints between sorted values)
+            let mut values: Vec<(f64, usize)> = indices
+                .iter()
+                .map(|&i| (features[i][feat_idx], i))
+                .collect();
+            values.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+            for window in values.windows(2) {
+                let (v0, _) = window[0];
+                let (v1, _) = window[1];
+                if (v1 - v0).abs() < 1e-10 {
+                    continue;
+                }
+                let threshold = (v0 + v1) / 2.0;
+
+                let left_labels: Vec<u8> = indices
+                    .iter()
+                    .filter(|&&i| features[i][feat_idx] <= threshold)
+                    .map(|&i| labels[i])
+                    .collect();
+                let right_labels: Vec<u8> = indices
+                    .iter()
+                    .filter(|&&i| features[i][feat_idx] > threshold)
+                    .map(|&i| labels[i])
+                    .collect();
+
+                if left_labels.is_empty() || right_labels.is_empty() {
+                    continue;
+                }
+
+                let n = indices.len() as f64;
+                let left_gini = Self::gini(&left_labels);
+                let right_gini = Self::gini(&right_labels);
+                let weighted_gini =
+                    (left_labels.len() as f64 / n) * left_gini
+                    + (right_labels.len() as f64 / n) * right_gini;
+                let gain = parent_gini - weighted_gini;
+
+                if gain > best_gain {
+                    best_gain = gain;
+                    best_feature = feat_idx;
+                    best_threshold = threshold;
+                }
+            }
+        }
+
+        if best_gain > 0.0 {
+            Some((best_feature, best_threshold, best_gain))
+        } else {
+            None
+        }
+    }
+
+    /// Recursively build the tree.
+    fn build_tree(
+        features: &[Vec<f64>],
+        labels: &[u8],
+        indices: &[usize],
+        depth: usize,
+        max_depth: usize,
+        min_samples_split: usize,
+        min_samples_leaf: usize,
+    ) -> TreeNode {
+        let n = indices.len();
+        let labels_subset: Vec<u8> = indices.iter().map(|&i| labels[i]).collect();
+        let positive_rate = labels_subset.iter().filter(|&&l| l == 1).count() as f64 / n as f64;
+
+        // Stopping conditions
+        if depth >= max_depth || n < min_samples_split || positive_rate == 0.0 || positive_rate == 1.0 {
+            return TreeNode::Leaf {
+                probability: positive_rate,
+                sample_count: n,
+            };
+        }
+
+        if let Some((feat_idx, threshold, gain)) = Self::best_split(features, labels, indices) {
+            let left_indices: Vec<usize> = indices
+                .iter()
+                .filter(|&&i| features[i][feat_idx] <= threshold)
+                .copied()
+                .collect();
+            let right_indices: Vec<usize> = indices
+                .iter()
+                .filter(|&&i| features[i][feat_idx] > threshold)
+                .copied()
+                .collect();
+
+            if left_indices.len() < min_samples_leaf || right_indices.len() < min_samples_leaf {
+                return TreeNode::Leaf {
+                    probability: positive_rate,
+                    sample_count: n,
+                };
+            }
+
+            let left = Self::build_tree(
+                features, labels, &left_indices, depth + 1,
+                max_depth, min_samples_split, min_samples_leaf,
+            );
+            let right = Self::build_tree(
+                features, labels, &right_indices, depth + 1,
+                max_depth, min_samples_split, min_samples_leaf,
+            );
+
+            TreeNode::Split {
+                feature_idx: feat_idx,
+                threshold,
+                left: Box::new(left),
+                right: Box::new(right),
+                gain,
+                sample_count: n,
+            }
+        } else {
+            TreeNode::Leaf {
+                probability: positive_rate,
+                sample_count: n,
+            }
+        }
+    }
+
+    /// Train the decision tree.
+    pub fn train(&mut self, data: &CreditTrainingData) {
+        let indices: Vec<usize> = (0..data.features.len()).collect();
+        self.feature_names = data.feature_names.clone();
+        self.root = Some(Self::build_tree(
+            &data.features,
+            &data.labels,
+            &indices,
+            0,
+            self.max_depth,
+            self.min_samples_split,
+            self.min_samples_leaf,
+        ));
+    }
+
+    /// Predict probability for a single sample.
+    pub fn predict_one(&self, features: &[f64]) -> f64 {
+        match &self.root {
+            None => 0.5,
+            Some(node) => Self::traverse(node, features),
+        }
+    }
+
+    fn traverse(node: &TreeNode, features: &[f64]) -> f64 {
+        match node {
+            TreeNode::Leaf { probability, .. } => *probability,
+            TreeNode::Split {
+                feature_idx,
+                threshold,
+                left,
+                right,
+                ..
+            } => {
+                if features[*feature_idx] <= *threshold {
+                    Self::traverse(left, features)
+                } else {
+                    Self::traverse(right, features)
+                }
+            }
+        }
+    }
+
+    /// Get feature importance (sum of information gain at each split).
+    pub fn feature_importance(&self) -> Vec<(String, f64)> {
+        let mut importance = vec![0.0_f64; self.feature_names.len()];
+        if let Some(ref root) = self.root {
+            Self::accumulate_importance(root, &mut importance);
+        }
+        let total: f64 = importance.iter().sum();
+        self.feature_names
+            .iter()
+            .zip(importance.iter())
+            .map(|(name, &imp)| (name.clone(), if total > 0.0 { imp / total } else { 0.0 }))
+            .collect()
+    }
+
+    fn accumulate_importance(node: &TreeNode, importance: &mut Vec<f64>) {
+        match node {
+            TreeNode::Leaf { .. } => {}
+            TreeNode::Split {
+                feature_idx,
+                gain,
+                left,
+                right,
+                ..
+            } => {
+                if *feature_idx < importance.len() {
+                    importance[*feature_idx] += gain;
+                }
+                Self::accumulate_importance(left, importance);
+                Self::accumulate_importance(right, importance);
+            }
+        }
+    }
+}
+
+/// Random Forest Classifier — Ensemble of decision trees with bagging.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RandomForestClassifier {
+    trees: Vec<DecisionTreeClassifier>,
+    n_trees: usize,
+    max_depth: usize,
+    min_samples_split: usize,
+    min_samples_leaf: usize,
+    feature_names: Vec<String>,
+}
+
+impl RandomForestClassifier {
+    pub fn new(n_trees: usize, max_depth: usize, min_samples_split: usize, min_samples_leaf: usize) -> Self {
+        Self {
+            trees: Vec::new(),
+            n_trees,
+            max_depth,
+            min_samples_split,
+            min_samples_leaf,
+            feature_names: Vec::new(),
+        }
+    }
+
+    /// Train with bootstrap aggregating (bagging).
+    pub fn train(&mut self, data: &CreditTrainingData) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let n = data.features.len();
+        self.feature_names = data.feature_names.clone();
+        self.trees.clear();
+
+        for _ in 0..self.n_trees {
+            // Bootstrap sample (sampling with replacement)
+            let bootstrap_indices: Vec<usize> = (0..n).map(|_| rng.gen_range(0..n)).collect();
+
+            let mut tree = DecisionTreeClassifier::new(
+                self.max_depth,
+                self.min_samples_split,
+                self.min_samples_leaf,
+            );
+            tree.train(data);
+            self.trees.push(tree);
+        }
+    }
+
+    /// Predict probability (average of all trees).
+    pub fn predict_one(&self, features: &[f64]) -> f64 {
+        if self.trees.is_empty() {
+            return 0.5;
+        }
+        let sum: f64 = self.trees.iter().map(|t| t.predict_one(features)).sum();
+        sum / self.trees.len() as f64
+    }
+
+    /// Get averaged feature importance across all trees.
+    pub fn feature_importance(&self) -> Vec<(String, f64)> {
+        if self.trees.is_empty() {
+            return self.feature_names.iter().map(|n| (n.clone(), 0.0)).collect();
+        }
+        let mut combined: Vec<f64> = vec![0.0; self.feature_names.len()];
+        for tree in &self.trees {
+            for (i, (_, imp)) in tree.feature_importance().iter().enumerate() {
+                if i < combined.len() {
+                    combined[i] += imp;
+                }
+            }
+        }
+        let n_trees = self.trees.len() as f64;
+        self.feature_names
+            .iter()
+            .zip(combined.iter())
+            .map(|(name, &imp)| (name.clone(), imp / n_trees))
+            .collect()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
 //  Helper Functions
 // ═══════════════════════════════════════════════════════════
 
@@ -684,5 +1034,60 @@ mod tests {
 
         let job2 = vec!["welding".to_string(), "plumbing".to_string()];
         assert!((ClassicalSearchEngine::skill_overlap(&worker, &job2) - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_decision_tree_gini() {
+        // Pure node: Gini = 0
+        assert!((DecisionTreeClassifier::gini(&[0, 0, 0]) - 0.0).abs() < 1e-10);
+        assert!((DecisionTreeClassifier::gini(&[1, 1, 1]) - 0.0).abs() < 1e-10);
+        // 50/50 split: Gini = 0.5
+        assert!((DecisionTreeClassifier::gini(&[0, 1]) - 0.5).abs() < 1e-10);
+        // 75/25 split: Gini = 0.375
+        assert!((DecisionTreeClassifier::gini(&[0, 0, 0, 1]) - 0.375).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_decision_tree_train_predict() {
+        let data = CreditTrainingData {
+            features: vec![
+                vec![1.0, 0.0],
+                vec![1.0, 0.1],
+                vec![0.0, 1.0],
+                vec![0.0, 0.9],
+                vec![0.5, 0.5],
+            ],
+            labels: vec![1, 1, 0, 0, 1],
+            feature_names: vec!["feature_a".to_string(), "feature_b".to_string()],
+        };
+
+        let mut tree = DecisionTreeClassifier::new(5, 2, 1);
+        tree.train(&data);
+
+        // Predict on training data — should get reasonable separation
+        let p_high = tree.predict_one(&[1.0, 0.0]);
+        let p_low = tree.predict_one(&[0.0, 1.0]);
+        assert!(p_high > p_low, "High-feature sample should have higher positive probability");
+    }
+
+    #[test]
+    fn test_random_forest_train_predict() {
+        let data = CreditTrainingData {
+            features: vec![
+                vec![2.0, 1.0],
+                vec![3.0, 1.5],
+                vec![1.0, 3.0],
+                vec![0.5, 2.5],
+                vec![2.5, 0.5],
+            ],
+            labels: vec![1, 1, 0, 0, 1],
+            feature_names: vec!["x".to_string(), "y".to_string()],
+        };
+
+        let mut forest = RandomForestClassifier::new(5, 4, 2, 1);
+        forest.train(&data);
+
+        let prob = forest.predict_one(&[2.0, 1.0]);
+        assert!(prob > 0.0 && prob < 1.0, "Probability should be in (0, 1)");
     }
 }
