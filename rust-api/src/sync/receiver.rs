@@ -68,6 +68,7 @@ impl SyncState {
     /// 6. Attach market intelligence for device's ward
     /// 7. Attach any pending alerts
     /// 8. Build freshness metadata
+    #[tracing::instrument(skip(self, request), fields(device_id = %request.device_id, protocol_version = request.sync_protocol_version))]
     pub async fn process_sync(&self, request: SyncRequest) -> SyncResponse {
         let now = Utc::now().timestamp_millis();
 
@@ -327,6 +328,7 @@ impl SyncState {
 
 /// Axum handler for POST /api/v1/sync/anonymized
 /// Extracts SyncState from GatewayState
+#[tracing::instrument(skip(gateway, request), fields(device_id = %request.device_id))]
 pub async fn handle_sync(
     axum::extract::State(gateway): axum::extract::State<super::super::GatewayState>,
     axum::extract::Json(request): axum::extract::Json<SyncRequest>,

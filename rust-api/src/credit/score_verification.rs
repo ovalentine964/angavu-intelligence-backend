@@ -240,6 +240,7 @@ mod tests {
             type_weight: 0.3,
             confidence,
             factors: vec![],
+            explanation: None,
             seasonally_adjusted: false,
             ci_lower: alama_score.saturating_sub(20),
             ci_upper: (alama_score + 20).min(850),

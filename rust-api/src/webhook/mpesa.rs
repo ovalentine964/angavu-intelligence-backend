@@ -97,6 +97,7 @@ pub struct MpesaPayment {
 /// Handle M-Pesa STK Push callback.
 ///
 /// POST /api/v1/webhooks/mpesa
+#[tracing::instrument(skip(state, payload), fields(webhook_type = "mpesa-stk"))]
 pub async fn handle_mpesa_callback(
     State(state): State<WebhookState>,
     Json(payload): Json<StkCallbackPayload>,

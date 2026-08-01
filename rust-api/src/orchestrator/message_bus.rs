@@ -19,6 +19,7 @@ pub enum ModuleId {
     EconomicAnalyzer,
     CollectiveIntelligence,
     ApiGateway,
+    ServicePriceDiscovery,
 }
 
 /// Priority levels for task scheduling
@@ -160,6 +161,18 @@ pub enum ModuleMessage {
         target_module: ModuleId,
         command: ModuleCommand,
         priority: Priority,
+    },
+
+    /// Service price broadcast from device
+    ServicePriceBroadcast {
+        trace_id: TraceId,
+        broadcast: crate::service_pricing::ServicePriceBroadcast,
+    },
+
+    /// ServicePriceDiscoveryEngine output: aggregated service market signal
+    ServiceMarketSignal {
+        trace_id: TraceId,
+        signal: crate::service_pricing::ServiceMarketSignal,
     },
 
     /// Module health/heartbeat
@@ -566,6 +579,8 @@ fn extract_trace_id(msg: &ModuleMessage) -> TraceId {
         | ModuleMessage::AnomalyAlert { trace_id, .. }
         | ModuleMessage::EmergentPattern { trace_id, .. }
         | ModuleMessage::RouteCommand { trace_id, .. } => *trace_id,
+        | ModuleMessage::ServicePriceBroadcast { trace_id, .. } => *trace_id,
+        | ModuleMessage::ServiceMarketSignal { trace_id, .. } => *trace_id,
         ModuleMessage::Heartbeat { .. } => Uuid::nil(),
     }
 }
@@ -582,6 +597,8 @@ fn message_type_name(msg: &ModuleMessage) -> String {
         ModuleMessage::AnomalyAlert { .. } => "AnomalyAlert",
         ModuleMessage::EmergentPattern { .. } => "EmergentPattern",
         ModuleMessage::RouteCommand { .. } => "RouteCommand",
+        ModuleMessage::ServicePriceBroadcast { .. } => "ServicePriceBroadcast",
+        ModuleMessage::ServiceMarketSignal { .. } => "ServiceMarketSignal",
         ModuleMessage::Heartbeat { .. } => "Heartbeat",
     }
     .to_string()
@@ -599,6 +616,8 @@ fn extract_source_module(msg: &ModuleMessage) -> ModuleId {
         ModuleMessage::AnomalyAlert { source_module, .. } => *source_module,
         ModuleMessage::EmergentPattern { .. } => ModuleId::CollectiveIntelligence,
         ModuleMessage::RouteCommand { .. } => ModuleId::Orchestrator,
+        ModuleMessage::ServicePriceBroadcast { .. } => ModuleId::ApiGateway,
+        ModuleMessage::ServiceMarketSignal { .. } => ModuleId::ServicePriceDiscovery,
         ModuleMessage::Heartbeat { module_id, .. } => *module_id,
     }
 }

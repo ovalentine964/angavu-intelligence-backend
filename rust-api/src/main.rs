@@ -1,5 +1,11 @@
 // Angavu Intelligence Backend — Main Entry Point
 // Integrates all modules: orchestrator, gateway, loops, credit, graph, health, service_pricing, webhooks
+//
+// Telemetry:
+// - Structured JSON logging with correlation IDs (X-Request-ID)
+// - OpenTelemetry OTLP export (optional, via OTEL_EXPORTER_OTLP_ENDPOINT)
+// - Request tracing from API gateway through all modules
+// - Health check endpoints: /health, /health/ready, /health/detailed
 
 use angavu_intelligence_backend::graphql;
 use angavu_intelligence_backend::orchestrator::message_bus::{ModuleMessageBus, MessageBusConfig};
@@ -12,58 +18,19 @@ use angavu_intelligence_backend::gateway::rate_limit::RateLimiter;
 use angavu_intelligence_backend::gateway::k_anonymity::KAnonymityEnforcer;
 use angavu_intelligence_backend::gateway::audit::AuditLogger;
 use angavu_intelligence_backend::loops;
+use angavu_intelligence_backend::telemetry;
 use std::sync::Arc;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use opentelemetry::trace::TracerProvider;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing with optional OpenTelemetry OTLP exporter
-    let otlp_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok();
+    // Initialize structured JSON logging with OpenTelemetry OTLP export
+    // Controlled by:
+    //   LOG_FORMAT=json|text  (default: json in production, text in development)
+    //   OTEL_EXPORTER_OTLP_ENDPOINT=http://... (optional OTLP collector)
+    //   RUST_LOG=angavu=info,tower_http=info,...
+    let _otel_tracer_guard = telemetry::init_json_logging();
 
-    let otel_tracer = if let Some(ref endpoint) = otlp_endpoint {
-        match opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(endpoint),
-            )
-            .with_trace_config(
-                opentelemetry_sdk::trace::Config::default()
-                    .with_resource(opentelemetry_sdk::Resource::new(vec![
-                        opentelemetry::KeyValue::new("service.name", "angavu-intelligence-backend"),
-                        opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                    ])),
-            )
-            .install_batch(opentelemetry_sdk::runtime::Tokio)
-        {
-            Ok(tracer) => {
-                tracing::info!(endpoint = %endpoint, "OpenTelemetry OTLP exporter initialized");
-                Some(tracer)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "Failed to initialize OTLP exporter — falling back to local tracing only");
-                None
-            }
-        }
-    } else {
-        tracing::info!("OTEL_EXPORTER_OTLP_ENDPOINT not set — tracing is local only");
-        None
-    };
-
-    let otel_layer = otel_tracer.map(|tracer| {
-        tracing_opentelemetry::layer().with_tracer(tracer)
-    });
-
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "angavu=info,tower_http=info".into()))
-        .with(tracing_subscriber::fmt::layer())
-        .with(otel_layer)
-        .init();
-
-    tracing::info!("Starting Angavu Intelligence Backend");
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting Angavu Intelligence Backend");
 
     // ── Load Configuration ──────────────────────────────────────
     // Security: JWT_SECRET and MPESA_PASSKEY MUST be set via environment variables.
@@ -123,18 +90,51 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Spawn audit buffer flusher
+    // Spawn audit buffer flusher — adaptive batching
+    // The AuditLogger already flushes when buffer reaches max_buffer_size (event-driven).
+    // This timer is a fallback to drain partial buffers every 60s.
+    // Uses MissedTickBehavior::Delay to avoid flush storms after backpressure.
     let bus_clone = Arc::clone(&bus);
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
             let entries = bus_clone.flush_audit().await;
             if !entries.is_empty() {
-                tracing::debug!(count = entries.len(), "Audit buffer flushed");
+                tracing::debug!(count = entries.len(), "Audit buffer flushed (timer fallback)");
             }
         }
     });
+
+    // P2: Cache warming on startup — pre-populate Redis caches from DB
+    // Eliminates cold-start latency for first requests after restart
+    let graph_cache = angavu_intelligence_backend::graph::cache::GraphCache::new(redis_conn.clone());
+    let pg_pool_warm = pg_pool.clone();
+    let cache_warm_handle = tokio::spawn(async move {
+        // Warm graph statistics
+        let stats_result = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT json_build_object( \
+             'node_count', (SELECT COUNT(*) FROM kg_nodes), \
+             'edge_count', (SELECT COUNT(*) FROM kg_edges), \
+             'worker_count', (SELECT COUNT(DISTINCT worker_id) FROM transactions) \
+             )"
+        )
+        .fetch_one(&pg_pool_warm)
+        .await;
+        match stats_result {
+            Ok(stats) => {
+                if let Err(e) = graph_cache.cache_stats(&stats).await {
+                    tracing::warn!(error = %e, "Failed to warm graph stats cache");
+                } else {
+                    tracing::info!("Graph stats cache warmed on startup");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "Failed to compute graph stats for cache warming"),
+        }
+    });
+    // Don't block startup on cache warming — it runs in background
+    let _ = cache_warm_handle;
 
     // ── Initialize API Gateway ──────────────────────────────────
     let jwt_config = JwtConfig {
@@ -145,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
             v.set_audience(&["angavu-api"]);
             v
         },
-        access_token_ttl: 3600,       // 1 hour
+        access_token_ttl: 900,         // 15 minutes (P1: reduced from 1 hour for security)
         refresh_token_ttl: 86400 * 30, // 30 days
     };
 
@@ -211,6 +211,63 @@ async fn main() -> anyhow::Result<()> {
         })
         .ok();
 
+    // ── Billing Tables Migrations ───────────────────────────────
+    // Core billing tables (subscriptions, invoices, usage_records, api_keys)
+    sqlx::query(angavu_intelligence_backend::billing::metering::USAGE_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Usage records table migration skipped (may already exist)")
+        })
+        .ok();
+
+    // M-Pesa payments table
+    sqlx::query(angavu_intelligence_backend::billing::mpesa::PAYMENTS_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Payments table migration skipped (may already exist)")
+        })
+        .ok();
+
+    // Invoice generation tables
+    sqlx::query(angavu_intelligence_backend::billing::invoice::INVOICE_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Invoice table migration skipped (may already exist)")
+        })
+        .ok();
+
+    // Subscription lifecycle tables
+    sqlx::query(angavu_intelligence_backend::billing::subscription::SUBSCRIPTION_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Subscription table migration skipped (may already exist)")
+        })
+        .ok();
+
+    // Model Registry tables
+    sqlx::query(angavu_intelligence_backend::credit::model_registry::MODEL_REGISTRY_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Model registry table migration skipped (may already exist)")
+        })
+        .ok();
+
+    // Data Retention tracking tables
+    sqlx::query(angavu_intelligence_backend::gateway::data_retention::RETENTION_MIGRATION)
+        .execute(&pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Data retention table migration skipped (may already exist)")
+        })
+        .ok();
+
+    tracing::info!("Billing tables initialized (subscriptions, invoices, usage_records, payments)");
+    tracing::info!("Model registry and data retention tables initialized");
     tracing::info!("Webhook system initialized (M-Pesa + Market Feed + Generic)");
 
     // ── Initialize Human-in-the-Loop Approval System ──────────
@@ -226,6 +283,8 @@ async fn main() -> anyhow::Result<()> {
     let graphql_routes = graphql::graphql_router(graphql_schema.clone());
     tracing::info!("GraphQL endpoint initialized at /graphql");
 
+    let clickhouse_url = std::env::var("CLICKHOUSE_URL").ok();
+
     let app = build_gateway_router(
         gateway_state,
         vec![
@@ -235,14 +294,23 @@ async fn main() -> anyhow::Result<()> {
         ],
     )
     // M-Pesa webhooks remain outside auth — they use their own API key / HMAC validation
-    .merge(webhook_router(webhook_state));
+    .merge(webhook_router(webhook_state))
+    // Health check endpoints (public, no auth required)
+    .merge(telemetry::health_router(telemetry::health::HealthState {
+        db: pg_pool.clone(),
+        redis: redis_conn.clone(),
+        clickhouse_url,
+        started_at: std::time::Instant::now(),
+    }));
 
     // ── Start HTTP Server ───────────────────────────────────────
     let addr = format!("{}:{}", host, port);
     tracing::info!(addr = %addr, "Starting HTTP server");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app)
+    // Use into_make_service_with_connect_info so ConnectInfo<SocketAddr>
+    // is available to middleware (auth, audit) for client IP extraction.
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

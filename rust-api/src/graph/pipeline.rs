@@ -648,6 +648,7 @@ impl PipelineExecutor {
     /// Execute the full pipeline using a provided node handler.
     /// The handler receives (node_name, input) and returns Ok(output) or Err(error).
     /// This is the main entry point for running a pipeline to completion.
+    #[tracing::instrument(skip(self, handler), fields(pipeline_nodes = self.nodes.len()))]
     pub async fn execute<F, Fut>(
         &mut self,
         handler: F,

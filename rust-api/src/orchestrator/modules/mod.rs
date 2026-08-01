@@ -6,6 +6,8 @@ pub mod distribution;
 pub mod fmcg;
 pub mod health;
 pub mod economic;
+pub mod service_price_discovery;
+pub mod inequality; // P1: Inequality tracker (Gini, Palma, Theil) for economic analysis
 
 use super::message_bus::{ModuleMessage, ModuleId};
 use std::collections::HashMap;

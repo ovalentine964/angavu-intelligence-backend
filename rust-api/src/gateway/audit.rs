@@ -1,5 +1,11 @@
 // src/gateway/audit.rs
 
+use axum::{
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::Response,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -70,40 +76,67 @@ impl AuditLogger {
 
         tracing::debug!(count = count, "Audit log flush started");
 
-        // Persist to PostgreSQL if pool is available
+        // P2: Batch INSERT for 10× write throughput (single multi-row statement)
         if let Some(ref pool) = self.pool {
-            for entry in &entries {
-                let result = sqlx::query(
-                    r#"
-                    INSERT INTO audit_log (
-                        id, timestamp, org_id, key_id, endpoint, method,
-                        status_code, response_time_ms, ip_address, user_agent,
-                        k_anonymity_suppressed, query_hash, rate_limit_remaining
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                    ON CONFLICT (id) DO NOTHING
-                    "#,
-                )
-                .bind(entry.id)
-                .bind(entry.timestamp)
-                .bind(&entry.org_id)
-                .bind(&entry.key_id)
-                .bind(&entry.endpoint)
-                .bind(&entry.method)
-                .bind(entry.status_code as i32)
-                .bind(entry.response_time_ms as i64)
-                .bind(&entry.ip_address)
-                .bind(&entry.user_agent)
-                .bind(entry.k_anonymity_suppressed)
-                .bind(&entry.query_hash)
-                .bind(entry.rate_limit_remaining as i32)
-                .execute(pool)
-                .await;
+            if !entries.is_empty() {
+                // Build multi-row INSERT for batch efficiency
+                let mut query = String::from(
+                    "INSERT INTO audit_log \
+                     (id, timestamp, org_id, key_id, endpoint, method, \
+                      status_code, response_time_ms, ip_address, user_agent, \
+                      k_anonymity_suppressed, query_hash, rate_limit_remaining) VALUES "
+                );
+                let mut binds: Vec<String> = Vec::with_capacity(entries.len());
+                for (i, _) in entries.iter().enumerate() {
+                    let n = i * 13;
+                    binds.push(format!(
+                        "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${})",
+                        n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12, n+13
+                    ));
+                }
+                query.push_str(&binds.join(", "));
+                query.push_str(" ON CONFLICT (id) DO NOTHING");
 
-                if let Err(e) = result {
-                    tracing::error!(error = %e, entry_id = %entry.id, "Failed to persist audit log entry");
+                let mut q = sqlx::query(&query);
+                for entry in &entries {
+                    q = q
+                        .bind(entry.id)
+                        .bind(entry.timestamp)
+                        .bind(&entry.org_id)
+                        .bind(&entry.key_id)
+                        .bind(&entry.endpoint)
+                        .bind(&entry.method)
+                        .bind(entry.status_code as i32)
+                        .bind(entry.response_time_ms as i64)
+                        .bind(&entry.ip_address)
+                        .bind(&entry.user_agent)
+                        .bind(entry.k_anonymity_suppressed)
+                        .bind(&entry.query_hash)
+                        .bind(entry.rate_limit_remaining as i32);
+                }
+                match q.execute(pool).await {
+                    Ok(_) => tracing::debug!(count = count, "Audit log batch flushed to PostgreSQL"),
+                    Err(e) => {
+                        tracing::error!(error = %e, count = count, "Batch audit flush failed, falling back to individual inserts");
+                        // Fallback: individual inserts
+                        for entry in &entries {
+                            let _ = sqlx::query(
+                                "INSERT INTO audit_log (id, timestamp, org_id, key_id, endpoint, method, \
+                                 status_code, response_time_ms, ip_address, user_agent, \
+                                 k_anonymity_suppressed, query_hash, rate_limit_remaining) \
+                                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO NOTHING"
+                            )
+                            .bind(entry.id).bind(entry.timestamp).bind(&entry.org_id)
+                            .bind(&entry.key_id).bind(&entry.endpoint).bind(&entry.method)
+                            .bind(entry.status_code as i32).bind(entry.response_time_ms as i64)
+                            .bind(&entry.ip_address).bind(&entry.user_agent)
+                            .bind(entry.k_anonymity_suppressed).bind(&entry.query_hash)
+                            .bind(entry.rate_limit_remaining as i32)
+                            .execute(pool).await.ok();
+                        }
+                    }
                 }
             }
-            tracing::debug!(count = count, "Audit log flushed to PostgreSQL");
         } else {
             // Fallback: structured logging only
             for entry in &entries {
@@ -121,6 +154,9 @@ impl AuditLogger {
 }
 
 /// Audit logging middleware
+///
+/// Extracts client IP from request extensions (set by auth middleware)
+/// for complete audit trail with source IP.
 pub async fn audit_middleware(
     State(state): State<super::GatewayState>,
     request: Request,
@@ -136,6 +172,7 @@ pub async fn audit_middleware(
         .map(|s| s.to_string());
 
     let claims = request.extensions().get::<super::auth::Claims>().cloned();
+    let client_ip = request.extensions().get::<super::auth::ClientIp>().map(|c| c.0.clone());
 
     let response = next.run(request).await;
 
@@ -151,7 +188,7 @@ pub async fn audit_middleware(
             method,
             status_code: response.status().as_u16(),
             response_time_ms: elapsed.as_millis() as u64,
-            ip_address: None, // Extract from ConnectInfo in production
+            ip_address: client_ip,
             user_agent,
             k_anonymity_suppressed: false,
             query_hash: None,

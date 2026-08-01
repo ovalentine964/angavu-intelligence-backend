@@ -20,4 +20,4 @@ pub mod differential_privacy;
 
 pub use nonparametric_bridge::NonparametricBridge;
 pub use types::*;
-pub use differential_privacy::DifferentialPrivacyEngine;
+pub use differential_privacy::{DifferentialPrivacyEngine, MechanismType};

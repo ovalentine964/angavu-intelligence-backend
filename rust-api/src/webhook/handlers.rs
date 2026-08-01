@@ -19,6 +19,36 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use super::{WebhookEvent, WebhookEventType, WebhookSource, WebhookState, WebhookResponse, route_to_ooda, store_webhook_event};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
+/// P1: Verify HMAC-SHA256 webhook signature.
+/// Signature header: X-Webhook-Signature: sha256=<hex_digest>
+/// The signature is computed over the raw request body using the shared secret.
+pub fn verify_webhook_signature(
+    body: &[u8],
+    signature_header: &str,
+    secret: &[u8],
+) -> bool {
+    // Parse "sha256=<hex>" format
+    let expected_hex = match signature_header.strip_prefix("sha256=") {
+        Some(hex) => hex,
+        None => return false,
+    };
+
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac = match HmacSha256::new_from_slice(secret) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    mac.update(body);
+    let expected_bytes = mac.finalize().into_bytes();
+    let computed_hex = hex::encode(expected_bytes);
+
+    // Constant-time comparison to prevent timing attacks
+    computed_hex.len() == expected_hex.len()
+        && computed_hex.bytes().zip(expected_hex.bytes()).all(|(a, b)| a == b)
+}
 
 /// Generic webhook payload.
 #[derive(Debug, Deserialize, garde::Validate)]
@@ -43,6 +73,7 @@ pub struct GenericWebhookPayload {
 ///
 /// POST /api/v1/webhooks/generic
 /// Header: X-Webhook-Key: <api_key>
+#[tracing::instrument(skip(state, payload), fields(webhook_type = "generic"))]
 pub async fn handle_generic_webhook(
     State(state): State<WebhookState>,
     headers: HeaderMap,

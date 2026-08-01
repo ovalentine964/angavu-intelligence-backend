@@ -1,7 +1,17 @@
 // src/gateway/k_anonymity.rs
+//
+// k-Anonymity enforcement for all data release endpoints.
+//
+// IC-PRIVACY changes:
+// - Added structured logging for ALL k-anonymity decisions (allow + suppress)
+// - Added alerting when k < MIN_K (via tracing::warn)
+// - Added audit trail via KAnonymityAuditRecord
+// - Added enforce_with_audit() for endpoints that need detailed logging
 
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
 /// Standard minimum k-anonymity threshold across the entire system.
 /// All cohort queries, FL aggregation, and market intelligence must
@@ -17,6 +27,21 @@ pub struct KAnonymityEnforcer {
     k: usize,
     /// Per-query cohort tracking
     cohort_sizes: DashMap<String, u32>,
+    /// Audit log of all k-anonymity decisions (ring buffer, last 1000)
+    audit_log: parking_lot::Mutex<Vec<KAnonymityAuditRecord>>,
+}
+
+/// Audit record for k-anonymity enforcement decisions.
+/// Logged for both allowed and suppressed queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KAnonymityAuditRecord {
+    pub timestamp: DateTime<Utc>,
+    pub cohort_key: String,
+    pub sample_size: u32,
+    pub threshold: usize,
+    pub allowed: bool,
+    pub endpoint: String,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +57,7 @@ impl KAnonymityEnforcer {
         Self {
             k: k.max(MIN_K_ANONYMITY), // Enforce system-wide minimum
             cohort_sizes: DashMap::new(),
+            audit_log: parking_lot::Mutex::new(Vec::with_capacity(1000)),
         }
     }
 
@@ -40,38 +66,128 @@ impl KAnonymityEnforcer {
         Self::new(MIN_K_ANONYMITY)
     }
 
-    /// Check if a query result meets k-anonymity requirements
-    pub fn enforce<T>(&self, cohort_key: &str, data: T, sample_size: u32) -> KAnonymityResult<T> {
-        if sample_size < self.k as u32 {
-            KAnonymityResult {
-                data: None,
-                k_anonymity: self.k,
-                suppressed: true,
-                reason: Some(format!(
-                    "Cohort size {} below k-anonymity threshold {}",
-                    sample_size, self.k
-                )),
-            }
-        } else {
-            // Track cohort
-            self.cohort_sizes.insert(cohort_key.to_string(), sample_size);
+    /// Get the configured k threshold.
+    pub fn k_threshold(&self) -> usize {
+        self.k
+    }
 
+    /// Check if a query result meets k-anonymity requirements.
+    /// Logs all decisions and alerts when k < threshold.
+    pub fn enforce<T>(&self, cohort_key: &str, data: T, sample_size: u32) -> KAnonymityResult<T> {
+        self.enforce_with_audit(cohort_key, data, sample_size, "unknown")
+    }
+
+    /// Check k-anonymity with full audit logging (endpoint name captured).
+    /// This is the preferred method for all data release endpoints.
+    pub fn enforce_with_audit<T>(
+        &self,
+        cohort_key: &str,
+        data: T,
+        sample_size: u32,
+        endpoint: &str,
+    ) -> KAnonymityResult<T> {
+        let allowed = sample_size >= self.k as u32;
+        let reason = if !allowed {
+            Some(format!(
+                "Cohort size {} below k-anonymity threshold {}",
+                sample_size, self.k
+            ))
+        } else {
+            None
+        };
+
+        // ── Audit logging ──
+        self.log_decision(cohort_key, sample_size, endpoint, allowed, reason.as_deref());
+
+        // ── Alerting: warn loudly when k < MIN_K ──
+        if !allowed {
+            warn!(
+                cohort_key = %cohort_key,
+                sample_size = %sample_size,
+                threshold = %self.k,
+                endpoint = %endpoint,
+                "⚠️ k-ANONYMITY VIOLATION: Cohort suppressed (k={} < MIN_K={})",
+                sample_size, self.k
+            );
+        }
+
+        if allowed {
+            self.cohort_sizes.insert(cohort_key.to_string(), sample_size);
             KAnonymityResult {
                 data: Some(data),
                 k_anonymity: self.k,
                 suppressed: false,
                 reason: None,
             }
+        } else {
+            KAnonymityResult {
+                data: None,
+                k_anonymity: self.k,
+                suppressed: true,
+                reason,
+            }
         }
     }
 
-    /// Enforce k-anonymity on a batch of results
+    /// Record a k-anonymity decision in the audit log.
+    fn log_decision(&self, cohort_key: &str, sample_size: u32, endpoint: &str, allowed: bool, reason: Option<&str>) {
+        let record = KAnonymityAuditRecord {
+            timestamp: Utc::now(),
+            cohort_key: cohort_key.to_string(),
+            sample_size,
+            threshold: self.k,
+            allowed,
+            endpoint: endpoint.to_string(),
+            reason: reason.map(String::from),
+        };
+
+        if allowed {
+            info!(
+                cohort_key = %cohort_key,
+                sample_size = %sample_size,
+                threshold = %self.k,
+                endpoint = %endpoint,
+                "k-anonymity check PASSED"
+            );
+        }
+
+        let mut log = self.audit_log.lock();
+        if log.len() >= 1000 {
+            log.drain(0..500);
+        }
+        log.push(record);
+    }
+
+    /// Get recent audit records (for monitoring dashboards).
+    pub fn recent_audit(&self, limit: usize) -> Vec<KAnonymityAuditRecord> {
+        let log = self.audit_log.lock();
+        let start = log.len().saturating_sub(limit);
+        log[start..].to_vec()
+    }
+
+    /// Count violations in the audit log.
+    pub fn violation_count(&self) -> usize {
+        let log = self.audit_log.lock();
+        log.iter().filter(|r| !r.allowed).count()
+    }
+
+    /// Enforce k-anonymity on a batch of results (with audit logging)
     pub fn enforce_batch<T>(
         &self,
         results: Vec<(String, T, u32)>, // (cohort_key, data, sample_size)
     ) -> Vec<KAnonymityResult<T>> {
-        results.into_iter()
-            .map(|(key, data, size)| self.enforce(&key, data, size))
+        self.enforce_batch_with_audit(results, "batch")
+    }
+
+    /// Enforce k-anonymity on a batch with endpoint tracking
+    pub fn enforce_batch_with_audit<T>(
+        &self,
+        results: Vec<(String, T, u32)>,
+        endpoint: &str,
+    ) -> Vec<KAnonymityResult<T>> {
+        results
+            .into_iter()
+            .map(|(key, data, size)| self.enforce_with_audit(&key, data, size, endpoint))
             .collect()
     }
 

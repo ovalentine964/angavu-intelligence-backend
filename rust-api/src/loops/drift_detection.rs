@@ -240,6 +240,7 @@ impl DriftDetector {
     }
 
     /// Generate a drift report. Called by the slow OODA loop (daily).
+    #[tracing::instrument(skip(self))]
     pub async fn generate_report(&self) -> DriftReport {
         let current_accuracy = self.global_window.accuracy();
         let current_confidence = self.global_window.mean_confidence();

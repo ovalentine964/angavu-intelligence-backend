@@ -2,6 +2,8 @@
 // Integrates loop engineering, graph engineering, multi-agent orchestration,
 // health metrics, credit scoring, and API gateway.
 
+#![deny(missing_docs)]
+
 pub mod loops;
 pub mod credit;
 pub mod graph;
@@ -13,8 +15,12 @@ pub mod service_pricing;
 pub mod sync;
 pub mod observability;
 pub mod webhook;
+pub mod billing;
 pub mod statistical;
 pub mod rag;
+pub mod telemetry;
+pub mod llm;
+pub mod agent;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

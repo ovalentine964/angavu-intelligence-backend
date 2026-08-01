@@ -1,4 +1,7 @@
 // src/orchestrator/modules/market.rs
+//
+// MarketAnalyzer: Demand pattern analysis, Soko Pulse generation
+// State persisted to PostgreSQL (table: market_windows).
 
 use super::*;
 use crate::orchestrator::message_bus::*;
@@ -13,22 +16,34 @@ use std::collections::HashMap;
 /// - Seasonal patterns
 /// - Market concentration (HHI)
 ///
-/// ⚠️  LIMITATION: All state is held in-memory HashMaps. Data is lost on
-/// process restart. For production, wire to PostgreSQL (table: market_windows)
-/// or Redis for persistence. See: TODO(MarketAnalyzer-Persistence)
+/// State is persisted to PostgreSQL (table: market_windows) for
+/// survival across process restarts.
 pub struct MarketAnalyzer {
     /// Rolling window of recent aggregates per (region, product) key
     windows: HashMap<String, RollingWindow>,
     /// Minimum sample size for a valid signal
     min_sample_size: u32,
+    /// Database pool for state persistence
+    pool: Option<sqlx::PgPool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct RollingWindow {
     prices: Vec<f64>,
     volumes: Vec<f64>,
     timestamps: Vec<chrono::DateTime<chrono::Utc>>,
     max_size: usize,
+}
+
+/// JSONB-serializable window for PostgreSQL storage
+#[derive(Serialize, Deserialize)]
+struct WindowRow {
+    region: String,
+    product_category: String,
+    prices: Vec<f64>,
+    volumes: Vec<f64>,
+    timestamps: Vec<chrono::DateTime<chrono::Utc>>,
+    max_size: i32,
 }
 
 impl RollingWindow {
@@ -73,7 +88,8 @@ impl RollingWindow {
 
         let n = self.prices.len();
         let recent = &self.prices[n - 3..];
-        let older = &self.prices[..n - 3].max(3);
+        let older_len = n.saturating_sub(3).max(3);
+        let older = &self.prices[..older_len.min(n)];
 
         let recent_avg: f64 = recent.iter().sum::<f64>() / recent.len() as f64;
         let older_avg: f64 = older.iter().sum::<f64>() / older.len() as f64;
@@ -83,7 +99,7 @@ impl RollingWindow {
         }
 
         let change_pct = ((recent_avg - older_avg) / older_avg) * 100.0;
-        let volatility = self.price_stddev() / self.mean_price() * 100.0;
+        let volatility = self.price_stddev() / self.mean_price().max(0.01) * 100.0;
 
         if volatility > 15.0 {
             PriceTrend::Volatile { range_pct: volatility }
@@ -97,28 +113,11 @@ impl RollingWindow {
     }
 
     /// Herfindahl-Hirschman Index for market concentration
-    /// 
-    /// FIXED: HHI was previously misapplied. HHI is an antitrust metric
-    /// (DOJ thresholds: <1500 unconcentrated, 1500-2500 moderate, >2500 high).
-    /// 
-    /// For informal sector analysis, we use HHI to assess market structure:
-    /// - High HHI (>2500): dominated by few sellers → potential for price manipulation
-    /// - Low HHI (<1500): competitive market → fair pricing
-    /// 
-    /// Mathematical basis: HHI = Σᵢ sᵢ² where sᵢ is market share as percentage
-    /// Range: [100/N, 10000] where N is number of firms
-    /// 
-    /// NOTE: Do NOT use HHI for inequality (use Gini instead)
-    /// Do NOT use HHI for diversity (use Shannon entropy instead)
     fn compute_hhi(&self, market_shares: &[f64]) -> f64 {
-        // HHI is computed on percentage shares (0-100 scale)
-        // Correct: if share is 0.3 (30%), then contribution is 30² = 900
         market_shares.iter().map(|s| (s * 100.0).powi(2)).sum()
     }
 
-    /// Shannon entropy for market diversity (alternative to HHI)
-    /// H = -Σ pᵢ ln(pᵢ)
-    /// Higher entropy = more diverse/competitive market
+    /// Shannon entropy for market diversity
     fn compute_entropy(&self, market_shares: &[f64]) -> f64 {
         -market_shares.iter()
             .filter(|&&s| s > 0.0)
@@ -129,13 +128,111 @@ impl RollingWindow {
 
 impl MarketAnalyzer {
     pub fn new() -> Self {
-        // Power analysis: minimum 10 observations for basic demand signal
-        // For reliable elasticity estimation: 30+ observations per category
-        // For seasonal patterns: 90+ days of data
         Self {
             windows: HashMap::new(),
             min_sample_size: 10,
+            pool: None,
         }
+    }
+
+    /// Create with database pool for state persistence.
+    pub fn with_pool(pool: sqlx::PgPool) -> Self {
+        Self {
+            windows: HashMap::new(),
+            min_sample_size: 10,
+            pool: Some(pool),
+        }
+    }
+
+    /// Load persisted state from PostgreSQL on startup.
+    pub async fn load_state(&mut self) -> Result<(), String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        // Use JSONB -> text casting for reliable serde
+        let rows = sqlx::query!(
+            "SELECT region, product_category,
+                    prices::text as \"prices!\",
+                    volumes::text as \"volumes!\",
+                    timestamps::text as \"timestamps!\",
+                    max_size
+             FROM market_windows"
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("Failed to load market_windows: {}", e))?;
+
+        let mut count = 0;
+        for row in rows {
+            let key = format!("{}:{}", row.region, row.product_category);
+            let prices: Vec<f64> = serde_json::from_str(&row.prices).unwrap_or_default();
+            let volumes: Vec<f64> = serde_json::from_str(&row.volumes).unwrap_or_default();
+            let timestamps: Vec<chrono::DateTime<chrono::Utc>> =
+                serde_json::from_str(&row.timestamps).unwrap_or_default();
+
+            let window = RollingWindow {
+                prices,
+                volumes,
+                timestamps,
+                max_size: row.max_size as usize,
+            };
+            if !window.prices.is_empty() {
+                self.windows.insert(key, window);
+                count += 1;
+            }
+        }
+
+        tracing::info!(windows = count, "MarketAnalyzer state loaded from PostgreSQL");
+        Ok(())
+    }
+
+    /// Persist current state to PostgreSQL.
+    pub async fn persist_state(&self) -> Result<(), String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        for (key, window) in &self.windows {
+            let parts: Vec<&str> = key.splitn(2, ':').collect();
+            if parts.len() != 2 { continue; }
+            let (region, category) = (parts[0], parts[1]);
+
+            let prices_json = serde_json::to_string(&window.prices).unwrap_or_default();
+            let volumes_json = serde_json::to_string(&window.volumes).unwrap_or_default();
+            let timestamps_json = serde_json::to_string(&window.timestamps).unwrap_or_default();
+
+            sqlx::query!(
+                "INSERT INTO market_windows
+                    (region, product_category, prices, volumes, timestamps, max_size,
+                     mean_price, price_stddev, last_updated)
+                 VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8, NOW())
+                 ON CONFLICT (region, product_category) DO UPDATE SET
+                    prices = EXCLUDED.prices,
+                    volumes = EXCLUDED.volumes,
+                    timestamps = EXCLUDED.timestamps,
+                    max_size = EXCLUDED.max_size,
+                    mean_price = EXCLUDED.mean_price,
+                    price_stddev = EXCLUDED.price_stddev,
+                    last_updated = NOW()",
+                region,
+                category,
+                prices_json,
+                volumes_json,
+                timestamps_json,
+                window.max_size as i32,
+                window.mean_price(),
+                window.price_stddev(),
+            )
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to persist market_windows: {}", e))?;
+        }
+
+        tracing::info!(windows = self.windows.len(), "MarketAnalyzer state persisted to PostgreSQL");
+        Ok(())
     }
 }
 
@@ -156,7 +253,6 @@ impl CapabilityModule for MarketAnalyzer {
                 region,
                 ..
             } => {
-                // Group transactions by product category
                 let mut by_category: HashMap<String, Vec<&TransactionRecord>> = HashMap::new();
                 for tx in &transactions {
                     by_category.entry(tx.product_category.clone())
@@ -164,7 +260,6 @@ impl CapabilityModule for MarketAnalyzer {
                         .push(tx);
                 }
 
-                // Generate a market signal for each category with enough data
                 let mut signals = Vec::new();
                 for (category, txs) in &by_category {
                     if txs.len() < self.min_sample_size as usize {
@@ -173,9 +268,8 @@ impl CapabilityModule for MarketAnalyzer {
 
                     let key = format!("{}:{}", region, category);
                     let window = self.windows.entry(key.clone())
-                        .or_insert_with(|| RollingWindow::new(168)); // 7 days of hourly data
+                        .or_insert_with(|| RollingWindow::new(168));
 
-                    // Aggregate this batch
                     let avg_price: f64 = txs.iter().map(|t| t.amount).sum::<f64>() / txs.len() as f64;
                     let total_volume: f64 = txs.iter()
                         .map(|t| t.quantity.unwrap_or(1.0))
@@ -183,7 +277,6 @@ impl CapabilityModule for MarketAnalyzer {
 
                     window.push(avg_price, total_volume, chrono::Utc::now());
 
-                    // Compute demand index (volume relative to rolling average)
                     let avg_volume = window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
                     let demand_index = if avg_volume > 0.0 {
                         total_volume / avg_volume
@@ -191,8 +284,6 @@ impl CapabilityModule for MarketAnalyzer {
                         1.0
                     };
 
-                    // Compute confidence interval for demand index
-                    // Using bootstrap-like approach: SE ≈ σ/√n
                     let demand_se = if window.volumes.len() > 1 {
                         let vol_mean = window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
                         let vol_var = window.volumes.iter()
@@ -200,7 +291,7 @@ impl CapabilityModule for MarketAnalyzer {
                             .sum::<f64>() / (window.volumes.len() - 1) as f64;
                         vol_var.sqrt() / (window.volumes.len() as f64).sqrt()
                     } else {
-                        demand_index * 0.5 // maximum uncertainty
+                        demand_index * 0.5
                     };
                     let z_95 = 1.96;
                     let demand_ci_lower = (demand_index - z_95 * demand_se / avg_volume.max(0.01)).max(0.0);
@@ -220,19 +311,20 @@ impl CapabilityModule for MarketAnalyzer {
                     });
                 }
 
-                // Return first signal (in production: return all or batch)
                 Ok(signals.into_iter().next())
             }
             ModuleMessage::RouteCommand { command: ModuleCommand::Recalculate, .. } => {
-                // Recalculate all windows — used during deep analysis
                 Ok(None)
             }
-            _ => Ok(None), // Ignore unrelated messages
+            _ => Ok(None),
         }
     }
 
     async fn shutdown(&self) {
         tracing::info!("MarketAnalyzer shutting down, {} windows active", self.windows.len());
+        if let Err(e) = self.persist_state().await {
+            tracing::error!("Failed to persist MarketAnalyzer state on shutdown: {}", e);
+        }
     }
 
     fn snapshot_state(&self) -> Option<Vec<u8>> {
@@ -257,7 +349,7 @@ impl CapabilityModule for MarketAnalyzer {
         if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
             self.windows = snap.windows;
             self.min_sample_size = snap.min_sample_size;
-            tracing::info!(count = self.windows.len(), "MarketAnalyzer state restored");
+            tracing::info!(count = self.windows.len(), "MarketAnalyzer state restored (fallback bincode)");
         }
     }
 }

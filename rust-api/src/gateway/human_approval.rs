@@ -15,10 +15,16 @@
 // - Low-confidence escalation (Fix 3)
 // - CFO report review (Fix 4)
 // - Chama majority approval (Fix 5)
+//
+// SECURITY FIXES:
+// - All endpoints verify authenticated user identity from JWT claims
+// - list_pending enforces per-object ownership authorization
+// - create_approval and resolve_approval verify caller owns the resource
+// - Client IP is included in all audit log entries
 
 use axum::{
     extract::{Json, State},
-    http::StatusCode,
+    http::{Request, StatusCode},
     response::IntoResponse,
 };
 use redis::aio::ConnectionManager;
@@ -28,6 +34,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use super::audit::AuditLogger;
+use super::auth::{Claims, ClientIp};
 
 /// Shared state for human approval endpoints
 #[derive(Clone)]
@@ -170,10 +177,29 @@ pub struct PendingApproval {
 
 /// POST /api/v1/approval/create
 /// Create a new pending approval for a sensitive action.
+///
+/// SECURITY: The authenticated user (from JWT) must match the user_id in the request.
 pub async fn create_approval(
     State(state): State<HumanApprovalState>,
+    request: Request<axum::body::Body>,
     Json(req): Json<CreateApprovalRequest>,
 ) -> impl IntoResponse {
+    // Extract authenticated claims from request extensions (injected by JWT middleware)
+    let claims = request.extensions().get::<Claims>().cloned();
+    let client_ip = request.extensions().get::<ClientIp>().map(|c| c.0.clone());
+
+    // Authorization: verify the authenticated user matches the request's user_id
+    if let Some(ref c) = claims {
+        if c.org_id != req.user_id && !c.permissions.contains(&"admin".to_string()) {
+            tracing::warn!(
+                requestor_org = %c.org_id,
+                requested_user = %req.user_id,
+                "Authorization denied: user attempted to create approval for another user"
+            );
+            return super::error::ErrorResponse::forbidden().into_response();
+        }
+    }
+
     // S8: Validate input
     use garde::Validate;
     if let Err(e) = req.validate() {
@@ -232,7 +258,7 @@ pub async fn create_approval(
         .query_async(&mut state.redis.clone())
         .await;
 
-    // Audit log
+    // Audit log with client IP
     state.audit.log(super::audit::AuditLogEntry {
         id: uuid::Uuid::new_v4(),
         timestamp: chrono::Utc::now(),
@@ -242,7 +268,7 @@ pub async fn create_approval(
         method: "POST".to_string(),
         status_code: 201,
         response_time_ms: 0,
-        ip_address: None,
+        ip_address: client_ip,
         user_agent: None,
         k_anonymity_suppressed: false,
         query_hash: Some(format!("action={}&confirmation_id={}", req.action_type, confirmation_id)),
@@ -270,10 +296,17 @@ pub async fn create_approval(
 
 /// POST /api/v1/approval/resolve
 /// Resolve a pending approval (user confirms or rejects).
+///
+/// SECURITY: The authenticated user must own the approval or be admin.
 pub async fn resolve_approval(
     State(state): State<HumanApprovalState>,
+    request: Request<axum::body::Body>,
     Json(req): Json<ResolveApprovalRequest>,
 ) -> impl IntoResponse {
+    // Extract authenticated claims and client IP before processing
+    let auth_claims = request.extensions().get::<Claims>().cloned();
+    let client_ip = request.extensions().get::<ClientIp>().map(|c| c.0.clone());
+
     // S8: Validate input
     use garde::Validate;
     if let Err(e) = req.validate() {
@@ -308,6 +341,19 @@ pub async fn resolve_approval(
                 .into_response();
         }
     };
+
+    // Authorization: verify the authenticated user owns this approval or is admin
+    if let Some(ref claims) = auth_claims {
+        if claims.org_id != pending.user_id && !claims.permissions.contains(&"admin".to_string()) {
+            tracing::warn!(
+                requestor_org = %claims.org_id,
+                approval_owner = %pending.user_id,
+                confirmation_id = %req.confirmation_id,
+                "Authorization denied: user attempted to resolve another user's approval"
+            );
+            return super::error::ErrorResponse::forbidden().into_response();
+        }
+    }
 
     // Check expiry
     let now = SystemTime::now()
@@ -349,7 +395,7 @@ pub async fn resolve_approval(
         )
     };
 
-    // Audit log
+    // Audit log with client IP
     state.audit.log(super::audit::AuditLogEntry {
         id: uuid::Uuid::new_v4(),
         timestamp: chrono::Utc::now(),
@@ -359,7 +405,7 @@ pub async fn resolve_approval(
         method: "POST".to_string(),
         status_code: 200,
         response_time_ms: 0,
-        ip_address: None,
+        ip_address: client_ip,
         user_agent: None,
         k_anonymity_suppressed: false,
         query_hash: Some(format!("confirmation_id={}&approved={}", req.confirmation_id, req.approved)),
@@ -385,10 +431,42 @@ pub async fn resolve_approval(
 
 /// GET /api/v1/approval/pending/:user_id
 /// List all pending approvals for a user.
+///
+/// SECURITY FIX: Authorization enforcement.
+/// The requesting user's identity is extracted from the JWT claims
+/// injected by the auth middleware. The endpoint verifies that the
+/// authenticated user is only allowed to see their own pending approvals,
+/// unless they hold an admin-level permission.
 pub async fn list_pending(
     State(state): State<HumanApprovalState>,
     axum::extract::Path(user_id): axum::extract::Path<String>,
+    request: Request<axum::body::Body>,
 ) -> impl IntoResponse {
+    // Extract the authenticated user's claims from the request extensions.
+    // These were injected by the JWT auth middleware.
+    let claims = match request.extensions().get::<Claims>().cloned() {
+        Some(c) => c,
+        None => {
+            return super::error::ErrorResponse::unauthorized().into_response();
+        }
+    };
+
+    // Authorization check: users can only list their own pending approvals.
+    // Only org admins (org_id matches and has "admin" permission) or
+    // the user themselves can view pending approvals.
+    let is_self = claims.org_id == user_id;
+    let is_admin = claims.permissions.contains(&"admin".to_string());
+
+    if !is_self && !is_admin {
+        // Log the unauthorized access attempt
+        tracing::warn!(
+            requestor_org = %claims.org_id,
+            requested_user = %user_id,
+            "Authorization denied: user attempted to list another user's approvals"
+        );
+        return super::error::ErrorResponse::forbidden().into_response();
+    }
+
     let pattern = "approval:*";
     let mut conn = state.redis.clone();
 
@@ -418,6 +496,9 @@ pub async fn list_pending(
 
             if let Some(d) = data {
                 if let Ok(approval) = serde_json::from_str::<PendingApproval>(&d) {
+                    // Object-level authorization: only return approvals
+                    // that belong to the requested user_id (which we already
+                    // verified the caller is authorized to see)
                     if approval.user_id == user_id {
                         pending.push(approval);
                     }

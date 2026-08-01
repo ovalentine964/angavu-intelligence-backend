@@ -21,19 +21,26 @@ pub struct OODAOrchestrator {
     last_restart: Arc<DashMap<ModuleId, DateTime<Utc>>>,
     /// Shutdown signal
     shutdown_tx: Arc<RwLock<Option<tokio::sync::broadcast::Sender<()>>>>,
-    /// Persistent state store for module snapshots
+    /// Persistent state store for module snapshots (fallback)
     state_store: Arc<modules::ModuleStateStore>,
+    /// PostgreSQL pool for market module persistence
+    pool: Option<sqlx::PgPool>,
 }
 
 impl OODAOrchestrator {
     pub fn new(config: OrchestratorConfig, bus: Arc<ModuleMessageBus>) -> Self {
-        Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"))
+        Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"), None)
+    }
+
+    pub fn with_pool(config: OrchestratorConfig, bus: Arc<ModuleMessageBus>, pool: sqlx::PgPool) -> Self {
+        Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"), Some(pool))
     }
 
     pub fn with_state_dir(
         config: OrchestratorConfig,
         bus: Arc<ModuleMessageBus>,
         state_dir: PathBuf,
+        pool: Option<sqlx::PgPool>,
     ) -> Self {
         let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
 
@@ -55,6 +62,7 @@ impl OODAOrchestrator {
             last_restart: Arc::new(DashMap::new()),
             shutdown_tx: Arc::new(RwLock::new(Some(shutdown_tx))),
             state_store: Arc::new(modules::ModuleStateStore::new(state_dir)),
+            pool,
         }
     }
 
@@ -63,12 +71,21 @@ impl OODAOrchestrator {
         info!("Starting capability modules...");
 
         let store = self.state_store.clone();
+        let pool = self.pool.clone();
 
         let modules_with_state: Vec<(ModuleId, Box<dyn CapabilityModule>)> = vec![
             (ModuleId::MarketAnalyzer, {
-                let mut m = modules::market::MarketAnalyzer::new();
-                if let Some(data) = store.load(ModuleId::MarketAnalyzer).await {
-                    m.restore_state(&data);
+                let mut m = if let Some(ref p) = pool {
+                    modules::market::MarketAnalyzer::with_pool(p.clone())
+                } else {
+                    modules::market::MarketAnalyzer::new()
+                };
+                // Load from PostgreSQL first, fall back to bincode snapshot
+                if let Err(e) = m.load_state().await {
+                    tracing::warn!("MarketAnalyzer PG load failed: {}", e);
+                    if let Some(data) = store.load(ModuleId::MarketAnalyzer).await {
+                        m.restore_state(&data);
+                    }
                 }
                 Box::new(m)
             }),
@@ -80,16 +97,41 @@ impl OODAOrchestrator {
                 Box::new(m)
             }),
             (ModuleId::DistributionAnalyzer, {
-                let mut m = modules::distribution::DistributionAnalyzer::new();
-                if let Some(data) = store.load(ModuleId::DistributionAnalyzer).await {
-                    m.restore_state(&data);
+                let mut m = if let Some(ref p) = pool {
+                    modules::distribution::DistributionAnalyzer::with_pool(p.clone())
+                } else {
+                    modules::distribution::DistributionAnalyzer::new()
+                };
+                if let Err(e) = m.load_state().await {
+                    tracing::warn!("DistributionAnalyzer PG load failed: {}", e);
+                    if let Some(data) = store.load(ModuleId::DistributionAnalyzer).await {
+                        m.restore_state(&data);
+                    }
                 }
                 Box::new(m)
             }),
             (ModuleId::FMCGIntelligence, {
-                let mut m = modules::fmcg::FMCGIntelligence::new();
-                if let Some(data) = store.load(ModuleId::FMCGIntelligence).await {
-                    m.restore_state(&data);
+                let mut m = if let Some(ref p) = pool {
+                    modules::fmcg::FMCGIntelligence::with_pool(p.clone())
+                } else {
+                    modules::fmcg::FMCGIntelligence::new()
+                };
+                if let Err(e) = m.load_state().await {
+                    tracing::warn!("FMCGIntelligence PG load failed: {}", e);
+                    if let Some(data) = store.load(ModuleId::FMCGIntelligence).await {
+                        m.restore_state(&data);
+                    }
+                }
+                Box::new(m)
+            }),
+            (ModuleId::ServicePriceDiscovery, {
+                let mut m = if let Some(ref p) = pool {
+                    modules::service_price_discovery::ServicePriceDiscoveryEngine::with_pool(p.clone())
+                } else {
+                    modules::service_price_discovery::ServicePriceDiscoveryEngine::new()
+                };
+                if let Err(e) = m.load_state().await {
+                    tracing::warn!("ServicePriceDiscoveryEngine PG load failed: {}", e);
                 }
                 Box::new(m)
             }),
@@ -101,9 +143,16 @@ impl OODAOrchestrator {
                 Box::new(m)
             }),
             (ModuleId::EconomicAnalyzer, {
-                let mut m = modules::economic::EconomicAnalyzer::new();
-                if let Some(data) = store.load(ModuleId::EconomicAnalyzer).await {
-                    m.restore_state(&data);
+                let mut m = if let Some(ref p) = pool {
+                    modules::economic::EconomicAnalyzer::with_pool(p.clone())
+                } else {
+                    modules::economic::EconomicAnalyzer::new()
+                };
+                if let Err(e) = m.load_state().await {
+                    tracing::warn!("EconomicAnalyzer PG load failed: {}", e);
+                    if let Some(data) = store.load(ModuleId::EconomicAnalyzer).await {
+                        m.restore_state(&data);
+                    }
                 }
                 Box::new(m)
             }),
@@ -113,7 +162,7 @@ impl OODAOrchestrator {
             self.spawn_module(module_id, module).await?;
         }
 
-        info!(count = 6, "All capability modules started");
+        info!(count = 7, "All capability modules started");
         Ok(())
     }
 
@@ -213,6 +262,7 @@ impl OODAOrchestrator {
     }
 
     /// The main orchestrator loop — runs continuously
+    #[tracing::instrument(skip(self))]
     pub async fn run(&self) -> Result<(), OrchestratorError> {
         info!("OODA Orchestrator starting main loop");
 
@@ -256,6 +306,7 @@ impl OODAOrchestrator {
     // ── OODA Phase Implementations ──────────────────────────────
 
     /// OBSERVE: Ingest signals from the message bus
+    #[tracing::instrument(skip(self))]
     async fn observe(&self) -> ObserveResult {
         let mut signals = Vec::new();
         let mut anomalies = Vec::new();
@@ -282,6 +333,7 @@ impl OODAOrchestrator {
     }
 
     /// ORIENT: Synthesize context from observed signals
+    #[tracing::instrument(skip(self, observe_result))]
     async fn orient(&self, observe_result: ObserveResult) -> OrientResult {
         let state = self.state.read().await;
 
@@ -315,6 +367,7 @@ impl OODAOrchestrator {
     }
 
     /// DECIDE: Select actions based on orientation
+    #[tracing::instrument(skip(self, orient_result))]
     async fn decide(&self, orient_result: OrientResult) -> Vec<Action> {
         let mut actions = Vec::new();
 
@@ -356,6 +409,7 @@ impl OODAOrchestrator {
     }
 
     /// ACT: Execute decided actions
+    #[tracing::instrument(skip(self, actions), fields(action_count = actions.len()))]
     async fn act(&self, actions: Vec<Action>) -> Vec<String> {
         let mut results = Vec::new();
 
@@ -427,6 +481,9 @@ impl OODAOrchestrator {
 #[async_trait::async_trait]
 impl Orchestrator for OODAOrchestrator {
     async fn run_cycle(&self) -> Result<CycleResult, OrchestratorError> {
+        let span = tracing::info_span!("orchestrator.run_cycle");
+        let _guard = span.enter();
+
         let start = Instant::now();
         let cycle_number = {
             let mut state = self.state.write().await;
@@ -543,6 +600,7 @@ impl Orchestrator for OODAOrchestrator {
             ModuleId::CreditScorer => Box::new(modules::credit::CreditScorer::new()),
             ModuleId::DistributionAnalyzer => Box::new(modules::distribution::DistributionAnalyzer::new()),
             ModuleId::FMCGIntelligence => Box::new(modules::fmcg::FMCGIntelligence::new()),
+            ModuleId::ServicePriceDiscovery => Box::new(modules::service_price_discovery::ServicePriceDiscoveryEngine::new()),
             ModuleId::HealthMetrics => Box::new(modules::health::HealthMetrics::new()),
             ModuleId::EconomicAnalyzer => Box::new(modules::economic::EconomicAnalyzer::new()),
             _ => return Err(OrchestratorError::Internal(

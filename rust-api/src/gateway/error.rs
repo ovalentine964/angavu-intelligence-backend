@@ -115,6 +115,21 @@ impl ErrorResponse {
         )
     }
 
+    pub fn privacy_budget_exhausted(query_type: &str, remaining: f64, window_reset: &str) -> Self {
+        Self::new(
+            "PRIVACY_BUDGET_EXHAUSTED",
+            format!(
+                "Privacy budget exhausted for query type '{}'. Remaining: {:.4}. Window resets at {}.",
+                query_type, remaining, window_reset
+            ),
+        )
+        .with_details(serde_json::json!({
+            "query_type": query_type,
+            "remaining_epsilon": remaining,
+            "window_reset_at": window_reset
+        }))
+    }
+
     pub fn internal() -> Self {
         Self::new("INTERNAL_ERROR", "An unexpected error occurred. Please try again later.")
     }
@@ -141,7 +156,7 @@ impl IntoResponse for ErrorResponse {
             "NOT_FOUND" => StatusCode::NOT_FOUND,
             "CONFLICT" => StatusCode::CONFLICT,
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
-            "K_ANONYMITY_VIOLATION" => StatusCode::FORBIDDEN,
+            "K_ANONYMITY_VIOLATION" | "PRIVACY_BUDGET_EXHAUSTED" => StatusCode::FORBIDDEN,
             "NOT_IMPLEMENTED" => StatusCode::NOT_IMPLEMENTED,
             "EXPIRED" => StatusCode::GONE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

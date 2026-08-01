@@ -2,6 +2,8 @@
 
 use super::types::{WorkerType, TypeFeatures};
 use super::base_features::AdjustedBaseFeatures;
+use super::shap_explainer::{ShapExplainer, KernelShapConfig, BackgroundStats, CreditExplanation};
+use super::logistic_regression::LogisticRegression;
 
 /// Fused Alama Score combining base and type-specific signals
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,8 +22,10 @@ pub struct FusedAlamaScore {
     pub type_weight: f64,
     /// Confidence in the score
     pub confidence: f64,
-    /// Factor breakdown for explainability
+    /// Factor breakdown for explainability (Shapley values when available)
     pub factors: Vec<ScoreFactor>,
+    /// Full SHAP explanation (stored with each score computation)
+    pub explanation: Option<CreditExplanation>,
     /// Whether seasonal adjustment was applied
     pub seasonally_adjusted: bool,
     /// 95% confidence interval lower bound (Alama score units)
@@ -45,6 +49,10 @@ pub struct ScoreFusionEngine {
     type_weights: std::collections::HashMap<WorkerType, f64>,
     /// Per-type calibrators for post-fusion adjustment
     type_calibrators: std::collections::HashMap<WorkerType, TypeCalibrator>,
+    /// SHAP explainer for computed Shapley values (replaces hand-crafted factors)
+    shap_explainer: Option<ShapExplainer>,
+    /// Logistic regression model (for SHAP computation)
+    model: Option<LogisticRegression>,
 }
 
 /// Per-type score calibrator (maps raw fused score to calibrated probability)
@@ -73,10 +81,19 @@ impl ScoreFusionEngine {
             type_calibrators.insert(wt, TypeCalibrator { a: -1.0, b: 0.0 });
         }
 
-        Self { type_weights, type_calibrators }
+        Self { type_weights, type_calibrators, shap_explainer: None, model: None }
     }
 
-    /// Compute fused score
+    /// Create engine with a trained model for SHAP explainability
+    pub fn with_model(model: LogisticRegression, background: BackgroundStats) -> Self {
+        let mut engine = Self::new();
+        let config = KernelShapConfig::default();
+        engine.shap_explainer = Some(ShapExplainer::new(config, background));
+        engine.model = Some(model);
+        engine
+    }
+
+    /// Compute fused score with SHAP-based explanation
     pub fn compute_score(
         &self,
         base_score: f64,
@@ -87,12 +104,37 @@ impl ScoreFusionEngine {
         let beta = self.type_weights.get(&worker_type).copied().unwrap_or(0.0);
         let alpha = 1.0 - beta;
 
-        let (type_score, factors) = if let Some(tf) = type_features {
+        let (type_score, factors, explanation) = if let Some(tf) = type_features {
             let raw_type = self.compute_type_score(tf);
-            let factors = self.extract_factors(base_features, tf);
-            (Some(raw_type), factors)
+
+            // Compute SHAP explanation if model is available
+            let explanation = if let (Some(explainer), Some(model)) = (&self.shap_explainer, &self.model) {
+                let feature_vector = &tf.feature_vector;
+                let feature_names = if tf.feature_names.is_empty() {
+                    super::base_features::AdjustedBaseFeatures::feature_names()
+                        .iter().map(|s| s.to_string()).collect::<Vec<_>>()
+                } else {
+                    tf.feature_names.clone()
+                };
+                if feature_vector.len() == model.coefficients.len() {
+                    Some(explainer.explain(model, feature_vector, &feature_names))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Use SHAP top_factors if available, otherwise fall back to hand-crafted factors
+            let factors = if let Some(ref exp) = explanation {
+                exp.top_factors.clone()
+            } else {
+                self.extract_factors(base_features, tf)
+            };
+
+            (Some(raw_type), factors, explanation)
         } else {
-            (None, Vec::new())
+            (None, Vec::new(), None)
         };
 
         // Fused score
@@ -116,10 +158,8 @@ impl ScoreFusionEngine {
         let confidence = self.compute_confidence(base_score, type_score, worker_type);
 
         // Compute confidence interval using delta method
-        // SE(p) ≈ p(1-p) × SE(logit(p))
-        // where SE(logit(p)) is approximated from model uncertainty
         let se = self.compute_standard_error(calibrated, confidence, base_features);
-        let z_95 = 1.96; // 95% CI
+        let z_95 = 1.96;
         let ci_raw_lower = (calibrated - z_95 * se).max(0.0);
         let ci_raw_upper = (calibrated + z_95 * se).min(1.0);
         let ci_lower = (300.0 + ci_raw_lower * 550.0).round() as u16;
@@ -134,6 +174,7 @@ impl ScoreFusionEngine {
             type_weight: beta,
             confidence,
             factors,
+            explanation,
             seasonally_adjusted: base_features.is_seasonal,
             ci_lower: ci_lower.clamp(300, 850),
             ci_upper: ci_upper.clamp(300, 850),

@@ -26,6 +26,7 @@ async fn graphql_playground() -> axum::response::Html<String> {
 }
 
 /// GraphQL request handler.
+#[tracing::instrument(skip(schema, req))]
 async fn graphql_handler(
     axum::extract::State(schema): axum::extract::State<AngavuSchema>,
     req: GraphQLRequest,

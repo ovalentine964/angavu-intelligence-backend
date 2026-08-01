@@ -464,7 +464,7 @@ impl OodaSupervisor {
 
     // ─── Fast Loop: Per-Sync Event ────────────────────────────────────────
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(cycle_id, loop_speed = "fast", iteration, device_id, worker_id, region))]
     async fn run_fast_loop(self: Arc<Self>) {
         let mut tick = interval(self.config.fast_interval);
         let mut rx = self.sync_event_tx.subscribe();
@@ -506,6 +506,7 @@ impl OodaSupervisor {
         }
     }
 
+    #[tracing::instrument(skip(self, event), fields(device_id = %event.device_id, worker_id = %event.worker_id, region = %event.region))]
     async fn execute_fast_cycle(&self, event: SyncEvent, iteration: u64) -> OodaCycle {
         let span = tracing::info_span!(
             "ooda_fast_cycle",
@@ -633,7 +634,7 @@ impl OodaSupervisor {
     // ─── Medium Loop: Hourly Market Aggregation ───────────────────────────
     // REAL IMPLEMENTATION: aggregates market signals from sync data
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(cycle_id, loop_speed = "medium", iteration))]
     async fn run_medium_loop(self: Arc<Self>) {
         let mut tick = interval(self.config.medium_interval);
         let mut shutdown_rx = self.shutdown_tx.subscribe();
@@ -660,6 +661,7 @@ impl OodaSupervisor {
         }
     }
 
+    #[tracing::instrument(skip(self), fields(iteration))]
     async fn execute_medium_cycle(&self, iteration: u64) -> OodaCycle {
         let span = tracing::info_span!(
             "ooda_medium_cycle",
@@ -766,7 +768,7 @@ impl OodaSupervisor {
     // ─── Slow Loop: Daily Intelligence ────────────────────────────────────
     // REAL IMPLEMENTATION: generates reports, checks drift, triggers retraining
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(cycle_id, loop_speed = "slow", iteration))]
     async fn run_slow_loop(self: Arc<Self>) {
         let mut tick = interval(self.config.slow_interval);
         let mut shutdown_rx = self.shutdown_tx.subscribe();
@@ -793,6 +795,7 @@ impl OodaSupervisor {
         }
     }
 
+    #[tracing::instrument(skip(self), fields(iteration))]
     async fn execute_slow_cycle(&self, iteration: u64) -> OodaCycle {
         let span = tracing::info_span!(
             "ooda_slow_cycle",
@@ -1009,7 +1012,7 @@ impl OodaSupervisor {
     // ─── Deep Loop: Weekly Federated Learning ─────────────────────────────
     // REAL IMPLEMENTATION: aggregates FL gradients, updates economic indicators
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(cycle_id, loop_speed = "deep", iteration))]
     async fn run_deep_loop(self: Arc<Self>) {
         let mut tick = interval(self.config.deep_interval);
         let mut shutdown_rx = self.shutdown_tx.subscribe();
@@ -1036,6 +1039,7 @@ impl OodaSupervisor {
         }
     }
 
+    #[tracing::instrument(skip(self), fields(iteration))]
     async fn execute_deep_cycle(&self, iteration: u64) -> OodaCycle {
         let span = tracing::info_span!(
             "ooda_deep_cycle",
@@ -1184,6 +1188,7 @@ impl OodaSupervisor {
     }
 
     /// FedProx aggregation: weighted average with proximal term
+    #[tracing::instrument(skip(self, batches), fields(batch_count = batches.len()))]
     async fn aggregate_federated_gradients(
         &self,
         batches: &[GradientBatch],
