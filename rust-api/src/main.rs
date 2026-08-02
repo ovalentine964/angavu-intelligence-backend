@@ -17,6 +17,8 @@ use angavu_intelligence_backend::gateway::auth::JwtConfig;
 use angavu_intelligence_backend::gateway::rate_limit::RateLimiter;
 use angavu_intelligence_backend::gateway::k_anonymity::KAnonymityEnforcer;
 use angavu_intelligence_backend::gateway::audit::AuditLogger;
+use angavu_intelligence_backend::credit::privacy_budget::PrivacyBudgetTracker;
+use angavu_intelligence_backend::statistical::DifferentialPrivacyEngine;
 use angavu_intelligence_backend::loops;
 use angavu_intelligence_backend::telemetry;
 use std::sync::Arc;
@@ -155,6 +157,8 @@ async fn main() -> anyhow::Result<()> {
         jwt_config: Arc::new(jwt_config),
         rate_limiter: Arc::new(RateLimiter::new(10)),
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
+        privacy_budget: Arc::new(PrivacyBudgetTracker::new()),
+        dp_engine: Arc::new(parking_lot::RwLock::new(DifferentialPrivacyEngine::new(0.1))),
         audit: Arc::new(AuditLogger::with_pool(1024, pg_pool.clone())),
         sync_state,
         db: pg_pool.clone(),

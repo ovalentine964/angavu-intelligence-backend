@@ -19,6 +19,8 @@ use gateway::auth::JwtConfig;
 use gateway::rate_limit::RateLimiter;
 use gateway::k_anonymity::KAnonymityEnforcer;
 use gateway::audit::AuditLogger;
+use angavu_intelligence_backend::credit::privacy_budget::PrivacyBudgetTracker;
+use angavu_intelligence_backend::statistical::DifferentialPrivacyEngine;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -51,6 +53,13 @@ async fn main() -> anyhow::Result<()> {
         .parse()?;
 
     // ── Initialize Database Connections ─────────────────────────
+    let pg_pool = sqlx::PgPool::connect(&database_url).await?;
+    tracing::info!("PostgreSQL connected");
+
+    let redis_client = redis::Client::open(redis_url)?;
+    let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
+    tracing::info!("Redis connected");
+
     let pg_pool = sqlx::PgPool::connect(&database_url).await?;
     tracing::info!("PostgreSQL connected");
 
@@ -109,11 +118,15 @@ async fn main() -> anyhow::Result<()> {
         jwt_config: Arc::new(jwt_config),
         rate_limiter: Arc::new(RateLimiter::new(10)),
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
+        privacy_budget: Arc::new(PrivacyBudgetTracker::new()),
+        dp_engine: Arc::new(parking_lot::RwLock::new(DifferentialPrivacyEngine::new(0.1))),
         audit: Arc::new(AuditLogger::new(1024)),
         sync_state,
+        db: pg_pool.clone(),
+        redis: redis_conn.clone(),
     };
 
-    let app = build_gateway_router(gateway_state);
+    let app = build_gateway_router(gateway_state, vec![]);
 
     // ── Start HTTP Server ───────────────────────────────────────
     let addr = format!("{}:{}", host, port);
