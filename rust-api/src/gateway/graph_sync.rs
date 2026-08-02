@@ -169,16 +169,19 @@ pub async fn process_sync(
     validate_no_pii(&message)?;
 
     // ── Step 3: Aggregate device stats into cohort ──
-    aggregate_device_stats(pool, &message).await?;
-
     // ── Step 4: Merge deltas ──
+    // Wrap steps 3+4 in a transaction for atomicity
+    let mut tx = pool.begin().await.map_err(|e| SyncError::Database(e.to_string()))?;
+
+    aggregate_device_stats_tx(&mut tx, &message).await?;
+
     let mut deltas_applied = 0;
 
     // Only apply product/supplier node deltas (not customer, not transaction)
     for delta in &message.node_deltas {
         if delta.node_type == "PRODUCT" || delta.node_type == "SUPPLIER" {
             if delta.operation == Operation::Upsert {
-                merge_node_delta(pool, delta).await?;
+                merge_node_delta_tx(&mut tx, delta).await?;
                 deltas_applied += 1;
             }
         }
@@ -187,16 +190,18 @@ pub async fn process_sync(
     // Apply edge deltas (supply chain, pricing relationships)
     for delta in &message.edge_deltas {
         if is_safe_edge_type(&delta.relation) {
-            merge_edge_delta(pool, delta, &message.cohort_hash).await?;
+            merge_edge_delta_tx(&mut tx, delta, &message.cohort_hash).await?;
             deltas_applied += 1;
         }
     }
 
     // Apply fact deltas (product knowledge)
     for delta in &message.fact_deltas {
-        merge_fact_delta(pool, delta).await?;
+        merge_fact_delta_tx(&mut tx, delta).await?;
         deltas_applied += 1;
     }
+
+    tx.commit().await.map_err(|e| SyncError::Database(e.to_string()))?;
 
     // ── Step 5: Build response with market signals ──
     let worker_type = &message.stats.worker_type_detected;
@@ -388,6 +393,103 @@ async fn merge_fact_delta(pool: &PgPool, delta: &FactDelta) -> Result<(), SyncEr
         delta.object
     )
     .execute(pool)
+    .await
+    .map_err(|e| SyncError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+// ── Transaction-compatible variants ────────────────────────
+
+async fn aggregate_device_stats_tx(
+    tx: &mut sqlx::PgConnection,
+    message: &GraphSyncMessage,
+) -> Result<(), SyncError> {
+    sqlx::query(
+        r#"
+        UPDATE kg_worker_cohorts SET
+            avg_daily_revenue = (avg_daily_revenue * member_count + $2) / (member_count + 1),
+            last_aggregated_at = NOW(),
+            updated_at = NOW()
+        WHERE cohort_hash = $1
+        "#,
+    )
+    .bind(&message.cohort_hash)
+    .bind(message.stats.total_revenue_today)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| SyncError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+async fn merge_node_delta_tx(
+    tx: &mut sqlx::PgConnection,
+    delta: &NodeDelta,
+) -> Result<(), SyncError> {
+    sqlx::query(
+        r#"
+        INSERT INTO kg_supply_chain_entities (entity_type, entity_name, anonymized, embedding, created_at, updated_at)
+        VALUES ($1, $2, true, NULL, NOW(), NOW())
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(delta.node_type.to_lowercase())
+    .bind(&delta.label)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| SyncError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+async fn merge_edge_delta_tx(
+    tx: &mut sqlx::PgConnection,
+    delta: &EdgeDelta,
+    cohort_hash: &str,
+) -> Result<(), SyncError> {
+    let cohort_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM kg_worker_cohorts WHERE cohort_hash = $1",
+    )
+    .bind(cohort_hash)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| SyncError::Database(e.to_string()))?;
+
+    if let Some(cohort_id) = cohort_id {
+        let target_id = Uuid::parse_str(&delta.from_id).unwrap_or(Uuid::nil());
+        sqlx::query(
+            r#"
+            INSERT INTO kg_edges (source_type, source_id, target_type, target_id, edge_type, weight, confidence, sample_size)
+            VALUES ('worker_cohort', $1, 'supply_chain_entity', $2, 'supply_chain', $3, 0.8, 10)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(cohort_id)
+        .bind(target_id)
+        .bind(delta.weight as f64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| SyncError::Database(e.to_string()))?;
+    }
+
+    Ok(())
+}
+
+async fn merge_fact_delta_tx(
+    tx: &mut sqlx::PgConnection,
+    delta: &FactDelta,
+) -> Result<(), SyncError> {
+    sqlx::query(
+        r#"
+        INSERT INTO kg_product_categories (category_code, category_name, created_at, updated_at)
+        VALUES ($1, $2, NOW(), NOW())
+        ON CONFLICT (category_code) DO UPDATE SET updated_at = NOW()
+        "#,
+    )
+    .bind(&delta.subject)
+    .bind(&delta.object)
+    .execute(&mut *tx)
     .await
     .map_err(|e| SyncError::Database(e.to_string()))?;
 

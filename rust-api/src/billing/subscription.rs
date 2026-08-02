@@ -646,6 +646,85 @@ pub async fn confirm_payment(
     Ok(())
 }
 
+/// Confirm a payment within an existing transaction.
+/// Used by mpesa::process_stk_callback to ensure atomicity.
+pub async fn confirm_payment_tx(
+    tx: &mut sqlx::PgConnection,
+    org_id: &str,
+    receipt: &str,
+    amount: f64,
+) -> Result<(), anyhow::Error> {
+    let now = Utc::now();
+
+    // Find the subscription within the transaction
+    let row = sqlx::query_as::<_, SubscriptionRow>(
+        r#"
+        SELECT id, org_id, tier, status, mpesa_phone, billing_cycle_day,
+               current_period_start, current_period_end,
+               trial_start, trial_end,
+               grace_period_end, cancelled_at, cancel_reason,
+               last_payment_at, last_payment_receipt, failed_payment_count,
+               created_at, updated_at
+        FROM subscriptions
+        WHERE org_id = $1 AND status != 'cancelled'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(org_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let sub = row
+        .map(|r| r.into_subscription())
+        .ok_or_else(|| anyhow::anyhow!("No subscription found for org"))?;
+
+    // Verify amount matches expected
+    let expected = sub.tier.monthly_price_kes();
+    if (amount - expected).abs() > 1.0 {
+        tracing::warn!(
+            org_id = %org_id,
+            expected = expected,
+            received = amount,
+            "Payment amount mismatch"
+        );
+    }
+
+    // Update subscription
+    let new_period_end = now + Duration::days(30);
+    sqlx::query(
+        r#"
+        UPDATE subscriptions
+        SET status = 'active',
+            last_payment_at = $1,
+            last_payment_receipt = $2,
+            current_period_start = $1,
+            current_period_end = $3,
+            failed_payment_count = 0,
+            grace_period_end = NULL,
+            trial_end = NULL,
+            updated_at = $1
+        WHERE org_id = $4 AND status NOT IN ('cancelled')
+        "#,
+    )
+    .bind(now)
+    .bind(receipt)
+    .bind(new_period_end)
+    .bind(org_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tracing::info!(
+        org_id = %org_id,
+        receipt = %receipt,
+        amount = amount,
+        new_period_end = %new_period_end,
+        "Payment confirmed — subscription renewed"
+    );
+
+    Ok(())
+}
+
 // ═══════════════════════════════════════════════════════════
 //  DB ROW MAPPING
 // ═══════════════════════════════════════════════════════════

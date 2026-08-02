@@ -336,10 +336,13 @@ pub async fn process_stk_callback(
     };
 
     if result_code == 0 {
-        // Payment successful
+        // Payment successful — wrap in transaction for atomicity
         let receipt_str = receipt.unwrap_or("");
         let amount_val = amount.unwrap_or(0.0);
 
+        let mut tx = db.begin().await?;
+
+        // Update payment status
         sqlx::query(
             r#"
             UPDATE payments
@@ -349,17 +352,26 @@ pub async fn process_stk_callback(
         )
         .bind(receipt_str)
         .bind(&txn_id)
-        .execute(db)
+        .execute(&mut *tx)
         .await?;
 
         // Get the org_id from the payment record
         let org_id: String = sqlx::query_scalar("SELECT org_id FROM payments WHERE id = $1")
             .bind(&txn_id)
-            .fetch_one(db)
+            .fetch_one(&mut *tx)
             .await?;
 
-        // Confirm the subscription payment
-        super::subscription::confirm_payment(db, redis, &org_id, receipt_str, amount_val).await?;
+        // Confirm the subscription payment (updates subscription status)
+        super::subscription::confirm_payment_tx(&mut tx, &org_id, receipt_str, amount_val).await?;
+
+        tx.commit().await?;
+
+        // Invalidate Redis cache (best-effort, non-transactional)
+        let cache_key = format!("subscription:{}", org_id);
+        let _ = redis::cmd("DEL")
+            .arg(&cache_key)
+            .query_async::<_, ()>(&mut redis.clone())
+            .await;
 
         tracing::info!(
             txn_id = %txn_id,
