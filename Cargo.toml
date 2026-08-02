@@ -47,18 +47,11 @@ chrono = { version = "0.4", features = ["serde"] }
 time = "0.3"
 
 # Cryptography - Post-Quantum
-aes-gcm = "0.10"
-sha2 = "0.10"
-hmac = "0.12"
 rand = "0.8"
 rand_distr = "0.4"
-argon2 = "0.5"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-ed25519-dalek = { version = "2", features = ["serde"] }
-p256 = { version = "0.13", features = ["ecdh"] }
-kem = "0.3"
-ml-kem = "0.2"
-hpke = "0.12"
+sha2 = "0.10"
+hmac = "0.12"
+
 
 # HTTP Client
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "trust-dns"] }
@@ -92,12 +85,9 @@ governor = "0.6"
 # Circuit Breaker
 
 # Data Processing
-ndarray = "0.15"
-nalgebra = "0.33"
-statrs = "0.17"
 
-# Python Interop (PyO3)
-pyo3 = { version = "0.22", features = ["auto-initialize"] }
+
+
 
 # JWT
 jsonwebtoken = "9"
@@ -139,8 +129,7 @@ toml = "0.8"
 md5 = "0.7"
 
 # Signal handling
-signal-hook = "0.3"
-signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
 
 # Async-trait
 async-trait = "0.1"
