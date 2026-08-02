@@ -16,7 +16,7 @@ path = "rust-api/src/migrate.rs"
 
 [dependencies]
 # Web Framework
-axum = { version = "0.7", features = ["macros", "ws", "json", "headers"] }
+axum = { version = "0.7", features = ["macros", "ws", "json"] }
 axum-extra = { version = "0.9", features = ["cookie", "typed-routing"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "compression-br", "limit", "timeout"] }
