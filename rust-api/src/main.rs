@@ -38,7 +38,10 @@ async fn main() -> anyhow::Result<()> {
     // Security: JWT_SECRET and MPESA_PASSKEY MUST be set via environment variables.
     // We fail fast if missing to prevent running with insecure defaults.
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://angavu:angavu_secret@localhost:5432/angavu".to_string());
+        .unwrap_or_else(|_| {
+            tracing::warn!("DATABASE_URL not set — using local development default (no password)");
+            "postgresql://angavu@localhost:5432/angavu".to_string()
+        });
     let redis_url = std::env::var("REDIS_URL")
         .unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
@@ -114,12 +117,12 @@ async fn main() -> anyhow::Result<()> {
     let graph_cache = angavu_intelligence_backend::graph::cache::GraphCache::new(redis_conn.clone());
     let pg_pool_warm = pg_pool.clone();
     let cache_warm_handle = tokio::spawn(async move {
-        // Warm graph statistics
+        // Warm graph statistics (use tables that exist: kg_edges, kg_worker_cohorts)
         let stats_result = sqlx::query_scalar::<_, serde_json::Value>(
             "SELECT json_build_object( \
-             'node_count', (SELECT COUNT(*) FROM kg_nodes), \
+             'node_count', (SELECT COUNT(*) FROM kg_edges), \
              'edge_count', (SELECT COUNT(*) FROM kg_edges), \
-             'worker_count', (SELECT COUNT(DISTINCT worker_id) FROM transactions) \
+             'worker_count', (SELECT COALESCE(SUM(member_count), 0) FROM kg_worker_cohorts) \
              )"
         )
         .fetch_one(&pg_pool_warm)

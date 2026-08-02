@@ -7,7 +7,12 @@
 unmaintained = "warn"
 yanked = "warn"
 notice = "warn"
-ignore = []
+ignore = [
+    # RUSTSEC-2024-0421: idna 0.5.0 accepts invalid Punycode labels
+    # Mitigated: removed unused `validator` crate that pulled in idna 0.5.0
+    # Kept as ignore in case of transitive re-introduction until all paths use idna >= 1.0
+    # "RUSTSEC-2024-0421",
+]
 
 [licenses]
 unlicensed = "deny"

@@ -37,7 +37,10 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Load Configuration ──────────────────────────────────────
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://angavu:angavu_secret@localhost:5432/angavu".to_string());
+        .unwrap_or_else(|_| {
+            tracing::warn!("DATABASE_URL not set — using local development default (no password)");
+            "postgresql://angavu@localhost:5432/angavu".to_string()
+        });
     let redis_url = std::env::var("REDIS_URL")
         .unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {

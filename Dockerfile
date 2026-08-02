@@ -41,8 +41,12 @@ COPY python/ ./
 # ── Stage 3: Minimal runtime image ────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 libssl3 ca-certificates curl python3 python3-pip dumb-init && \
+# Install runtime deps + security upgrades in one layer
+# Pin package versions where possible; upgrade all for CVE patches
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    libpq5 libssl3 ca-certificates curl python3 dumb-init && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

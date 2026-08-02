@@ -140,9 +140,6 @@ pin-project = "1"
 # Try-lock
 try-lock = "0.2"
 
-# Validator
-validator = { version = "0.18", features = ["derive"] }
-
 # Garde (validation)
 garde = { version = "0.20", features = ["derive"] }
 

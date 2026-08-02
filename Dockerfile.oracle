@@ -37,7 +37,9 @@ RUN touch rust-api/src/main.rs rust-api/src/migrate.rs && \
 # ── Stage 2: Minimal runtime image ──────────────────────────────────────────
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
     libpq5 libssl3 ca-certificates curl dumb-init && \
     rm -rf /var/lib/apt/lists/*
 
