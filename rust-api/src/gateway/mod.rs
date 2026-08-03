@@ -222,6 +222,7 @@ mod superagent {
 /// Uses the billing module for real subscription, usage, payment, and invoice management.
 mod billing {
     use super::*;
+    use super::auth::Claims;
     use axum::extract::Path;
     use crate::billing::{metering, subscription, mpesa, invoice};
 
@@ -247,6 +248,7 @@ mod billing {
 /// Billing handler implementations using the billing module.
 mod billing_handlers {
     use super::*;
+    use super::auth::Claims;
     use crate::billing::{metering, subscription, mpesa, invoice};
     use axum::extract::Path;
 
@@ -473,7 +475,7 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
         .route("/api/v1/superagent/cycles", post(superagent::trigger_cycle))
         .route("/api/v1/superagent/invocations", post(superagent::invoke))
         // Sync endpoints
-        .route("/api/v1/sync/anonymized", post(sync::receiver::handle_sync))
+        .route("/api/v1/sync/anonymized", post(crate::sync::receiver::handle_sync))
         .route("/api/v1/sync/graph", post(graph_sync::handle_graph_sync))
         // Billing endpoints — fully implemented
         .route("/api/v1/billing/tiers", get(tools_impl::list_billing_tiers))

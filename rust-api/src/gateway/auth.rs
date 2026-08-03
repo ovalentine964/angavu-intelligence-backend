@@ -608,6 +608,25 @@ pub async fn logout(
     }
 }
 
+// ── FromRequestParts impl for Claims ──────────────────────────
+// Allows `Claims` to be used directly as an Axum handler extractor.
+// The JWT middleware inserts Claims into request extensions; this impl
+// extracts them back out for handlers to use.
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Claims {
+    type Rejection = StatusCode;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Claims>()
+            .cloned()
+            .ok_or(StatusCode::UNAUTHORIZED)
+    }
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {

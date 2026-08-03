@@ -569,19 +569,4 @@ mod tests {
 }
 
 
-// === Council Integration: AggregationAdjustment ===
-#[async_trait]
-trait CircuitBreakerProtected: Send + Sync {
-    type Response;
-    type Error: Display;
-    
-    fn service_name(&self) -> &str;
-    async fn execute_request(&self) -> Result<Self::Response, Self::Error>;
-    fn registry(&self) -> &CircuitBreakerRegistry;
-    
-    async fn call(&self) -> Result<Self::Response, ProtectedCallError<Self::Error>> {
-        // 1. Check circuit
-        // 2. Execute request
-        // 3. Record success/failure
-    }
-}
+

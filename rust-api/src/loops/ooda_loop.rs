@@ -15,9 +15,10 @@ use super::metrics::LoopMetrics;
 use super::drift_detection::DriftDetector;
 use super::pipeline_feedback::PipelineFeedbackChannel;
 use crate::graph::knowledge_graph::{
-    EpisodicMemory, EpisodicEventType, MemoryConsolidator, NodeStatus,
+    EpisodicMemory, EpisodicEventType, MemoryConsolidator,
 };
-use crate::graph::unified_graph::UnifiedKnowledgeLayer;
+use crate::graph::NodeStatus;
+use crate::graph::unified_graph::{UnifiedKnowledgeLayer, UnifiedGraphOps};
 
 // ─── OODA Phase Definitions ───────────────────────────────────────────────
 
