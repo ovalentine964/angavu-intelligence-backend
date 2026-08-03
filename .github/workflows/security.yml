@@ -72,29 +72,25 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: advisories
+          arguments: advisories --all-features
 
       - name: Run cargo deny check licenses
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: licenses
+          arguments: licenses --all-features
 
       - name: Run cargo deny check bans
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: bans
+          arguments: bans --all-features
 
       - name: Run cargo deny check sources
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: sources
+          arguments: sources --all-features
 
   # ── Dependency Review: Block PRs with vulnerable dependencies ─────────────
   dependency-review:
