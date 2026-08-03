@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // M-Pesa STK Push Integration — Safaricom Daraja API
 //
 // Integrates with Safaricom's M-Pesa Daraja API for mobile money payments.

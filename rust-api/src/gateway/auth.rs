@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // src/gateway/auth.rs
 //
 // JWT Authentication with Token Revocation

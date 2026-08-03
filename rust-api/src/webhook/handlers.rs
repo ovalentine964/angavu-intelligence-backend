@@ -11,7 +11,8 @@
 //! Authentication: API key in X-Webhook-Key header.
 
 use axum::{
-    extract::{HeaderMap, Json, State},
+    extract::{Json, State},
+    http::HeaderMap,
     http::StatusCode,
     response::IntoResponse,
 };
@@ -59,6 +60,7 @@ pub struct GenericWebhookPayload {
     #[garde(length(min = 1, max = 128))]
     pub event_type: String,
     /// Event payload (arbitrary JSON)
+    #[garde(skip)]
     pub data: serde_json::Value,
     /// Optional event ID for idempotency
     #[garde(length(max = 128))]

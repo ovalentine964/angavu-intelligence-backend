@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // Data Pipeline Feedback Loops
 // Each pipeline stage feeds back: error signals, quality metrics, adjustment parameters
 

@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 // credit/score_verification.rs
 // Fix 3 (backend): Verify Alama Score for range, consistency, and confidence.
 //

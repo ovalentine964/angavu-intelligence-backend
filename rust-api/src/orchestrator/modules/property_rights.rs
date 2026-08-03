@@ -189,7 +189,7 @@ impl PropertyRightsScorer {
         }
         if total_value_at_risk > 50000.0 {
             recommendations.push(format!(
-                "You have KES {:,.0f} in property at risk. Legal aid may help.",
+                "You have KES {:.0f} in property at risk. Legal aid may help.",
                 total_value_at_risk
             ));
         }

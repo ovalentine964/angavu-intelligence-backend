@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 // credit/score_fusion.rs
 
 use super::base_features::AdjustedBaseFeatures;

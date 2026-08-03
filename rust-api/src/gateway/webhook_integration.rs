@@ -3,12 +3,11 @@
 //! This module provides the function to mount webhook routes onto the
 //! main gateway router, bridging the webhook module with the gateway state.
 
+use uuid::Uuid;
 use axum::Router;
 use std::sync::Arc;
 
 use crate::gateway::rate_limit::IpRateLimiter;
-use crate::webhook::{self, MpesaConfig, MpesaEnvironment, WebhookState};
-use std::sync::Arc;
 
 /// Create the webhook state from environment variables and shared resources.
 pub fn create_webhook_state(

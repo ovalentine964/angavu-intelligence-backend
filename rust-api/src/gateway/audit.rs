@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // src/gateway/audit.rs
 
 use axum::{

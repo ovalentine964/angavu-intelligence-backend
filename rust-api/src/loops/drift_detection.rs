@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // Model Drift Detection Loop
 // Monitors prediction accuracy over time, detects degradation, triggers retraining
 

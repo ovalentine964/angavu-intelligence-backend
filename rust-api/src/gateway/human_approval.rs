@@ -48,7 +48,7 @@ pub struct HumanApprovalState {
 /// Request to create a pending approval
 #[derive(Debug, Deserialize, garde::Validate)]
 pub struct CreateApprovalRequest {
-    #[garde(pattern("transaction|loan_application|credit_decision|tax_filing|chama_withdrawal|group_contribution|large_expense|report_delivery"))]
+    #[garde(skip)]
     pub action_type: String,
     #[garde(range(min = 0.0))]
     pub amount: Option<f64>,
@@ -56,6 +56,7 @@ pub struct CreateApprovalRequest {
     pub description: String,
     #[garde(length(min = 1, max = 128))]
     pub user_id: String,
+    #[garde(skip)]
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -73,6 +74,7 @@ pub struct ApprovalCreatedResponse {
 pub struct ResolveApprovalRequest {
     #[garde(length(min = 1, max = 128))]
     pub confirmation_id: String,
+    #[garde(skip)]
     pub approved: bool,
     #[garde(length(max = 2000))]
     pub user_comment: Option<String>,
@@ -527,7 +529,7 @@ fn build_confirmation_prompt(
     amount: Option<f64>,
     description: &str,
 ) -> String {
-    let amount_str = amount.map(|a| format!("KES {:,.0}", a)).unwrap_or_default();
+    let amount_str = amount.map(|a| format!("KES {:.0}", a)).unwrap_or_default();
 
     match action_type {
         ApprovalActionType::Transaction => {

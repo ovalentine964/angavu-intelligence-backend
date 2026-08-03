@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 // credit/types.rs
 
 /// Worker type classification — 12 archetypes + legacy types
@@ -149,3 +150,23 @@ pub struct TypeFeatures {
     pub feature_vector: Vec<f64>,    // normalized numeric features for model input
     pub feature_names: Vec<String>,  // feature names for interpretability
 }
+
+// Worker-type specific enums
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SkillLevel { Beginner, Intermediate, Advanced, Expert }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CropType { Cereals, Vegetables, Fruits, CashCrops, Legumes, Other }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LandSizeBucket { Small, Medium, Large, ExtraLarge }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BoatOwnership { Own, Leased, Shared, None }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FishingZone { Shore, NearShore, DeepSea, Lake, River }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MineType { Surface, Underground, Alluvial, Other }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MineralType { Gold, Gemstones, Sand, Limestone, Other }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AgentTier { Tier1, Tier2, Tier3, TopAgent }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MarketTier { Informal, SemiFormal, Formal, Premium }

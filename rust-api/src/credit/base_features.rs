@@ -2,7 +2,7 @@
 // Wraps existing CreditFeatures with seasonal adjustment
 
 use crate::credit::seasonality::SeasonalBaseline;
-use crate::credit::types::TrajectoryType;
+use crate::credit::seasonality_enhanced::TrajectoryType;
 use serde::{Deserialize, Serialize};
 
 /// Existing credit features from credit_feedback.rs (unchanged for backward compat)

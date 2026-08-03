@@ -7,7 +7,7 @@
 // - Stale data triggers a "pull for fresh data" indicator
 // - Very stale data (> 7 days) triggers an alert
 
-use super::receiver::AlamaScoreUpdate;
+use super::AlamaScoreUpdate;
 use super::*;
 use chrono::Utc;
 

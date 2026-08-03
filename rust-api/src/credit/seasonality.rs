@@ -397,7 +397,7 @@ pub struct IncomeTrajectory {
     pub trajectory: TrajectoryType,
 }
 
-use crate::credit::types::TrajectoryType;
+use crate::credit::seasonality_enhanced::TrajectoryType;
 
 #[cfg(test)]
 mod tests {

@@ -13,8 +13,6 @@ use chrono::{DateTime, Utc};
 // This consolidates the 3 duplicate implementations into 1 canonical source.
 pub use crate::loops::circuit_breaker::CircuitBreaker;
 pub use crate::loops::circuit_breaker::CircuitBreakerConfig;
-pub use crate::loops::circuit_breaker::CircuitState;
-pub use crate::loops::circuit_breaker::FallbackStrategy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

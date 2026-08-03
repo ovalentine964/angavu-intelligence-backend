@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // src/orchestrator/supervisor.rs
 
 use super::*;

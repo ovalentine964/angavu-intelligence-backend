@@ -345,25 +345,25 @@ fn build_description(
     let en = match decision_type {
         CreditDecisionType::LoanEligibility => {
             format!(
-                "Based on your Alama Score of {}, you may qualify for a {} loan of KES {:,.0} from {} at {:.1}% APR.",
+                "Based on your Alama Score of {}, you may qualify for a {} loan of KES {:.0} from {} at {:.1}% APR.",
                 score, product, amount, lender, apr * 100.0
             )
         }
         CreditDecisionType::LoanApplication => {
             format!(
-                "Submit loan application for KES {:,.0} from {} ({}) at {:.1}% APR. Alama Score: {}.",
+                "Submit loan application for KES {:.0} from {} ({}) at {:.1}% APR. Alama Score: {}.",
                 amount, lender, product, apr * 100.0, score
             )
         }
         CreditDecisionType::CreditLimitChange => {
             format!(
-                "Credit limit change to KES {:,.0} for {} ({}). Current Alama Score: {}.",
+                "Credit limit change to KES {:.0} for {} ({}). Current Alama Score: {}.",
                 amount, lender, product, score
             )
         }
         CreditDecisionType::DebtRestructuring => {
             format!(
-                "Debt restructuring recommendation: KES {:,.0} via {} at {:.1}% APR.",
+                "Debt restructuring recommendation: KES {:.0} via {} at {:.1}% APR.",
                 amount,
                 product,
                 apr * 100.0
@@ -371,7 +371,7 @@ fn build_description(
         }
         CreditDecisionType::GroupCredit => {
             format!(
-                "Group credit decision: KES {:,.0} from {} for your chama. Alama Score: {}.",
+                "Group credit decision: KES {:.0} from {} for your chama. Alama Score: {}.",
                 amount, lender, score
             )
         }
@@ -380,25 +380,25 @@ fn build_description(
     let sw = match decision_type {
         CreditDecisionType::LoanEligibility => {
             format!(
-                "Kulingana na Alama Score yako ya {}, unaweza kupata mkopo wa KES {:,.0} kutoka {} kwa riba ya {:.1}% APR. Unataka kuendelea?",
+                "Kulingana na Alama Score yako ya {}, unaweza kupata mkopo wa KES {:.0} kutoka {} kwa riba ya {:.1}% APR. Unataka kuendelea?",
                 score, amount, lender, apr * 100.0
             )
         }
         CreditDecisionType::LoanApplication => {
             format!(
-                "Unataka kuomba mkopo wa KES {:,.0} kutoka {} ({}) kwa riba ya {:.1}% APR. Alama Score: {}. Unakubali?",
+                "Unataka kuomba mkopo wa KES {:.0} kutoka {} ({}) kwa riba ya {:.1}% APR. Alama Score: {}. Unakubali?",
                 amount, lender, product, apr * 100.0, score
             )
         }
         CreditDecisionType::CreditLimitChange => {
             format!(
-                "Kikomo cha mkopo kimebadilishwa kuwa KES {:,.0} kwa {} ({}). Alama Score ya sasa: {}.",
+                "Kikomo cha mkopo kimebadilishwa kuwa KES {:.0} kwa {} ({}). Alama Score ya sasa: {}.",
                 amount, lender, product, score
             )
         }
         CreditDecisionType::DebtRestructuring => {
             format!(
-                "Pendekezo la kubadilisha deni: KES {:,.0} kupitia {} kwa riba ya {:.1}% APR.",
+                "Pendekezo la kubadilisha deni: KES {:.0} kupitia {} kwa riba ya {:.1}% APR.",
                 amount,
                 product,
                 apr * 100.0
@@ -406,7 +406,7 @@ fn build_description(
         }
         CreditDecisionType::GroupCredit => {
             format!(
-                "Uamuzi wa mkopo wa kikundi: KES {:,.0} kutoka {} kwa chama yako. Alama Score: {}.",
+                "Uamuzi wa mkopo wa kikundi: KES {:.0} kutoka {} kwa chama yako. Alama Score: {}.",
                 amount, lender, score
             )
         }
@@ -433,31 +433,31 @@ fn build_confirmation_prompt(
     match decision_type {
         CreditDecisionType::LoanEligibility => {
             format!(
-                "📋 CREDIT DECISION\n━━━━━━━━━━━━━━━━━━━━\n\nKulingana na data ya biashara yako (Alama Score: {}), unaweza kupata mkopo wa KES {:,.0} kutoka {}.\n\nBidhaa: {}\n\nUnataka kuomba mkopo huu?\n\n✅ Jibu: Ndio / Hapana{}",
+                "📋 CREDIT DECISION\n━━━━━━━━━━━━━━━━━━━━\n\nKulingana na data ya biashara yako (Alama Score: {}), unaweza kupata mkopo wa KES {:.0} kutoka {}.\n\nBidhaa: {}\n\nUnataka kuomba mkopo huu?\n\n✅ Jibu: Ndio / Hapana{}",
                 score, amount, lender, product, voice_note
             )
         }
         CreditDecisionType::LoanApplication => {
             format!(
-                "📋 OMBI LA MKOPO\n━━━━━━━━━━━━━━━━━━━━\n\nMkopo: KES {:,.0}\nWakopeshaji: {}\nBidhaa: {}\nAlama Score: {}\n\n⚠️ Unakubali kuomba mkopo huu?\n\n✅ Jibu: Ndio / Hapana{}",
+                "📋 OMBI LA MKOPO\n━━━━━━━━━━━━━━━━━━━━\n\nMkopo: KES {:.0}\nWakopeshaji: {}\nBidhaa: {}\nAlama Score: {}\n\n⚠️ Unakubali kuomba mkopo huu?\n\n✅ Jibu: Ndio / Hapana{}",
                 amount, lender, product, score, voice_note
             )
         }
         CreditDecisionType::CreditLimitChange => {
             format!(
-                "📋 KIKOMO CHA MKOPO\n━━━━━━━━━━━━━━━━━━━━\n\nKikomo kipya: KES {:,.0}\nWakopeshaji: {}\n\nUnakubali?\n\n✅ Jibu: Ndio / Hapana{}",
+                "📋 KIKOMO CHA MKOPO\n━━━━━━━━━━━━━━━━━━━━\n\nKikomo kipya: KES {:.0}\nWakopeshaji: {}\n\nUnakubali?\n\n✅ Jibu: Ndio / Hapana{}",
                 amount, lender, voice_note
             )
         }
         CreditDecisionType::DebtRestructuring => {
             format!(
-                "📋 KUBADILISHA DENI\n━━━━━━━━━━━━━━━━━━━━\n\nKiasi: KES {:,.0}\nBidhaa: {}\n\nUnakubali kubadilisha deni lako?\n\n✅ Jibu: Ndio / Hapana{}",
+                "📋 KUBADILISHA DENI\n━━━━━━━━━━━━━━━━━━━━\n\nKiasi: KES {:.0}\nBidhaa: {}\n\nUnakubali kubadilisha deni lako?\n\n✅ Jibu: Ndio / Hapana{}",
                 amount, product, voice_note
             )
         }
         CreditDecisionType::GroupCredit => {
             format!(
-                "📋 MKOPO WA KIKUNDI\n━━━━━━━━━━━━━━━━━━━━\n\nKiasi: KES {:,.0}\nWakopeshaji: {}\n\nUnakubali kwa niaba ya chama yako?\n\n✅ Jibu: Ndio / Hapana{}",
+                "📋 MKOPO WA KIKUNDI\n━━━━━━━━━━━━━━━━━━━━\n\nKiasi: KES {:.0}\nWakopeshaji: {}\n\nUnakubali kwa niaba ya chama yako?\n\n✅ Jibu: Ndio / Hapana{}",
                 amount, lender, voice_note
             )
         }

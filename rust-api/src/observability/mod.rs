@@ -7,5 +7,4 @@ pub mod metrics;
 pub mod slo;
 
 pub use agent_traces::AgentTraceLogger;
-pub use metrics::MetricsLayer;
 pub use slo::SloTracker;

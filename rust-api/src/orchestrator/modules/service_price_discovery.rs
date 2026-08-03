@@ -1,3 +1,4 @@
+use uuid::Uuid;
 // src/orchestrator/modules/service_price_discovery.rs
 //
 // ServicePriceDiscoveryEngine: Processes ServicePriceBroadcast events,

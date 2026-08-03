@@ -1,7 +1,8 @@
 // Credit Scoring — Jua Kali Artisan Feature Extractor
 
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{AssetValueBucket, SkillType, TypeFeatures, WorkerType};
+use crate::credit::types::{AssetValueBucket, TypeFeatures, WorkerType};
+use crate::service_pricing::SkillType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
