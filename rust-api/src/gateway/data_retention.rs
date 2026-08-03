@@ -211,20 +211,25 @@ pub fn generate_retention_queries() -> Vec<(DataCategory, &'static str, String)>
     queries
 }
 
-/// Right-to-erasure: Generate deletion SQL for a specific individual.
-/// Returns a list of (table, sql) pairs for cascading deletion.
-pub fn generate_erasure_queries(person_id: &str) -> Vec<(&'static str, String)> {
+/// Right-to-erasure: Generate parameterized deletion SQL for a specific individual.
+/// Returns a list of (table, sql, params) tuples for cascading deletion.
+///
+/// SECURITY FIX (P0): Uses $1 parameterized placeholders instead of string interpolation
+/// to prevent SQL injection. The `person_id` is passed as a bind parameter, never
+/// interpolated into the SQL string.
+pub fn generate_erasure_queries(person_id: &str) -> Vec<(&'static str, String, Vec<String>)> {
+    let params = vec![person_id.to_string()];
     vec![
-        ("transactions", format!(
-            "DELETE FROM transactions WHERE worker_id_hash = '{}'", person_id
-        )),
-        ("credit_score_history", format!(
-            "DELETE FROM credit_score_history WHERE cohort_hash IN \
-             (SELECT DISTINCT cohort_hash FROM transactions WHERE worker_id_hash = '{}')", person_id
-        )),
-        ("audit_log", format!(
-            "DELETE FROM audit_log WHERE org_id = '{}' AND timestamp > NOW() - INTERVAL '30 days'", person_id
-        )),
+        ("transactions",
+         "DELETE FROM transactions WHERE worker_id_hash = $1".to_string(),
+         params.clone()),
+        ("credit_score_history",
+         "DELETE FROM credit_score_history WHERE cohort_hash IN \
+          (SELECT DISTINCT cohort_hash FROM transactions WHERE worker_id_hash = $1)".to_string(),
+         params.clone()),
+        ("audit_log",
+         "DELETE FROM audit_log WHERE org_id = $1 AND timestamp > NOW() - INTERVAL '30 days'".to_string(),
+         params),
     ]
 }
 
@@ -286,11 +291,15 @@ mod tests {
     }
 
     #[test]
-    fn test_erasure_queries_include_person_id() {
+    fn test_erasure_queries_parameterized() {
         let queries = generate_erasure_queries("test_hash_123");
         assert!(!queries.is_empty());
-        for (_, sql) in &queries {
-            assert!(sql.contains("test_hash_123"));
+        for (table, sql, params) in &queries {
+            // SECURITY: SQL must use $1 placeholder, not inline the person_id
+            assert!(sql.contains("$1"), "{}: SQL should use $1 placeholder", table);
+            assert!(!sql.contains("test_hash_123"), "{}: SQL must not interpolate person_id", table);
+            // Parameter must contain the actual person_id
+            assert!(params.contains(&"test_hash_123".to_string()));
         }
     }
 

@@ -47,8 +47,12 @@ pub struct DifferentialPrivacyEngine {
 pub struct DPResult<T: Serialize> {
     /// The noisy result (may be negative for counts, rounded for integers)
     pub noisy_value: T,
-    /// The original (true) value — only available to authorized callers
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// SECURITY FIX (P0): The true value is NEVER serialized into API responses.
+    /// `#[serde(skip)]` ensures this field cannot leak real data even if the struct
+    /// is accidentally serialized (e.g., via `Json(dp_result)` in an axum handler).
+    /// The true value is only available in-process for internal audit/logging,
+    /// and MUST NOT be exposed to external callers.
+    #[serde(skip)]
     pub true_value: Option<T>,
     /// Privacy budget consumed by this query
     pub epsilon_used: f64,

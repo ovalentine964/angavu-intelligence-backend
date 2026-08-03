@@ -62,6 +62,17 @@ pub enum BuyerTier {
     Enterprise,
 }
 
+impl From<crate::billing::subscription::SubscriptionTier> for BuyerTier {
+    fn from(tier: crate::billing::subscription::SubscriptionTier) -> Self {
+        match tier {
+            crate::billing::subscription::SubscriptionTier::Free => BuyerTier::Free,
+            crate::billing::subscription::SubscriptionTier::Starter => BuyerTier::Starter,
+            crate::billing::subscription::SubscriptionTier::Pro => BuyerTier::Pro,
+            crate::billing::subscription::SubscriptionTier::Enterprise => BuyerTier::Enterprise,
+        }
+    }
+}
+
 impl BuyerTier {
     pub fn rate_limit_per_minute(&self) -> u32 {
         match self {
@@ -330,19 +341,36 @@ pub async fn issue_token(
     State(state): State<super::GatewayState>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    // Parse tier
-    let tier = match req.tier.to_lowercase().as_str() {
-        "free" => BuyerTier::Free,
-        "starter" => BuyerTier::Starter,
-        "pro" => BuyerTier::Pro,
-        "enterprise" => BuyerTier::Enterprise,
-        _ => {
+    // SECURITY FIX (P0): Look up the user's actual tier from the database
+    // instead of trusting the client-claimed tier. A free user could previously
+    // claim "enterprise" tier to bypass rate limits and access restrictions.
+    let tier = match crate::billing::subscription::get_active_subscription(
+        &state.db,
+        &req.org_id,
+    )
+    .await
+    {
+        Ok(Some(sub)) => BuyerTier::from(sub.tier),
+        Ok(None) => {
+            // No active subscription — default to Free tier (most restrictive)
+            tracing::info!(
+                org_id = %req.org_id,
+                "No active subscription found during token issuance, defaulting to Free tier"
+            );
+            BuyerTier::Free
+        }
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                org_id = %req.org_id,
+                "Failed to look up subscription tier during token issuance"
+            );
             return (
-                StatusCode::BAD_REQUEST,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": {
-                        "code": "INVALID_TIER",
-                        "message": "Tier must be one of: free, starter, pro, enterprise"
+                        "code": "TIER_LOOKUP_FAILED",
+                        "message": "Failed to verify subscription tier"
                     }
                 })),
             )
