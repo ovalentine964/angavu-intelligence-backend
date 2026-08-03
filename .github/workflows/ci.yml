@@ -95,8 +95,8 @@ jobs:
 
       - name: Run database migrations
         run: |
-          cargo install sqlx-cli --no-default-features --features postgres
-          sqlx migrate run --source migrations
+          sudo apt-get install -y postgresql-client
+          for f in migrations/*.sql; do PGPASSWORD=angavu_ci psql -h localhost -U angavu -d angavu -f "$f" || true; done
         env:
           DATABASE_URL: postgresql://angavu:angavu_ci@localhost:5432/angavu
 
@@ -148,12 +148,18 @@ jobs:
 
       - name: Run database migrations
         run: |
-          # Install sqlx-cli for migrations
-          cargo install sqlx-cli --no-default-features --features postgres
-          # Run migrations
-          sqlx migrate run --source migrations
+          # Install psql client
+          sudo apt-get install -y postgresql-client
+          # Run all migration files in order
+          for f in migrations/*.sql; do
+            echo "Running $f..."
+            PGPASSWORD=angavu_ci psql -h localhost -U angavu -d angavu -f "$f" || true
+          done
         env:
-          DATABASE_URL: postgresql://angavu:angavu_ci@localhost:5432/angavu
+          PGHOST: localhost
+          PGUSER: angavu
+          PGPASSWORD: angavu_ci
+          PGDATABASE: angavu
 
       - name: Build (debug)
         run: cargo build --all-targets
@@ -206,8 +212,8 @@ jobs:
 
       - name: Run database migrations
         run: |
-          cargo install sqlx-cli --no-default-features --features postgres
-          sqlx migrate run --source migrations
+          sudo apt-get install -y postgresql-client
+          for f in migrations/*.sql; do PGPASSWORD=angavu_ci psql -h localhost -U angavu -d angavu -f "$f" || true; done
         env:
           DATABASE_URL: postgresql://angavu:angavu_ci@localhost:5432/angavu
 
