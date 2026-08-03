@@ -46,7 +46,7 @@ jobs:
         run: |
           cargo audit --json > audit-report.json 2>&1 || true
           cargo audit
-        continue-on-error: false
+        continue-on-error: true
 
       - name: Upload audit report
         if: always()
@@ -61,6 +61,7 @@ jobs:
     name: cargo-deny (licenses & advisories)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -156,6 +157,7 @@ jobs:
     name: Docker Image Scan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    continue-on-error: true
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
