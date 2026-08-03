@@ -6,6 +6,10 @@ authors = ["Angavu Intelligence Team"]
 description = "Angavu Intelligence Backend - Superagent-powered revenue intelligence platform"
 license = "Apache-2.0"
 
+[lib]
+name = "angavu_intelligence_backend"
+path = "rust-api/src/lib.rs"
+
 [[bin]]
 name = "angavu-server"
 path = "rust-api/src/main.rs"
