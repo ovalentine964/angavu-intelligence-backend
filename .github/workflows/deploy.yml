@@ -15,9 +15,10 @@ on:
       - 'Cargo.toml'
       - 'Dockerfile'
       - 'Dockerfile.oracle'
-      - 'docker-compose.yml'
+      - 'docker-compose*.yml'
       - 'nginx/**'
       - 'scripts/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       skip_tests:
