@@ -3,9 +3,9 @@
 //! This module provides the function to mount webhook routes onto the
 //! main gateway router, bridging the webhook module with the gateway state.
 
-use uuid::Uuid;
 use axum::Router;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::gateway::rate_limit::IpRateLimiter;
 

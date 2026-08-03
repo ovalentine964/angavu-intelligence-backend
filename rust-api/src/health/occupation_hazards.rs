@@ -1,7 +1,6 @@
-use super::insurance::InsuranceProductType;
-use super::insurance::InsuranceProductType;
 //! Occupation-specific hazard risk profiles
 
+use super::insurance::InsuranceProductType;
 use super::types::*;
 
 fn boda_boda_risk_profile() -> OccupationRiskProfile {

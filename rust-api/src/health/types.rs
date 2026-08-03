@@ -1,7 +1,7 @@
 //! Health metrics types — occupation hazard risk assessment
 
-use serde::{Deserialize, Serialize};
 use super::insurance::InsuranceProductType;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Anonymized worker identifier (SHA-256 hash)
