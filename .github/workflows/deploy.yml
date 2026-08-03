@@ -14,6 +14,7 @@ on:
       - 'python/**'
       - 'Cargo.toml'
       - 'Dockerfile'
+      - 'Dockerfile.oracle'
       - 'docker-compose.yml'
       - 'nginx/**'
       - 'scripts/**'
@@ -144,6 +145,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.oracle
+          platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -201,13 +204,15 @@ jobs:
 
             cd /opt/angavu
 
+            COMPOSE_FILE="docker-compose.oracle.yml"
+
             # ── Save current state for rollback ──
             CURRENT_IMAGE=$(docker inspect --format='{{.Config.Image}}' angavu-api 2>/dev/null || echo "none")
             echo "$CURRENT_IMAGE" > /tmp/previous_image.txt
             echo "Previous image: $CURRENT_IMAGE"
 
             # ── Save current docker-compose state ──
-            cp docker-compose.yml docker-compose.yml.bak 2>/dev/null || true
+            cp $COMPOSE_FILE ${COMPOSE_FILE}.bak 2>/dev/null || true
 
             # Pull target images
             echo "=== Pulling image ==="
@@ -219,13 +224,16 @@ jobs:
             # Tag as 'deployed' for reference
             docker tag "${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}" "${REGISTRY}/${IMAGE_NAME}:deployed"
 
+            # Export image reference for docker-compose
+            export IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
             # Run database migrations
             echo "=== Running migrations ==="
-            docker compose run --rm api /app/angavu-migrate || echo "⚠️ No migrations to run"
+            docker compose -f $COMPOSE_FILE run --rm api /app/angavu-migrate || echo "⚠️ No migrations to run"
 
             # Restart services with zero-downtime
             echo "=== Restarting services ==="
-            docker compose up -d --remove-orphans
+            docker compose -f $COMPOSE_FILE up -d --remove-orphans
 
             # Record deployed tag
             echo "$IMAGE_TAG" > /opt/angavu/.deployed_tag
@@ -279,8 +287,10 @@ jobs:
 
             cd /opt/angavu
 
+            COMPOSE_FILE="docker-compose.oracle.yml"
+
             # Restore previous docker-compose
-            cp docker-compose.yml.bak docker-compose.yml 2>/dev/null || true
+            cp ${COMPOSE_FILE}.bak $COMPOSE_FILE 2>/dev/null || true
 
             # Get previous image
             PREVIOUS_IMAGE=$(cat /tmp/previous_image.txt 2>/dev/null || echo "")
@@ -288,8 +298,8 @@ jobs:
               echo "Rolling back to: $PREVIOUS_IMAGE"
 
               # Restart with previous image
-              docker compose down
-              docker compose up -d --remove-orphans
+              docker compose -f $COMPOSE_FILE down
+              docker compose -f $COMPOSE_FILE up -d --remove-orphans
 
               # Verify rollback health
               sleep 15

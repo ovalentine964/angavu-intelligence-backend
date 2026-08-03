@@ -78,9 +78,7 @@ services:
 
   # ── Angavu Intelligence Backend (Rust) ──────────────────────────────────────
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.oracle
+    image: ${IMAGE}
     restart: unless-stopped
     ports:
       - "8000:8000"
