@@ -9,16 +9,6 @@ name: Deploy Backend
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'python/**'
-      - 'Cargo.toml'
-      - 'Dockerfile'
-      - 'Dockerfile.oracle'
-      - 'docker-compose*.yml'
-      - 'nginx/**'
-      - 'scripts/**'
-      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       skip_tests:
