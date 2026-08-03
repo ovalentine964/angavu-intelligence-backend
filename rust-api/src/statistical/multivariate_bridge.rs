@@ -2,7 +2,6 @@
 ///
 /// Executes Python multivariate_runner.py methods via subprocess with JSON I/O.
 /// Methods: PCA, DBSCAN, LDA, QDA, MANOVA
-
 use serde_json::{json, Value};
 use std::process::Command;
 use tracing::{debug, error};
@@ -70,11 +69,7 @@ impl MultivariateBridge {
     ///
     /// Reduces p-dimensional data to k principal components capturing
     /// maximum variance. Used for worker profile dimensionality reduction.
-    pub fn pca(
-        &self,
-        data: &[Vec<f64>],
-        n_components: Option<usize>,
-    ) -> Result<PCAResult, String> {
+    pub fn pca(&self, data: &[Vec<f64>], n_components: Option<usize>) -> Result<PCAResult, String> {
         let result = self.execute_python(
             "pca",
             json!({
@@ -135,11 +130,7 @@ impl MultivariateBridge {
     ///
     /// Like LDA but allows different covariance per class.
     /// Decision boundary is quadratic — more flexible than LDA.
-    pub fn qda(
-        &self,
-        x: &[Vec<f64>],
-        y: &[i32],
-    ) -> Result<QDAResult, String> {
+    pub fn qda(&self, x: &[Vec<f64>], y: &[i32]) -> Result<QDAResult, String> {
         let result = self.execute_python(
             "qda",
             json!({
@@ -155,10 +146,7 @@ impl MultivariateBridge {
     ///
     /// Tests whether group means differ across multiple dependent variables.
     /// Extension of ANOVA to multivariate response (Wilks' Lambda).
-    pub fn manova(
-        &self,
-        groups: &[Vec<Vec<f64>>],
-    ) -> Result<MANOVAResult, String> {
+    pub fn manova(&self, groups: &[Vec<Vec<f64>>]) -> Result<MANOVAResult, String> {
         let result = self.execute_python(
             "manova",
             json!({

@@ -1,11 +1,6 @@
 // src/gateway/rate_limit.rs
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -34,11 +29,10 @@ impl IpRateLimiter {
 
     /// Check if a request from this IP is allowed.
     pub fn check(&self, ip: &str) -> Result<u32, Duration> {
-        let mut bucket = self.buckets
+        let mut bucket = self
+            .buckets
             .entry(ip.to_string())
-            .or_insert_with(|| {
-                TokenBucket::new(self.rpm as f64, self.rpm as f64 / 60.0)
-            });
+            .or_insert_with(|| TokenBucket::new(self.rpm as f64, self.rpm as f64 / 60.0));
 
         if bucket.try_consume() {
             Ok(bucket.tokens as u32)
@@ -101,12 +95,10 @@ impl RateLimiter {
 
     /// Check if a request is allowed. Returns Ok(remaining) or Err(retry_after).
     pub fn check(&self, key_id: &str, tier_rpm: u32) -> Result<u32, Duration> {
-        let mut bucket = self.buckets
-            .entry(key_id.to_string())
-            .or_insert_with(|| {
-                let rpm = tier_rpm.max(self.default_rpm) as f64;
-                TokenBucket::new(rpm, rpm / 60.0)
-            });
+        let mut bucket = self.buckets.entry(key_id.to_string()).or_insert_with(|| {
+            let rpm = tier_rpm.max(self.default_rpm) as f64;
+            TokenBucket::new(rpm, rpm / 60.0)
+        });
 
         if bucket.try_consume() {
             Ok(bucket.tokens as u32)
@@ -135,10 +127,7 @@ pub async fn rate_limit_middleware(
         Ok(remaining) => {
             let mut response = next.run(request).await;
             if let Ok(val) = remaining.to_string().parse() {
-                response.headers_mut().insert(
-                    "X-RateLimit-Remaining",
-                    val,
-                );
+                response.headers_mut().insert("X-RateLimit-Remaining", val);
             }
             Ok(response)
         }
@@ -146,10 +135,7 @@ pub async fn rate_limit_middleware(
             let mut response = Response::new(axum::body::Body::empty());
             *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
             if let Ok(val) = retry_after.as_secs().to_string().parse() {
-                response.headers_mut().insert(
-                    "Retry-After",
-                    val,
-                );
+                response.headers_mut().insert("Retry-After", val);
             }
             Ok(response)
         }

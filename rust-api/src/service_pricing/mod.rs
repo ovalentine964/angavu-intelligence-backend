@@ -27,13 +27,13 @@ pub enum ServiceCategory {
 pub struct ServicePriceRecord {
     pub record_id: Uuid,
     pub service_category: ServiceCategory,
-    pub service_type: String,           // e.g., "boda_boda_ride", "hair_braiding", "phone_screen_repair"
-    pub region: String,                 // e.g., "nairobi-eastlands", "migori-town"
-    pub price_bucket: String,           // e.g., "100-200" — never exact price
-    pub price_avg: f64,                 // aggregated average (only if k≥10)
-    pub unit: String,                   // e.g., "per_trip", "per_hour", "per_piece"
-    pub sample_size: u32,              // how many data points (must be ≥10 for k-anonymity)
-    pub confidence: f64,               // 0.0-1.0
+    pub service_type: String, // e.g., "boda_boda_ride", "hair_braiding", "phone_screen_repair"
+    pub region: String,       // e.g., "nairobi-eastlands", "migori-town"
+    pub price_bucket: String, // e.g., "100-200" — never exact price
+    pub price_avg: f64,       // aggregated average (only if k≥10)
+    pub unit: String,         // e.g., "per_trip", "per_hour", "per_piece"
+    pub sample_size: u32,     // how many data points (must be ≥10 for k-anonymity)
+    pub confidence: f64,      // 0.0-1.0
     pub recorded_at: DateTime<Utc>,
     pub synced_at: DateTime<Utc>,
 }
@@ -48,11 +48,11 @@ pub struct ServiceMarketSignal {
     pub price_avg: f64,
     pub price_min: f64,
     pub price_max: f64,
-    pub price_trend: f64,              // -1.0 to 1.0 (declining to rising)
-    pub demand_velocity: f64,          // relative demand strength
-    pub volatility: f64,               // price stability
+    pub price_trend: f64,     // -1.0 to 1.0 (declining to rising)
+    pub demand_velocity: f64, // relative demand strength
+    pub volatility: f64,      // price stability
     pub sample_size: u32,
-    pub factors: Vec<PricingFactor>,   // what's influencing the price
+    pub factors: Vec<PricingFactor>, // what's influencing the price
     pub updated_at: DateTime<Utc>,
 }
 
@@ -78,12 +78,12 @@ pub struct TransportRoute {
     pub route_id: Uuid,
     pub origin: GeoPoint,
     pub destination: GeoPoint,
-    pub origin_name: String,           // "CBD", "Westlands", "Kawangware"
+    pub origin_name: String, // "CBD", "Westlands", "Kawangware"
     pub destination_name: String,
     pub distance_km: f64,
     pub transport_type: TransportType,
-    pub base_fare: f64,                // KES
-    pub per_km_rate: f64,             // KES per km
+    pub base_fare: f64,   // KES
+    pub per_km_rate: f64, // KES per km
     pub region: String,
     pub sample_size: u32,
     pub last_updated: DateTime<Utc>,
@@ -111,7 +111,7 @@ pub struct SurgeState {
     pub region: String,
     pub transport_type: TransportType,
     pub is_surge: bool,
-    pub surge_multiplier: f64,         // 1.0 = normal, 1.5 = 50% surge
+    pub surge_multiplier: f64, // 1.0 = normal, 1.5 = 50% surge
     pub reason: SurgeReason,
     pub detected_at: DateTime<Utc>,
     pub expected_duration_mins: u32,
@@ -132,9 +132,9 @@ pub enum SurgeReason {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FuelCostModel {
     pub region: String,
-    pub fuel_price_per_litre: f64,     // KES
-    pub consumption_per_km: f64,       // litres per km
-    pub cost_per_km: f64,              // derived: fuel_price * consumption
+    pub fuel_price_per_litre: f64, // KES
+    pub consumption_per_km: f64,   // litres per km
+    pub cost_per_km: f64,          // derived: fuel_price * consumption
     pub last_updated: DateTime<Utc>,
 }
 
@@ -150,11 +150,11 @@ pub struct TransportCompetitorRate {
     pub rate_id: Uuid,
     pub route_id: Uuid,
     pub transport_type: TransportType,
-    pub competitor_count: u32,         // how many riders at this stage
+    pub competitor_count: u32, // how many riders at this stage
     pub avg_fare: f64,
     pub min_fare: f64,
     pub max_fare: f64,
-    pub idle_time_pct: f64,            // % of time riders are idle
+    pub idle_time_pct: f64, // % of time riders are idle
     pub region: String,
     pub recorded_at: DateTime<Utc>,
 }
@@ -170,10 +170,10 @@ pub struct LaborRateCard {
     pub skill_type: SkillType,
     pub experience_level: ExperienceLevel,
     pub region: String,
-    pub daily_rate: f64,               // KES per day
-    pub hourly_rate: f64,              // KES per hour
-    pub project_rate: Option<f64>,     // KES per project (if applicable)
-    pub unit: String,                  // "per_day", "per_hour", "per_project"
+    pub daily_rate: f64,           // KES per day
+    pub hourly_rate: f64,          // KES per hour
+    pub project_rate: Option<f64>, // KES per project (if applicable)
+    pub unit: String,              // "per_day", "per_hour", "per_project"
     pub sample_size: u32,
     pub last_updated: DateTime<Utc>,
 }
@@ -189,17 +189,17 @@ pub enum SkillType {
     Roofer,
     Tiler,
     GeneralLaborer,
-    Fundi,  // generic skilled artisan
+    Fundi, // generic skilled artisan
     Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ExperienceLevel {
-    Apprentice,     // < 1 year
-    Junior,         // 1-3 years
-    Intermediate,   // 3-7 years
-    Senior,         // 7-15 years
-    Master,         // 15+ years
+    Apprentice,   // < 1 year
+    Junior,       // 1-3 years
+    Intermediate, // 3-7 years
+    Senior,       // 7-15 years
+    Master,       // 15+ years
 }
 
 /// Project type pricing model
@@ -209,9 +209,9 @@ pub struct ProjectPricing {
     pub project_type: ProjectType,
     pub skill_required: SkillType,
     pub region: String,
-    pub material_cost_estimate: f64,   // KES
-    pub labor_cost_estimate: f64,      // KES
-    pub total_estimate: f64,           // KES
+    pub material_cost_estimate: f64, // KES
+    pub labor_cost_estimate: f64,    // KES
+    pub total_estimate: f64,         // KES
     pub duration_days: u32,
     pub workers_needed: u32,
     pub sample_size: u32,
@@ -237,8 +237,8 @@ pub enum ProjectType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstructionMaterial {
     pub material_id: Uuid,
-    pub name: String,                  // "cement", "sand", "ballast", "timber"
-    pub unit: String,                  // "bag", "tonne", "piece", "metre"
+    pub name: String, // "cement", "sand", "ballast", "timber"
+    pub unit: String, // "bag", "tonne", "piece", "metre"
     pub region: String,
     pub price_avg: f64,
     pub price_min: f64,
@@ -255,10 +255,10 @@ pub struct RegionalWageIndex {
     pub region: String,
     pub daily_wage_avg: f64,
     pub daily_wage_median: f64,
-    pub daily_wage_p25: f64,           // 25th percentile
-    pub daily_wage_p75: f64,           // 75th percentile
-    pub worker_count: u32,             // must be ≥10 for k-anonymity
-    pub cost_of_living_index: f64,     // relative to national average (1.0)
+    pub daily_wage_p25: f64,       // 25th percentile
+    pub daily_wage_p75: f64,       // 75th percentile
+    pub worker_count: u32,         // must be ≥10 for k-anonymity
+    pub cost_of_living_index: f64, // relative to national average (1.0)
     pub updated_at: DateTime<Utc>,
 }
 
@@ -309,7 +309,7 @@ pub enum EstablishmentType {
     Salon,
     Barbershop,
     Spa,
-    HomeService,      // mobile service provider
+    HomeService, // mobile service provider
     StreetSide,
 }
 
@@ -318,9 +318,9 @@ pub enum EstablishmentType {
 pub struct BeautyTimePricing {
     pub service_type: BeautyServiceType,
     pub region: String,
-    pub peak_hours: Vec<u8>,           // hours with highest demand (0-23)
-    pub peak_multiplier: f64,          // price multiplier during peak
-    pub off_peak_multiplier: f64,      // price multiplier during off-peak
+    pub peak_hours: Vec<u8>,      // hours with highest demand (0-23)
+    pub peak_multiplier: f64,     // price multiplier during peak
+    pub off_peak_multiplier: f64, // price multiplier during off-peak
     pub weekend_multiplier: f64,
 }
 
@@ -328,12 +328,12 @@ pub struct BeautyTimePricing {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BeautyProduct {
     pub product_id: Uuid,
-    pub name: String,                  // "hair gel", "relaxer", "hair dye"
-    pub unit: String,                  // "bottle", "tube", "packet"
+    pub name: String, // "hair gel", "relaxer", "hair dye"
+    pub unit: String, // "bottle", "tube", "packet"
     pub region: String,
     pub price_avg: f64,
-    pub usage_per_service: f64,        // how much product per service
-    pub cost_per_service: f64,         // derived
+    pub usage_per_service: f64, // how much product per service
+    pub cost_per_service: f64,  // derived
     pub last_updated: DateTime<Utc>,
 }
 
@@ -346,8 +346,8 @@ pub struct BeautyProduct {
 pub struct RepairServicePrice {
     pub price_id: Uuid,
     pub repair_category: RepairCategory,
-    pub device_type: String,           // "Samsung Galaxy", "iPhone", "TV", "motorcycle"
-    pub repair_type: String,           // "screen replacement", "battery", "engine overhaul"
+    pub device_type: String, // "Samsung Galaxy", "iPhone", "TV", "motorcycle"
+    pub repair_type: String, // "screen replacement", "battery", "engine overhaul"
     pub complexity: RepairComplexity,
     pub region: String,
     pub labor_cost_avg: f64,
@@ -355,40 +355,40 @@ pub struct RepairServicePrice {
     pub total_cost_avg: f64,
     pub duration_hours: f64,
     pub sample_size: u32,
-    pub warranty_days: u32,            // typical warranty offered
+    pub warranty_days: u32, // typical warranty offered
     pub last_updated: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum RepairCategory {
     PhoneRepair,
-    ElectronicsRepair,    // TV, radio, sound systems
-    ApplianceRepair,      // fridge, washing machine
-    MotorcycleRepair,     // boda boda, tuk-tuk
-    VehicleRepair,        // car, matatu
+    ElectronicsRepair, // TV, radio, sound systems
+    ApplianceRepair,   // fridge, washing machine
+    MotorcycleRepair,  // boda boda, tuk-tuk
+    VehicleRepair,     // car, matatu
     BicycleRepair,
     Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum RepairComplexity {
-    Simple,       // < 1 hour, basic tools
-    Moderate,     // 1-3 hours, specialized tools
-    Complex,      // 3-8 hours, expert knowledge
-    Expert,       // 8+ hours, rare skills/parts
+    Simple,   // < 1 hour, basic tools
+    Moderate, // 1-3 hours, specialized tools
+    Complex,  // 3-8 hours, expert knowledge
+    Expert,   // 8+ hours, rare skills/parts
 }
 
 /// Parts cost integration for repair services
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepairPart {
     pub part_id: Uuid,
-    pub name: String,                  // "screen", "battery", "brake pad"
+    pub name: String, // "screen", "battery", "brake pad"
     pub compatible_devices: Vec<String>,
     pub region: String,
     pub price_avg: f64,
     pub price_min: f64,
     pub price_max: f64,
-    pub is_genuine: bool,              // genuine vs aftermarket
+    pub is_genuine: bool, // genuine vs aftermarket
     pub availability: PartAvailability,
     pub last_updated: DateTime<Utc>,
 }
@@ -397,8 +397,8 @@ pub struct RepairPart {
 pub enum PartAvailability {
     InStock,
     LimitedStock,
-    OrderRequired,      // 1-3 days
-    ImportRequired,     // 1-4 weeks
+    OrderRequired,  // 1-3 days
+    ImportRequired, // 1-4 weeks
     Discontinued,
 }
 
@@ -415,7 +415,7 @@ pub struct EntertainmentServicePrice {
     pub price_avg: f64,
     pub price_min: f64,
     pub price_max: f64,
-    pub unit: String,                  // "per_hour", "per_event", "per_song"
+    pub unit: String, // "per_hour", "per_event", "per_song"
     pub equipment_included: bool,
     pub sample_size: u32,
     pub last_updated: DateTime<Utc>,
@@ -446,7 +446,7 @@ pub struct ServicePriceQuery {
     pub service_type: Option<String>,
     pub region: String,
     pub date: Option<DateTime<Utc>>,
-    pub include_factors: bool,         // include pricing factors in response
+    pub include_factors: bool, // include pricing factors in response
 }
 
 /// Response with service price intelligence
@@ -457,8 +457,8 @@ pub struct ServicePriceResponse {
     pub price_range: Option<PriceRange>,
     pub factors: Vec<PricingFactor>,
     pub comparable_regions: Vec<RegionComparison>,
-    pub cache_hit: bool,               // was this served from offline cache?
-    pub k_anonymity_met: bool,         // was k≥10 satisfied?
+    pub cache_hit: bool,       // was this served from offline cache?
+    pub k_anonymity_met: bool, // was k≥10 satisfied?
     pub generated_at: DateTime<Utc>,
 }
 
@@ -467,7 +467,7 @@ pub struct PriceRange {
     pub min: f64,
     pub max: f64,
     pub avg: f64,
-    pub recommended: f64,              // suggested price for the worker
+    pub recommended: f64, // suggested price for the worker
     pub unit: String,
 }
 
@@ -476,7 +476,7 @@ pub struct PriceRange {
 pub struct RegionComparison {
     pub region: String,
     pub price_avg: f64,
-    pub price_diff_pct: f64,           // % difference from queried region
+    pub price_diff_pct: f64, // % difference from queried region
     pub sample_size: u32,
 }
 
@@ -484,11 +484,11 @@ pub struct RegionComparison {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServicePriceBroadcast {
     pub broadcast_id: Uuid,
-    pub worker_id: String,             // anonymized
+    pub worker_id: String, // anonymized
     pub service_category: ServiceCategory,
     pub service_type: String,
     pub region: String,
-    pub price_bucket: String,          // "100-200" — never exact
+    pub price_bucket: String, // "100-200" — never exact
     pub unit: String,
     pub timestamp: DateTime<Utc>,
 }
@@ -518,7 +518,7 @@ pub struct WageCalculationResult {
     pub material_cost_estimate: Option<f64>,
     pub total_estimate: Option<f64>,
     pub regional_comparison: RegionalWageIndex,
-    pub percentile_rank: f64,          // where this wage falls (0-100)
+    pub percentile_rank: f64, // where this wage falls (0-100)
     pub k_anonymity_met: bool,
     pub generated_at: DateTime<Utc>,
 }
@@ -536,8 +536,8 @@ pub struct ServicePriceCache {
     pub prices: Vec<ServicePriceRecord>,
     pub market_signals: Vec<ServiceMarketSignal>,
     pub cached_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,     // cache TTL
-    pub version: u64,                  // for conflict resolution on sync
+    pub expires_at: DateTime<Utc>, // cache TTL
+    pub version: u64,              // for conflict resolution on sync
 }
 
 impl ServicePriceCache {
@@ -559,11 +559,11 @@ impl ServicePriceCache {
 /// Privacy enforcement for service pricing queries
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KAnonymityCheck {
-    pub min_cohort_size: u32,          // must be ≥10
+    pub min_cohort_size: u32, // must be ≥10
     pub actual_cohort_size: u32,
     pub is_anonymous: bool,
-    pub suppression_applied: bool,     // true if data was suppressed
-    pub generalization_level: u8,      // 0=exact, 1=city, 2=county, 3=country
+    pub suppression_applied: bool, // true if data was suppressed
+    pub generalization_level: u8,  // 0=exact, 1=city, 2=county, 3=country
 }
 
 impl KAnonymityCheck {
@@ -581,10 +581,10 @@ impl KAnonymityCheck {
     /// to achieve k≥10 anonymity
     pub fn required_generalization(&self) -> u8 {
         match self.actual_cohort_size {
-            0..=9 => 3,    // must generalize to country level
-            10..=24 => 2,  // county level
-            25..=99 => 1,  // city level
-            _ => 0,        // exact region is fine
+            0..=9 => 3,   // must generalize to country level
+            10..=24 => 2, // county level
+            25..=99 => 1, // city level
+            _ => 0,       // exact region is fine
         }
     }
 }
@@ -619,7 +619,7 @@ mod tests {
         let model = FuelCostModel {
             region: "nairobi".to_string(),
             fuel_price_per_litre: 185.0,
-            consumption_per_km: 0.03,  // boda boda: ~30km/litre
+            consumption_per_km: 0.03, // boda boda: ~30km/litre
             cost_per_km: 0.0,
             last_updated: Utc::now(),
         };

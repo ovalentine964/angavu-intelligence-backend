@@ -1,9 +1,9 @@
 // Credit Scoring Feedback Loop — Alama Score Improvement
 // Score → Loan Outcome → Model Retrain → Score Calibration
 
-use std::collections::{HashMap, VecDeque};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
+use std::collections::{HashMap, VecDeque};
 use tracing::{info, warn};
 
 use super::drift_detection::BayesianCalibrator;
@@ -14,12 +14,12 @@ use super::drift_detection::BayesianCalibrator;
 pub struct CreditScoreRecord {
     pub score_id: String,
     pub worker_id: String,
-    pub score: f64,            // 0.0 - 1.0 (probability of repayment)
-    pub confidence: f64,       // 0.0 - 1.0
+    pub score: f64,      // 0.0 - 1.0 (probability of repayment)
+    pub confidence: f64, // 0.0 - 1.0
     pub features: CreditFeatures,
     pub model_version: String,
     pub scored_at: DateTime<Utc>,
-    pub cohort: String,        // region|business_type
+    pub cohort: String, // region|business_type
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,10 +44,10 @@ pub struct LoanOutcome {
     pub worker_id: String,
     pub score_at_origination: f64,
     pub confidence_at_origination: f64,
-    pub loan_amount_bucket: String,  // "micro" | "small" | "medium"
+    pub loan_amount_bucket: String, // "micro" | "small" | "medium"
     pub outcome: OutcomeType,
     pub days_to_outcome: u32,
-    pub repaid_amount_ratio: f64,    // 0.0 - 1.0+ (1.0 = fully repaid)
+    pub repaid_amount_ratio: f64, // 0.0 - 1.0+ (1.0 = fully repaid)
     pub recorded_at: DateTime<Utc>,
     pub model_version: String,
 }
@@ -113,7 +113,8 @@ impl ScoreCalibration {
         self.overall_calibrator.update(actual_outcome);
 
         // Update cohort calibrator
-        let cohort_cal = self.cohort_calibrators
+        let cohort_cal = self
+            .cohort_calibrators
             .entry(cohort.to_string())
             .or_insert_with(BayesianCalibrator::default_prior);
         cohort_cal.update(actual_outcome);
@@ -123,7 +124,8 @@ impl ScoreCalibration {
         let bin = &mut self.bins[bin_idx];
         let n = bin.count as f64;
         bin.predicted_mean = (bin.predicted_mean * n + predicted_score) / (n + 1.0);
-        bin.actual_mean = (bin.actual_mean * n + if actual_outcome { 1.0 } else { 0.0 }) / (n + 1.0);
+        bin.actual_mean =
+            (bin.actual_mean * n + if actual_outcome { 1.0 } else { 0.0 }) / (n + 1.0);
         bin.count += 1;
     }
 
@@ -135,14 +137,18 @@ impl ScoreCalibration {
             return 0.0;
         }
 
-        let ece: f64 = self.bins.iter().map(|bin| {
-            if bin.count == 0 {
-                return 0.0;
-            }
-            let weight = bin.count as f64 / total as f64;
-            let gap = (bin.predicted_mean - bin.actual_mean).abs();
-            weight * gap
-        }).sum();
+        let ece: f64 = self
+            .bins
+            .iter()
+            .map(|bin| {
+                if bin.count == 0 {
+                    return 0.0;
+                }
+                let weight = bin.count as f64 / total as f64;
+                let gap = (bin.predicted_mean - bin.actual_mean).abs();
+                weight * gap
+            })
+            .sum();
 
         ece
     }
@@ -154,7 +160,10 @@ impl ScoreCalibration {
 
     /// Get calibration data for visualization/analysis.
     pub fn calibration_data(&self) -> Vec<(f64, f64, u64)> {
-        self.bins.iter().map(|b| (b.predicted_mean, b.actual_mean, b.count)).collect()
+        self.bins
+            .iter()
+            .map(|b| (b.predicted_mean, b.actual_mean, b.count))
+            .collect()
     }
 
     /// Get calibrated probability for a cohort.
@@ -250,16 +259,14 @@ impl CreditFeedbackLoop {
     pub fn record_outcome(&mut self, outcome: LoanOutcome) {
         // Update calibration with the score-outcome pair
         let actual = outcome.outcome == OutcomeType::Repaid;
-        let cohort = self.pending_scores
+        let cohort = self
+            .pending_scores
             .get(&outcome.loan_id)
             .map(|s| s.cohort.clone())
             .unwrap_or_else(|| "unknown".to_string());
 
-        self.calibration.record(
-            outcome.score_at_origination,
-            actual,
-            &cohort,
-        );
+        self.calibration
+            .record(outcome.score_at_origination, actual, &cohort);
 
         // Remove from pending
         self.pending_scores.remove(&outcome.loan_id);
@@ -280,7 +287,9 @@ impl CreditFeedbackLoop {
         self.performance.calibration_error = self.calibration.expected_calibration_error();
 
         // Update actual default rate
-        let defaults = self.outcomes.iter()
+        let defaults = self
+            .outcomes
+            .iter()
             .filter(|o| o.outcome == OutcomeType::Defaulted)
             .count();
         let total = self.outcomes.len();
@@ -354,7 +363,10 @@ impl CreditFeedbackLoop {
 
     /// Apply a retrained model. Resets calibration and updates version.
     pub fn apply_retrained_model(&mut self, version: String, baseline_auc: f64) {
-        info!("Applying retrained Alama model: {} (AUC: {:.3})", version, baseline_auc);
+        info!(
+            "Applying retrained Alama model: {} (AUC: {:.3})",
+            version, baseline_auc
+        );
         self.performance.model_version = version;
         self.performance.auc_roc = baseline_auc;
         self.performance.last_retrain = Some(Utc::now());
@@ -462,7 +474,10 @@ impl ChampionChallenger {
                 action: PromotionAction::Promote,
                 reason: format!(
                     "Challenger {} (AUC: {:.3}) beats champion {} (AUC: {:.3}) by {:.3}",
-                    challenger, challenger_auc, self.champion_version, self.champion_auc,
+                    challenger,
+                    challenger_auc,
+                    self.champion_version,
+                    self.champion_auc,
                     challenger_auc - self.champion_auc,
                 ),
             })
@@ -511,7 +526,11 @@ mod tests {
 
         // Should be well-calibrated
         let ece = cal.expected_calibration_error();
-        assert!(ece < 0.1, "ECE should be low for well-calibrated predictions, got {}", ece);
+        assert!(
+            ece < 0.1,
+            "ECE should be low for well-calibrated predictions, got {}",
+            ece
+        );
     }
 
     #[test]

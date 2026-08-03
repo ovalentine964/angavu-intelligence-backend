@@ -1,10 +1,10 @@
 // Model Drift Detection Loop
 // Monitors prediction accuracy over time, detects degradation, triggers retraining
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 
 // ─── Drift Configuration ──────────────────────────────────────────────────
@@ -50,7 +50,7 @@ pub struct PredictionRecord {
     pub predicted_value: f64,
     pub actual_value: Option<f64>, // None until outcome is known
     pub confidence: f64,
-    pub feature_hash: String,     // anonymized feature vector hash
+    pub feature_hash: String, // anonymized feature vector hash
     pub cohort: String,
     pub timestamp: DateTime<Utc>,
     pub outcome_recorded_at: Option<DateTime<Utc>>,
@@ -217,12 +217,14 @@ impl DriftDetector {
 
     /// Record a prediction outcome. Called when ground truth becomes available.
     pub fn record_outcome(&mut self, prediction: &PredictionRecord, actual: f64) {
-        let correct = self.is_prediction_correct(prediction.predicted_value, actual, prediction.confidence);
+        let correct =
+            self.is_prediction_correct(prediction.predicted_value, actual, prediction.confidence);
 
         self.global_window.push(correct, prediction.confidence);
 
         // Per-cohort tracking
-        let cohort_window = self.cohort_windows
+        let cohort_window = self
+            .cohort_windows
             .entry(prediction.cohort.clone())
             .or_insert_with(|| AccuracyWindow::new(self.config.window_size));
         cohort_window.push(correct, prediction.confidence);
@@ -250,11 +252,10 @@ impl DriftDetector {
             0.0
         };
 
-        let drift_detected = self.global_window.len() >= self.config.min_samples && (
-            current_accuracy < self.config.accuracy_threshold ||
-            relative_degradation > self.config.relative_degradation_threshold ||
-            current_confidence < self.config.confidence_threshold
-        );
+        let drift_detected = self.global_window.len() >= self.config.min_samples
+            && (current_accuracy < self.config.accuracy_threshold
+                || relative_degradation > self.config.relative_degradation_threshold
+                || current_confidence < self.config.confidence_threshold);
 
         let drift_type = if drift_detected {
             if relative_degradation > 0.3 {
@@ -265,7 +266,8 @@ impl DriftDetector {
                 Some(DriftType::CalibrationDrift)
             } else {
                 // Check if specific cohort is causing the issue
-                self.find_worst_cohort().map(|c| DriftType::CohortDrift { cohort: c })
+                self.find_worst_cohort()
+                    .map(|c| DriftType::CohortDrift { cohort: c })
             }
         } else {
             None
@@ -279,14 +281,16 @@ impl DriftDetector {
         );
 
         // Build cohort details
-        let cohort_details: Vec<CohortDrift> = self.cohort_windows.iter().map(|(cohort, window)| {
-            CohortDrift {
+        let cohort_details: Vec<CohortDrift> = self
+            .cohort_windows
+            .iter()
+            .map(|(cohort, window)| CohortDrift {
                 cohort: cohort.clone(),
                 accuracy: window.accuracy(),
                 sample_size: window.len(),
                 drift_detected: window.accuracy() < self.config.accuracy_threshold,
-            }
-        }).collect();
+            })
+            .collect();
 
         DriftReport {
             report_id: uuid::Uuid::new_v4().to_string(),
@@ -308,9 +312,14 @@ impl DriftDetector {
     }
 
     fn find_worst_cohort(&self) -> Option<String> {
-        self.cohort_windows.iter()
+        self.cohort_windows
+            .iter()
             .filter(|(_, w)| w.len() >= 20) // minimum samples
-            .min_by(|(_, a), (_, b)| a.accuracy().partial_cmp(&b.accuracy()).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|(_, a), (_, b)| {
+                a.accuracy()
+                    .partial_cmp(&b.accuracy())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|(name, _)| name.clone())
     }
 
@@ -334,7 +343,12 @@ impl DriftDetector {
         if self.consecutive_degraded >= self.config.consecutive_degraded_windows {
             // Check cooldown
             if let Some(last) = self.last_retrain_attempt {
-                if Utc::now().signed_duration_since(last).to_std().unwrap_or(Duration::ZERO) < self.config.retrain_cooldown {
+                if Utc::now()
+                    .signed_duration_since(last)
+                    .to_std()
+                    .unwrap_or(Duration::ZERO)
+                    < self.config.retrain_cooldown
+                {
                     return DriftRecommendation::Monitor;
                 }
             }
@@ -351,7 +365,11 @@ impl DriftDetector {
 
     /// Apply a new model after retraining. Resets drift counters.
     pub fn apply_new_model(&mut self, version: String, baseline_accuracy: f64) {
-        info!("Applying new model: {} (baseline: {:.2}%)", version, baseline_accuracy * 100.0);
+        info!(
+            "Applying new model: {} (baseline: {:.2}%)",
+            version,
+            baseline_accuracy * 100.0
+        );
         self.current_model_version = version;
         self.baseline_accuracy = baseline_accuracy;
         self.consecutive_degraded = 0;
@@ -436,10 +454,7 @@ impl BayesianCalibrator {
         let std_dev = variance.sqrt();
         let z = 1.96; // 95%
 
-        (
-            (mean - z * std_dev).max(0.0),
-            (mean + z * std_dev).min(1.0),
-        )
+        ((mean - z * std_dev).max(0.0), (mean + z * std_dev).min(1.0))
     }
 
     /// Get the posterior distribution parameters.
@@ -567,6 +582,3 @@ mod tests {
         assert!(!detector.is_rolled_back());
     }
 }
-
-
-

@@ -11,10 +11,10 @@
 // - PostgreSQL: Persistent storage for subscriptions, invoices, payment records
 // - ClickHouse: Analytics storage for usage event logs (OLAP queries)
 
-pub mod metering;
-pub mod subscription;
-pub mod mpesa;
 pub mod invoice;
+pub mod metering;
+pub mod mpesa;
+pub mod subscription;
 
 use axum::{
     extract::State,
@@ -36,17 +36,29 @@ pub fn billing_router() -> Router<GatewayState> {
         // Subscription management
         .route("/api/v1/billing/subscriptions", post(create_subscription))
         .route("/api/v1/billing/subscriptions/me", get(get_my_subscription))
-        .route("/api/v1/billing/subscriptions/cancel", post(cancel_subscription))
-        .route("/api/v1/billing/subscriptions/reactivate", post(reactivate_subscription))
+        .route(
+            "/api/v1/billing/subscriptions/cancel",
+            post(cancel_subscription),
+        )
+        .route(
+            "/api/v1/billing/subscriptions/reactivate",
+            post(reactivate_subscription),
+        )
         // Usage
         .route("/api/v1/billing/usage", get(get_my_usage))
         // Payments (M-Pesa STK Push)
         .route("/api/v1/billing/payments/initiate", post(initiate_payment))
-        .route("/api/v1/billing/payments/{txn_id}/status", get(check_payment_status))
+        .route(
+            "/api/v1/billing/payments/{txn_id}/status",
+            get(check_payment_status),
+        )
         // Invoices
         .route("/api/v1/billing/invoices", get(list_invoices))
         .route("/api/v1/billing/invoices/{invoice_id}", get(get_invoice))
-        .route("/api/v1/billing/invoices/{invoice_id}/pdf", get(download_invoice_pdf))
+        .route(
+            "/api/v1/billing/invoices/{invoice_id}/pdf",
+            get(download_invoice_pdf),
+        )
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -61,7 +73,11 @@ async fn create_subscription(
     Json(req): Json<subscription::CreateSubscriptionRequest>,
 ) -> impl IntoResponse {
     match subscription::create_subscription(&state.db, &state.redis, &claims.org_id, req).await {
-        Ok(sub) => (StatusCode::CREATED, Json(serde_json::to_value(sub).unwrap())).into_response(),
+        Ok(sub) => (
+            StatusCode::CREATED,
+            Json(serde_json::to_value(sub).unwrap()),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, org_id = %claims.org_id, "Failed to create subscription");
             ErrorResponse::internal().into_response()
@@ -117,10 +133,7 @@ async fn reactivate_subscription(
 
 /// GET /api/v1/billing/usage
 /// Get current billing cycle usage for the authenticated user's org.
-async fn get_my_usage(
-    State(state): State<GatewayState>,
-    claims: Claims,
-) -> impl IntoResponse {
+async fn get_my_usage(State(state): State<GatewayState>, claims: Claims) -> impl IntoResponse {
     match metering::get_usage_summary(&state.redis, &state.db, &claims.org_id, &claims.tier).await {
         Ok(usage) => Json(serde_json::to_value(usage).unwrap()).into_response(),
         Err(e) => {
@@ -140,8 +153,7 @@ async fn initiate_payment(
     // Load M-Pesa config from webhook state (shared config)
     let mpesa_config = crate::webhook::MpesaConfig {
         passkey: std::env::var("MPESA_PASSKEY").unwrap_or_default(),
-        shortcode: std::env::var("MPESA_SHORTCODE")
-            .unwrap_or_else(|_| "174379".to_string()),
+        shortcode: std::env::var("MPESA_SHORTCODE").unwrap_or_else(|_| "174379".to_string()),
         initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD").unwrap_or_default(),
         environment: match std::env::var("MPESA_ENVIRONMENT").as_deref() {
             Ok("production") => crate::webhook::MpesaEnvironment::Production,
@@ -149,8 +161,14 @@ async fn initiate_payment(
         },
     };
 
-    match mpesa::initiate_stk_push(&state.db, &state.redis, &mpesa_config, &claims.org_id, req).await {
-        Ok(resp) => (StatusCode::ACCEPTED, Json(serde_json::to_value(resp).unwrap())).into_response(),
+    match mpesa::initiate_stk_push(&state.db, &state.redis, &mpesa_config, &claims.org_id, req)
+        .await
+    {
+        Ok(resp) => (
+            StatusCode::ACCEPTED,
+            Json(serde_json::to_value(resp).unwrap()),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, org_id = %claims.org_id, "Failed to initiate payment");
             ErrorResponse::internal().into_response()
@@ -218,7 +236,10 @@ async fn download_invoice_pdf(
     match invoice::generate_invoice_pdf(&state.db, &claims.org_id, &invoice_id).await {
         Ok(pdf_bytes) => {
             let headers = [
-                (axum::http::header::CONTENT_TYPE, "application/pdf".to_string()),
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "application/pdf".to_string(),
+                ),
                 (
                     axum::http::header::CONTENT_DISPOSITION,
                     format!("attachment; filename=\"invoice-{}.pdf\"", invoice_id),

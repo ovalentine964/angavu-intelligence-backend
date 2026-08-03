@@ -97,7 +97,13 @@ impl KAnonymityEnforcer {
         };
 
         // ── Audit logging ──
-        self.log_decision(cohort_key, sample_size, endpoint, allowed, reason.as_deref());
+        self.log_decision(
+            cohort_key,
+            sample_size,
+            endpoint,
+            allowed,
+            reason.as_deref(),
+        );
 
         // ── Alerting: warn loudly when k < MIN_K ──
         if !allowed {
@@ -112,7 +118,8 @@ impl KAnonymityEnforcer {
         }
 
         if allowed {
-            self.cohort_sizes.insert(cohort_key.to_string(), sample_size);
+            self.cohort_sizes
+                .insert(cohort_key.to_string(), sample_size);
             KAnonymityResult {
                 data: Some(data),
                 k_anonymity: self.k,
@@ -130,7 +137,14 @@ impl KAnonymityEnforcer {
     }
 
     /// Record a k-anonymity decision in the audit log.
-    fn log_decision(&self, cohort_key: &str, sample_size: u32, endpoint: &str, allowed: bool, reason: Option<&str>) {
+    fn log_decision(
+        &self,
+        cohort_key: &str,
+        sample_size: u32,
+        endpoint: &str,
+        allowed: bool,
+        reason: Option<&str>,
+    ) {
         let record = KAnonymityAuditRecord {
             timestamp: Utc::now(),
             cohort_key: cohort_key.to_string(),
@@ -196,7 +210,8 @@ impl KAnonymityEnforcer {
         &self,
         cohorts: &mut std::collections::HashMap<String, Vec<String>>,
     ) {
-        let small_cohorts: Vec<String> = cohorts.iter()
+        let small_cohorts: Vec<String> = cohorts
+            .iter()
             .filter(|(_, members)| members.len() < self.k)
             .map(|(key, _)| key.clone())
             .collect();
@@ -204,7 +219,8 @@ impl KAnonymityEnforcer {
         for small_key in small_cohorts {
             if let Some((_, members)) = cohorts.remove_entry(&small_key) {
                 // Find nearest existing cohort
-                let nearest = cohorts.keys()
+                let nearest = cohorts
+                    .keys()
                     .min_by_key(|k| cohort_distance(&small_key, k))
                     .cloned();
 

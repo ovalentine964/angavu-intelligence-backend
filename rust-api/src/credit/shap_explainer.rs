@@ -20,9 +20,9 @@
 //
 // Reference: Lundberg & Lee (2017), "A Unified Approach to Interpreting Model Predictions"
 
-use serde::{Deserialize, Serialize};
 use super::logistic_regression::LogisticRegression;
 use super::score_fusion::ScoreFactor;
+use serde::{Deserialize, Serialize};
 
 /// Explanation for a single credit score computation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,8 +124,16 @@ impl ShapExplainer {
         features: &[f64],
         feature_names: &[String],
     ) -> CreditExplanation {
-        assert_eq!(features.len(), model.coefficients.len(), "Feature count mismatch");
-        assert_eq!(features.len(), feature_names.len(), "Feature names count mismatch");
+        assert_eq!(
+            features.len(),
+            model.coefficients.len(),
+            "Feature count mismatch"
+        );
+        assert_eq!(
+            features.len(),
+            feature_names.len(),
+            "Feature names count mismatch"
+        );
 
         let predicted = model.predict_probability(features);
 
@@ -246,24 +254,27 @@ impl ShapExplainer {
         }
 
         // Fit weighted linear regression: coalition_outputs ≈ φ₀ + Σ φᵢ × zᵢ
-        let shapley_coeffs = weighted_linear_regression(
-            &coalitions,
-            &coalition_outputs,
-            &coalition_weights,
-        );
+        let shapley_coeffs =
+            weighted_linear_regression(&coalitions, &coalition_outputs, &coalition_weights);
 
         let mut shapley_values: Vec<ShapleyValue> = (0..n_features)
             .map(|i| {
                 let shap = shapley_coeffs.get(i + 1).copied().unwrap_or(0.0);
                 let direction = if shap >= 0.0 { "positive" } else { "negative" };
                 ShapleyValue {
-                    feature_name: feature_names.get(i).cloned().unwrap_or_else(|| format!("feature_{}", i)),
+                    feature_name: feature_names
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_else(|| format!("feature_{}", i)),
                     feature_value: features[i],
                     shapley_value: shap,
                     abs_contribution: shap.abs(),
                     direction: direction.to_string(),
                     description: self.describe_feature(
-                        feature_names.get(i).map(|s| s.as_str()).unwrap_or("unknown"),
+                        feature_names
+                            .get(i)
+                            .map(|s| s.as_str())
+                            .unwrap_or("unknown"),
                         features[i],
                         shap,
                         self.background.mean_features.get(i).copied().unwrap_or(0.0),
@@ -322,47 +333,81 @@ impl ShapExplainer {
         match name {
             "transaction_volume" => format!(
                 "Transaction volume ({:.2}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "active_days_ratio" => format!(
                 "Active days ratio ({:.0}%, {}) {} your credit score by {:.3}",
-                value * 100.0, comparison, direction, shap.abs()
+                value * 100.0,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "revenue_stability" => format!(
                 "Revenue stability ({:.0}%, {}) {} your credit score by {:.3}",
-                value * 100.0, comparison, direction, shap.abs()
+                value * 100.0,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "product_diversity" => format!(
                 "Product diversity ({:.0}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "income_consistency" => format!(
                 "Income consistency ({:.0}%, {}) {} your credit score by {:.3}",
-                value * 100.0, comparison, direction, shap.abs()
+                value * 100.0,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "repayment_history" => format!(
                 "Repayment history ({:.0}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "loan_count" => format!(
                 "Active loans ({:.0}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "recency" => format!(
                 "Transaction recency ({:.0}%, {}) {} your credit score by {:.3}",
-                value * 100.0, comparison, direction, shap.abs()
+                value * 100.0,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "region_economic_index" => format!(
                 "Regional economic index ({:.2}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             "income_trajectory" => format!(
                 "Income trajectory ({:.2}, {}) {} your credit score by {:.3}",
-                value, comparison, direction, shap.abs()
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
             _ => format!(
                 "{} ({:.3}, {}) {} your credit score by {:.3}",
-                name, value, comparison, direction, shap.abs()
+                name,
+                value,
+                comparison,
+                direction,
+                shap.abs()
             ),
         }
     }
@@ -381,8 +426,14 @@ impl ShapExplainer {
         for _ in 2..n_coalitions {
             let coalition: Vec<u8> = (0..n_features)
                 .map(|_| {
-                    rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                    if (rng_state >> 63) & 1 == 1 { 1u8 } else { 0u8 }
+                    rng_state = rng_state
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
+                    if (rng_state >> 63) & 1 == 1 {
+                        1u8
+                    } else {
+                        0u8
+                    }
                 })
                 .collect();
 
@@ -429,11 +480,7 @@ fn binomial_coefficient(n: usize, k: usize) -> f64 {
 /// Weighted least squares regression for KernelSHAP.
 /// Solves: minimize Σ wᵢ(yᵢ - xᵢᵀβ)²
 /// Returns coefficients [intercept, φ₁, φ₂, ..., φₚ]
-fn weighted_linear_regression(
-    X: &[Vec<u8>],
-    y: &[f64],
-    weights: &[f64],
-) -> Vec<f64> {
+fn weighted_linear_regression(X: &[Vec<u8>], y: &[f64], weights: &[f64]) -> Vec<f64> {
     let n = X.len();
     if n == 0 {
         return Vec::new();
@@ -524,10 +571,7 @@ fn cholesky_solve(A: &[Vec<f64>], b: &[f64]) -> Result<Vec<f64>, String> {
 
 /// Build background statistics from training data.
 /// Call this once after model training.
-pub fn compute_background_stats(
-    X: &[Vec<f64>],
-    model: &LogisticRegression,
-) -> BackgroundStats {
+pub fn compute_background_stats(X: &[Vec<f64>], model: &LogisticRegression) -> BackgroundStats {
     let n = X.len() as f64;
     let p = X[0].len();
 

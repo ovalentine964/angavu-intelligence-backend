@@ -226,15 +226,13 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: advisories
+          arguments: advisories --all-features
 
       - name: Run cargo deny check licenses
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-          arguments: --all-features
-          deny-arguments: licenses
+          arguments: licenses --all-features
 
   # ── Docker Build Test ──────────────────────────────────────────────────────
   docker-build:

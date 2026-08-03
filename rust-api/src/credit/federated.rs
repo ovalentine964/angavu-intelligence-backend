@@ -12,16 +12,18 @@ use serde::{Deserialize, Serialize};
 /// Multiple dimensions allow fine-grained model updates
 pub struct WorkerCohort {
     pub worker_type: WorkerType,
-    pub region: String,           // e.g., "nairobi", "kisumu"
-    pub income_tercile: u8,       // 1=low, 2=medium, 3=high
-    pub business_age_bucket: u8,  // 0=new(<6mo), 1=growing(6-24mo), 2=established(>24mo)
+    pub region: String,          // e.g., "nairobi", "kisumu"
+    pub income_tercile: u8,      // 1=low, 2=medium, 3=high
+    pub business_age_bucket: u8, // 0=new(<6mo), 1=growing(6-24mo), 2=established(>24mo)
 }
 
 impl WorkerCohort {
     /// Cohort key for aggregation (must have ≥10 members for k-anonymity)
     pub fn aggregation_key(&self) -> String {
-        format!("{}|{}|{}|{}", 
-            self.worker_type, self.region, self.income_tercile, self.business_age_bucket)
+        format!(
+            "{}|{}|{}|{}",
+            self.worker_type, self.region, self.income_tercile, self.business_age_bucket
+        )
     }
 }
 
@@ -52,7 +54,11 @@ pub struct FedProxAggregator {
 
 impl FedProxAggregator {
     pub fn new(mu: f64, clip_norm: f64, noise_multiplier: f64) -> Self {
-        Self { mu, clip_norm, noise_multiplier }
+        Self {
+            mu,
+            clip_norm,
+            noise_multiplier,
+        }
     }
 
     /// Default FedProx for credit scoring (conservative, stable).
@@ -164,9 +170,10 @@ impl FedProxAggregator {
 
     /// Aggregate with full DP metadata returned alongside the gradient.
     /// Useful for audit trails and privacy budget accounting.
-    pub fn aggregate_with_metadata(&self, batches: &[GradientBatch])
-        -> Result<AggregatedGradient, String>
-    {
+    pub fn aggregate_with_metadata(
+        &self,
+        batches: &[GradientBatch],
+    ) -> Result<AggregatedGradient, String> {
         let gradients = self.aggregate(batches)?;
         let total_samples: u64 = batches.iter().map(|b| b.sample_count).sum();
         let num_cohorts = batches.len() as u32;
@@ -247,9 +254,11 @@ impl ConvergenceMonitor {
             return false;
         }
         let n = self.round_losses.len();
-        let recent = &self.round_losses[n-4..];
+        let recent = &self.round_losses[n - 4..];
         // Check if all recent improvements are below threshold
-        recent.windows(2).all(|w| (w[0] - w[1]).abs() < self.convergence_threshold)
+        recent
+            .windows(2)
+            .all(|w| (w[0] - w[1]).abs() < self.convergence_threshold)
     }
 
     /// Check if max rounds exceeded
@@ -320,7 +329,9 @@ pub enum SparsificationStrategy {
 impl SparsificationStrategy {
     /// Default for credit scoring FL: top 10% of gradients
     pub fn credit_default(num_params: usize) -> Self {
-        Self::TopK { k: (num_params / 10).max(1) }
+        Self::TopK {
+            k: (num_params / 10).max(1),
+        }
     }
 }
 
@@ -331,12 +342,14 @@ pub fn sparsify_gradient(
     strategy: &SparsificationStrategy,
 ) -> (Vec<usize>, Vec<f64>) {
     match strategy {
-        SparsificationStrategy::None => {
-            (gradient.iter().enumerate().map(|(i, _)| i).collect(), gradient.to_vec())
-        }
+        SparsificationStrategy::None => (
+            gradient.iter().enumerate().map(|(i, _)| i).collect(),
+            gradient.to_vec(),
+        ),
         SparsificationStrategy::TopK { k } => {
             let k = (*k).min(gradient.len());
-            let mut indexed: Vec<(usize, f64)> = gradient.iter()
+            let mut indexed: Vec<(usize, f64)> = gradient
+                .iter()
                 .enumerate()
                 .map(|(i, &v)| (i, v.abs()))
                 .collect();
@@ -346,7 +359,8 @@ pub fn sparsify_gradient(
             (indices, values)
         }
         SparsificationStrategy::Threshold { threshold } => {
-            let indices: Vec<usize> = gradient.iter()
+            let indices: Vec<usize> = gradient
+                .iter()
                 .enumerate()
                 .filter(|(_, v)| v.abs() >= *threshold)
                 .map(|(i, _)| i)
@@ -424,12 +438,16 @@ pub fn robust_aggregate(
         AggregationStrategy::WeightedAverage => {
             // Standard weighted average (same as FedProxAggregator)
             let total: u64 = batches.iter().map(|b| b.sample_count).sum();
-            if total == 0 { return Err("Zero total samples".to_string()); }
+            if total == 0 {
+                return Err("Zero total samples".to_string());
+            }
             let mut result = vec![0.0_f64; dim];
             for batch in batches {
                 let w = batch.sample_count as f64 / total as f64;
                 for (i, &g) in batch.gradients.iter().enumerate() {
-                    if i < dim { result[i] += w * g; }
+                    if i < dim {
+                        result[i] += w * g;
+                    }
                 }
             }
             Ok(result)
@@ -443,7 +461,8 @@ pub fn robust_aggregate(
 
             let mut result = vec![0.0_f64; dim];
             for d in 0..dim {
-                let mut values: Vec<f64> = batches.iter()
+                let mut values: Vec<f64> = batches
+                    .iter()
                     .filter_map(|b| b.gradients.get(d).copied())
                     .collect();
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -460,7 +479,8 @@ pub fn robust_aggregate(
         AggregationStrategy::CoordinateMedian => {
             let mut result = vec![0.0_f64; dim];
             for d in 0..dim {
-                let mut values: Vec<f64> = batches.iter()
+                let mut values: Vec<f64> = batches
+                    .iter()
                     .filter_map(|b| b.gradients.get(d).copied())
                     .collect();
                 values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -483,7 +503,9 @@ pub fn robust_aggregate(
             let mut distances = vec![vec![0.0_f64; n]; n];
             for i in 0..n {
                 for j in (i + 1)..n {
-                    let dist: f64 = batches[i].gradients.iter()
+                    let dist: f64 = batches[i]
+                        .gradients
+                        .iter()
                         .zip(batches[j].gradients.iter())
                         .map(|(a, b)| (a - b).powi(2))
                         .sum::<f64>()
@@ -494,15 +516,19 @@ pub fn robust_aggregate(
             }
 
             // For each gradient, sum distances to k-nearest neighbors
-            let mut scores: Vec<(usize, f64)> = (0..n).map(|i| {
-                let mut dists: Vec<f64> = distances[i].iter().enumerate()
-                    .filter(|(j, _)| *j != i)
-                    .map(|(_, d)| *d)
-                    .collect();
-                dists.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                let score: f64 = dists[..k.min(dists.len())].iter().sum();
-                (i, score)
-            }).collect();
+            let mut scores: Vec<(usize, f64)> = (0..n)
+                .map(|i| {
+                    let mut dists: Vec<f64> = distances[i]
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, _)| *j != i)
+                        .map(|(_, d)| *d)
+                        .collect();
+                    dists.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    let score: f64 = dists[..k.min(dists.len())].iter().sum();
+                    (i, score)
+                })
+                .collect();
 
             scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             let winner = scores[0].0;
@@ -526,17 +552,20 @@ pub struct ScoreDistributionMonitor {
 impl ScoreDistributionMonitor {
     /// Check if score distribution has shifted significantly
     pub fn check_drift(&self) -> DriftReport {
-        let kl_divergence = self.kl_divergence(&self.baseline_distribution, &self.current_distribution);
+        let kl_divergence =
+            self.kl_divergence(&self.baseline_distribution, &self.current_distribution);
         DriftReport {
             overall_divergence: kl_divergence,
             is_drifted: kl_divergence > self.max_divergence,
-            type_reports: self.type_distributions.iter().map(|(wt, hist)| {
-                TypeDriftReport {
+            type_reports: self
+                .type_distributions
+                .iter()
+                .map(|(wt, hist)| TypeDriftReport {
                     worker_type: *wt,
                     divergence: self.kl_divergence(&self.baseline_distribution, hist),
                     mean_shift: hist.mean() - self.baseline_distribution.mean(),
-                }
-            }).collect(),
+                })
+                .collect(),
         }
     }
 }

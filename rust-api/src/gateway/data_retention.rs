@@ -80,7 +80,8 @@ pub fn default_policies() -> Vec<RetentionPolicy> {
             category: DataCategory::RawTransactions,
             retention_days: 730, // 2 years
             description: "Raw transaction records from device syncs".to_string(),
-            legal_basis: "Kenya DPA 2019: legitimate business interest for credit scoring".to_string(),
+            legal_basis: "Kenya DPA 2019: legitimate business interest for credit scoring"
+                .to_string(),
         },
         RetentionPolicy {
             category: DataCategory::AggregatedStatistics,
@@ -104,7 +105,8 @@ pub fn default_policies() -> Vec<RetentionPolicy> {
             category: DataCategory::FederatedGradients,
             retention_days: 90,
             description: "Gradient updates from federated learning rounds".to_string(),
-            legal_basis: "Minimization — gradients are intermediate computation artifacts".to_string(),
+            legal_basis: "Minimization — gradients are intermediate computation artifacts"
+                .to_string(),
         },
         RetentionPolicy {
             category: DataCategory::WebhookEvents,
@@ -220,16 +222,24 @@ pub fn generate_retention_queries() -> Vec<(DataCategory, &'static str, String)>
 pub fn generate_erasure_queries(person_id: &str) -> Vec<(&'static str, String, Vec<String>)> {
     let params = vec![person_id.to_string()];
     vec![
-        ("transactions",
-         "DELETE FROM transactions WHERE worker_id_hash = $1".to_string(),
-         params.clone()),
-        ("credit_score_history",
-         "DELETE FROM credit_score_history WHERE cohort_hash IN \
-          (SELECT DISTINCT cohort_hash FROM transactions WHERE worker_id_hash = $1)".to_string(),
-         params.clone()),
-        ("audit_log",
-         "DELETE FROM audit_log WHERE org_id = $1 AND timestamp > NOW() - INTERVAL '30 days'".to_string(),
-         params),
+        (
+            "transactions",
+            "DELETE FROM transactions WHERE worker_id_hash = $1".to_string(),
+            params.clone(),
+        ),
+        (
+            "credit_score_history",
+            "DELETE FROM credit_score_history WHERE cohort_hash IN \
+          (SELECT DISTINCT cohort_hash FROM transactions WHERE worker_id_hash = $1)"
+                .to_string(),
+            params.clone(),
+        ),
+        (
+            "audit_log",
+            "DELETE FROM audit_log WHERE org_id = $1 AND timestamp > NOW() - INTERVAL '30 days'"
+                .to_string(),
+            params,
+        ),
     ]
 }
 
@@ -285,8 +295,16 @@ mod tests {
     fn test_retention_periods_reasonable() {
         let policies = default_policies();
         for p in &policies {
-            assert!(p.retention_days > 0, "{:?} has non-positive retention", p.category);
-            assert!(p.retention_days <= 3650, "{:?} retention > 10 years", p.category);
+            assert!(
+                p.retention_days > 0,
+                "{:?} has non-positive retention",
+                p.category
+            );
+            assert!(
+                p.retention_days <= 3650,
+                "{:?} retention > 10 years",
+                p.category
+            );
         }
     }
 
@@ -296,8 +314,16 @@ mod tests {
         assert!(!queries.is_empty());
         for (table, sql, params) in &queries {
             // SECURITY: SQL must use $1 placeholder, not inline the person_id
-            assert!(sql.contains("$1"), "{}: SQL should use $1 placeholder", table);
-            assert!(!sql.contains("test_hash_123"), "{}: SQL must not interpolate person_id", table);
+            assert!(
+                sql.contains("$1"),
+                "{}: SQL should use $1 placeholder",
+                table
+            );
+            assert!(
+                !sql.contains("test_hash_123"),
+                "{}: SQL must not interpolate person_id",
+                table
+            );
             // Parameter must contain the actual person_id
             assert!(params.contains(&"test_hash_123".to_string()));
         }

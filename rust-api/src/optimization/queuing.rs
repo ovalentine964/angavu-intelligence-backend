@@ -46,7 +46,10 @@ pub struct MM1Queue {
 impl MM1Queue {
     /// Create a new M/M/1 queue.
     pub fn new(arrival_rate: f64, service_rate: f64) -> Self {
-        Self { arrival_rate, service_rate }
+        Self {
+            arrival_rate,
+            service_rate,
+        }
     }
 
     /// Compute queue statistics.
@@ -65,10 +68,10 @@ impl MM1Queue {
             return None; // Unstable queue
         }
 
-        let l = rho / (1.0 - rho);            // Avg customers in system
-        let lq = rho * rho / (1.0 - rho);     // Avg customers in queue
-        let w = 1.0 / (mu - lambda);           // Avg time in system
-        let wq = rho / (mu - lambda);          // Avg time in queue
+        let l = rho / (1.0 - rho); // Avg customers in system
+        let lq = rho * rho / (1.0 - rho); // Avg customers in queue
+        let w = 1.0 / (mu - lambda); // Avg time in system
+        let wq = rho / (mu - lambda); // Avg time in queue
 
         Some(QueueStats {
             avg_customers_in_system: l,
@@ -235,8 +238,6 @@ fn factorial(n: usize) -> f64 {
         (2..=n).fold(1.0, |acc, x| acc * x as f64)
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -37,17 +37,17 @@ pub struct FiscalImpact {
     pub income_change_pct: f64,
     pub income_change_kes: f64,
     pub welfare_change_kes: f64,
-    pub revenue_impact_kes: f64,       // Government revenue change
-    pub compliance_rate: f64,          // Expected compliance (0.0-1.0)
+    pub revenue_impact_kes: f64, // Government revenue change
+    pub compliance_rate: f64,    // Expected compliance (0.0-1.0)
     pub distributional_effect: DistributionalEffect,
 }
 
 /// Whether policy is progressive, neutral, or regressive
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DistributionalEffect {
-    Progressive,     // Benefits lower income more
-    Neutral,         // Proportional impact
-    Regressive,      // Burdens lower income more
+    Progressive, // Benefits lower income more
+    Neutral,     // Proportional impact
+    Regressive,  // Burdens lower income more
 }
 
 /// Fiscal impact analyzer
@@ -77,7 +77,9 @@ impl FiscalImpactAnalyzer {
 
         for (segment, incomes) in &self.segment_incomes {
             let n = incomes.len() as u64;
-            if n == 0 { continue; }
+            if n == 0 {
+                continue;
+            }
 
             let mean_income = incomes.iter().sum::<f64>() / n as f64;
             let median = {
@@ -99,8 +101,8 @@ impl FiscalImpactAnalyzer {
             let impact = match policy {
                 FiscalPolicy::VatChange { rate_change_pct } => {
                     // VAT is regressive: lower income spends higher % on VAT-liable goods
-                    let spend_ratio_lower = 0.9;  // Bottom 40% spend 90% of income
-                    let spend_ratio_upper = 0.6;   // Top 20% spend 60% of income
+                    let spend_ratio_lower = 0.9; // Bottom 40% spend 90% of income
+                    let spend_ratio_upper = 0.6; // Top 20% spend 60% of income
 
                     let lower_impact = p10 * spend_ratio_lower * (rate_change_pct / 100.0);
                     let upper_impact = p90 * spend_ratio_upper * (rate_change_pct / 100.0);
@@ -108,7 +110,11 @@ impl FiscalImpactAnalyzer {
                     let income_change = mean_income * 0.8 * (rate_change_pct / 100.0);
 
                     FiscalImpact {
-                        policy: format!("VAT {}{}", if *rate_change_pct > 0.0 { "+" } else { "" }, rate_change_pct),
+                        policy: format!(
+                            "VAT {}{}",
+                            if *rate_change_pct > 0.0 { "+" } else { "" },
+                            rate_change_pct
+                        ),
                         worker_segment: segment.clone(),
                         affected_workers: n,
                         income_change_pct: -(rate_change_pct * 0.8),
@@ -133,7 +139,11 @@ impl FiscalImpactAnalyzer {
                         policy: format!("Minimum Wage → KES {}/day", new_wage_daily),
                         worker_segment: segment.clone(),
                         affected_workers: affected,
-                        income_change_pct: if mean_income > 0.0 { (wage_increase / mean_income) * 100.0 } else { 0.0 },
+                        income_change_pct: if mean_income > 0.0 {
+                            (wage_increase / mean_income) * 100.0
+                        } else {
+                            0.0
+                        },
                         income_change_kes: wage_increase * 30.0,
                         welfare_change_kes: wage_increase * 30.0 * 0.9,
                         revenue_impact_kes: wage_increase * 30.0 * affected as f64 * 0.15, // Tax revenue
@@ -168,7 +178,11 @@ impl FiscalImpactAnalyzer {
                         policy: format!("Market Fee → KES {}/day", new_fee_daily),
                         worker_segment: segment.clone(),
                         affected_workers: n,
-                        income_change_pct: if mean_income > 0.0 { -(fee_change / mean_income) * 100.0 } else { 0.0 },
+                        income_change_pct: if mean_income > 0.0 {
+                            -(fee_change / mean_income) * 100.0
+                        } else {
+                            0.0
+                        },
                         income_change_kes: -fee_change * 30.0,
                         welfare_change_kes: -fee_change * 30.0 * 0.9,
                         revenue_impact_kes: fee_change * 30.0 * n as f64,
@@ -184,7 +198,8 @@ impl FiscalImpactAnalyzer {
                 FiscalPolicy::FuelSubsidyRemoval { price_increase_pct } => {
                     // Fuel price increase affects transport costs → higher prices for all goods
                     let transport_cost_share = 0.15; // 15% of informal worker costs
-                    let cost_increase = mean_income * transport_cost_share * (price_increase_pct / 100.0);
+                    let cost_increase =
+                        mean_income * transport_cost_share * (price_increase_pct / 100.0);
 
                     FiscalImpact {
                         policy: format!("Fuel Subsidy Removal (+{}%)", price_increase_pct),
@@ -216,11 +231,21 @@ impl FiscalImpactAnalyzer {
                     }
                 }
 
-                FiscalPolicy::DigitalServicesTax { rate_pct, threshold_daily } => {
-                    let affected = incomes.iter().filter(|&&i| i >= *threshold_daily).count() as u64;
+                FiscalPolicy::DigitalServicesTax {
+                    rate_pct,
+                    threshold_daily,
+                } => {
+                    let affected =
+                        incomes.iter().filter(|&&i| i >= *threshold_daily).count() as u64;
                     let mean_affected = if affected > 0 {
-                        incomes.iter().filter(|&&i| i >= *threshold_daily).sum::<f64>() / affected as f64
-                    } else { 0.0 };
+                        incomes
+                            .iter()
+                            .filter(|&&i| i >= *threshold_daily)
+                            .sum::<f64>()
+                            / affected as f64
+                    } else {
+                        0.0
+                    };
                     let tax_per_worker = mean_affected * 30.0 * (rate_pct / 100.0);
 
                     FiscalImpact {
@@ -245,7 +270,10 @@ impl FiscalImpactAnalyzer {
 
     /// Compute total welfare impact across all segments
     pub fn total_welfare_impact(&self, impacts: &[FiscalImpact]) -> f64 {
-        impacts.iter().map(|i| i.welfare_change_kes * i.affected_workers as f64).sum()
+        impacts
+            .iter()
+            .map(|i| i.welfare_change_kes * i.affected_workers as f64)
+            .sum()
     }
 
     /// Compute total revenue impact
@@ -261,40 +289,82 @@ mod tests {
     fn setup_analyzer() -> FiscalImpactAnalyzer {
         let mut analyzer = FiscalImpactAnalyzer::new();
         // Mama mboga: low income, high variance
-        analyzer.set_segment_incomes("mama_mboga", vec![200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0, 2000.0, 3000.0]);
+        analyzer.set_segment_incomes(
+            "mama_mboga",
+            vec![
+                200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0, 1500.0, 2000.0, 3000.0,
+            ],
+        );
         // Boda boda: medium income
-        analyzer.set_segment_incomes("boda_boda", vec![500.0, 700.0, 800.0, 1000.0, 1200.0, 1500.0, 1800.0, 2000.0, 2500.0, 3000.0]);
+        analyzer.set_segment_incomes(
+            "boda_boda",
+            vec![
+                500.0, 700.0, 800.0, 1000.0, 1200.0, 1500.0, 1800.0, 2000.0, 2500.0, 3000.0,
+            ],
+        );
         // Duka owner: higher income
-        analyzer.set_segment_incomes("duka_owner", vec![1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 4000.0, 5000.0, 6000.0, 8000.0, 10000.0]);
+        analyzer.set_segment_incomes(
+            "duka_owner",
+            vec![
+                1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 4000.0, 5000.0, 6000.0, 8000.0, 10000.0,
+            ],
+        );
         analyzer
     }
 
     #[test]
     fn test_vat_is_regressive() {
         let analyzer = setup_analyzer();
-        let impacts = analyzer.simulate_impact(&FiscalPolicy::VatChange { rate_change_pct: 2.0 });
+        let impacts = analyzer.simulate_impact(&FiscalPolicy::VatChange {
+            rate_change_pct: 2.0,
+        });
         // Lower income segments should bear proportionally more
-        let mama = impacts.iter().find(|i| i.worker_segment == "mama_mboga").unwrap();
-        let duka = impacts.iter().find(|i| i.worker_segment == "duka_owner").unwrap();
-        assert!(mama.income_change_pct.abs() > duka.income_change_pct.abs(),
-            "VAT should be regressive: mama={}% vs duka={}%", mama.income_change_pct, duka.income_change_pct);
+        let mama = impacts
+            .iter()
+            .find(|i| i.worker_segment == "mama_mboga")
+            .unwrap();
+        let duka = impacts
+            .iter()
+            .find(|i| i.worker_segment == "duka_owner")
+            .unwrap();
+        assert!(
+            mama.income_change_pct.abs() > duka.income_change_pct.abs(),
+            "VAT should be regressive: mama={}% vs duka={}%",
+            mama.income_change_pct,
+            duka.income_change_pct
+        );
     }
 
     #[test]
     fn test_minimum_wage_is_progressive() {
         let analyzer = setup_analyzer();
-        let impacts = analyzer.simulate_impact(&FiscalPolicy::MinimumWageChange { new_wage_daily: 500.0 });
-        let mama = impacts.iter().find(|i| i.worker_segment == "mama_mboga").unwrap();
-        let duka = impacts.iter().find(|i| i.worker_segment == "duka_owner").unwrap();
-        assert!(matches!(mama.distributional_effect, DistributionalEffect::Progressive));
+        let impacts = analyzer.simulate_impact(&FiscalPolicy::MinimumWageChange {
+            new_wage_daily: 500.0,
+        });
+        let mama = impacts
+            .iter()
+            .find(|i| i.worker_segment == "mama_mboga")
+            .unwrap();
+        let duka = impacts
+            .iter()
+            .find(|i| i.worker_segment == "duka_owner")
+            .unwrap();
+        assert!(matches!(
+            mama.distributional_effect,
+            DistributionalEffect::Progressive
+        ));
         assert!(mama.affected_workers > duka.affected_workers);
     }
 
     #[test]
     fn test_total_impacts() {
         let analyzer = setup_analyzer();
-        let impacts = analyzer.simulate_impact(&FiscalPolicy::MpesaTransactionTax { rate_pct: 1.0 });
+        let impacts =
+            analyzer.simulate_impact(&FiscalPolicy::MpesaTransactionTax { rate_pct: 1.0 });
         let total_welfare = analyzer.total_welfare_impact(&impacts);
-        assert!(total_welfare < 0.0, "M-Pesa tax should reduce total welfare");
+        assert!(
+            total_welfare < 0.0,
+            "M-Pesa tax should reduce total welfare"
+        );
     }
 }

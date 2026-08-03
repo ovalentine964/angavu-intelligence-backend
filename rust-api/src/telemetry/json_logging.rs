@@ -15,12 +15,7 @@
 //   LOG_LEVEL=info        (default: info; overrides RUST_LOG for our module)
 
 use opentelemetry::trace::TracerProvider;
-use tracing_subscriber::{
-    fmt,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Initialize the global tracing subscriber with:
 /// 1. JSON-formatted structured logging
@@ -41,7 +36,9 @@ pub fn init_json_logging() -> Option<opentelemetry_sdk::trace::Tracer> {
     });
 
     // ── Build OTel Tracer ────────────────────────────────────
-    let otel_tracer: Option<opentelemetry_sdk::trace::Tracer> = if let Some(ref endpoint) = otlp_endpoint {
+    let otel_tracer: Option<opentelemetry_sdk::trace::Tracer> = if let Some(ref endpoint) =
+        otlp_endpoint
+    {
         match opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_exporter(
@@ -49,15 +46,16 @@ pub fn init_json_logging() -> Option<opentelemetry_sdk::trace::Tracer> {
                     .tonic()
                     .with_endpoint(endpoint),
             )
-            .with_trace_config(
-                opentelemetry_sdk::trace::Config::default()
-                    .with_resource(opentelemetry_sdk::Resource::new(vec![
-                        opentelemetry::KeyValue::new("service.name", "angavu-intelligence-backend"),
-                        opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                        opentelemetry::KeyValue::new("deployment.environment",
-                            std::env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string())),
-                    ])),
-            )
+            .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
+                opentelemetry_sdk::Resource::new(vec![
+                    opentelemetry::KeyValue::new("service.name", "angavu-intelligence-backend"),
+                    opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                    opentelemetry::KeyValue::new(
+                        "deployment.environment",
+                        std::env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()),
+                    ),
+                ]),
+            ))
             .install_batch(opentelemetry_sdk::runtime::Tokio)
         {
             Ok(tracer) => {
@@ -75,15 +73,14 @@ pub fn init_json_logging() -> Option<opentelemetry_sdk::trace::Tracer> {
     };
 
     // ── Build OTel Layer ─────────────────────────────────────
-    let otel_layer = otel_tracer.as_ref().map(|tracer| {
-        tracing_opentelemetry::layer().with_tracer(tracer.clone())
-    });
+    let otel_layer = otel_tracer
+        .as_ref()
+        .map(|tracer| tracing_opentelemetry::layer().with_tracer(tracer.clone()));
 
     // ── Build EnvFilter ──────────────────────────────────────
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            EnvFilter::new("angavu=info,tower_http=info,sqlx=warn,redis=warn,hyper=info")
-        });
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("angavu=info,tower_http=info,sqlx=warn,redis=warn,hyper=info")
+    });
 
     // ── Build Fmt Layer ──────────────────────────────────────
     match log_format.as_str() {

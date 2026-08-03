@@ -69,7 +69,7 @@ pub struct FishermanFeatures {
     /// Estimated boat ownership (inferred from fuel + maintenance patterns)
     pub boat_ownership: BoatOwnership, // Owned, Leased, Shared
     /// Fishing zone (inferred from departure time patterns and catch types)
-    pub fishing_zone: FishingZone,     // Nearshore, Offshore, Deep-sea
+    pub fishing_zone: FishingZone, // Nearshore, Offshore, Deep-sea
     /// Catch cycle in days (detected from income periodicity)
     pub catch_cycle_days: Option<u32>,
     /// Seasonal catch pattern (monthly income profile)
@@ -90,7 +90,7 @@ pub struct FishermanFeatures {
 
 pub struct VendorFeatures {
     /// Market location quality tier (inferred from transaction volume + pricing)
-    pub market_tier: MarketTier,  // Tier1 (CBD), Tier2 (suburban), Tier3 (rural)
+    pub market_tier: MarketTier, // Tier1 (CBD), Tier2 (suburban), Tier3 (rural)
     /// Product category diversity
     pub product_diversity: u8,
     /// Number of supplier relationships
@@ -202,4 +202,3 @@ pub struct MiningFeatures {
     /// Safety investment (spending on safety equipment)
     pub safety_investment_ratio: f64,
 }
-

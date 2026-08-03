@@ -65,7 +65,7 @@ impl EconomicAnalyzer {
         };
 
         let rows = sqlx::query_as::<_, (String, String, String)>(
-            "SELECT region, state_json, baseline_cpi_json FROM economic_analyzer_state"
+            "SELECT region, state_json, baseline_cpi_json FROM economic_analyzer_state",
         )
         .fetch_all(pool)
         .await
@@ -80,7 +80,10 @@ impl EconomicAnalyzer {
             }
         }
 
-        tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state loaded from PostgreSQL");
+        tracing::info!(
+            regions = self.regional_state.len(),
+            "EconomicAnalyzer state loaded from PostgreSQL"
+        );
         Ok(())
     }
 
@@ -111,7 +114,10 @@ impl EconomicAnalyzer {
             .map_err(|e| format!("Failed to persist economic state: {}", e))?;
         }
 
-        tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state persisted to PostgreSQL");
+        tracing::info!(
+            regions = self.regional_state.len(),
+            "EconomicAnalyzer state persisted to PostgreSQL"
+        );
         Ok(())
     }
 
@@ -158,7 +164,8 @@ impl CapabilityModule for EconomicAnalyzer {
                 region,
                 ..
             } => {
-                let state = self.regional_state
+                let state = self
+                    .regional_state
                     .entry(region.clone())
                     .or_insert_with(|| RegionalEconomicState {
                         current_volume: 0.0,
@@ -171,12 +178,9 @@ impl CapabilityModule for EconomicAnalyzer {
                     });
 
                 // Update state
-                let batch_volume: f64 = transactions.iter()
-                    .map(|t| t.quantity.unwrap_or(1.0))
-                    .sum();
-                let batch_revenue: f64 = transactions.iter()
-                    .map(|t| t.amount)
-                    .sum();
+                let batch_volume: f64 =
+                    transactions.iter().map(|t| t.quantity.unwrap_or(1.0)).sum();
+                let batch_revenue: f64 = transactions.iter().map(|t| t.amount).sum();
 
                 // Shift periods (hourly)
                 state.previous_volume = state.current_volume;
@@ -187,7 +191,9 @@ impl CapabilityModule for EconomicAnalyzer {
 
                 // Update price index
                 for tx in &transactions {
-                    let entry = state.price_index.entry(tx.product_category.clone())
+                    let entry = state
+                        .price_index
+                        .entry(tx.product_category.clone())
                         .or_insert(tx.amount);
                     *entry = 0.95 * *entry + 0.05 * tx.amount; // EMA
                 }
@@ -230,9 +236,14 @@ impl CapabilityModule for EconomicAnalyzer {
                 Ok(None)
             }
             // Market signals contribute to economic indicators
-            ModuleMessage::MarketSignal { region, demand_index, .. } => {
+            ModuleMessage::MarketSignal {
+                region,
+                demand_index,
+                ..
+            } => {
                 if let Some(state) = self.regional_state.get_mut(&region) {
-                    state.active_workers = (state.active_workers as f64 * 0.9 + demand_index * 10.0) as u32;
+                    state.active_workers =
+                        (state.active_workers as f64 * 0.9 + demand_index * 10.0) as u32;
                 }
                 Ok(None)
             }
@@ -262,7 +273,8 @@ impl CapabilityModule for EconomicAnalyzer {
         bincode::serialize(&Snapshot {
             regional_state: self.regional_state.clone(),
             baseline_cpi: self.baseline_cpi.clone(),
-        }).ok()
+        })
+        .ok()
     }
 
     fn restore_state(&mut self, data: &[u8]) {
@@ -274,7 +286,10 @@ impl CapabilityModule for EconomicAnalyzer {
         if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
             self.regional_state = snap.regional_state;
             self.baseline_cpi = snap.baseline_cpi;
-            tracing::info!(regions = self.regional_state.len(), "EconomicAnalyzer state restored");
+            tracing::info!(
+                regions = self.regional_state.len(),
+                "EconomicAnalyzer state restored"
+            );
         }
     }
 }

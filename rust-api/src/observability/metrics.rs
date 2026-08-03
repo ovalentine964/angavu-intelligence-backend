@@ -1,13 +1,9 @@
 // Prometheus metrics instrumentation for Angavu Intelligence Backend
 // Exposes /metrics endpoint with HTTP, OODA, sync, credit, and federated learning metrics
 
-use metrics::{counter, histogram, gauge};
+use axum::{extract::Request, middleware::Next, response::Response};
+use metrics::{counter, gauge, histogram};
 use std::time::Instant;
-use axum::{
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
 
 /// Register all application metrics.
 /// Call once at startup before serving requests.
@@ -19,7 +15,10 @@ pub fn register_metrics() {
 
     // ── OODA Loop Metrics ─────────────────────────────────────
     metrics::describe_histogram!("ooda_loop_cycle_seconds", "OODA loop full cycle time");
-    metrics::describe_histogram!("ooda_phase_duration_seconds", "OODA phase duration (observe/orient/decide/act)");
+    metrics::describe_histogram!(
+        "ooda_phase_duration_seconds",
+        "OODA phase duration (observe/orient/decide/act)"
+    );
     metrics::describe_counter!("ooda_loop_cycles_total", "Total OODA loop cycles completed");
 
     // ── Sync Pipeline Metrics ─────────────────────────────────
@@ -33,13 +32,25 @@ pub fn register_metrics() {
     metrics::describe_histogram!("credit_scoring_duration_seconds", "Credit scoring latency");
 
     // ── Federated Learning Metrics ────────────────────────────
-    metrics::describe_counter!("federated_learning_rounds_total", "Total FL aggregation rounds");
+    metrics::describe_counter!(
+        "federated_learning_rounds_total",
+        "Total FL aggregation rounds"
+    );
     metrics::describe_gauge!("federated_learning_clients_active", "Active FL clients");
-    metrics::describe_histogram!("federated_learning_aggregation_duration_seconds", "FL aggregation time");
-    metrics::describe_counter!("federated_learning_aggregation_failures_total", "FL aggregation failures");
+    metrics::describe_histogram!(
+        "federated_learning_aggregation_duration_seconds",
+        "FL aggregation time"
+    );
+    metrics::describe_counter!(
+        "federated_learning_aggregation_failures_total",
+        "FL aggregation failures"
+    );
 
     // ── Intent Classification Metrics ─────────────────────────
-    metrics::describe_gauge!("intent_classification_accuracy", "Intent classification accuracy");
+    metrics::describe_gauge!(
+        "intent_classification_accuracy",
+        "Intent classification accuracy"
+    );
 
     // ── Database Metrics ──────────────────────────────────────
     metrics::describe_histogram!("db_query_duration_seconds", "Database query latency");
@@ -83,32 +94,26 @@ pub async fn metrics_middleware(request: Request, next: Next) -> Response {
 pub fn record_ooda_cycle(loop_name: &str, duration_secs: f64) {
     histogram!("ooda_loop_cycle_seconds", "loop_name" => loop_name.to_string())
         .record(duration_secs);
-    counter!("ooda_loop_cycles_total", "loop_name" => loop_name.to_string())
-        .increment(1);
+    counter!("ooda_loop_cycles_total", "loop_name" => loop_name.to_string()).increment(1);
 }
 
 /// Record an OODA phase duration.
 pub fn record_ooda_phase(phase: &str, duration_secs: f64) {
-    histogram!("ooda_phase_duration_seconds", "phase" => phase.to_string())
-        .record(duration_secs);
+    histogram!("ooda_phase_duration_seconds", "phase" => phase.to_string()).record(duration_secs);
 }
 
 /// Record a sync operation.
 pub fn record_sync_operation(status: &str, duration_secs: f64, bytes: u64) {
-    counter!("sync_operations_total", "status" => status.to_string())
-        .increment(1);
+    counter!("sync_operations_total", "status" => status.to_string()).increment(1);
     histogram!("sync_operation_duration_seconds", "status" => status.to_string())
         .record(duration_secs);
-    counter!("sync_bytes_transferred_total")
-        .increment(bytes);
+    counter!("sync_bytes_transferred_total").increment(bytes);
 }
 
 /// Update credit scoring accuracy gauge.
 pub fn update_credit_accuracy(model_version: &str, accuracy: f64, f1: f64) {
-    gauge!("credit_score_accuracy", "model_version" => model_version.to_string())
-        .set(accuracy);
-    gauge!("credit_score_f1", "model_version" => model_version.to_string())
-        .set(f1);
+    gauge!("credit_score_accuracy", "model_version" => model_version.to_string()).set(accuracy);
+    gauge!("credit_score_f1", "model_version" => model_version.to_string()).set(f1);
 }
 
 /// Record a credit scoring operation.
@@ -133,12 +138,10 @@ pub fn update_intent_accuracy(accuracy: f64) {
 
 /// Record a database query duration.
 pub fn record_db_query(db: &str, duration_secs: f64) {
-    histogram!("db_query_duration_seconds", "db" => db.to_string())
-        .record(duration_secs);
+    histogram!("db_query_duration_seconds", "db" => db.to_string()).record(duration_secs);
 }
 
 /// Record a Redis operation.
 pub fn record_redis_op(operation: &str) {
-    counter!("redis_operations_total", "operation" => operation.to_string())
-        .increment(1);
+    counter!("redis_operations_total", "operation" => operation.to_string()).increment(1);
 }

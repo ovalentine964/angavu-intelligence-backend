@@ -3,9 +3,9 @@
 // Covers archetype: CasualLaborer (A-019–A-023, M-009–M-015, O-001–O-004)
 // Construction Worker, Farm Laborer, Domestic Worker, Night Guard
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CasualLaborerFeatures {
@@ -22,16 +22,25 @@ pub struct CasualLaborerFeatures {
 pub struct CasualLaborerFeatureExtractor;
 
 impl CasualLaborerFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for CasualLaborerFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let wages: Vec<f64> = transactions.iter()
-            .filter(|tx| tx.category == TransactionCategory::Wage || tx.category == TransactionCategory::Sale)
+        let wages: Vec<f64> = transactions
+            .iter()
+            .filter(|tx| {
+                tx.category == TransactionCategory::Wage || tx.category == TransactionCategory::Sale
+            })
             .map(|tx| tx.amount)
             .collect();
-        let daily_wage_avg = if wages.is_empty() { 0.0 } else { wages.iter().sum::<f64>() / wages.len() as f64 };
+        let daily_wage_avg = if wages.is_empty() {
+            0.0
+        } else {
+            wages.iter().sum::<f64>() / wages.len() as f64
+        };
         let days_worked = wages.len() as f64 / 4.0; // weeks in a month
 
         let features = CasualLaborerFeatures {
@@ -58,17 +67,38 @@ impl WorkerTypeFeatureExtractor for CasualLaborerFeatureExtractor {
                 features.payment_delay_frequency,
                 features.savings_regularity,
             ],
-            feature_names: vec!["daily_wage", "days_worked", "employer_diversity",
-                "income_volatility", "idle_days", "transport_cost",
-                "payment_delay", "savings_regularity"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "daily_wage",
+                "days_worked",
+                "employer_diversity",
+                "income_volatility",
+                "idle_days",
+                "transport_cost",
+                "payment_delay",
+                "savings_regularity",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::CasualLaborer }
-    fn min_transactions(&self) -> usize { 15 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::CasualLaborer
+    }
+    fn min_transactions(&self) -> usize {
+        15
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["daily_wage", "days_worked", "employer_diversity",
-             "income_volatility", "idle_days", "transport_cost",
-             "payment_delay", "savings_regularity"]
+        vec![
+            "daily_wage",
+            "days_worked",
+            "employer_diversity",
+            "income_volatility",
+            "idle_days",
+            "transport_cost",
+            "payment_delay",
+            "savings_regularity",
+        ]
     }
 }

@@ -11,25 +11,24 @@
 //! Authentication: API key in X-Webhook-Key header.
 
 use axum::{
-    extract::{Json, State, HeaderMap},
+    extract::{HeaderMap, Json, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use super::{WebhookEvent, WebhookEventType, WebhookSource, WebhookState, WebhookResponse, route_to_ooda, store_webhook_event};
+use super::{
+    route_to_ooda, store_webhook_event, WebhookEvent, WebhookEventType, WebhookResponse,
+    WebhookSource, WebhookState,
+};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 /// P1: Verify HMAC-SHA256 webhook signature.
 /// Signature header: X-Webhook-Signature: sha256=<hex_digest>
 /// The signature is computed over the raw request body using the shared secret.
-pub fn verify_webhook_signature(
-    body: &[u8],
-    signature_header: &str,
-    secret: &[u8],
-) -> bool {
+pub fn verify_webhook_signature(body: &[u8], signature_header: &str, secret: &[u8]) -> bool {
     // Parse "sha256=<hex>" format
     let expected_hex = match signature_header.strip_prefix("sha256=") {
         Some(hex) => hex,
@@ -47,7 +46,10 @@ pub fn verify_webhook_signature(
 
     // Constant-time comparison to prevent timing attacks
     computed_hex.len() == expected_hex.len()
-        && computed_hex.bytes().zip(expected_hex.bytes()).all(|(a, b)| a == b)
+        && computed_hex
+            .bytes()
+            .zip(expected_hex.bytes())
+            .all(|(a, b)| a == b)
 }
 
 /// Generic webhook payload.
@@ -89,12 +91,13 @@ pub async fn handle_generic_webhook(
 
     if let Err(retry_after) = state.ip_rate_limiter.check(client_ip) {
         warn!(ip = %client_ip, "Webhook rate limit exceeded");
-        let mut response = axum::response::IntoResponse::into_response(
-            (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+        let mut response = axum::response::IntoResponse::into_response((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
                 "success": false,
                 "message": "Rate limit exceeded. Try again later."
-            })))
-        );
+            })),
+        ));
         if let Ok(val) = retry_after.as_secs().to_string().parse() {
             response.headers_mut().insert("Retry-After", val);
         }
@@ -117,8 +120,9 @@ pub async fn handle_generic_webhook(
             Json(serde_json::json!({
                 "success": false,
                 "message": "Invalid API key"
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // S8: Validate input payload
@@ -130,12 +134,17 @@ pub async fn handle_generic_webhook(
             Json(serde_json::json!({
                 "success": false,
                 "message": format!("Validation failed: {}", e)
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     let event_id = payload.event_id.clone().unwrap_or_else(|| {
-        format!("generic-{}-{}", payload.event_type, chrono::Utc::now().timestamp_millis())
+        format!(
+            "generic-{}-{}",
+            payload.event_type,
+            chrono::Utc::now().timestamp_millis()
+        )
     });
 
     info!(
@@ -178,6 +187,7 @@ pub async fn handle_generic_webhook(
             event_id,
             message: "Webhook received and queued for processing".to_string(),
             routed_to: Some("ooda_loop".to_string()),
-        })
-    ).into_response()
+        }),
+    )
+        .into_response()
 }

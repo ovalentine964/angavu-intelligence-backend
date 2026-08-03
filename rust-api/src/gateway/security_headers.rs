@@ -18,10 +18,7 @@ use axum::{
 
 /// Security headers middleware.
 /// Injects hardened HTTP headers into every response.
-pub async fn security_headers_middleware(
-    request: Request<Body>,
-    next: Next,
-) -> Response<Body> {
+pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> Response<Body> {
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();
@@ -39,10 +36,7 @@ pub async fn security_headers_middleware(
     );
 
     // Prevent clickjacking — no framing allowed
-    headers.insert(
-        "x-frame-options",
-        HeaderValue::from_static("DENY"),
-    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
 
     // Legacy XSS filter (for older browsers)
     headers.insert(

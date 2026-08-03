@@ -12,11 +12,11 @@ pub struct SeasonalityDetector {
 }
 
 pub struct PeriodCandidate {
-    pub cycle_length_days: u32,   // e.g., 7 (weekly), 30 (monthly), 365 (annual)
-    pub strength: f64,            // 0.0-1.0, how strong the periodic signal is
-    pub phase: f64,               // where in the cycle we currently are
-    pub peak_months: Vec<u32>,    // months with highest income
-    pub trough_months: Vec<u32>,  // months with lowest income
+    pub cycle_length_days: u32, // e.g., 7 (weekly), 30 (monthly), 365 (annual)
+    pub strength: f64,          // 0.0-1.0, how strong the periodic signal is
+    pub phase: f64,             // where in the cycle we currently are
+    pub peak_months: Vec<u32>,  // months with highest income
+    pub trough_months: Vec<u32>, // months with lowest income
 }
 
 /// Instead of comparing to overall average, compare to same-period historical
@@ -42,7 +42,9 @@ impl SeasonalBaseline {
         }
 
         // Seasonal workers: compare each month to its baseline
-        let deviations: Vec<f64> = monthly_incomes.iter().enumerate()
+        let deviations: Vec<f64> = monthly_incomes
+            .iter()
+            .enumerate()
             .map(|(i, &income)| {
                 let baseline = self.monthly_baselines[i];
                 if baseline > 0.0 {
@@ -90,7 +92,7 @@ pub struct AdjustedBaseFeatures {
     pub raw: CreditFeatures,
 
     // Seasonality-adjusted features
-    pub adjusted_stability: f64,       // replaces raw consistency_score for seasonal workers
+    pub adjusted_stability: f64, // replaces raw consistency_score for seasonal workers
     pub income_trajectory: TrajectoryType,
     pub yoy_growth_rate: f64,
     pub is_seasonal: bool,
@@ -107,4 +109,3 @@ impl AdjustedBaseFeatures {
         }
     }
 }
-

@@ -3,9 +3,9 @@
 // Covers archetype: DigitalWorker (D-005–D-013)
 // Cyber Cafe, Graphic Designer, Social Media Manager, Content Creator, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DigitalWorkerFeatures {
@@ -22,16 +22,23 @@ pub struct DigitalWorkerFeatures {
 pub struct DigitalWorkerFeatureExtractor;
 
 impl DigitalWorkerFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for DigitalWorkerFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let avg_project_value = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / sales.len() as f64 };
+        let avg_project_value = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / sales.len() as f64
+        };
         let projects_per_month = sales.len() as f64 / 3.0;
 
         let features = DigitalWorkerFeatures {
@@ -58,17 +65,38 @@ impl WorkerTypeFeatureExtractor for DigitalWorkerFeatureExtractor {
                 features.international_payment_ratio,
                 features.skill_premium,
             ],
-            feature_names: vec!["avg_project_value", "projects_per_month", "platform_income",
-                "client_diversity", "income_volatility", "internet_cost",
-                "international_payment", "skill_premium"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "avg_project_value",
+                "projects_per_month",
+                "platform_income",
+                "client_diversity",
+                "income_volatility",
+                "internet_cost",
+                "international_payment",
+                "skill_premium",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::DigitalWorker }
-    fn min_transactions(&self) -> usize { 30 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::DigitalWorker
+    }
+    fn min_transactions(&self) -> usize {
+        30
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["avg_project_value", "projects_per_month", "platform_income",
-             "client_diversity", "income_volatility", "internet_cost",
-             "international_payment", "skill_premium"]
+        vec![
+            "avg_project_value",
+            "projects_per_month",
+            "platform_income",
+            "client_diversity",
+            "income_volatility",
+            "internet_cost",
+            "international_payment",
+            "skill_premium",
+        ]
     }
 }

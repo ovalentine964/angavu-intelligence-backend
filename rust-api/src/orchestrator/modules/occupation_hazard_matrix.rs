@@ -79,33 +79,136 @@ impl OccupationHazardMatrixModule {
         let mut hazard_entries = HashMap::new();
 
         // Boda boda hazards
-        hazard_entries.insert("boda_boda".into(), vec![
-            HazardEntry { id: "boda_accident".into(), name: "Road Traffic Accident".into(), category: "Accident".into(), severity: "Critical".into(), base_risk_multiplier: 4.5, prevalence: 0.35, who_reference: Some("ICD-10: V20-V29".into()) },
-            HazardEntry { id: "boda_musculoskeletal".into(), name: "Joint and Back Problems".into(), category: "Musculoskeletal".into(), severity: "High".into(), base_risk_multiplier: 2.8, prevalence: 0.45, who_reference: Some("ICD-10: M54".into()) },
-            HazardEntry { id: "boda_mental_health".into(), name: "Stress and Anxiety".into(), category: "MentalHealth".into(), severity: "High".into(), base_risk_multiplier: 2.5, prevalence: 0.40, who_reference: Some("ICD-10: F41".into()) },
-            HazardEntry { id: "boda_violence".into(), name: "Robbery and Assault".into(), category: "Violence".into(), severity: "High".into(), base_risk_multiplier: 3.0, prevalence: 0.20, who_reference: None },
-        ]);
+        hazard_entries.insert(
+            "boda_boda".into(),
+            vec![
+                HazardEntry {
+                    id: "boda_accident".into(),
+                    name: "Road Traffic Accident".into(),
+                    category: "Accident".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 4.5,
+                    prevalence: 0.35,
+                    who_reference: Some("ICD-10: V20-V29".into()),
+                },
+                HazardEntry {
+                    id: "boda_musculoskeletal".into(),
+                    name: "Joint and Back Problems".into(),
+                    category: "Musculoskeletal".into(),
+                    severity: "High".into(),
+                    base_risk_multiplier: 2.8,
+                    prevalence: 0.45,
+                    who_reference: Some("ICD-10: M54".into()),
+                },
+                HazardEntry {
+                    id: "boda_mental_health".into(),
+                    name: "Stress and Anxiety".into(),
+                    category: "MentalHealth".into(),
+                    severity: "High".into(),
+                    base_risk_multiplier: 2.5,
+                    prevalence: 0.40,
+                    who_reference: Some("ICD-10: F41".into()),
+                },
+                HazardEntry {
+                    id: "boda_violence".into(),
+                    name: "Robbery and Assault".into(),
+                    category: "Violence".into(),
+                    severity: "High".into(),
+                    base_risk_multiplier: 3.0,
+                    prevalence: 0.20,
+                    who_reference: None,
+                },
+            ],
+        );
 
         // Miner hazards
-        hazard_entries.insert("miner".into(), vec![
-            HazardEntry { id: "miner_respiratory".into(), name: "Silicosis and TB".into(), category: "Respiratory".into(), severity: "Critical".into(), base_risk_multiplier: 4.5, prevalence: 0.25, who_reference: Some("ICD-10: J62".into()) },
-            HazardEntry { id: "miner_heavy_metal".into(), name: "Heavy Metal Exposure".into(), category: "ChemicalExposure".into(), severity: "Critical".into(), base_risk_multiplier: 4.2, prevalence: 0.60, who_reference: Some("ICD-10: T56".into()) },
-            HazardEntry { id: "miner_cave_in".into(), name: "Cave-In".into(), category: "Accident".into(), severity: "Critical".into(), base_risk_multiplier: 4.0, prevalence: 0.08, who_reference: Some("ICD-10: W20-W49".into()) },
-        ]);
+        hazard_entries.insert(
+            "miner".into(),
+            vec![
+                HazardEntry {
+                    id: "miner_respiratory".into(),
+                    name: "Silicosis and TB".into(),
+                    category: "Respiratory".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 4.5,
+                    prevalence: 0.25,
+                    who_reference: Some("ICD-10: J62".into()),
+                },
+                HazardEntry {
+                    id: "miner_heavy_metal".into(),
+                    name: "Heavy Metal Exposure".into(),
+                    category: "ChemicalExposure".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 4.2,
+                    prevalence: 0.60,
+                    who_reference: Some("ICD-10: T56".into()),
+                },
+                HazardEntry {
+                    id: "miner_cave_in".into(),
+                    name: "Cave-In".into(),
+                    category: "Accident".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 4.0,
+                    prevalence: 0.08,
+                    who_reference: Some("ICD-10: W20-W49".into()),
+                },
+            ],
+        );
 
         // Construction hazards
-        hazard_entries.insert("construction".into(), vec![
-            HazardEntry { id: "construction_fall".into(), name: "Fall from Height".into(), category: "Accident".into(), severity: "Critical".into(), base_risk_multiplier: 4.0, prevalence: 0.15, who_reference: Some("ICD-10: W00-W19".into()) },
-            HazardEntry { id: "construction_dust".into(), name: "Dust Exposure".into(), category: "Respiratory".into(), severity: "High".into(), base_risk_multiplier: 3.0, prevalence: 0.70, who_reference: Some("ICD-10: J60-J67".into()) },
-        ]);
+        hazard_entries.insert(
+            "construction".into(),
+            vec![
+                HazardEntry {
+                    id: "construction_fall".into(),
+                    name: "Fall from Height".into(),
+                    category: "Accident".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 4.0,
+                    prevalence: 0.15,
+                    who_reference: Some("ICD-10: W00-W19".into()),
+                },
+                HazardEntry {
+                    id: "construction_dust".into(),
+                    name: "Dust Exposure".into(),
+                    category: "Respiratory".into(),
+                    severity: "High".into(),
+                    base_risk_multiplier: 3.0,
+                    prevalence: 0.70,
+                    who_reference: Some("ICD-10: J60-J67".into()),
+                },
+            ],
+        );
 
         // Farmer hazards
-        hazard_entries.insert("farmer".into(), vec![
-            HazardEntry { id: "farmer_pesticide".into(), name: "Pesticide Exposure".into(), category: "ChemicalExposure".into(), severity: "Critical".into(), base_risk_multiplier: 3.5, prevalence: 0.50, who_reference: Some("ICD-10: T60".into()) },
-            HazardEntry { id: "farmer_heat".into(), name: "Heat Stress".into(), category: "EnvironmentalExposure".into(), severity: "High".into(), base_risk_multiplier: 2.5, prevalence: 0.80, who_reference: Some("ICD-10: T67".into()) },
-        ]);
+        hazard_entries.insert(
+            "farmer".into(),
+            vec![
+                HazardEntry {
+                    id: "farmer_pesticide".into(),
+                    name: "Pesticide Exposure".into(),
+                    category: "ChemicalExposure".into(),
+                    severity: "Critical".into(),
+                    base_risk_multiplier: 3.5,
+                    prevalence: 0.50,
+                    who_reference: Some("ICD-10: T60".into()),
+                },
+                HazardEntry {
+                    id: "farmer_heat".into(),
+                    name: "Heat Stress".into(),
+                    category: "EnvironmentalExposure".into(),
+                    severity: "High".into(),
+                    base_risk_multiplier: 2.5,
+                    prevalence: 0.80,
+                    who_reference: Some("ICD-10: T67".into()),
+                },
+            ],
+        );
 
-        OccupationHazardMatrix { occupations, hazard_entries }
+        OccupationHazardMatrix {
+            occupations,
+            hazard_entries,
+        }
     }
 
     fn boda_boda_score() -> OccupationRiskScore {
@@ -119,7 +222,11 @@ impl OccupationHazardMatrixModule {
             critical_hazards: vec!["Road Traffic Accident".into()],
             high_hazards: vec!["Joint Problems".into(), "Stress".into(), "Robbery".into()],
             typical_work_hours: 11.0,
-            recommended_insurance_types: vec!["PersonalAccident".into(), "MotorVehicle".into(), "MentalHealth".into()],
+            recommended_insurance_types: vec![
+                "PersonalAccident".into(),
+                "MotorVehicle".into(),
+                "MentalHealth".into(),
+            ],
         }
     }
 
@@ -131,10 +238,18 @@ impl OccupationHazardMatrixModule {
             overall_risk_multiplier: 4.0,
             risk_tier: "Critical".into(),
             hazard_count: 5,
-            critical_hazards: vec!["Silicosis/TB".into(), "Heavy Metal".into(), "Cave-In".into()],
+            critical_hazards: vec![
+                "Silicosis/TB".into(),
+                "Heavy Metal".into(),
+                "Cave-In".into(),
+            ],
             high_hazards: vec!["Hearing Loss".into(), "Back Injuries".into()],
             typical_work_hours: 10.0,
-            recommended_insurance_types: vec!["CriticalIllness".into(), "InpatientCover".into(), "PersonalAccident".into()],
+            recommended_insurance_types: vec![
+                "CriticalIllness".into(),
+                "InpatientCover".into(),
+                "PersonalAccident".into(),
+            ],
         }
     }
 
@@ -162,7 +277,11 @@ impl OccupationHazardMatrixModule {
             risk_tier: "High".into(),
             hazard_count: 5,
             critical_hazards: vec!["Pesticide Exposure".into()],
-            high_hazards: vec!["Heat Stress".into(), "Snake Bite".into(), "Zoonotic Disease".into()],
+            high_hazards: vec![
+                "Heat Stress".into(),
+                "Snake Bite".into(),
+                "Zoonotic Disease".into(),
+            ],
             typical_work_hours: 9.0,
             recommended_insurance_types: vec!["CriticalIllness".into(), "InpatientCover".into()],
         }
@@ -224,7 +343,10 @@ impl OccupationHazardMatrixModule {
             critical_hazards: vec![],
             high_hazards: vec!["Mental Health".into(), "Violence".into()],
             typical_work_hours: 10.0,
-            recommended_insurance_types: vec!["MentalHealthCover".into(), "PersonalAccident".into()],
+            recommended_insurance_types: vec![
+                "MentalHealthCover".into(),
+                "PersonalAccident".into(),
+            ],
         }
     }
 
@@ -329,7 +451,11 @@ impl OccupationHazardMatrixModule {
             critical_hazards: vec!["Biological Exposure".into()],
             high_hazards: vec!["Chemical Exposure".into(), "Respiratory".into()],
             typical_work_hours: 10.0,
-            recommended_insurance_types: vec!["CriticalIllness".into(), "InpatientCover".into(), "PersonalAccident".into()],
+            recommended_insurance_types: vec![
+                "CriticalIllness".into(),
+                "InpatientCover".into(),
+                "PersonalAccident".into(),
+            ],
         }
     }
 
@@ -350,13 +476,20 @@ impl OccupationHazardMatrixModule {
 
     /// Get risk score for a specific occupation
     pub fn get_risk_score(&self, occupation: &str) -> Option<&OccupationRiskScore> {
-        self.matrix.occupations.iter().find(|o| o.occupation == occupation)
+        self.matrix
+            .occupations
+            .iter()
+            .find(|o| o.occupation == occupation)
     }
 
     /// Get all occupations sorted by risk (highest first)
     pub fn get_ranked(&self) -> Vec<&OccupationRiskScore> {
         let mut ranked: Vec<_> = self.matrix.occupations.iter().collect();
-        ranked.sort_by(|a, b| b.overall_risk_multiplier.partial_cmp(&a.overall_risk_multiplier).unwrap());
+        ranked.sort_by(|a, b| {
+            b.overall_risk_multiplier
+                .partial_cmp(&a.overall_risk_multiplier)
+                .unwrap()
+        });
         ranked
     }
 
@@ -392,7 +525,10 @@ mod tests {
     fn test_risk_tiers_valid() {
         let module = OccupationHazardMatrixModule::new();
         for occ in &module.matrix().occupations {
-            assert!(matches!(occ.risk_tier.as_str(), "Low" | "Moderate" | "High" | "Critical"));
+            assert!(matches!(
+                occ.risk_tier.as_str(),
+                "Low" | "Moderate" | "High" | "Critical"
+            ));
             assert!(occ.overall_risk_multiplier >= 1.0 && occ.overall_risk_multiplier <= 5.0);
         }
     }

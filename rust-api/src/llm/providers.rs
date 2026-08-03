@@ -203,7 +203,10 @@ impl ModelRegistry {
 
     /// Set routing rule: which provider to prefer for a task type
     pub async fn set_routing(&self, task_type: TaskType, provider_order: Vec<String>) {
-        self.routing_rules.write().await.insert(task_type, provider_order);
+        self.routing_rules
+            .write()
+            .await
+            .insert(task_type, provider_order);
     }
 
     /// Set default provider
@@ -281,7 +284,12 @@ pub struct DeepSeekProvider {
 }
 
 impl DeepSeekProvider {
-    pub fn new(model_name: &str, api_key: Option<String>, base_url: String, http: reqwest::Client) -> Self {
+    pub fn new(
+        model_name: &str,
+        api_key: Option<String>,
+        base_url: String,
+        http: reqwest::Client,
+    ) -> Self {
         let capabilities = match model_name {
             "deepseek-reasoner" => ModelCapabilities {
                 max_context_tokens: 65536,
@@ -341,10 +349,9 @@ impl ModelProvider for DeepSeekProvider {
     }
 
     async fn infer(&self, request: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
-        let api_key = self
-            .api_key
-            .as_ref()
-            .ok_or_else(|| ProviderError::AuthFailed("No DeepSeek API key configured".to_string()))?;
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            ProviderError::AuthFailed("No DeepSeek API key configured".to_string())
+        })?;
 
         let url = format!("{}/chat/completions", self.base_url);
 
@@ -378,11 +385,16 @@ impl ModelProvider for DeepSeekProvider {
             return Err(ProviderError::AuthFailed(format!("HTTP {}", status)));
         }
         if status == 429 {
-            return Err(ProviderError::RateLimited("Rate limited by DeepSeek".to_string()));
+            return Err(ProviderError::RateLimited(
+                "Rate limited by DeepSeek".to_string(),
+            ));
         }
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(ProviderError::Internal(format!("HTTP {}: {}", status, body)));
+            return Err(ProviderError::Internal(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let latency_ms = start.elapsed().as_millis() as u64;
@@ -426,7 +438,12 @@ pub struct QwenProvider {
 }
 
 impl QwenProvider {
-    pub fn new(model_name: &str, api_key: Option<String>, base_url: String, http: reqwest::Client) -> Self {
+    pub fn new(
+        model_name: &str,
+        api_key: Option<String>,
+        base_url: String,
+        http: reqwest::Client,
+    ) -> Self {
         Self {
             model_name: model_name.to_string(),
             api_key,
@@ -500,11 +517,16 @@ impl ModelProvider for QwenProvider {
             return Err(ProviderError::AuthFailed(format!("HTTP {}", status)));
         }
         if status == 429 {
-            return Err(ProviderError::RateLimited("Rate limited by Qwen".to_string()));
+            return Err(ProviderError::RateLimited(
+                "Rate limited by Qwen".to_string(),
+            ));
         }
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(ProviderError::Internal(format!("HTTP {}: {}", status, body)));
+            return Err(ProviderError::Internal(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let latency_ms = start.elapsed().as_millis() as u64;
@@ -580,7 +602,11 @@ impl ModelProvider for GptProvider {
             cost_per_million_output: 10.00,
             latency_tier: "medium".to_string(),
             quality_tier: "excellent".to_string(),
-            specializations: vec!["reasoning".to_string(), "multimodal".to_string(), "tool_use".to_string()],
+            specializations: vec![
+                "reasoning".to_string(),
+                "multimodal".to_string(),
+                "tool_use".to_string(),
+            ],
         }
     }
 
@@ -620,15 +646,22 @@ impl ModelProvider for GptProvider {
             return Err(ProviderError::AuthFailed(format!("HTTP {}", status)));
         }
         if status == 429 {
-            return Err(ProviderError::RateLimited("Rate limited by OpenAI".to_string()));
+            return Err(ProviderError::RateLimited(
+                "Rate limited by OpenAI".to_string(),
+            ));
         }
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(ProviderError::Internal(format!("HTTP {}: {}", status, body)));
+            return Err(ProviderError::Internal(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let latency_ms = start.elapsed().as_millis() as u64;
-        let resp: serde_json::Value = response.json().await
+        let resp: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| ProviderError::Internal(format!("Parse error: {}", e)))?;
 
         let content = resp["choices"][0]["message"]["content"]

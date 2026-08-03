@@ -8,7 +8,6 @@
 ///
 /// This replaces direct Python imports with a clean subprocess boundary.
 /// The Python script is self-contained and handles all computation.
-
 use serde_json::{json, Value};
 use std::process::Command;
 use tracing::{debug, error, warn};
@@ -167,11 +166,7 @@ impl NonparametricBridge {
     }
 
     /// Kernel density estimation with multimodality detection.
-    pub fn kde(
-        &self,
-        data: &[f64],
-        n_points: usize,
-    ) -> Result<KDEResult, String> {
+    pub fn kde(&self, data: &[f64], n_points: usize) -> Result<KDEResult, String> {
         let result = self.execute_python(
             "kde",
             json!({

@@ -220,8 +220,7 @@ impl RagClient {
         let collections = body["collections"]
             .as_array()
             .map(|arr| {
-                serde_json::from_value(serde_json::Value::Array(arr.clone()))
-                    .unwrap_or_default()
+                serde_json::from_value(serde_json::Value::Array(arr.clone())).unwrap_or_default()
             })
             .unwrap_or_default();
 
@@ -273,16 +272,10 @@ impl RagClient {
     ) -> Result<R, RagError> {
         debug!("RAG POST {}", url);
 
-        let resp = self
-            .http
-            .post(&url)
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("RAG request failed: {}", e);
-                RagError::ServiceUnavailable(e.to_string())
-            })?;
+        let resp = self.http.post(&url).json(body).send().await.map_err(|e| {
+            error!("RAG request failed: {}", e);
+            RagError::ServiceUnavailable(e.to_string())
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();

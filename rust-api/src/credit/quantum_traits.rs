@@ -35,13 +35,19 @@ pub trait CreditScoringAlgorithm: Send + Sync {
     fn algorithm_tier(&self) -> AlgorithmTier;
 
     /// Train the model on historical data
-    async fn train(&mut self, training_data: &CreditTrainingData) -> Result<TrainingResult, AlgorithmError>;
+    async fn train(
+        &mut self,
+        training_data: &CreditTrainingData,
+    ) -> Result<TrainingResult, AlgorithmError>;
 
     /// Predict credit score for a single observation
     async fn predict(&self, features: &[f64]) -> Result<CreditPrediction, AlgorithmError>;
 
     /// Batch prediction for efficiency
-    async fn predict_batch(&self, features: &[Vec<f64>]) -> Result<Vec<CreditPrediction>, AlgorithmError>;
+    async fn predict_batch(
+        &self,
+        features: &[Vec<f64>],
+    ) -> Result<Vec<CreditPrediction>, AlgorithmError>;
 
     /// Get feature importance (for explainability)
     fn feature_importance(&self) -> Vec<(String, f64)>;
@@ -113,7 +119,10 @@ pub trait OptimizationAlgorithm: Send + Sync {
     fn algorithm_tier(&self) -> AlgorithmTier;
 
     /// Solve an optimization problem
-    async fn solve(&self, problem: &OptimizationProblem) -> Result<OptimizationSolution, AlgorithmError>;
+    async fn solve(
+        &self,
+        problem: &OptimizationProblem,
+    ) -> Result<OptimizationSolution, AlgorithmError>;
 
     /// Check if the problem size is within this algorithm's capacity
     fn can_handle(&self, problem_size: usize) -> bool;

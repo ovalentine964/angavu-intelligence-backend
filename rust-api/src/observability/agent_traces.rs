@@ -1,11 +1,11 @@
 // Agent reasoning trace logging for Angavu Intelligence Backend
 // Stores structured traces of agent runs for debugging and analysis
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tracing::{info, debug};
+use tracing::{debug, info};
+use uuid::Uuid;
 
 /// A single agent reasoning trace
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +105,16 @@ impl AgentTraceLogger {
         session_id: &str,
         limit: i64,
     ) -> anyhow::Result<Vec<AgentTrace>> {
-        let rows: Vec<(String, String, String, DateTime<Utc>, Option<DateTime<Utc>>, serde_json::Value, Option<serde_json::Value>, serde_json::Value)> = sqlx::query_as(
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            Option<DateTime<Utc>>,
+            serde_json::Value,
+            Option<serde_json::Value>,
+            serde_json::Value,
+        )> = sqlx::query_as(
             r#"
             SELECT trace_id, session_id, agent_type, started_at, completed_at,
                    steps, outcome, metadata
@@ -122,23 +131,34 @@ impl AgentTraceLogger {
 
         let traces = rows
             .into_iter()
-            .map(|(trace_id, session_id, agent_type, started_at, completed_at, steps, outcome, metadata)| {
-                AgentTrace {
+            .map(
+                |(
                     trace_id,
                     session_id,
                     agent_type,
                     started_at,
                     completed_at,
-                    steps: serde_json::from_value(steps).unwrap_or_default(),
-                    outcome: outcome.and_then(|o| serde_json::from_value(o).ok()),
-                    metadata: serde_json::from_value(metadata).unwrap_or(TraceMetadata {
-                        device_type: "unknown".to_string(),
-                        app_version: "unknown".to_string(),
-                        region: None,
-                        worker_type: None,
-                    }),
-                }
-            })
+                    steps,
+                    outcome,
+                    metadata,
+                )| {
+                    AgentTrace {
+                        trace_id,
+                        session_id,
+                        agent_type,
+                        started_at,
+                        completed_at,
+                        steps: serde_json::from_value(steps).unwrap_or_default(),
+                        outcome: outcome.and_then(|o| serde_json::from_value(o).ok()),
+                        metadata: serde_json::from_value(metadata).unwrap_or(TraceMetadata {
+                            device_type: "unknown".to_string(),
+                            app_version: "unknown".to_string(),
+                            region: None,
+                            worker_type: None,
+                        }),
+                    }
+                },
+            )
             .collect();
 
         Ok(traces)

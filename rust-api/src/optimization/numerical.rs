@@ -260,7 +260,10 @@ impl CubicSpline {
         let idx = if x >= self.x[n - 1] {
             n - 2
         } else {
-            match self.x.binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less)) {
+            match self
+                .x
+                .binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less))
+            {
                 Ok(i) => i.min(n - 2),
                 Err(i) => i.max(1) - 1,
             }
@@ -289,15 +292,21 @@ pub fn bilinear_interpolation(
     }
 
     // Find interval
-    let x_idx = match x_data.binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less)) {
+    let x_idx = match x_data
+        .binary_search_by(|xi| xi.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Less))
+    {
         Ok(i) => i,
         Err(i) => i.max(1) - 1,
-    }.min(nx - 2);
+    }
+    .min(nx - 2);
 
-    let y_idx = match y_data.binary_search_by(|yi| yi.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Less)) {
+    let y_idx = match y_data
+        .binary_search_by(|yi| yi.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Less))
+    {
         Ok(i) => i,
         Err(i) => i.max(1) - 1,
-    }.min(ny - 2);
+    }
+    .min(ny - 2);
 
     let tx = (x - x_data[x_idx]) / (x_data[x_idx + 1] - x_data[x_idx]);
     let ty = (y - y_data[y_idx]) / (y_data[y_idx + 1] - y_data[y_idx]);
@@ -371,13 +380,7 @@ mod tests {
     #[test]
     fn test_newton_raphson_quadratic() {
         // f(x) = x² - 4, root at x = 2
-        let result = newton_raphson(
-            |x| x * x - 4.0,
-            |x| 2.0 * x,
-            3.0,
-            1e-10,
-            100,
-        );
+        let result = newton_raphson(|x| x * x - 4.0, |x| 2.0 * x, 3.0, 1e-10, 100);
         assert!(result.converged);
         assert!((result.root - 2.0).abs() < 1e-8);
     }
@@ -385,12 +388,7 @@ mod tests {
     #[test]
     fn test_newton_raphson_numerical() {
         // f(x) = x³ - 27, root at x = 3
-        let result = newton_raphson_numerical(
-            |x| x * x * x - 27.0,
-            4.0,
-            1e-10,
-            100,
-        );
+        let result = newton_raphson_numerical(|x| x * x * x - 27.0, 4.0, 1e-10, 100);
         assert!(result.converged);
         assert!((result.root - 3.0).abs() < 1e-6);
     }

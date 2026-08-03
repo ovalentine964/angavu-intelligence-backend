@@ -36,7 +36,8 @@ impl VersionCompatibilityChecker {
                 ModelDeltaEntry {
                     from_version: "2.0.0".to_string(),
                     to_version: "2.1.0".to_string(),
-                    download_url: "https://models.msaidizi.app/deltas/2.0.0-to-2.1.0.patch".to_string(),
+                    download_url: "https://models.msaidizi.app/deltas/2.0.0-to-2.1.0.patch"
+                        .to_string(),
                     checksum: "sha256:abc123def456".to_string(),
                     size_bytes: 512_000,
                 },
@@ -64,7 +65,10 @@ impl VersionCompatibilityChecker {
         let device_version = match semver::Version::parse(device_version_str) {
             Ok(v) => v,
             Err(_) => {
-                warn!(version = device_model_version, "Invalid model version from device");
+                warn!(
+                    version = device_model_version,
+                    "Invalid model version from device"
+                );
                 // Return full model for unknown versions
                 return Some(ModelDelta {
                     target_version: self.current_version.to_string(),

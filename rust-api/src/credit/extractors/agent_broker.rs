@@ -3,9 +3,9 @@
 // Covers archetype: AgentBroker (D-001–D-004, T-023)
 // M-Pesa Agent, Forex Bureau, Money Lender, Produce Broker
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentBrokerFeatures {
@@ -22,7 +22,9 @@ pub struct AgentBrokerFeatures {
 pub struct AgentBrokerFeatureExtractor;
 
 impl AgentBrokerFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for AgentBrokerFeatureExtractor {
@@ -54,17 +56,38 @@ impl WorkerTypeFeatureExtractor for AgentBrokerFeatureExtractor {
                 features.repeat_customer_ratio,
                 features.operating_hours / 24.0,
             ],
-            feature_names: vec!["daily_txn", "float_turnover", "commission_rate",
-                "peak_concentration", "fraud_risk", "volume",
-                "repeat_customers", "operating_hours"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "daily_txn",
+                "float_turnover",
+                "commission_rate",
+                "peak_concentration",
+                "fraud_risk",
+                "volume",
+                "repeat_customers",
+                "operating_hours",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::AgentBroker }
-    fn min_transactions(&self) -> usize { 30 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::AgentBroker
+    }
+    fn min_transactions(&self) -> usize {
+        30
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["daily_txn", "float_turnover", "commission_rate",
-             "peak_concentration", "fraud_risk", "volume",
-             "repeat_customers", "operating_hours"]
+        vec![
+            "daily_txn",
+            "float_turnover",
+            "commission_rate",
+            "peak_concentration",
+            "fraud_risk",
+            "volume",
+            "repeat_customers",
+            "operating_hours",
+        ]
     }
 }

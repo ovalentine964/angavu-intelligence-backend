@@ -3,9 +3,9 @@
 // Covers archetypes: FoodService (F-001–F-019)
 // Mama Lishe, Chapati Seller, Chips Seller, Nyama Choma, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoodServiceFeatures {
@@ -32,27 +32,40 @@ pub struct FoodServiceFeatures {
 pub struct FoodServiceFeatureExtractor;
 
 impl FoodServiceFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for FoodServiceFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let purchases: Vec<f64> = transactions.iter()
+        let purchases: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Purchase)
             .map(|tx| tx.amount)
             .collect();
 
-        let avg_daily_revenue = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / 30.0 };
+        let avg_daily_revenue = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / 30.0
+        };
         let total_revenue: f64 = sales.iter().sum();
         let total_purchases: f64 = purchases.iter().sum();
 
-        let ingredient_cost_ratio = if total_revenue > 0.0 { total_purchases / total_revenue } else { 0.0 };
+        let ingredient_cost_ratio = if total_revenue > 0.0 {
+            total_purchases / total_revenue
+        } else {
+            0.0
+        };
         let fuel_cost_ratio = 0.10; // Placeholder — needs fuel category tracking
-        let menu_diversity = transactions.iter()
+        let menu_diversity = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .filter_map(|tx| tx.product.clone())
             .collect::<std::collections::HashSet<_>>()
@@ -92,18 +105,39 @@ impl WorkerTypeFeatureExtractor for FoodServiceFeatureExtractor {
             features: serde_json::to_value(&features).unwrap_or_default(),
             feature_vector,
             feature_names: vec![
-                "avg_daily_revenue", "ingredient_cost_ratio", "fuel_cost_ratio",
-                "menu_diversity", "operating_days", "revenue_volatility",
-                "delivery_platform_ratio", "spoilage_proxy", "restock_regularity",
-            ].into_iter().map(String::from).collect(),
+                "avg_daily_revenue",
+                "ingredient_cost_ratio",
+                "fuel_cost_ratio",
+                "menu_diversity",
+                "operating_days",
+                "revenue_volatility",
+                "delivery_platform_ratio",
+                "spoilage_proxy",
+                "restock_regularity",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::FoodService }
-    fn min_transactions(&self) -> usize { 30 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::FoodService
+    }
+    fn min_transactions(&self) -> usize {
+        30
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["avg_daily_revenue", "ingredient_cost_ratio", "fuel_cost_ratio",
-             "menu_diversity", "operating_days", "revenue_volatility",
-             "delivery_platform_ratio", "spoilage_proxy", "restock_regularity"]
+        vec![
+            "avg_daily_revenue",
+            "ingredient_cost_ratio",
+            "fuel_cost_ratio",
+            "menu_diversity",
+            "operating_days",
+            "revenue_volatility",
+            "delivery_platform_ratio",
+            "spoilage_proxy",
+            "restock_regularity",
+        ]
     }
 }

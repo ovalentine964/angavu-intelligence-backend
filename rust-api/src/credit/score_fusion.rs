@@ -1,9 +1,9 @@
 // credit/score_fusion.rs
 
-use super::types::{WorkerType, TypeFeatures};
 use super::base_features::AdjustedBaseFeatures;
-use super::shap_explainer::{ShapExplainer, KernelShapConfig, BackgroundStats, CreditExplanation};
 use super::logistic_regression::LogisticRegression;
+use super::shap_explainer::{BackgroundStats, CreditExplanation, KernelShapConfig, ShapExplainer};
+use super::types::{TypeFeatures, WorkerType};
 
 /// Fused Alama Score combining base and type-specific signals
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,8 +39,8 @@ pub struct FusedAlamaScore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreFactor {
     pub name: String,
-    pub impact: f64,        // positive = improves score, negative = reduces
-    pub weight: f64,        // importance weight
+    pub impact: f64, // positive = improves score, negative = reduces
+    pub weight: f64, // importance weight
     pub description: String,
 }
 
@@ -81,7 +81,12 @@ impl ScoreFusionEngine {
             type_calibrators.insert(wt, TypeCalibrator { a: -1.0, b: 0.0 });
         }
 
-        Self { type_weights, type_calibrators, shap_explainer: None, model: None }
+        Self {
+            type_weights,
+            type_calibrators,
+            shap_explainer: None,
+            model: None,
+        }
     }
 
     /// Create engine with a trained model for SHAP explainability
@@ -108,22 +113,25 @@ impl ScoreFusionEngine {
             let raw_type = self.compute_type_score(tf);
 
             // Compute SHAP explanation if model is available
-            let explanation = if let (Some(explainer), Some(model)) = (&self.shap_explainer, &self.model) {
-                let feature_vector = &tf.feature_vector;
-                let feature_names = if tf.feature_names.is_empty() {
-                    super::base_features::AdjustedBaseFeatures::feature_names()
-                        .iter().map(|s| s.to_string()).collect::<Vec<_>>()
-                } else {
-                    tf.feature_names.clone()
-                };
-                if feature_vector.len() == model.coefficients.len() {
-                    Some(explainer.explain(model, feature_vector, &feature_names))
+            let explanation =
+                if let (Some(explainer), Some(model)) = (&self.shap_explainer, &self.model) {
+                    let feature_vector = &tf.feature_vector;
+                    let feature_names = if tf.feature_names.is_empty() {
+                        super::base_features::AdjustedBaseFeatures::feature_names()
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                    } else {
+                        tf.feature_names.clone()
+                    };
+                    if feature_vector.len() == model.coefficients.len() {
+                        Some(explainer.explain(model, feature_vector, &feature_names))
+                    } else {
+                        None
+                    }
                 } else {
                     None
-                }
-            } else {
-                None
-            };
+                };
 
             // Use SHAP top_factors if available, otherwise fall back to hand-crafted factors
             let factors = if let Some(ref exp) = explanation {
@@ -189,36 +197,44 @@ impl ScoreFusionEngine {
         if features.feature_vector.is_empty() {
             return 0.5; // neutral
         }
-        
+
         // Apply logistic regression with domain-informed weights
         // These weights encode known credit risk relationships:
         // - Higher transaction volume → lower risk (positive)
         // - Higher volatility → higher risk (negative)
         // - More repayment history → lower risk (positive)
         // Weights are log-odds: positive = reduces P(default), negative = increases P(default)
-        let weights: Vec<f64> = features.feature_vector.iter().enumerate().map(|(i, _)| {
-            match features.feature_names.get(i).map(|s| s.as_str()) {
-                Some("transaction_volume") => 1.2,
-                Some("active_days_ratio") => 0.8,
-                Some("revenue_stability") => 1.0,
-                Some("product_diversity") => 0.3,
-                Some("income_consistency") => 0.9,
-                Some("repayment_history") => 1.5,
-                Some("loan_count") => -0.5, // More loans = more risk
-                Some("recency") => 0.7,
-                Some("region_economic_index") => 0.4,
-                Some("income_trajectory") => 0.6,
-                _ => 0.0,
-            }
-        }).collect();
-        
+        let weights: Vec<f64> = features
+            .feature_vector
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                match features.feature_names.get(i).map(|s| s.as_str()) {
+                    Some("transaction_volume") => 1.2,
+                    Some("active_days_ratio") => 0.8,
+                    Some("revenue_stability") => 1.0,
+                    Some("product_diversity") => 0.3,
+                    Some("income_consistency") => 0.9,
+                    Some("repayment_history") => 1.5,
+                    Some("loan_count") => -0.5, // More loans = more risk
+                    Some("recency") => 0.7,
+                    Some("region_economic_index") => 0.4,
+                    Some("income_trajectory") => 0.6,
+                    _ => 0.0,
+                }
+            })
+            .collect();
+
         // Compute log-odds: z = intercept + Σ(wᵢ × xᵢ)
         let intercept = -1.5; // Base rate adjustment
-        let z: f64 = intercept + features.feature_vector.iter()
-            .zip(weights.iter())
-            .map(|(x, w)| x * w)
-            .sum::<f64>();
-        
+        let z: f64 = intercept
+            + features
+                .feature_vector
+                .iter()
+                .zip(weights.iter())
+                .map(|(x, w)| x * w)
+                .sum::<f64>();
+
         // Sigmoid to get probability
         let score = 1.0 / (1.0 + (-z).exp());
         score.clamp(0.0, 1.0)
@@ -237,10 +253,15 @@ impl ScoreFusionEngine {
             impact: base.effective_stability() - 0.5,
             weight: 0.25,
             description: if base.is_seasonal {
-                format!("Seasonal income stability: {:.0}% (adjusted for crop cycle)", 
-                    base.adjusted_stability * 100.0)
+                format!(
+                    "Seasonal income stability: {:.0}% (adjusted for crop cycle)",
+                    base.adjusted_stability * 100.0
+                )
             } else {
-                format!("Income consistency: {:.0}%", base.raw.consistency_score * 100.0)
+                format!(
+                    "Income consistency: {:.0}%",
+                    base.raw.consistency_score * 100.0
+                )
             },
         });
 
@@ -302,12 +323,12 @@ impl ScoreFusionEngine {
         } else {
             1.0 // maximum uncertainty
         };
-        
+
         // Adjust for data sufficiency
         // More transactions = lower SE
         let n = base_features.raw.transaction_count_90d as f64;
         let data_factor = if n > 0.0 { 1.0 / n.sqrt() } else { 1.0 };
-        
+
         // Delta method: SE(p) = p(1-p) × SE(logit(p))
         let se = p * (1.0 - p) * logit_se * (1.0 + data_factor);
         se.clamp(0.01, 0.3) // bound between 1% and 30%

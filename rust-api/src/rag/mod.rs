@@ -14,10 +14,10 @@
 // =============================================================================
 
 pub mod client;
-pub mod types;
 pub mod credit_context;
-pub mod market_context;
 pub mod health_context;
+pub mod market_context;
+pub mod types;
 
 pub use client::RagClient;
 pub use types::*;

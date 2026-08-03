@@ -8,14 +8,14 @@
 // - Distributes model deltas, market intelligence, and alerts
 // - Handles version compatibility and freshness checks
 
+use super::freshness::FreshnessChecker;
 use super::verification::SyncVerifier;
 use super::version_compat::VersionCompatibilityChecker;
-use super::freshness::FreshnessChecker;
 use super::*;
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// State shared across sync operations
 #[derive(Clone)]
@@ -91,9 +91,13 @@ impl SyncState {
                     alert_type: "protocol_outdated".to_string(),
                     severity: "critical".to_string(),
                     title: "App update required".to_string(),
-                    body: "Your app version is too old. Please update to continue syncing.".to_string(),
+                    body: "Your app version is too old. Please update to continue syncing."
+                        .to_string(),
                     timestamp: now,
-                    action_url: Some("https://play.google.com/store/apps/details?id=com.msaidizi.app".to_string()),
+                    action_url: Some(
+                        "https://play.google.com/store/apps/details?id=com.msaidizi.app"
+                            .to_string(),
+                    ),
                 }],
                 freshness: FreshnessMetadata {
                     server_timestamp: now,
@@ -156,21 +160,23 @@ impl SyncState {
         let alama_score_update = self.compute_score_update(&request, device_state).await;
 
         // ── Step 5: Model version compatibility ──
-        let model_delta = self.version_checker
+        let model_delta = self
+            .version_checker
             .check_and_prepare_delta(request.model_version.as_deref())
             .await;
 
         // ── Step 6: Market intelligence ──
-        let market_intelligence = self.get_market_intelligence(&request.ward, &request.business_category).await;
+        let market_intelligence = self
+            .get_market_intelligence(&request.ward, &request.business_category)
+            .await;
 
         // ── Step 7: Pending alerts ──
         let mut alerts_cache = self.pending_alerts.write().await;
-        let alerts = alerts_cache
-            .remove(&request.device_id)
-            .unwrap_or_default();
+        let alerts = alerts_cache.remove(&request.device_id).unwrap_or_default();
 
         // ── Step 8: Freshness metadata ──
-        let freshness = self.freshness_checker
+        let freshness = self
+            .freshness_checker
             .check_freshness(
                 request.last_server_timestamp,
                 market_intelligence.as_ref(),
@@ -234,7 +240,9 @@ impl SyncState {
 
         // Simple score estimation based on available signals
         let transaction_volume = (device_state.total_transactions_synced as f64 / 300.0).min(1.0);
-        let pattern_confidence = request.learned_patterns.iter()
+        let pattern_confidence = request
+            .learned_patterns
+            .iter()
             .map(|p| p.confidence)
             .max_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap_or(0.0);

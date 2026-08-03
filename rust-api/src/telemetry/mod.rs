@@ -7,12 +7,12 @@
 // - DB query and Redis operation tracing layers
 
 pub mod correlation;
-pub mod json_logging;
-pub mod request_trace;
 pub mod db_tracing;
 pub mod health;
+pub mod json_logging;
+pub mod request_trace;
 
 pub use correlation::CorrelationId;
+pub use health::health_router;
 pub use json_logging::init_json_logging;
 pub use request_trace::request_trace_middleware;
-pub use health::health_router;

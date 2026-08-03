@@ -17,10 +17,10 @@ const PREFIX_SUBGRAPH: &str = "graph:sub:";
 const PREFIX_STATS: &str = "graph:stats:";
 
 /// Default TTLs for cached results.
-const TTL_PAGERANK: Duration = Duration::from_secs(3600);       // 1 hour
-const TTL_COMMUNITY: Duration = Duration::from_secs(7200);      // 2 hours
-const TTL_SUBGRAPH: Duration = Duration::from_secs(300);        // 5 minutes
-const TTL_STATS: Duration = Duration::from_secs(600);           // 10 minutes
+const TTL_PAGERANK: Duration = Duration::from_secs(3600); // 1 hour
+const TTL_COMMUNITY: Duration = Duration::from_secs(7200); // 2 hours
+const TTL_SUBGRAPH: Duration = Duration::from_secs(300); // 5 minutes
+const TTL_STATS: Duration = Duration::from_secs(600); // 10 minutes
 
 /// Maximum traversal depth to prevent expensive queries.
 pub const MAX_TRAVERSAL_DEPTH: u32 = 10;
@@ -85,13 +85,12 @@ impl GraphCache {
     }
 
     /// Get cached PageRank results.
-    pub async fn get_pagerank(&self) -> anyhow::Result<Option<Vec<super::algorithms::PageRankResult>>> {
+    pub async fn get_pagerank(
+        &self,
+    ) -> anyhow::Result<Option<Vec<super::algorithms::PageRankResult>>> {
         let key = format!("{}all", PREFIX_PAGERANK);
         let mut conn = self.redis.clone();
-        let result: Option<String> = redis::cmd("GET")
-            .arg(&key)
-            .query_async(&mut conn)
-            .await?;
+        let result: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await?;
 
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),
@@ -117,13 +116,12 @@ impl GraphCache {
     }
 
     /// Get cached community results.
-    pub async fn get_communities(&self) -> anyhow::Result<Option<Vec<super::algorithms::Community>>> {
+    pub async fn get_communities(
+        &self,
+    ) -> anyhow::Result<Option<Vec<super::algorithms::Community>>> {
         let key = format!("{}all", PREFIX_COMMUNITY);
         let mut conn = self.redis.clone();
-        let result: Option<String> = redis::cmd("GET")
-            .arg(&key)
-            .query_async(&mut conn)
-            .await?;
+        let result: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await?;
 
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),
@@ -158,10 +156,7 @@ impl GraphCache {
     ) -> anyhow::Result<Option<serde_json::Value>> {
         let key = format!("{}{}:{}", PREFIX_SUBGRAPH, center, hops);
         let mut conn = self.redis.clone();
-        let result: Option<String> = redis::cmd("GET")
-            .arg(&key)
-            .query_async(&mut conn)
-            .await?;
+        let result: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await?;
 
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),
@@ -187,10 +182,7 @@ impl GraphCache {
     pub async fn get_stats(&self) -> anyhow::Result<Option<serde_json::Value>> {
         let key = format!("{}global", PREFIX_STATS);
         let mut conn = self.redis.clone();
-        let result: Option<String> = redis::cmd("GET")
-            .arg(&key)
-            .query_async(&mut conn)
-            .await?;
+        let result: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await?;
 
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),

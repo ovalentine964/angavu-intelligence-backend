@@ -127,11 +127,7 @@ impl CreditContextEnricher {
     }
 
     /// Extract risk factors from RAG responses.
-    fn extract_risk_factors(
-        &self,
-        history: &RagResponse,
-        peer: &RagResponse,
-    ) -> Vec<String> {
+    fn extract_risk_factors(&self, history: &RagResponse, peer: &RagResponse) -> Vec<String> {
         let mut factors = Vec::new();
 
         // Extract from source metadata

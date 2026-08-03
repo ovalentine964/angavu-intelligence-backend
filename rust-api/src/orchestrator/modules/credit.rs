@@ -68,10 +68,12 @@ impl CreditModel {
 
     /// Compute probability of repayment (0.0 - 1.0)
     fn predict_probability(&self, features: &[f64]) -> f64 {
-        let z: f64 = self.intercept + features.iter()
-            .zip(self.weights.iter())
-            .map(|(f, w)| f * w)
-            .sum::<f64>();
+        let z: f64 = self.intercept
+            + features
+                .iter()
+                .zip(self.weights.iter())
+                .map(|(f, w)| f * w)
+                .sum::<f64>();
 
         // Sigmoid with overflow protection
         if z >= 0.0 {
@@ -115,13 +117,13 @@ impl CreditScorer {
     fn extract_features(&self, worker_id: &str) -> Option<Vec<f64>> {
         self.worker_features.get(worker_id).map(|f| {
             vec![
-                (f.total_transactions as f64).ln().max(0.0),  // log-scale
-                f.daily_avg_revenue / 1000.0,                  // normalize to KSh thousands
+                (f.total_transactions as f64).ln().max(0.0), // log-scale
+                f.daily_avg_revenue / 1000.0,                // normalize to KSh thousands
                 f.revenue_volatility,
                 f.active_days_ratio,
-                (f.product_diversity as f64) / 10.0,           // normalize
+                (f.product_diversity as f64) / 10.0, // normalize
                 f.transaction_trend,
-                (f.days_since_last as f64) / 30.0,             // normalize to months
+                (f.days_since_last as f64) / 30.0, // normalize to months
             ]
         })
     }
@@ -145,7 +147,8 @@ impl CapabilityModule for CreditScorer {
                 ..
             } => {
                 // Update worker features
-                let features = self.worker_features
+                let features = self
+                    .worker_features
                     .entry(worker_id_hash.clone())
                     .or_insert_with(|| WorkerFeatures {
                         total_transactions: 0,
@@ -170,16 +173,15 @@ impl CapabilityModule for CreditScorer {
 
                 // Incremental feature update
                 features.total_transactions += transactions.len() as u64;
-                let batch_revenue: f64 = transactions.iter()
-                    .map(|t| t.amount)
-                    .sum();
+                let batch_revenue: f64 = transactions.iter().map(|t| t.amount).sum();
                 let batch_avg = batch_revenue / transactions.len().max(1) as f64;
 
                 // Exponential moving average for revenue
                 features.daily_avg_revenue = 0.9 * features.daily_avg_revenue + 0.1 * batch_avg;
 
                 // Track product diversity
-                let categories: std::collections::HashSet<&str> = transactions.iter()
+                let categories: std::collections::HashSet<&str> = transactions
+                    .iter()
                     .map(|t| t.product_category.as_str())
                     .collect();
                 features.product_diversity = categories.len() as u32;
@@ -207,19 +209,34 @@ impl CapabilityModule for CreditScorer {
                             name: "transaction_volume".to_string(),
                             weight: 0.25,
                             value: feature_vec[0],
-                            direction: if feature_vec[0] > 0.5 { "positive" } else { "negative" }.to_string(),
+                            direction: if feature_vec[0] > 0.5 {
+                                "positive"
+                            } else {
+                                "negative"
+                            }
+                            .to_string(),
                         },
                         CreditFactor {
                             name: "revenue_consistency".to_string(),
                             weight: 0.20,
                             value: 1.0 - feature_vec[2], // inverse of volatility
-                            direction: if feature_vec[2] < 0.3 { "positive" } else { "negative" }.to_string(),
+                            direction: if feature_vec[2] < 0.3 {
+                                "positive"
+                            } else {
+                                "negative"
+                            }
+                            .to_string(),
                         },
                         CreditFactor {
                             name: "activity_recency".to_string(),
                             weight: 0.15,
                             value: 1.0 - feature_vec[6],
-                            direction: if feature_vec[6] < 0.1 { "positive" } else { "negative" }.to_string(),
+                            direction: if feature_vec[6] < 0.1 {
+                                "positive"
+                            } else {
+                                "negative"
+                            }
+                            .to_string(),
                         },
                     ];
 
@@ -265,7 +282,8 @@ impl CapabilityModule for CreditScorer {
         struct Snapshot {
             workers: Vec<(String, WorkerFeatures)>,
         }
-        let workers: Vec<(String, WorkerFeatures)> = self.worker_features
+        let workers: Vec<(String, WorkerFeatures)> = self
+            .worker_features
             .iter()
             .map(|entry| (entry.key().clone(), entry.value().clone()))
             .collect();
@@ -281,7 +299,10 @@ impl CapabilityModule for CreditScorer {
             for (id, features) in snap.workers {
                 self.worker_features.insert(id, features);
             }
-            tracing::info!(count = self.worker_features.len(), "CreditScorer state restored");
+            tracing::info!(
+                count = self.worker_features.len(),
+                "CreditScorer state restored"
+            );
         }
     }
 }

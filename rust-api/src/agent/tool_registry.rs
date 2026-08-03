@@ -206,11 +206,7 @@ impl ToolRegistry {
     }
 
     /// Execute a tool by name with input validation
-    pub async fn execute_tool(
-        &self,
-        name: &str,
-        input: serde_json::Value,
-    ) -> ToolResult {
+    pub async fn execute_tool(&self, name: &str, input: serde_json::Value) -> ToolResult {
         let start = std::time::Instant::now();
 
         // Look up definition
@@ -321,7 +317,10 @@ impl ToolRegistry {
             Err(_) => ToolResult {
                 success: false,
                 output: serde_json::Value::Null,
-                error: Some(format!("Tool execution timed out after {}s", definition.timeout_secs)),
+                error: Some(format!(
+                    "Tool execution timed out after {}s",
+                    definition.timeout_secs
+                )),
                 execution_ms: start.elapsed().as_millis() as u64,
                 tool_name: name.to_string(),
                 metadata: ToolExecutionMetadata {
@@ -355,7 +354,6 @@ pub fn build_all_tool_definitions() -> Vec<ToolDefinition> {
         credit_cohort_analysis(),
         credit_default_predict(),
         credit_seasonality_adjust(),
-
         // ── Market Tools (6) ─────────────────────────────────────────────
         market_analysis(),
         market_price_lookup(),
@@ -363,23 +361,19 @@ pub fn build_all_tool_definitions() -> Vec<ToolDefinition> {
         market_trend_detect(),
         market_opportunity_scan(),
         market_competitor_analysis(),
-
         // ── Intelligence Tools (4) ───────────────────────────────────────
         intelligence_report_generate(),
         intelligence_anomaly_detect(),
         intelligence_pattern_mine(),
         intelligence_knowledge_query(),
-
         // ── Data Tools (4) ───────────────────────────────────────────────
         data_transaction_query(),
         data_cohort_lookup(),
         data_aggregate(),
         data_export(),
-
         // ── Federated Learning Tools (2) ─────────────────────────────────
         federated_status(),
         federated_trigger_round(),
-
         // ── System Tools (2) ─────────────────────────────────────────────
         system_health_check(),
         system_model_status(),

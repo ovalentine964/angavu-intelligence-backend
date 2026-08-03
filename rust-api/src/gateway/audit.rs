@@ -84,14 +84,26 @@ impl AuditLogger {
                     "INSERT INTO audit_log \
                      (id, timestamp, org_id, key_id, endpoint, method, \
                       status_code, response_time_ms, ip_address, user_agent, \
-                      k_anonymity_suppressed, query_hash, rate_limit_remaining) VALUES "
+                      k_anonymity_suppressed, query_hash, rate_limit_remaining) VALUES ",
                 );
                 let mut binds: Vec<String> = Vec::with_capacity(entries.len());
                 for (i, _) in entries.iter().enumerate() {
                     let n = i * 13;
                     binds.push(format!(
                         "(${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${})",
-                        n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12, n+13
+                        n + 1,
+                        n + 2,
+                        n + 3,
+                        n + 4,
+                        n + 5,
+                        n + 6,
+                        n + 7,
+                        n + 8,
+                        n + 9,
+                        n + 10,
+                        n + 11,
+                        n + 12,
+                        n + 13
                     ));
                 }
                 query.push_str(&binds.join(", "));
@@ -115,7 +127,9 @@ impl AuditLogger {
                         .bind(entry.rate_limit_remaining as i32);
                 }
                 match q.execute(pool).await {
-                    Ok(_) => tracing::debug!(count = count, "Audit log batch flushed to PostgreSQL"),
+                    Ok(_) => {
+                        tracing::debug!(count = count, "Audit log batch flushed to PostgreSQL")
+                    }
                     Err(e) => {
                         tracing::error!(error = %e, count = count, "Batch audit flush failed, falling back to individual inserts");
                         // Fallback: individual inserts
@@ -166,13 +180,17 @@ pub async fn audit_middleware(
 
     let method = request.method().to_string();
     let uri = request.uri().to_string();
-    let user_agent = request.headers()
+    let user_agent = request
+        .headers()
         .get("User-Agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
     let claims = request.extensions().get::<super::auth::Claims>().cloned();
-    let client_ip = request.extensions().get::<super::auth::ClientIp>().map(|c| c.0.clone());
+    let client_ip = request
+        .extensions()
+        .get::<super::auth::ClientIp>()
+        .map(|c| c.0.clone());
 
     let response = next.run(request).await;
 
@@ -229,4 +247,3 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_org_id ON audit_log(org_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_endpoint ON audit_log(endpoint);
 CREATE INDEX IF NOT EXISTS idx_audit_log_status ON audit_log(status_code);
 "#;
-

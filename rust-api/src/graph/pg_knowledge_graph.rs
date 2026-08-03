@@ -119,22 +119,94 @@ impl PgKnowledgeGraph {
     /// Insert an edge into kg_memory_edges
     pub async fn add_edge(&self, edge: &MemoryEdge) -> Result<(), String> {
         let (source_id, target_id, edge_type, weight, properties) = match edge {
-            MemoryEdge::TemporalSequence { source_id, target_id, time_gap_hours } =>
-                (*source_id, *target_id, "temporal_sequence", 1.0 / (1.0 + time_gap_hours / 24.0), serde_json::json!({"time_gap_hours": time_gap_hours})),
-            MemoryEdge::Causal { source_id, target_id, confidence } =>
-                (*source_id, *target_id, "causal", *confidence, serde_json::json!({})),
-            MemoryEdge::SemanticSimilarity { source_id, target_id, similarity } =>
-                (*source_id, *target_id, "semantic_similarity", *similarity, serde_json::json!({})),
-            MemoryEdge::Contextual { source_id, target_id, context_type } =>
-                (*source_id, *target_id, "contextual", 0.5, serde_json::json!({"context_type": context_type})),
-            MemoryEdge::Contradicts { source_id, target_id, resolution } =>
-                (*source_id, *target_id, "contradicts", -1.0, serde_json::json!({"resolution": resolution})),
-            MemoryEdge::Supports { source_id, target_id, strength } =>
-                (*source_id, *target_id, "supports", *strength, serde_json::json!({})),
-            MemoryEdge::PartOf { source_id, target_id, step_index } =>
-                (*source_id, *target_id, "part_of", 1.0, serde_json::json!({"step_index": step_index})),
-            MemoryEdge::Involves { source_id, target_id, role } =>
-                (*source_id, *target_id, "involves", 0.7, serde_json::json!({"role": role})),
+            MemoryEdge::TemporalSequence {
+                source_id,
+                target_id,
+                time_gap_hours,
+            } => (
+                *source_id,
+                *target_id,
+                "temporal_sequence",
+                1.0 / (1.0 + time_gap_hours / 24.0),
+                serde_json::json!({"time_gap_hours": time_gap_hours}),
+            ),
+            MemoryEdge::Causal {
+                source_id,
+                target_id,
+                confidence,
+            } => (
+                *source_id,
+                *target_id,
+                "causal",
+                *confidence,
+                serde_json::json!({}),
+            ),
+            MemoryEdge::SemanticSimilarity {
+                source_id,
+                target_id,
+                similarity,
+            } => (
+                *source_id,
+                *target_id,
+                "semantic_similarity",
+                *similarity,
+                serde_json::json!({}),
+            ),
+            MemoryEdge::Contextual {
+                source_id,
+                target_id,
+                context_type,
+            } => (
+                *source_id,
+                *target_id,
+                "contextual",
+                0.5,
+                serde_json::json!({"context_type": context_type}),
+            ),
+            MemoryEdge::Contradicts {
+                source_id,
+                target_id,
+                resolution,
+            } => (
+                *source_id,
+                *target_id,
+                "contradicts",
+                -1.0,
+                serde_json::json!({"resolution": resolution}),
+            ),
+            MemoryEdge::Supports {
+                source_id,
+                target_id,
+                strength,
+            } => (
+                *source_id,
+                *target_id,
+                "supports",
+                *strength,
+                serde_json::json!({}),
+            ),
+            MemoryEdge::PartOf {
+                source_id,
+                target_id,
+                step_index,
+            } => (
+                *source_id,
+                *target_id,
+                "part_of",
+                1.0,
+                serde_json::json!({"step_index": step_index}),
+            ),
+            MemoryEdge::Involves {
+                source_id,
+                target_id,
+                role,
+            } => (
+                *source_id,
+                *target_id,
+                "involves",
+                0.7,
+                serde_json::json!({"role": role}),
+            ),
         };
 
         sqlx::query!(
@@ -159,7 +231,10 @@ impl PgKnowledgeGraph {
     }
 
     /// Query episodic memories by participant
-    pub async fn episodic_by_participant(&self, participant: &str) -> Result<Vec<EpisodicMemory>, String> {
+    pub async fn episodic_by_participant(
+        &self,
+        participant: &str,
+    ) -> Result<Vec<EpisodicMemory>, String> {
         let rows = sqlx::query!(
             r#"
             SELECT id, event_type, description, timestamp, participants, location, emotional_valence, importance, context, outcome, embedding, status
@@ -174,20 +249,24 @@ impl PgKnowledgeGraph {
         .await
         .map_err(|e| format!("Failed to query episodic memories: {}", e))?;
 
-        Ok(rows.into_iter().map(|r| EpisodicMemory {
-            id: r.id,
-            event_type: serde_json::from_str(&r.event_type).unwrap_or(EpisodicEventType::Custom("unknown".to_string())),
-            description: r.description,
-            timestamp: r.timestamp,
-            participants: r.participants,
-            location: r.location,
-            emotional_valence: r.emotional_valence,
-            importance: r.importance,
-            context: r.context.unwrap_or_default(),
-            outcome: r.outcome,
-            embedding: r.embedding,
-            status: serde_json::from_str(&r.status).unwrap_or(NodeStatus::Completed),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| EpisodicMemory {
+                id: r.id,
+                event_type: serde_json::from_str(&r.event_type)
+                    .unwrap_or(EpisodicEventType::Custom("unknown".to_string())),
+                description: r.description,
+                timestamp: r.timestamp,
+                participants: r.participants,
+                location: r.location,
+                emotional_valence: r.emotional_valence,
+                importance: r.importance,
+                context: r.context.unwrap_or_default(),
+                outcome: r.outcome,
+                embedding: r.embedding,
+                status: serde_json::from_str(&r.status).unwrap_or(NodeStatus::Completed),
+            })
+            .collect())
     }
 
     /// Query semantic memories by concept
@@ -206,30 +285,42 @@ impl PgKnowledgeGraph {
         .await
         .map_err(|e| format!("Failed to query semantic memories: {}", e))?;
 
-        Ok(rows.into_iter().map(|r| SemanticMemory {
-            id: r.id,
-            concept: r.concept,
-            category: serde_json::from_str(&r.category).unwrap_or(SemanticCategory::Custom("unknown".to_string())),
-            statement: r.statement,
-            confidence: r.confidence,
-            source: r.source,
-            last_verified: r.last_verified,
-            contradiction_count: r.contradiction_count.unwrap_or(0) as u32,
-            embedding: r.embedding,
-            status: serde_json::from_str(&r.status).unwrap_or(NodeStatus::Completed),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| SemanticMemory {
+                id: r.id,
+                concept: r.concept,
+                category: serde_json::from_str(&r.category)
+                    .unwrap_or(SemanticCategory::Custom("unknown".to_string())),
+                statement: r.statement,
+                confidence: r.confidence,
+                source: r.source,
+                last_verified: r.last_verified,
+                contradiction_count: r.contradiction_count.unwrap_or(0) as u32,
+                embedding: r.embedding,
+                status: serde_json::from_str(&r.status).unwrap_or(NodeStatus::Completed),
+            })
+            .collect())
     }
 
     /// Get graph statistics from PostgreSQL
     pub async fn stats(&self) -> Result<GraphStats, String> {
         let episodic = sqlx::query_scalar!("SELECT COUNT(*) FROM kg_episodic_memories")
-            .fetch_one(&self.pool).await.unwrap_or(0);
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
         let semantic = sqlx::query_scalar!("SELECT COUNT(*) FROM kg_semantic_memories")
-            .fetch_one(&self.pool).await.unwrap_or(0);
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
         let procedural = sqlx::query_scalar!("SELECT COUNT(*) FROM kg_procedural_memories")
-            .fetch_one(&self.pool).await.unwrap_or(0);
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
         let edges = sqlx::query_scalar!("SELECT COUNT(*) FROM kg_memory_edges")
-            .fetch_one(&self.pool).await.unwrap_or(0);
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
 
         let total = episodic + semantic + procedural;
         Ok(GraphStats {
@@ -238,7 +329,11 @@ impl PgKnowledgeGraph {
             semantic_count: semantic as u64,
             procedural_count: procedural as u64,
             total_edges: edges as u64,
-            avg_connections_per_node: if total > 0 { edges as f64 / total as f64 } else { 0.0 },
+            avg_connections_per_node: if total > 0 {
+                edges as f64 / total as f64
+            } else {
+                0.0
+            },
         })
     }
 }

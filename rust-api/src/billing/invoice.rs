@@ -68,13 +68,13 @@ pub struct LineItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Invoice {
     pub id: String,
-    pub invoice_number: String,        // human-readable: "INV-2026-00001"
+    pub invoice_number: String, // human-readable: "INV-2026-00001"
     pub org_id: String,
     pub subscription_id: String,
     pub status: InvoiceStatus,
-    pub currency: String,              // "KES"
+    pub currency: String, // "KES"
     pub subtotal_kes: f64,
-    pub tax_kes: f64,                  // 16% VAT
+    pub tax_kes: f64, // 16% VAT
     pub total_kes: f64,
     pub line_items: Vec<LineItem>,
     pub description: String,
@@ -302,7 +302,8 @@ pub async fn generate_invoice_pdf(
     org_id: &str,
     invoice_id: &str,
 ) -> Result<Vec<u8>, anyhow::Error> {
-    let invoice = get_invoice(db, org_id, invoice_id).await?
+    let invoice = get_invoice(db, org_id, invoice_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("Invoice not found"))?;
 
     generate_pdf_bytes(&invoice)
@@ -316,8 +317,8 @@ fn generate_pdf_bytes(invoice: &Invoice) -> Result<Vec<u8>, anyhow::Error> {
 
     let (doc, page1, layer1) = PdfDocument::new(
         &format!("Invoice {}", invoice.invoice_number),
-        Mm(210.0),  // A4 width
-        Mm(297.0),  // A4 height
+        Mm(210.0), // A4 width
+        Mm(297.0), // A4 height
         "Layer 1",
     );
 
@@ -332,7 +333,13 @@ fn generate_pdf_bytes(invoice: &Invoice) -> Result<Vec<u8>, anyhow::Error> {
     // ── Header ──────────────────────────────────────────────
     current_layer.use_text("ANGAVU INTELLIGENCE", 24.0, Mm(20.0), Mm(y), &font_bold);
     y -= 10.0;
-    current_layer.use_text("Revenue Intelligence Platform", 12.0, Mm(20.0), Mm(y), &font);
+    current_layer.use_text(
+        "Revenue Intelligence Platform",
+        12.0,
+        Mm(20.0),
+        Mm(y),
+        &font,
+    );
     y -= 15.0;
 
     // ── Invoice details ─────────────────────────────────────
@@ -383,13 +390,7 @@ fn generate_pdf_bytes(invoice: &Invoice) -> Result<Vec<u8>, anyhow::Error> {
     // Line items
     for item in &invoice.line_items {
         current_layer.use_text(&item.description, 10.0, Mm(20.0), Mm(y), &font);
-        current_layer.use_text(
-            &item.quantity.to_string(),
-            10.0,
-            Mm(120.0),
-            Mm(y),
-            &font,
-        );
+        current_layer.use_text(&item.quantity.to_string(), 10.0, Mm(120.0), Mm(y), &font);
         current_layer.use_text(
             &format!("KES {:.2}", item.unit_price_kes),
             10.0,
@@ -480,7 +481,13 @@ fn generate_pdf_bytes(invoice: &Invoice) -> Result<Vec<u8>, anyhow::Error> {
     y -= 7.0;
     current_layer.use_text("Pay via M-Pesa:", 10.0, Mm(20.0), Mm(y), &font);
     y -= 6.0;
-    current_layer.use_text("1. Go to Lipa na M-Pesa → Pay Bill", 10.0, Mm(25.0), Mm(y), &font);
+    current_layer.use_text(
+        "1. Go to Lipa na M-Pesa → Pay Bill",
+        10.0,
+        Mm(25.0),
+        Mm(y),
+        &font,
+    );
     y -= 6.0;
     current_layer.use_text("2. Business No: 174379", 10.0, Mm(25.0), Mm(y), &font);
     y -= 6.0;
@@ -536,12 +543,11 @@ async fn generate_invoice_number(db: &sqlx::PgPool) -> Result<String, anyhow::Er
     let year = Utc::now().format("%Y").to_string();
 
     // Get the next sequence number for this year
-    let count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE $1",
-    )
-    .bind(format!("INV-{}-%", year))
-    .fetch_one(db)
-    .await?;
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE $1")
+            .bind(format!("INV-{}-%", year))
+            .fetch_one(db)
+            .await?;
 
     let seq = count.0 + 1;
     Ok(format!("INV-{}-{:05}", year, seq))

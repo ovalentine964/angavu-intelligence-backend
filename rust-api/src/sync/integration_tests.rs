@@ -8,11 +8,11 @@
 // FIX 4: Model version compatibility
 // FIX 5: Data freshness checks
 
-use crate::sync::*;
-use crate::sync::receiver::{SyncState, DeviceState};
+use crate::sync::freshness::FreshnessChecker;
+use crate::sync::receiver::{DeviceState, SyncState};
 use crate::sync::verification::SyncVerifier;
 use crate::sync::version_compat::VersionCompatibilityChecker;
-use crate::sync::freshness::FreshnessChecker;
+use crate::sync::*;
 use chrono::Utc;
 
 fn sample_sync_request() -> SyncRequest {
@@ -158,15 +158,17 @@ async fn test_invalid_hour_rejected() {
 async fn test_oversized_payload_rejected() {
     let state = SyncState::new();
     let mut request = sample_sync_request();
-    request.transactions = (0..600).map(|i| AnonymizedTransaction {
-        amount_bucket: "100-500".to_string(),
-        category: "sale".to_string(),
-        payment_method: "cash".to_string(),
-        hour_of_day: 12,
-        day_of_week: 3,
-        is_service: false,
-        dedup_key: Some(format!("key-{}", i)),
-    }).collect();
+    request.transactions = (0..600)
+        .map(|i| AnonymizedTransaction {
+            amount_bucket: "100-500".to_string(),
+            category: "sale".to_string(),
+            payment_method: "cash".to_string(),
+            hour_of_day: 12,
+            day_of_week: 3,
+            is_service: false,
+            dedup_key: Some(format!("key-{}", i)),
+        })
+        .collect();
 
     let response = state.process_sync(request).await;
     assert_eq!(response.verification.accepted_count, 0);
@@ -179,15 +181,17 @@ async fn test_sync_with_queued_transactions() {
     // Simulate: device had 5 transactions queued offline, then syncs them all
     let state = SyncState::new();
     let mut request = sample_sync_request();
-    request.transactions = (0..5).map(|i| AnonymizedTransaction {
-        amount_bucket: "100-500".to_string(),
-        category: "sale".to_string(),
-        payment_method: "cash".to_string(),
-        hour_of_day: 10 + i as u8,
-        day_of_week: 3,
-        is_service: false,
-        dedup_key: Some(format!("queued-tx-{}", i)),
-    }).collect();
+    request.transactions = (0..5)
+        .map(|i| AnonymizedTransaction {
+            amount_bucket: "100-500".to_string(),
+            category: "sale".to_string(),
+            payment_method: "cash".to_string(),
+            hour_of_day: 10 + i as u8,
+            day_of_week: 3,
+            is_service: false,
+            dedup_key: Some(format!("queued-tx-{}", i)),
+        })
+        .collect();
 
     let response = state.process_sync(request).await;
     assert_eq!(response.synced_count, 5);
@@ -200,15 +204,17 @@ async fn test_sync_preserves_dedup_across_drains() {
 
     // First drain: 3 transactions
     let mut request1 = sample_sync_request();
-    request1.transactions = (0..3).map(|i| AnonymizedTransaction {
-        amount_bucket: "100-500".to_string(),
-        category: "sale".to_string(),
-        payment_method: "cash".to_string(),
-        hour_of_day: 10,
-        day_of_week: 3,
-        is_service: false,
-        dedup_key: Some(format!("drain1-{}", i)),
-    }).collect();
+    request1.transactions = (0..3)
+        .map(|i| AnonymizedTransaction {
+            amount_bucket: "100-500".to_string(),
+            category: "sale".to_string(),
+            payment_method: "cash".to_string(),
+            hour_of_day: 10,
+            day_of_week: 3,
+            is_service: false,
+            dedup_key: Some(format!("drain1-{}", i)),
+        })
+        .collect();
 
     let resp1 = state.process_sync(request1).await;
     assert_eq!(resp1.synced_count, 3);
@@ -345,16 +351,24 @@ fn test_freshness_thresholds() {
     let now = Utc::now().timestamp_millis();
 
     // Market data: 30 minutes old → fresh
-    assert!(!FreshnessChecker::needs_market_refresh(now - 30 * 60 * 1000));
+    assert!(!FreshnessChecker::needs_market_refresh(
+        now - 30 * 60 * 1000
+    ));
 
     // Market data: 2 hours old → stale
-    assert!(FreshnessChecker::needs_market_refresh(now - 2 * 60 * 60 * 1000));
+    assert!(FreshnessChecker::needs_market_refresh(
+        now - 2 * 60 * 60 * 1000
+    ));
 
     // Score: 12 hours old → fresh
-    assert!(!FreshnessChecker::needs_score_refresh(now - 12 * 60 * 60 * 1000));
+    assert!(!FreshnessChecker::needs_score_refresh(
+        now - 12 * 60 * 60 * 1000
+    ));
 
     // Score: 25 hours old → stale
-    assert!(FreshnessChecker::needs_score_refresh(now - 25 * 60 * 60 * 1000));
+    assert!(FreshnessChecker::needs_score_refresh(
+        now - 25 * 60 * 60 * 1000
+    ));
 }
 
 #[test]

@@ -66,12 +66,17 @@ impl StochasticOptimizer {
     }
 
     /// Find the decision that maximizes expected value.
-    pub fn maximize_expected_value(&self, scenarios: &[Scenario], num_decisions: usize) -> StochasticResult {
+    pub fn maximize_expected_value(
+        &self,
+        scenarios: &[Scenario],
+        num_decisions: usize,
+    ) -> StochasticResult {
         let mut best_decision = 0;
         let mut best_ev = f64::NEG_INFINITY;
 
         for d in 0..num_decisions {
-            let ev: f64 = scenarios.iter()
+            let ev: f64 = scenarios
+                .iter()
                 .map(|s| s.probability * s.outcomes.get(d).copied().unwrap_or(0.0))
                 .sum();
 
@@ -87,21 +92,28 @@ impl StochasticOptimizer {
     /// Find the decision that maximizes expected utility with risk aversion.
     ///
     /// Uses mean-variance optimization: max E[x] - λ * Var(x)
-    pub fn maximize_utility(&self, scenarios: &[Scenario], num_decisions: usize) -> StochasticResult {
+    pub fn maximize_utility(
+        &self,
+        scenarios: &[Scenario],
+        num_decisions: usize,
+    ) -> StochasticResult {
         let mut best_decision = 0;
         let mut best_utility = f64::NEG_INFINITY;
 
         for d in 0..num_decisions {
-            let values: Vec<f64> = scenarios.iter()
+            let values: Vec<f64> = scenarios
+                .iter()
                 .map(|s| s.outcomes.get(d).copied().unwrap_or(0.0))
                 .collect();
 
-            let ev: f64 = scenarios.iter()
+            let ev: f64 = scenarios
+                .iter()
                 .zip(values.iter())
                 .map(|(s, v)| s.probability * v)
                 .sum();
 
-            let variance: f64 = scenarios.iter()
+            let variance: f64 = scenarios
+                .iter()
                 .zip(values.iter())
                 .map(|(s, v)| s.probability * (v - ev).powi(2))
                 .sum();
@@ -120,12 +132,18 @@ impl StochasticOptimizer {
     /// Minimax regret: minimize the maximum regret across all scenarios.
     ///
     /// Regret = best possible outcome - actual outcome for each scenario.
-    pub fn minimize_regret(&self, scenarios: &[Scenario], num_decisions: usize) -> StochasticResult {
+    pub fn minimize_regret(
+        &self,
+        scenarios: &[Scenario],
+        num_decisions: usize,
+    ) -> StochasticResult {
         // Compute regret matrix
         let mut max_regret_per_decision = vec![f64::NEG_INFINITY; num_decisions];
 
         for s in scenarios {
-            let best_outcome = s.outcomes.iter()
+            let best_outcome = s
+                .outcomes
+                .iter()
                 .take(num_decisions)
                 .cloned()
                 .fold(f64::NEG_INFINITY, f64::max);
@@ -137,7 +155,8 @@ impl StochasticOptimizer {
             }
         }
 
-        let best_decision = max_regret_per_decision.iter()
+        let best_decision = max_regret_per_decision
+            .iter()
             .enumerate()
             .min_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
@@ -152,9 +171,12 @@ impl StochasticOptimizer {
     /// EVPI = E[best decision with perfect info] - E[best decision without info]
     pub fn evpi(&self, scenarios: &[Scenario], num_decisions: usize) -> f64 {
         // Expected value with perfect info: choose best decision per scenario
-        let ev_perfect: f64 = scenarios.iter()
+        let ev_perfect: f64 = scenarios
+            .iter()
             .map(|s| {
-                let best = s.outcomes.iter()
+                let best = s
+                    .outcomes
+                    .iter()
                     .take(num_decisions)
                     .cloned()
                     .fold(f64::NEG_INFINITY, f64::max);
@@ -163,18 +185,27 @@ impl StochasticOptimizer {
             .sum();
 
         // Expected value without perfect info
-        let ev_best = self.maximize_expected_value(scenarios, num_decisions).expected_value;
+        let ev_best = self
+            .maximize_expected_value(scenarios, num_decisions)
+            .expected_value;
 
         ev_perfect - ev_best
     }
 
     /// Build result with VaR, CVaR, and robustness metrics.
-    fn build_result(&self, scenarios: &[Scenario], num_decisions: usize, best_decision: usize) -> StochasticResult {
-        let mut scenario_values: Vec<f64> = scenarios.iter()
+    fn build_result(
+        &self,
+        scenarios: &[Scenario],
+        num_decisions: usize,
+        best_decision: usize,
+    ) -> StochasticResult {
+        let mut scenario_values: Vec<f64> = scenarios
+            .iter()
             .map(|s| s.outcomes.get(best_decision).copied().unwrap_or(0.0))
             .collect();
 
-        let expected_value: f64 = scenarios.iter()
+        let expected_value: f64 = scenarios
+            .iter()
             .map(|s| s.probability * s.outcomes.get(best_decision).copied().unwrap_or(0.0))
             .sum();
 
@@ -196,7 +227,8 @@ impl StochasticOptimizer {
         let conditional_var = expected_value - cvar_mean;
 
         // Robustness: coefficient of variation (lower = more robust)
-        let variance: f64 = scenarios.iter()
+        let variance: f64 = scenarios
+            .iter()
             .map(|s| {
                 let v = s.outcomes.get(best_decision).copied().unwrap_or(0.0);
                 s.probability * (v - expected_value).powi(2)

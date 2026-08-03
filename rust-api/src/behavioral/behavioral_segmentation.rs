@@ -15,7 +15,6 @@
 ///
 /// Reference: Mullainathan & Shafir (2013), "Scarcity: Why Having
 ///            Too Little Means So Much"
-
 use serde::{Deserialize, Serialize};
 
 /// Behavioral features extracted from worker transaction data
@@ -290,8 +289,13 @@ impl BehavioralSegmentationEngine {
                 .sum::<f64>()
                 / cluster_workers.len() as f64;
 
-            let (name, description, nudges, risk_profile) =
-                Self::classify_segment(avg_savings, avg_present_bias, avg_risk, avg_literacy, avg_social);
+            let (name, description, nudges, risk_profile) = Self::classify_segment(
+                avg_savings,
+                avg_present_bias,
+                avg_risk,
+                avg_literacy,
+                avg_social,
+            );
 
             segments.push(BehavioralSegment {
                 segment_id: cluster_id,

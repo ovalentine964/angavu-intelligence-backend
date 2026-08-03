@@ -1,8 +1,8 @@
 // Credit Scoring — Fisherman Feature Extractor
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures, BoatOwnership, FishingZone};
+use crate::credit::types::{BoatOwnership, FishingZone, TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FishermanFeatures {
@@ -21,7 +21,9 @@ pub struct FishermanFeatures {
 pub struct FishermanFeatureExtractor;
 
 impl FishermanFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     fn detect_boat_ownership(&self, transactions: &[Transaction]) -> BoatOwnership {
         let has_major_repair = transactions.iter().any(|tx| {
@@ -32,18 +34,30 @@ impl FishermanFeatureExtractor {
                     l.contains("boat") || l.contains("engine") || l.contains("meshi")
                 })
         });
-        if has_major_repair { BoatOwnership::Owned } else { BoatOwnership::Shared }
+        if has_major_repair {
+            BoatOwnership::Owned
+        } else {
+            BoatOwnership::Shared
+        }
     }
 
     fn detect_fishing_zone(&self, transactions: &[Transaction]) -> FishingZone {
-        let sales: Vec<&Transaction> = transactions.iter()
+        let sales: Vec<&Transaction> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .collect();
-        let avg_catch_value: f64 = if sales.is_empty() { 0.0 }
-            else { sales.iter().map(|tx| tx.amount).sum::<f64>() / sales.len() as f64 };
-        if avg_catch_value > 10_000.0 { FishingZone::DeepSea }
-        else if avg_catch_value > 3_000.0 { FishingZone::Offshore }
-        else { FishingZone::Nearshore }
+        let avg_catch_value: f64 = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().map(|tx| tx.amount).sum::<f64>() / sales.len() as f64
+        };
+        if avg_catch_value > 10_000.0 {
+            FishingZone::DeepSea
+        } else if avg_catch_value > 3_000.0 {
+            FishingZone::Offshore
+        } else {
+            FishingZone::Nearshore
+        }
     }
 
     fn monthly_profile(&self, transactions: &[Transaction]) -> [f64; 12] {
@@ -59,7 +73,9 @@ impl FishermanFeatureExtractor {
         }
         let mut profile = [0.0f64; 12];
         for i in 0..12 {
-            if counts[i] > 0 { profile[i] = totals[i] / counts[i] as f64; }
+            if counts[i] > 0 {
+                profile[i] = totals[i] / counts[i] as f64;
+            }
         }
         profile
     }
@@ -68,17 +84,23 @@ impl FishermanFeatureExtractor {
         transactions.iter().any(|tx| {
             tx.product.as_ref().map_or(false, |p| {
                 let l = p.to_lowercase();
-                l.contains("ice") || l.contains("cold") || l.contains("freez") || l.contains("barafu")
+                l.contains("ice")
+                    || l.contains("cold")
+                    || l.contains("freez")
+                    || l.contains("barafu")
             })
         })
     }
 
     fn weather_gap_days(&self, transactions: &[Transaction]) -> u32 {
-        let sales: Vec<i64> = transactions.iter()
+        let sales: Vec<i64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.timestamp / 86400)
             .collect();
-        if sales.len() < 2 { return 0; }
+        if sales.len() < 2 {
+            return 0;
+        }
         let mut sorted = sales.clone();
         sorted.sort();
         sorted.dedup();
@@ -86,25 +108,37 @@ impl FishermanFeatureExtractor {
         let mut current_gap = 0u32;
         for w in sorted.windows(2) {
             let gap = (w[1] - w[0]) as u32;
-            if gap > 3 { current_gap += gap; }
-            else { current_gap = 0; }
+            if gap > 3 {
+                current_gap += gap;
+            } else {
+                current_gap = 0;
+            }
             max_gap = max_gap.max(current_gap);
         }
         max_gap
     }
 
     fn savings_rate(&self, transactions: &[Transaction]) -> f64 {
-        let income: f64 = transactions.iter()
+        let income: f64 = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
-            .map(|tx| tx.amount).sum();
-        let savings: f64 = transactions.iter()
+            .map(|tx| tx.amount)
+            .sum();
+        let savings: f64 = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Savings)
-            .map(|tx| tx.amount).sum();
-        if income > 0.0 { (savings / income).min(1.0) } else { 0.0 }
+            .map(|tx| tx.amount)
+            .sum();
+        if income > 0.0 {
+            (savings / income).min(1.0)
+        } else {
+            0.0
+        }
     }
 
     fn buyer_diversity(&self, transactions: &[Transaction]) -> u8 {
-        let unique: std::collections::HashSet<String> = transactions.iter()
+        let unique: std::collections::HashSet<String> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .filter_map(|tx| tx.counterparty_id.clone())
             .collect();
@@ -136,8 +170,16 @@ impl WorkerTypeFeatureExtractor for FishermanFeatureExtractor {
         };
 
         let fv = vec![
-            match boat { BoatOwnership::Owned => 1.0, BoatOwnership::Leased => 0.6, BoatOwnership::Shared => 0.3 },
-            match zone { FishingZone::DeepSea => 1.0, FishingZone::Offshore => 0.6, FishingZone::Nearshore => 0.3 },
+            match boat {
+                BoatOwnership::Owned => 1.0,
+                BoatOwnership::Leased => 0.6,
+                BoatOwnership::Shared => 0.3,
+            },
+            match zone {
+                FishingZone::DeepSea => 1.0,
+                FishingZone::Offshore => 0.6,
+                FishingZone::Nearshore => 0.3,
+            },
             0.5, // catch_cycle placeholder
             0.7, // stability placeholder
             (buyers as f64 / 10.0).min(1.0),
@@ -151,11 +193,24 @@ impl WorkerTypeFeatureExtractor for FishermanFeatureExtractor {
         TypeFeatures::from_features(WorkerType::Fisherman, &features, fv, self.feature_names())
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::Fisherman }
-    fn min_transactions(&self) -> usize { 90 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::Fisherman
+    }
+    fn min_transactions(&self) -> usize {
+        90
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["boat_ownership", "fishing_zone", "catch_cycle", "stability",
-             "landing_sites", "cold_chain", "weather_resilience", "savings_rate",
-             "income_level", "trajectory"]
+        vec![
+            "boat_ownership",
+            "fishing_zone",
+            "catch_cycle",
+            "stability",
+            "landing_sites",
+            "cold_chain",
+            "weather_resilience",
+            "savings_rate",
+            "income_level",
+            "trajectory",
+        ]
     }
 }

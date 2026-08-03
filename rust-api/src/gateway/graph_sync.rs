@@ -15,10 +15,10 @@
 //! - All data must be aggregated to cohort level (k≥10)
 //! - Device ID is hashed (SHA-256) — no PII in transit
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::gateway::k_anonymity::{KAnonymityEnforcer, MIN_K_ANONYMITY};
 
@@ -171,7 +171,10 @@ pub async fn process_sync(
     // ── Step 3: Aggregate device stats into cohort ──
     // ── Step 4: Merge deltas ──
     // Wrap steps 3+4 in a transaction for atomicity
-    let mut tx = pool.begin().await.map_err(|e| SyncError::Database(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| SyncError::Database(e.to_string()))?;
 
     aggregate_device_stats_tx(&mut tx, &message).await?;
 
@@ -201,7 +204,9 @@ pub async fn process_sync(
         deltas_applied += 1;
     }
 
-    tx.commit().await.map_err(|e| SyncError::Database(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| SyncError::Database(e.to_string()))?;
 
     // ── Step 5: Build response with market signals ──
     let worker_type = &message.stats.worker_type_detected;
@@ -257,7 +262,8 @@ fn validate_no_pii(message: &GraphSyncMessage) -> Result<(), SyncError> {
         if let Some(props) = delta.properties.as_object() {
             for (key, value) in props {
                 let key_lower = key.to_lowercase();
-                if key_lower.contains("phone") || key_lower.contains("name")
+                if key_lower.contains("phone")
+                    || key_lower.contains("name")
                     || key_lower.contains("mpesa_ref")
                 {
                     if let Some(s) = value.as_str() {
@@ -448,13 +454,12 @@ async fn merge_edge_delta_tx(
     delta: &EdgeDelta,
     cohort_hash: &str,
 ) -> Result<(), SyncError> {
-    let cohort_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM kg_worker_cohorts WHERE cohort_hash = $1",
-    )
-    .bind(cohort_hash)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| SyncError::Database(e.to_string()))?;
+    let cohort_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM kg_worker_cohorts WHERE cohort_hash = $1")
+            .bind(cohort_hash)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| SyncError::Database(e.to_string()))?;
 
     if let Some(cohort_id) = cohort_id {
         let target_id = Uuid::parse_str(&delta.from_id).unwrap_or(Uuid::nil());
@@ -542,10 +547,7 @@ async fn get_market_signals(
         .collect())
 }
 
-async fn get_price_updates(
-    pool: &PgPool,
-    region: &str,
-) -> Result<Vec<ServerDelta>, SyncError> {
+async fn get_price_updates(pool: &PgPool, region: &str) -> Result<Vec<ServerDelta>, SyncError> {
     let rows = sqlx::query!(
         r#"
         SELECT pc.category_code, pp.price_kes, pp.price_change_7d

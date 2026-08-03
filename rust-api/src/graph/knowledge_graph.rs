@@ -70,8 +70,8 @@ pub struct SemanticMemory {
     pub concept: String,
     pub category: SemanticCategory,
     pub statement: String,
-    pub confidence: f64,   // 0.0 to 1.0
-    pub source: String,    // where this knowledge came from
+    pub confidence: f64, // 0.0 to 1.0
+    pub source: String,  // where this knowledge came from
     pub last_verified: Option<DateTime<Utc>>,
     pub contradiction_count: u32,
     pub embedding: Option<Vec<f64>>,
@@ -80,14 +80,14 @@ pub struct SemanticMemory {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SemanticCategory {
-    DomainKnowledge,   // "Mama mbogas lose 15-30% to spoilage"
-    UserPreference,    // "User prefers morning deliveries"
-    MarketFact,        // "Tomato prices peak in December"
-    SocialFact,        // "User is treasurer of Chama A"
-    BusinessRule,      // "Never approve loans > 3x monthly revenue"
-    GeographicFact,    // "Gikomba market is cheapest for vegetables"
-    TemporalPattern,   // "Demand peaks on Fridays"
-    CausalRelation,    // "Rain → higher vegetable prices"
+    DomainKnowledge, // "Mama mbogas lose 15-30% to spoilage"
+    UserPreference,  // "User prefers morning deliveries"
+    MarketFact,      // "Tomato prices peak in December"
+    SocialFact,      // "User is treasurer of Chama A"
+    BusinessRule,    // "Never approve loans > 3x monthly revenue"
+    GeographicFact,  // "Gikomba market is cheapest for vegetables"
+    TemporalPattern, // "Demand peaks on Fridays"
+    CausalRelation,  // "Rain → higher vegetable prices"
     Custom(String),
 }
 
@@ -104,7 +104,7 @@ pub struct ProceduralMemory {
     pub success_rate: f64,
     pub average_duration_ms: Option<u64>,
     pub applicable_contexts: Vec<String>,
-    pub learned_from: String,  // "explicit_instruction", "observation", "trial_and_error"
+    pub learned_from: String, // "explicit_instruction", "observation", "trial_and_error"
     pub embedding: Option<Vec<f64>>,
     pub status: NodeStatus,
 }
@@ -331,10 +331,7 @@ impl KnowledgeGraph {
         for word in description.split_whitespace().take(5) {
             let word_lower = word.to_lowercase();
             if word_lower.len() > 3 {
-                self.concept_index
-                    .entry(word_lower)
-                    .or_default()
-                    .push(id);
+                self.concept_index.entry(word_lower).or_default().push(id);
             }
         }
 
@@ -466,7 +463,9 @@ impl KnowledgeGraph {
             .iter()
             .filter_map(|edge| match edge {
                 MemoryEdge::Contradicts {
-                    source_id, target_id, ..
+                    source_id,
+                    target_id,
+                    ..
                 } => {
                     let a = match self.nodes.get(source_id)? {
                         MemoryNode::Semantic(m) => m,
@@ -583,7 +582,9 @@ impl KnowledgeGraph {
         }
 
         // Update stats
-        self.stats.semantic_count = self.nodes.values()
+        self.stats.semantic_count = self
+            .nodes
+            .values()
             .filter(|n| matches!(n, MemoryNode::Semantic(_)))
             .count() as u64;
 
@@ -593,7 +594,9 @@ impl KnowledgeGraph {
     /// Prune semantic memories that have decayed below a confidence threshold.
     /// Returns the number of pruned nodes.
     pub fn prune_low_confidence(&mut self, threshold: f64) -> usize {
-        let pruned_ids: Vec<Uuid> = self.nodes.iter()
+        let pruned_ids: Vec<Uuid> = self
+            .nodes
+            .iter()
             .filter_map(|(id, node)| match node {
                 MemoryNode::Semantic(m) if m.confidence < threshold => Some(*id),
                 _ => None,
@@ -604,8 +607,12 @@ impl KnowledgeGraph {
         for id in &pruned_ids {
             self.nodes.remove(id);
             // Remove from indexes
-            self.concept_index.values_mut().for_each(|ids| ids.retain(|i| i != id));
-            self.entity_index.values_mut().for_each(|ids| ids.retain(|i| i != id));
+            self.concept_index
+                .values_mut()
+                .for_each(|ids| ids.retain(|i| i != id));
+            self.entity_index
+                .values_mut()
+                .for_each(|ids| ids.retain(|i| i != id));
         }
         // Remove edges involving pruned nodes
         self.edges.retain(|e| {
@@ -639,9 +646,7 @@ impl MemoryConsolidator {
                 ep.event_type,
                 ep.outcome.as_deref().unwrap_or("unknown")
             );
-            let entry = pattern_counts
-                .entry(pattern)
-                .or_insert((0, Vec::new()));
+            let entry = pattern_counts.entry(pattern).or_insert((0, Vec::new()));
             entry.0 += 1;
             entry.1.push(ep.description.clone());
         }
@@ -657,7 +662,12 @@ impl MemoryConsolidator {
                     "Pattern observed {} times: {}. Examples: {}",
                     count,
                     pattern,
-                    examples.iter().take(3).cloned().collect::<Vec<_>>().join("; ")
+                    examples
+                        .iter()
+                        .take(3)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("; ")
                 ),
                 confidence: (count as f64 / (count as f64 + 10.0)).min(0.95),
                 source: "consolidation".to_string(),
@@ -677,7 +687,10 @@ impl MemoryConsolidator {
     ) -> Vec<SemanticMemory> {
         let mut by_type: HashMap<String, Vec<&EpisodicMemory>> = HashMap::new();
         for ep in episodes {
-            by_type.entry(format!("{:?}", ep.event_type)).or_default().push(ep);
+            by_type
+                .entry(format!("{:?}", ep.event_type))
+                .or_default()
+                .push(ep);
         }
 
         let mut results = Vec::new();
@@ -713,7 +726,10 @@ impl MemoryConsolidator {
         // Consolidate learning events
         if let Some(learn_episodes) = by_type.get("Learning") {
             if learn_episodes.len() >= min_occurrences {
-                let descriptions: Vec<&str> = learn_episodes.iter().map(|e| e.description.as_str()).collect();
+                let descriptions: Vec<&str> = learn_episodes
+                    .iter()
+                    .map(|e| e.description.as_str())
+                    .collect();
                 results.push(SemanticMemory {
                     id: Uuid::new_v4(),
                     concept: "learning_pattern".to_string(),
@@ -721,9 +737,16 @@ impl MemoryConsolidator {
                     statement: format!(
                         "Learning pattern from {} events: {}",
                         learn_episodes.len(),
-                        descriptions.iter().take(3).cloned().collect::<Vec<_>>().join("; ")
+                        descriptions
+                            .iter()
+                            .take(3)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("; ")
                     ),
-                    confidence: (learn_episodes.len() as f64 / (learn_episodes.len() as f64 + 10.0)).min(0.95),
+                    confidence: (learn_episodes.len() as f64
+                        / (learn_episodes.len() as f64 + 10.0))
+                        .min(0.95),
                     source: "consolidation".to_string(),
                     last_verified: Some(Utc::now()),
                     contradiction_count: 0,

@@ -164,7 +164,10 @@ pub fn verify_tool_output(
                     issues.push(ToolOutputIssue {
                         issue_type: ToolOutputIssueType::InvalidFormat,
                         severity: IssueSeverity::Low,
-                        message: format!("Tool '{}' output is not numeric: '{}'", tool_name, output),
+                        message: format!(
+                            "Tool '{}' output is not numeric: '{}'",
+                            tool_name, output
+                        ),
                     });
                 }
             }
@@ -172,8 +175,12 @@ pub fn verify_tool_output(
         }
     }
 
-    let has_critical = issues.iter().any(|i| matches!(i.severity, IssueSeverity::Critical));
-    let has_high = issues.iter().any(|i| matches!(i.severity, IssueSeverity::High));
+    let has_critical = issues
+        .iter()
+        .any(|i| matches!(i.severity, IssueSeverity::Critical));
+    let has_high = issues
+        .iter()
+        .any(|i| matches!(i.severity, IssueSeverity::High));
 
     ToolOutputVerification {
         valid: !has_critical && !has_high,
@@ -202,10 +209,10 @@ mod tests {
     fn empty_output_fails() {
         let result = verify_tool_output("cfo_engine", "", None);
         assert!(!result.valid);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            ToolOutputIssueType::EmptyOutput
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, ToolOutputIssueType::EmptyOutput)));
     }
 
     #[test]
@@ -216,10 +223,10 @@ mod tests {
             None,
         );
         assert!(!result.valid);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            ToolOutputIssueType::InjectionDetected
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, ToolOutputIssueType::InjectionDetected)));
     }
 
     #[test]
@@ -250,10 +257,10 @@ mod tests {
     #[test]
     fn invalid_json_flagged() {
         let result = verify_tool_output("any_tool", "not json at all", Some("json"));
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            ToolOutputIssueType::InvalidFormat
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, ToolOutputIssueType::InvalidFormat)));
     }
 
     #[test]
@@ -265,9 +272,9 @@ mod tests {
     #[test]
     fn numeric_format_invalid() {
         let result = verify_tool_output("any_tool", "not a number", Some("numeric"));
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            ToolOutputIssueType::InvalidFormat
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, ToolOutputIssueType::InvalidFormat)));
     }
 }

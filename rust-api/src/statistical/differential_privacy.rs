@@ -367,8 +367,11 @@ mod tests {
         let result = engine.gaussian_mean(500.0, 1000.0, 100);
         assert!(!result.suppressed);
         // Should be within reasonable range
-        assert!(result.noisy_value > 400.0 && result.noisy_value < 600.0,
-            "noisy_value={}", result.noisy_value);
+        assert!(
+            result.noisy_value > 400.0 && result.noisy_value < 600.0,
+            "noisy_value={}",
+            result.noisy_value
+        );
     }
 
     #[test]

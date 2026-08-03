@@ -3,9 +3,9 @@
 // Covers archetype: LivestockKeeper (A-007–A-014)
 // Dairy Farmer, Poultry Farmer, Goat/Sheep Keeper, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LivestockFeatures {
@@ -22,16 +22,23 @@ pub struct LivestockFeatures {
 pub struct LivestockFeatureExtractor;
 
 impl LivestockFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for LivestockFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let daily_production_income = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / 30.0 };
+        let daily_production_income = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / 30.0
+        };
 
         let features = LivestockFeatures {
             daily_production_income,
@@ -57,17 +64,38 @@ impl WorkerTypeFeatureExtractor for LivestockFeatureExtractor {
                 features.mortality_proxy,
                 features.years_in_livestock / 20.0,
             ],
-            feature_names: vec!["daily_production", "feed_cost", "vet_cost",
-                "production_regularity", "animal_sales", "revenue_volatility",
-                "mortality_proxy", "years_in_livestock"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "daily_production",
+                "feed_cost",
+                "vet_cost",
+                "production_regularity",
+                "animal_sales",
+                "revenue_volatility",
+                "mortality_proxy",
+                "years_in_livestock",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::LivestockKeeper }
-    fn min_transactions(&self) -> usize { 60 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::LivestockKeeper
+    }
+    fn min_transactions(&self) -> usize {
+        60
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["daily_production", "feed_cost", "vet_cost",
-             "production_regularity", "animal_sales", "revenue_volatility",
-             "mortality_proxy", "years_in_livestock"]
+        vec![
+            "daily_production",
+            "feed_cost",
+            "vet_cost",
+            "production_regularity",
+            "animal_sales",
+            "revenue_volatility",
+            "mortality_proxy",
+            "years_in_livestock",
+        ]
     }
 }

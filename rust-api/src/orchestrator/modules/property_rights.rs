@@ -25,11 +25,11 @@ pub enum PropertyType {
 /// Documentation level
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DocumentationLevel {
-    NoDocumentation,      // Verbal agreement only
-    InformalReceipt,      // Handwritten receipt
-    OfficialReceipt,      // Printed receipt from authority
-    Permit,               // Government permit
-    TitleDeed,            // Full legal ownership
+    NoDocumentation, // Verbal agreement only
+    InformalReceipt, // Handwritten receipt
+    OfficialReceipt, // Printed receipt from authority
+    Permit,          // Government permit
+    TitleDeed,       // Full legal ownership
 }
 
 /// Property rights assessment for a worker
@@ -37,8 +37,8 @@ pub enum DocumentationLevel {
 pub struct PropertyRightsAssessment {
     pub worker_id: String,
     pub properties: Vec<PropertyAssessment>,
-    pub overall_score: f64,     // 0-100
-    pub risk_level: String,     // "Low", "Medium", "High", "Critical"
+    pub overall_score: f64, // 0-100
+    pub risk_level: String, // "Low", "Medium", "High", "Critical"
     pub recommendations: Vec<String>,
     pub estimated_value_at_risk: f64,
 }
@@ -49,9 +49,9 @@ pub struct PropertyAssessment {
     pub property_type: PropertyType,
     pub description: String,
     pub documentation_level: DocumentationLevel,
-    pub score: f64,              // 0-100
+    pub score: f64, // 0-100
     pub estimated_value: f64,
-    pub eviction_risk: String,   // "Low", "Medium", "High"
+    pub eviction_risk: String, // "Low", "Medium", "High"
     pub formalization_path: String,
     pub formalization_cost: f64,
 }
@@ -60,7 +60,9 @@ pub struct PropertyAssessment {
 pub struct PropertyRightsScorer;
 
 impl PropertyRightsScorer {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Score documentation level (0-100)
     pub fn score_documentation(level: &DocumentationLevel) -> f64 {
@@ -86,7 +88,10 @@ impl PropertyRightsScorer {
     }
 
     /// Recommend formalization path
-    pub fn formalization_path(property_type: &PropertyType, current_level: &DocumentationLevel) -> (String, f64) {
+    pub fn formalization_path(
+        property_type: &PropertyType,
+        current_level: &DocumentationLevel,
+    ) -> (String, f64) {
         match (property_type, current_level) {
             (PropertyType::Stall, DocumentationLevel::NoDocumentation) => (
                 "Apply for market allocation from county government. Visit county offices with ID and 2 passport photos. Fee: KES 500-2000.".into(),
@@ -138,7 +143,13 @@ impl PropertyRightsScorer {
             let eviction = Self::eviction_risk(&doc_level, &ptype);
             let (path, cost) = Self::formalization_path(&ptype, &doc_level);
 
-            let value_at_risk = if doc_score < 50.0 { value * 0.8 } else if doc_score < 75.0 { value * 0.3 } else { 0.0 };
+            let value_at_risk = if doc_score < 50.0 {
+                value * 0.8
+            } else if doc_score < 75.0 {
+                value * 0.3
+            } else {
+                0.0
+            };
 
             assessments.push(PropertyAssessment {
                 property_type: ptype,
@@ -155,22 +166,32 @@ impl PropertyRightsScorer {
             total_value_at_risk += value_at_risk;
         }
 
-        let overall_score = if assessments.is_empty() { 0.0 } else { total_score / assessments.len() as f64 };
+        let overall_score = if assessments.is_empty() {
+            0.0
+        } else {
+            total_score / assessments.len() as f64
+        };
 
         let risk_level = match overall_score as u32 {
             0..=25 => "Critical",
             26..=50 => "High",
             51..=75 => "Medium",
             _ => "Low",
-        }.to_string();
+        }
+        .to_string();
 
         let mut recommendations = Vec::new();
         if overall_score < 50.0 {
-            recommendations.push("Prioritize formalizing your most valuable property first.".into());
-            recommendations.push("Visit your county's land registry or market superintendent office.".into());
+            recommendations
+                .push("Prioritize formalizing your most valuable property first.".into());
+            recommendations
+                .push("Visit your county's land registry or market superintendent office.".into());
         }
         if total_value_at_risk > 50000.0 {
-            recommendations.push(format!("You have KES {:,.0f} in property at risk. Legal aid may help.", total_value_at_risk));
+            recommendations.push(format!(
+                "You have KES {:,.0f} in property at risk. Legal aid may help.",
+                total_value_at_risk
+            ));
         }
         recommendations.push("Keep all receipts and agreements in a safe place — photos on your phone count as evidence.".into());
 
@@ -191,16 +212,28 @@ mod tests {
 
     #[test]
     fn test_documentation_scoring() {
-        assert_eq!(PropertyRightsScorer::score_documentation(&DocumentationLevel::NoDocumentation), 10.0);
-        assert_eq!(PropertyRightsScorer::score_documentation(&DocumentationLevel::TitleDeed), 100.0);
+        assert_eq!(
+            PropertyRightsScorer::score_documentation(&DocumentationLevel::NoDocumentation),
+            10.0
+        );
+        assert_eq!(
+            PropertyRightsScorer::score_documentation(&DocumentationLevel::TitleDeed),
+            100.0
+        );
     }
 
     #[test]
     fn test_high_risk_no_docs() {
         let scorer = PropertyRightsScorer::new();
-        let assessment = scorer.assess("worker1", vec![
-            (PropertyType::Stall, "Market stall".into(), DocumentationLevel::NoDocumentation, 20000.0),
-        ]);
+        let assessment = scorer.assess(
+            "worker1",
+            vec![(
+                PropertyType::Stall,
+                "Market stall".into(),
+                DocumentationLevel::NoDocumentation,
+                20000.0,
+            )],
+        );
         assert_eq!(assessment.risk_level, "Critical");
         assert!(assessment.estimated_value_at_risk > 10000.0);
     }
@@ -208,9 +241,15 @@ mod tests {
     #[test]
     fn test_low_risk_title_deed() {
         let scorer = PropertyRightsScorer::new();
-        let assessment = scorer.assess("worker2", vec![
-            (PropertyType::FarmPlot, "Family shamba".into(), DocumentationLevel::TitleDeed, 500000.0),
-        ]);
+        let assessment = scorer.assess(
+            "worker2",
+            vec![(
+                PropertyType::FarmPlot,
+                "Family shamba".into(),
+                DocumentationLevel::TitleDeed,
+                500000.0,
+            )],
+        );
         assert_eq!(assessment.risk_level, "Low");
         assert_eq!(assessment.estimated_value_at_risk, 0.0);
     }

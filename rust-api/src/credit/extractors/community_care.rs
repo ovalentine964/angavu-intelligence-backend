@@ -3,9 +3,9 @@
 // Covers archetype: CommunityCareWorker (O-005–O-030)
 // MC/DJ, Photographer, Waste Picker, Security Guard, Tutor, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityCareFeatures {
@@ -22,16 +22,23 @@ pub struct CommunityCareFeatures {
 pub struct CommunityCareFeatureExtractor;
 
 impl CommunityCareFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for CommunityCareFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let avg_fee = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / sales.len() as f64 };
+        let avg_fee = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / sales.len() as f64
+        };
         let engagements_per_month = sales.len() as f64 / 3.0;
 
         let features = CommunityCareFeatures {
@@ -58,17 +65,38 @@ impl WorkerTypeFeatureExtractor for CommunityCareFeatureExtractor {
                 features.advance_payment_ratio,
                 features.reputation_score,
             ],
-            feature_names: vec!["avg_fee", "engagements_per_month", "income_volatility",
-                "equipment_investment", "repeat_clients", "seasonal_peak",
-                "advance_payment", "reputation"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "avg_fee",
+                "engagements_per_month",
+                "income_volatility",
+                "equipment_investment",
+                "repeat_clients",
+                "seasonal_peak",
+                "advance_payment",
+                "reputation",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::CommunityCareWorker }
-    fn min_transactions(&self) -> usize { 20 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::CommunityCareWorker
+    }
+    fn min_transactions(&self) -> usize {
+        20
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["avg_fee", "engagements_per_month", "income_volatility",
-             "equipment_investment", "repeat_clients", "seasonal_peak",
-             "advance_payment", "reputation"]
+        vec![
+            "avg_fee",
+            "engagements_per_month",
+            "income_volatility",
+            "equipment_investment",
+            "repeat_clients",
+            "seasonal_peak",
+            "advance_payment",
+            "reputation",
+        ]
     }
 }

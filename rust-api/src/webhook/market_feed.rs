@@ -20,7 +20,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use super::{WebhookEvent, WebhookEventType, WebhookSource, WebhookState, route_to_ooda, store_webhook_event};
+use super::{
+    route_to_ooda, store_webhook_event, WebhookEvent, WebhookEventType, WebhookSource, WebhookState,
+};
 
 // ═══════════════════════════════════════════════════════════
 //  MARKET FEED PAYLOAD
@@ -88,7 +90,11 @@ pub async fn handle_market_feed(
     State(state): State<WebhookState>,
     Json(payload): Json<MarketFeedPayload>,
 ) -> impl IntoResponse {
-    let event_id = format!("market-{}-{}", payload.provider, chrono::Utc::now().timestamp_millis());
+    let event_id = format!(
+        "market-{}-{}",
+        payload.provider,
+        chrono::Utc::now().timestamp_millis()
+    );
 
     info!(
         event_id = %event_id,
@@ -103,8 +109,9 @@ pub async fn handle_market_feed(
             Json(serde_json::json!({
                 "success": false,
                 "message": "No items in feed"
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // Process each feed item
@@ -122,14 +129,20 @@ pub async fn handle_market_feed(
 
         let market_event = MarketEvent {
             product: item.product.clone(),
-            category: item.category.clone().unwrap_or_else(|| "general".to_string()),
+            category: item
+                .category
+                .clone()
+                .unwrap_or_else(|| "general".to_string()),
             market: item.market.clone(),
             region: item.region.clone(),
             price_current: item.price_per_unit,
             price_previous: item.previous_price,
             price_change_pct,
             unit: item.unit.clone(),
-            supply_level: item.supply_level.clone().unwrap_or_else(|| "normal".to_string()),
+            supply_level: item
+                .supply_level
+                .clone()
+                .unwrap_or_else(|| "normal".to_string()),
             provider: payload.provider.clone(),
         };
 
@@ -204,6 +217,7 @@ pub async fn handle_market_feed(
             "event_id": event_id,
             "processed": processed,
             "alerts_triggered": alerts.len(),
-        }))
-    ).into_response()
+        })),
+    )
+        .into_response()
 }

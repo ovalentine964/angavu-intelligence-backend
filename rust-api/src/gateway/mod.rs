@@ -1,18 +1,18 @@
 // src/gateway/mod.rs
 
-pub mod auth;
-pub mod rate_limit;
-pub mod k_anonymity;
 pub mod audit;
-pub mod tool_output_verification;
-pub mod sync_verification;
-pub mod webhook_integration;
-pub mod human_approval;
+pub mod auth;
+pub mod data_retention;
 pub mod error;
-pub mod tools_impl;
 pub mod graph_sync;
+pub mod human_approval;
+pub mod k_anonymity;
+pub mod rate_limit;
 pub mod security_headers;
-pub mod data_retention; // P1: Data retention policies and right-to-erasure enforcement
+pub mod sync_verification;
+pub mod tool_output_verification;
+pub mod tools_impl;
+pub mod webhook_integration; // P1: Data retention policies and right-to-erasure enforcement
 
 use axum::{
     extract::{ConnectInfo, Request, State},
@@ -49,11 +49,10 @@ pub struct GatewayState {
 // src/gateway/mod.rs (continued — full router assembly)
 
 use axum::{
-    Router,
     middleware,
     response::IntoResponse,
     routing::{get, post},
-    Json,
+    Json, Router,
 };
 use serde_json::json;
 
@@ -132,9 +131,8 @@ mod tools {
                 dp.gaussian_mechanism_f64(req.value, sensitivity)
             }
             _ => {
-                return ErrorResponse::bad_request(
-                    "mechanism must be 'laplace' or 'gaussian'"
-                ).into_response();
+                return ErrorResponse::bad_request("mechanism must be 'laplace' or 'gaussian'")
+                    .into_response();
             }
         };
 
@@ -165,7 +163,8 @@ mod tools {
             return ErrorResponse::k_anonymity_violation(
                 req.cohort_size as usize,
                 state.k_anonymity.k_threshold(),
-            ).into_response();
+            )
+            .into_response();
         }
 
         // Apply DP noise to the aggregated value
@@ -221,18 +220,23 @@ mod superagent {
 /// Billing API handlers — fully implemented.
 /// Uses the billing module for real subscription, usage, payment, and invoice management.
 mod billing {
-    use super::*;
     use super::auth::Claims;
+    use super::*;
+    use crate::billing::{invoice, metering, mpesa, subscription};
     use axum::extract::Path;
-    use crate::billing::{metering, subscription, mpesa, invoice};
 
     pub async fn create_subscription(
         State(state): State<GatewayState>,
         claims: Claims,
         Json(req): Json<subscription::CreateSubscriptionRequest>,
     ) -> impl IntoResponse {
-        match subscription::create_subscription(&state.db, &state.redis, &claims.org_id, req).await {
-            Ok(sub) => (StatusCode::CREATED, Json(serde_json::to_value(sub).unwrap())).into_response(),
+        match subscription::create_subscription(&state.db, &state.redis, &claims.org_id, req).await
+        {
+            Ok(sub) => (
+                StatusCode::CREATED,
+                Json(serde_json::to_value(sub).unwrap()),
+            )
+                .into_response(),
             Err(e) => {
                 tracing::error!(error = %e, org_id = %claims.org_id, "Failed to create subscription");
                 ErrorResponse::internal().into_response()
@@ -247,9 +251,9 @@ mod billing {
 
 /// Billing handler implementations using the billing module.
 mod billing_handlers {
-    use super::*;
     use super::auth::Claims;
-    use crate::billing::{metering, subscription, mpesa, invoice};
+    use super::*;
+    use crate::billing::{invoice, metering, mpesa, subscription};
     use axum::extract::Path;
 
     pub async fn get_subscription(
@@ -279,11 +283,10 @@ mod billing_handlers {
         }
     }
 
-    pub async fn get_usage(
-        State(state): State<GatewayState>,
-        claims: Claims,
-    ) -> impl IntoResponse {
-        match metering::get_usage_summary(&state.redis, &state.db, &claims.org_id, &claims.tier).await {
+    pub async fn get_usage(State(state): State<GatewayState>, claims: Claims) -> impl IntoResponse {
+        match metering::get_usage_summary(&state.redis, &state.db, &claims.org_id, &claims.tier)
+            .await
+        {
             Ok(usage) => Json(serde_json::to_value(usage).unwrap()).into_response(),
             Err(e) => {
                 tracing::error!(error = %e, org_id = %claims.org_id, "Failed to get usage");
@@ -307,8 +310,14 @@ mod billing_handlers {
             },
         };
 
-        match mpesa::initiate_stk_push(&state.db, &state.redis, &mpesa_config, &claims.org_id, req).await {
-            Ok(resp) => (StatusCode::ACCEPTED, Json(serde_json::to_value(resp).unwrap())).into_response(),
+        match mpesa::initiate_stk_push(&state.db, &state.redis, &mpesa_config, &claims.org_id, req)
+            .await
+        {
+            Ok(resp) => (
+                StatusCode::ACCEPTED,
+                Json(serde_json::to_value(resp).unwrap()),
+            )
+                .into_response(),
             Err(e) => {
                 tracing::error!(error = %e, org_id = %claims.org_id, "Failed to initiate payment");
                 ErrorResponse::internal().into_response()
@@ -381,7 +390,10 @@ mod billing_handlers {
         match invoice::generate_invoice_pdf(&state.db, &claims.org_id, &invoice_id).await {
             Ok(pdf_bytes) => {
                 let headers = [
-                    (axum::http::header::CONTENT_TYPE, "application/pdf".to_string()),
+                    (
+                        axum::http::header::CONTENT_TYPE,
+                        "application/pdf".to_string(),
+                    ),
                     (
                         axum::http::header::CONTENT_DISPOSITION,
                         format!("attachment; filename=\"invoice-{}.pdf\"", invoice_id),
@@ -399,7 +411,10 @@ mod billing_handlers {
 
 /// Build the full API gateway router with all middleware.
 /// S6: Accepts additional routers that should also be protected by JWT auth.
-pub fn build_gateway_router(state: GatewayState, additional_protected_routers: Vec<Router>) -> Router {
+pub fn build_gateway_router(
+    state: GatewayState,
+    additional_protected_routers: Vec<Router>,
+) -> Router {
     // P2: Hardened CORS — explicit ALLOWED_ORIGINS with no localhost fallback in production
     let cors = tower_http::cors::CorsLayer::new()
         .allow_origin(tower_http::cors::AllowOrigin::predicate(
@@ -417,7 +432,9 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
                     return false;
                 }
                 // Fallback: allow localhost only in development (ANGAVU_ENV != production)
-                let is_production = std::env::var("ANGAVU_ENV").map(|v| v == "production").unwrap_or(false);
+                let is_production = std::env::var("ANGAVU_ENV")
+                    .map(|v| v == "production")
+                    .unwrap_or(false);
                 if !is_production {
                     if let Ok(origin_str) = origin.to_str() {
                         return origin_str.starts_with("http://localhost")
@@ -453,42 +470,92 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
     );
 
     // Public routes (no auth required) — health check moved to telemetry module
-    let public_routes = Router::new()
-        .route("/api/v1/tools", get(list_tools));
+    let public_routes = Router::new().route("/api/v1/tools", get(list_tools));
 
     // Protected routes (auth + rate limit + audit required)
     let mut protected_routes = Router::new()
         // Tools endpoints — D1: top 5 critical endpoints implemented
-        .route("/api/v1/tools/credit-scores", post(tools_impl::compute_credit_score))
-        .route("/api/v1/tools/market-analyses", get(tools_impl::get_market_analysis))
-        .route("/api/v1/tools/demand-forecasts", get(tools_impl::get_demand_forecast))
-        .route("/api/v1/tools/economic-indicators", post(tools::economic_indicators))
-        .route("/api/v1/tools/distribution-gaps", get(tools::distribution_gaps))
+        .route(
+            "/api/v1/tools/credit-scores",
+            post(tools_impl::compute_credit_score),
+        )
+        .route(
+            "/api/v1/tools/market-analyses",
+            get(tools_impl::get_market_analysis),
+        )
+        .route(
+            "/api/v1/tools/demand-forecasts",
+            get(tools_impl::get_demand_forecast),
+        )
+        .route(
+            "/api/v1/tools/economic-indicators",
+            post(tools::economic_indicators),
+        )
+        .route(
+            "/api/v1/tools/distribution-gaps",
+            get(tools::distribution_gaps),
+        )
         .route("/api/v1/tools/fmcg-reports", get(tools::fmcg_report))
         .route("/api/v1/tools/privacy/noise", post(tools::privacy_noise))
         .route("/api/v1/tools/anonymization", post(tools::anonymize))
-        .route("/api/v1/tools/federated-learning/status", get(tools_impl::get_federated_status))
-        .route("/api/v1/tools/credit/:score_id/explain", get(tools_impl::explain_credit_score))
+        .route(
+            "/api/v1/tools/federated-learning/status",
+            get(tools_impl::get_federated_status),
+        )
+        .route(
+            "/api/v1/tools/credit/:score_id/explain",
+            get(tools_impl::explain_credit_score),
+        )
         .route("/api/v1/tools/reports", post(tools::generate_report))
         // Superagent endpoints
         .route("/api/v1/superagent/status", get(superagent::status))
         .route("/api/v1/superagent/cycles", post(superagent::trigger_cycle))
         .route("/api/v1/superagent/invocations", post(superagent::invoke))
         // Sync endpoints
-        .route("/api/v1/sync/anonymized", post(crate::sync::receiver::handle_sync))
+        .route(
+            "/api/v1/sync/anonymized",
+            post(crate::sync::receiver::handle_sync),
+        )
         .route("/api/v1/sync/graph", post(graph_sync::handle_graph_sync))
         // Billing endpoints — fully implemented
         .route("/api/v1/billing/tiers", get(tools_impl::list_billing_tiers))
-        .route("/api/v1/billing/subscriptions", post(billing::create_subscription))
-        .route("/api/v1/billing/subscriptions/me", get(billing_handlers::get_subscription))
-        .route("/api/v1/billing/subscriptions/cancel", post(billing_handlers::cancel_subscription))
+        .route(
+            "/api/v1/billing/subscriptions",
+            post(billing::create_subscription),
+        )
+        .route(
+            "/api/v1/billing/subscriptions/me",
+            get(billing_handlers::get_subscription),
+        )
+        .route(
+            "/api/v1/billing/subscriptions/cancel",
+            post(billing_handlers::cancel_subscription),
+        )
         .route("/api/v1/billing/usage", get(billing_handlers::get_usage))
-        .route("/api/v1/billing/payments/initiate", post(billing_handlers::initiate_payment))
-        .route("/api/v1/billing/invoices", get(billing_handlers::list_invoices))
-        .route("/api/v1/billing/invoices/:invoice_id", get(billing_handlers::get_invoice))
-        .route("/api/v1/billing/invoices/:invoice_id/pdf", get(billing_handlers::download_invoice_pdf))
-        .route("/api/v1/billing/subscriptions/reactivate", post(billing_handlers::reactivate_subscription))
-        .route("/api/v1/billing/payments/:txn_id/status", get(billing_handlers::check_payment_status))
+        .route(
+            "/api/v1/billing/payments/initiate",
+            post(billing_handlers::initiate_payment),
+        )
+        .route(
+            "/api/v1/billing/invoices",
+            get(billing_handlers::list_invoices),
+        )
+        .route(
+            "/api/v1/billing/invoices/:invoice_id",
+            get(billing_handlers::get_invoice),
+        )
+        .route(
+            "/api/v1/billing/invoices/:invoice_id/pdf",
+            get(billing_handlers::download_invoice_pdf),
+        )
+        .route(
+            "/api/v1/billing/subscriptions/reactivate",
+            post(billing_handlers::reactivate_subscription),
+        )
+        .route(
+            "/api/v1/billing/payments/:txn_id/status",
+            get(billing_handlers::check_payment_status),
+        )
         .route("/api/v1/billing/api-keys", post(billing::create_api_key));
 
     // S6: Merge additional protected routers (approval, GraphQL) inside auth layer
@@ -542,8 +609,7 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
         .route("/api/v1/auth/refresh", post(auth::refresh_token));
 
     // Logout requires authentication (to identify which token to revoke)
-    let auth_protected = Router::new()
-        .route("/api/v1/auth/logout", post(auth::logout));
+    let auth_protected = Router::new().route("/api/v1/auth/logout", post(auth::logout));
 
     // Merge logout into protected routes so it benefits from JWT middleware
     protected_routes = protected_routes.merge(auth_protected);
@@ -554,7 +620,9 @@ pub fn build_gateway_router(state: GatewayState, additional_protected_routers: V
         .merge(protected_routes)
         .layer(cors)
         .layer(vary_header)
-        .layer(middleware::from_fn(security_headers::security_headers_middleware))
+        .layer(middleware::from_fn(
+            security_headers::security_headers_middleware,
+        ))
         .layer(compression)
         .layer(body_limit)
         .layer(timeout)

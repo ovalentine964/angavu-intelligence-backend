@@ -12,8 +12,8 @@ use chrono::{DateTime, Utc};
 // Re-export the canonical CircuitBreaker from loops module to avoid duplication.
 // This consolidates the 3 duplicate implementations into 1 canonical source.
 pub use crate::loops::circuit_breaker::CircuitBreaker;
-pub use crate::loops::circuit_breaker::CircuitState;
 pub use crate::loops::circuit_breaker::CircuitBreakerConfig;
+pub use crate::loops::circuit_breaker::CircuitState;
 pub use crate::loops::circuit_breaker::FallbackStrategy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -90,7 +90,7 @@ pub struct OodaEdge {
     pub source_phase: OodaPhase,
     pub target_phase: OodaPhase,
     pub condition: Option<TransitionCondition>,
-    pub data_schema: serde_json::Value,  // JSON schema of data flowing through
+    pub data_schema: serde_json::Value, // JSON schema of data flowing through
 }
 
 /// Condition that must be true for a transition to fire.
@@ -128,7 +128,11 @@ pub enum ComparisonOp {
 
 /// Helper: Create a simple per-node circuit breaker with default config.
 /// Delegates to the canonical CircuitBreaker from the loops module.
-pub fn make_node_circuit_breaker(service_name: &str, failure_threshold: u32, open_timeout_secs: u64) -> CircuitBreaker {
+pub fn make_node_circuit_breaker(
+    service_name: &str,
+    failure_threshold: u32,
+    open_timeout_secs: u64,
+) -> CircuitBreaker {
     CircuitBreaker::new(
         service_name.to_string(),
         CircuitBreakerConfig {
@@ -136,7 +140,9 @@ pub fn make_node_circuit_breaker(service_name: &str, failure_threshold: u32, ope
             open_timeout: std::time::Duration::from_secs(open_timeout_secs),
             ..Default::default()
         },
-        FallbackStrategy::FailFast { error: "Circuit breaker open".to_string() },
+        FallbackStrategy::FailFast {
+            error: "Circuit breaker open".to_string(),
+        },
     )
 }
 
@@ -253,9 +259,7 @@ impl OodaGraph {
                 id: Uuid::new_v4(),
                 source_phase: OodaPhase::Orient,
                 target_phase: OodaPhase::Act,
-                condition: Some(TransitionCondition::AnomalyDetected {
-                    sensitivity: 0.95,
-                }),
+                condition: Some(TransitionCondition::AnomalyDetected { sensitivity: 0.95 }),
                 data_schema: serde_json::json!({
                     "type": "emergency_action",
                     "fields": ["anomaly_type", "severity", "recommended_action"]
@@ -385,10 +389,10 @@ pub struct OrientOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trend {
-    pub dimension: String,        // "price:tomatoes:nairobi"
+    pub dimension: String, // "price:tomatoes:nairobi"
     pub direction: TrendDirection,
     pub magnitude_pct: f64,
-    pub duration: String,         // "3 days", "2 weeks"
+    pub duration: String, // "3 days", "2 weeks"
     pub confidence: f64,
 }
 
@@ -449,7 +453,7 @@ pub struct DecideOutput {
     pub selected_action: Action,
     pub decision_source: DecisionSource,
     pub confidence: f64,
-    pub alternatives_rejected: Vec<(Action, String)>,  // (action, rejection_reason)
+    pub alternatives_rejected: Vec<(Action, String)>, // (action, rejection_reason)
     pub requires_human_approval: bool,
 }
 

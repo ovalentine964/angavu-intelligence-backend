@@ -3,9 +3,9 @@
 // Covers archetype: ServiceProvider (S-001–S-034)
 // Barber, Hairdresser, Mechanic, Plumber, Electrician, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceProviderFeatures {
@@ -22,18 +22,26 @@ pub struct ServiceProviderFeatures {
 pub struct ServiceProviderFeatureExtractor;
 
 impl ServiceProviderFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for ServiceProviderFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let avg_service_price = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / sales.len() as f64 };
+        let avg_service_price = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / sales.len() as f64
+        };
         let services_per_day = sales.len() as f64 / 30.0;
-        let service_diversity = transactions.iter()
+        let service_diversity = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .filter_map(|tx| tx.product.clone())
             .collect::<std::collections::HashSet<_>>()
@@ -63,17 +71,38 @@ impl WorkerTypeFeatureExtractor for ServiceProviderFeatureExtractor {
                 features.workspace_cost_ratio,
                 service_diversity as f64 / 20.0,
             ],
-            feature_names: vec!["avg_service_price", "services_per_day", "parts_markup",
-                "repeat_customers", "appointment_regularity", "revenue_volatility",
-                "workspace_cost", "service_diversity"].into_iter().map(String::from).collect(),
+            feature_names: vec![
+                "avg_service_price",
+                "services_per_day",
+                "parts_markup",
+                "repeat_customers",
+                "appointment_regularity",
+                "revenue_volatility",
+                "workspace_cost",
+                "service_diversity",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::ServiceProvider }
-    fn min_transactions(&self) -> usize { 20 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::ServiceProvider
+    }
+    fn min_transactions(&self) -> usize {
+        20
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["avg_service_price", "services_per_day", "parts_markup",
-             "repeat_customers", "appointment_regularity", "revenue_volatility",
-             "workspace_cost", "service_diversity"]
+        vec![
+            "avg_service_price",
+            "services_per_day",
+            "parts_markup",
+            "repeat_customers",
+            "appointment_regularity",
+            "revenue_volatility",
+            "workspace_cost",
+            "service_diversity",
+        ]
     }
 }

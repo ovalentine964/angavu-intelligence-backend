@@ -55,7 +55,10 @@ impl Default for SimplexSolver {
 impl SimplexSolver {
     /// Create a new solver with custom parameters.
     pub fn new(max_iterations: usize, tolerance: f64) -> Self {
-        Self { max_iterations, tolerance }
+        Self {
+            max_iterations,
+            tolerance,
+        }
     }
 
     /// Solve a linear programming problem using the revised simplex method.
@@ -213,10 +216,7 @@ impl SimplexSolver {
 
         let problem = LpProblem {
             objective: profits.to_vec(),
-            constraints: vec![
-                unit_costs.to_vec(),
-                storage_sizes.to_vec(),
-            ],
+            constraints: vec![unit_costs.to_vec(), storage_sizes.to_vec()],
             rhs: vec![budget, storage_capacity],
         };
 
@@ -234,11 +234,7 @@ mod tests {
         // subject to: x + y ≤ 4, x ≤ 3, y ≤ 3
         let problem = LpProblem {
             objective: vec![3.0, 2.0],
-            constraints: vec![
-                vec![1.0, 1.0],
-                vec![1.0, 0.0],
-                vec![0.0, 1.0],
-            ],
+            constraints: vec![vec![1.0, 1.0], vec![1.0, 0.0], vec![0.0, 1.0]],
             rhs: vec![4.0, 3.0, 3.0],
         };
 

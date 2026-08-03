@@ -1,11 +1,11 @@
 // Data Pipeline Feedback Loops
 // Each pipeline stage feeds back: error signals, quality metrics, adjustment parameters
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 
 // ─── Pipeline Stage ───────────────────────────────────────────────────────
@@ -206,18 +206,24 @@ impl PipelineFeedbackChannel {
         };
 
         if let Err(e) = self.send(signal).await {
-            warn!("Failed to send error signal for device {}: {:?}", device_id, e);
+            warn!(
+                "Failed to send error signal for device {}: {:?}",
+                device_id, e
+            );
         }
 
         // Also queue for next sync
         let mut pending = self.pending_device_errors.write().await;
-        pending.entry(device_id.to_string()).or_default().push(DeviceErrorSignal {
-            device_id: device_id.to_string(),
-            errors: errors.to_vec(),
-            severity: Severity::Warning,
-            suggested_fix: Some("Check data format and retry".to_string()),
-            timestamp: Utc::now(),
-        });
+        pending
+            .entry(device_id.to_string())
+            .or_default()
+            .push(DeviceErrorSignal {
+                device_id: device_id.to_string(),
+                errors: errors.to_vec(),
+                severity: Severity::Warning,
+                suggested_fix: Some("Check data format and retry".to_string()),
+                timestamp: Utc::now(),
+            });
     }
 
     /// Get pending error signals for a device (consumed on next sync).
@@ -260,7 +266,10 @@ impl PipelineFeedbackChannel {
 
     /// Update data collection priorities based on analyzer feedback.
     pub async fn update_collection_priorities(&self, priorities: Vec<CollectionPriority>) {
-        info!("Updating collection priorities: {} entries", priorities.len());
+        info!(
+            "Updating collection priorities: {} entries",
+            priorities.len()
+        );
         let mut stored = self.collection_priorities.write().await;
         *stored = priorities;
     }
@@ -309,7 +318,10 @@ pub struct PipelineFeedbackLoop {
 
 impl PipelineFeedbackLoop {
     pub fn new(channel: Arc<PipelineFeedbackChannel>, check_interval: std::time::Duration) -> Self {
-        Self { channel, check_interval }
+        Self {
+            channel,
+            check_interval,
+        }
     }
 
     /// Start the feedback loop orchestrator.
@@ -351,12 +363,16 @@ impl PipelineFeedbackLoop {
                 );
             }
             FeedbackType::ParameterAdjustment => {
-                if let Ok(adjustment) = serde_json::from_value::<AggregationAdjustment>(signal.data.clone()) {
+                if let Ok(adjustment) =
+                    serde_json::from_value::<AggregationAdjustment>(signal.data.clone())
+                {
                     self.channel.record_aggregation_adjustment(adjustment).await;
                 }
             }
             FeedbackType::PriorityChange => {
-                if let Ok(priorities) = serde_json::from_value::<Vec<CollectionPriority>>(signal.data.clone()) {
+                if let Ok(priorities) =
+                    serde_json::from_value::<Vec<CollectionPriority>>(signal.data.clone())
+                {
                     self.channel.update_collection_priorities(priorities).await;
                 }
             }
@@ -389,7 +405,8 @@ impl PipelineFeedbackLoop {
             if m.error_rate > 0.1 {
                 warn!(
                     "Stage {:?} has high error rate: {:.1}%",
-                    stage, m.error_rate * 100.0
+                    stage,
+                    m.error_rate * 100.0
                 );
             }
 
@@ -434,7 +451,9 @@ mod tests {
 
         channel.send(signal).await.unwrap();
 
-        let signals = channel.process_stage_signals(&PipelineStage::SyncReceiver).await;
+        let signals = channel
+            .process_stage_signals(&PipelineStage::SyncReceiver)
+            .await;
         assert_eq!(signals.len(), 1);
         assert_eq!(signals[0].signal_id, "test-1");
     }
@@ -443,7 +462,9 @@ mod tests {
     async fn test_device_error_queue() {
         let channel = PipelineFeedbackChannel::new();
 
-        channel.send_error("dev-001", &["missing field".to_string()]).await;
+        channel
+            .send_error("dev-001", &["missing field".to_string()])
+            .await;
 
         let errors = channel.consume_device_errors("dev-001").await;
         assert_eq!(errors.len(), 1);
@@ -458,13 +479,15 @@ mod tests {
     async fn test_aggregation_adjustments() {
         let channel = PipelineFeedbackChannel::new();
 
-        channel.record_aggregation_adjustment(AggregationAdjustment {
-            parameter: "window_size_hours".to_string(),
-            old_value: 24.0,
-            new_value: 12.0,
-            reason: "High volatility detected".to_string(),
-            confidence: 0.8,
-        }).await;
+        channel
+            .record_aggregation_adjustment(AggregationAdjustment {
+                parameter: "window_size_hours".to_string(),
+                old_value: 24.0,
+                new_value: 12.0,
+                reason: "High volatility detected".to_string(),
+                confidence: 0.8,
+            })
+            .await;
 
         let adjustments = channel.get_aggregation_adjustments().await;
         assert_eq!(adjustments.len(), 1);
@@ -475,14 +498,14 @@ mod tests {
     async fn test_collection_priorities() {
         let channel = PipelineFeedbackChannel::new();
 
-        channel.update_collection_priorities(vec![
-            CollectionPriority {
+        channel
+            .update_collection_priorities(vec![CollectionPriority {
                 region: "nairobi-eastlands".to_string(),
                 product_category: "vegetables".to_string(),
                 priority_score: 0.9,
                 reason: "High demand spike detected".to_string(),
-            },
-        ]).await;
+            }])
+            .await;
 
         let priorities = channel.get_collection_priorities().await;
         assert_eq!(priorities.len(), 1);

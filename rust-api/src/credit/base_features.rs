@@ -1,9 +1,9 @@
 // Credit Scoring — Seasonality-Adjusted Base Features
 // Wraps existing CreditFeatures with seasonal adjustment
 
-use serde::{Deserialize, Serialize};
 use crate::credit::seasonality::SeasonalBaseline;
 use crate::credit::types::TrajectoryType;
+use serde::{Deserialize, Serialize};
 
 /// Existing credit features from credit_feedback.rs (unchanged for backward compat)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,9 +165,8 @@ mod tests {
     #[test]
     fn test_non_seasonal_uses_raw_features() {
         let raw = sample_raw_features();
-        let adjusted = AdjustedBaseFeatures::from_raw_with_seasonality(
-            raw.clone(), None, None, None,
-        );
+        let adjusted =
+            AdjustedBaseFeatures::from_raw_with_seasonality(raw.clone(), None, None, None);
 
         assert!(!adjusted.is_seasonal);
         assert_eq!(adjusted.effective_stability(), raw.consistency_score);
@@ -189,10 +188,15 @@ mod tests {
         };
 
         // Current year follows seasonal pattern
-        let current = [110.0, 90.0, 520.0, 780.0, 610.0, 190.0, 105.0, 95.0, 110.0, 95.0, 210.0, 310.0];
+        let current = [
+            110.0, 90.0, 520.0, 780.0, 610.0, 190.0, 105.0, 95.0, 110.0, 95.0, 210.0, 310.0,
+        ];
 
         let adjusted = AdjustedBaseFeatures::from_raw_with_seasonality(
-            raw, Some(&baseline), Some(&current), None,
+            raw,
+            Some(&baseline),
+            Some(&current),
+            None,
         );
 
         assert!(adjusted.is_seasonal);

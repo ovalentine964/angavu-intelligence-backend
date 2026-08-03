@@ -9,26 +9,26 @@ pub struct LocationRiskAdjustment {
     pub regional_disease: RegionalDiseaseBurden,
     pub water_quality: WaterQualityIndex,
     pub air_quality: AirQualityIndex,
-    pub overall_location_multiplier: f64,  // 0.8 (favorable) to 1.5 (unfavorable)
+    pub overall_location_multiplier: f64, // 0.8 (favorable) to 1.5 (unfavorable)
 }
 
 /// Access to healthcare facilities.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FacilityAccessScore {
-    pub score: f64,                    // 0.0 (no access) to 1.0 (excellent access)
+    pub score: f64, // 0.0 (no access) to 1.0 (excellent access)
     pub nearest_health_center_km: f64,
     pub nearest_hospital_km: f64,
     pub has_emergency_services: bool,
     pub ambulance_availability: AmbulanceAvailability,
-    pub description: String,           // "25km to nearest hospital"
-    pub risk_adjustment: f64,          // Multiplier: 1.0 (good) to 1.5 (poor)
+    pub description: String,  // "25km to nearest hospital"
+    pub risk_adjustment: f64, // Multiplier: 1.0 (good) to 1.5 (poor)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AmbulanceAvailability {
-    ReadilyAvailable,    // <30 min response
-    Limited,             // 30-60 min response
-    Unavailable,         // No ambulance service
+    ReadilyAvailable, // <30 min response
+    Limited,          // 30-60 min response
+    Unavailable,      // No ambulance service
 }
 
 /// Regional disease prevalence.
@@ -45,17 +45,17 @@ pub struct RegionalDiseaseBurden {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DiseaseRiskLevel {
-    VeryLow,    // <5% prevalence
-    Low,        // 5-10%
-    Moderate,   // 10-20%
-    High,       // 20-35%
-    VeryHigh,   // >35%
+    VeryLow,  // <5% prevalence
+    Low,      // 5-10%
+    Moderate, // 10-20%
+    High,     // 20-35%
+    VeryHigh, // >35%
 }
 
 /// Water quality and sanitation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaterQualityIndex {
-    pub score: f64,                     // 0.0 (contaminated) to 1.0 (clean)
+    pub score: f64, // 0.0 (contaminated) to 1.0 (clean)
     pub water_source: WaterSource,
     pub sanitation_level: SanitationLevel,
     pub risk_adjustment: f64,
@@ -63,26 +63,26 @@ pub struct WaterQualityIndex {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WaterSource {
-    PipedWater,          // Treated, reliable
-    Borehole,            // Usually safe
-    ProtectedWell,       // Moderately safe
-    UnprotectedWell,     // Risky
-    SurfaceWater,        // River, lake — high risk
+    PipedWater,      // Treated, reliable
+    Borehole,        // Usually safe
+    ProtectedWell,   // Moderately safe
+    UnprotectedWell, // Risky
+    SurfaceWater,    // River, lake — high risk
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SanitationLevel {
-    Improved,            // Flush toilet, pit latrine with slab
-    Shared,              // Shared facilities
-    Unimproved,          // Open pit, no slab
-    OpenDefecation,      // No facilities
+    Improved,       // Flush toilet, pit latrine with slab
+    Shared,         // Shared facilities
+    Unimproved,     // Open pit, no slab
+    OpenDefecation, // No facilities
 }
 
 /// Air quality for urban workers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AirQualityIndex {
-    pub score: f64,                     // 0.0 (hazardous) to 1.0 (excellent)
-    pub pm25_level: Option<f64>,        // µg/m³
+    pub score: f64,              // 0.0 (hazardous) to 1.0 (excellent)
+    pub pm25_level: Option<f64>, // µg/m³
     pub primary_pollutant: Option<String>,
     pub risk_adjustment: f64,
 }
@@ -97,10 +97,10 @@ impl LocationRiskAdjustment {
     /// - Poor air quality → higher multiplier (respiratory risk for outdoor workers)
     pub fn calculate_multiplier(&self) -> f64 {
         // Weights
-        let w_facility = 0.35;  // Access to care matters most for outcomes
-        let w_disease = 0.30;   // Regional disease burden
-        let w_water = 0.20;     // Water/sanitation
-        let w_air = 0.15;       // Air quality
+        let w_facility = 0.35; // Access to care matters most for outcomes
+        let w_disease = 0.30; // Regional disease burden
+        let w_water = 0.20; // Water/sanitation
+        let w_air = 0.15; // Air quality
 
         // Each factor is 1.0 (favorable) to ~1.5 (unfavorable)
         let facility_factor = self.facility_access.risk_adjustment;
@@ -109,9 +109,9 @@ impl LocationRiskAdjustment {
         let air_factor = self.air_quality.risk_adjustment;
 
         let weighted = w_facility * facility_factor
-                     + w_disease * disease_factor
-                     + w_water * water_factor
-                     + w_air * air_factor;
+            + w_disease * disease_factor
+            + w_water * water_factor
+            + w_air * air_factor;
 
         // Clamp to reasonable range
         weighted.clamp(0.8, 1.5)
@@ -127,7 +127,8 @@ fn kisumu_location_profile() -> LocationRiskAdjustment {
             nearest_hospital_km: 15.0,
             has_emergency_services: true,
             ambulance_availability: AmbulanceAvailability::Limited,
-            description: "Jaramogi Oginga Odinga Hospital available, but rural areas 15-30km away".into(),
+            description: "Jaramogi Oginga Odinga Hospital available, but rural areas 15-30km away"
+                .into(),
             risk_adjustment: 1.15,
         },
         regional_disease: RegionalDiseaseBurden {
@@ -151,7 +152,7 @@ fn kisumu_location_profile() -> LocationRiskAdjustment {
             primary_pollutant: Some("Particulate matter from roads".into()),
             risk_adjustment: 1.05,
         },
-        overall_location_multiplier: 1.20,  // Computed via calculate_multiplier()
+        overall_location_multiplier: 1.20, // Computed via calculate_multiplier()
     }
 }
 

@@ -106,7 +106,7 @@ pub struct PrivacyBudget {
     pub clip_norm: f64,
     pub noise_multiplier: f64,
     pub cumulative_epsilon: f64,
-    pub rounds_remaining: u32,  // before budget exhaustion
+    pub rounds_remaining: u32, // before budget exhaustion
 }
 
 /// Model metrics.
@@ -118,7 +118,7 @@ pub struct ModelMetrics {
     pub calibration_error: Option<f64>,
     pub worst_cohort_accuracy: f64,
     pub best_cohort_accuracy: f64,
-    pub accuracy_parity: f64,  // max difference across cohorts
+    pub accuracy_parity: f64, // max difference across cohorts
 }
 
 /// Delta encoding info for model distribution.
@@ -192,7 +192,7 @@ pub struct CohortInfo {
     pub region: String,
     pub device_count: u32,
     pub avg_data_quality: f64,
-    pub model_head_version: Option<String>,  // cohort-specific head
+    pub model_head_version: Option<String>, // cohort-specific head
     pub last_participation: Option<DateTime<Utc>>,
 }
 
@@ -303,11 +303,7 @@ impl FlGraph {
         let cutoff = Utc::now() - chrono::Duration::hours(threshold_hours);
         self.cohorts
             .values()
-            .filter(|c| {
-                c.last_participation
-                    .map(|ts| ts < cutoff)
-                    .unwrap_or(true)
-            })
+            .filter(|c| c.last_participation.map(|ts| ts < cutoff).unwrap_or(true))
             .collect()
     }
 
@@ -319,7 +315,7 @@ impl FlGraph {
             .rounds
             .iter()
             .rev()
-            .nth(1)  // second-to-last round
+            .nth(1) // second-to-last round
             .map(|r| r.global_metrics.accuracy);
 
         if let Some(prev) = prev_accuracy {

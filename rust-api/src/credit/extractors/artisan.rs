@@ -3,9 +3,9 @@
 // Covers archetype: Artisan (M-001–M-028)
 // Welder, Carpenter, Tailor, Potter, Basket Weaver, etc.
 
-use serde::{Deserialize, Serialize};
 use super::{Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtisanFeatures {
@@ -30,16 +30,23 @@ pub struct ArtisanFeatures {
 pub struct ArtisanFeatureExtractor;
 
 impl ArtisanFeatureExtractor {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl WorkerTypeFeatureExtractor for ArtisanFeatureExtractor {
     fn extract(&self, transactions: &[Transaction], _context: &WorkerContext) -> TypeFeatures {
-        let sales: Vec<f64> = transactions.iter()
+        let sales: Vec<f64> = transactions
+            .iter()
             .filter(|tx| tx.category == TransactionCategory::Sale)
             .map(|tx| tx.amount)
             .collect();
-        let avg_job_value = if sales.is_empty() { 0.0 } else { sales.iter().sum::<f64>() / sales.len() as f64 };
+        let avg_job_value = if sales.is_empty() {
+            0.0
+        } else {
+            sales.iter().sum::<f64>() / sales.len() as f64
+        };
         let jobs_per_month = sales.len() as f64 / 3.0; // Assuming 3 months of data
         let material_cost_ratio = 0.40; // Placeholder
         let revenue_volatility = 0.5; // Project-based = high volatility
@@ -71,18 +78,37 @@ impl WorkerTypeFeatureExtractor for ArtisanFeatureExtractor {
             features: serde_json::to_value(&features).unwrap_or_default(),
             feature_vector,
             feature_names: vec![
-                "avg_job_value", "material_cost_ratio", "jobs_per_month",
-                "revenue_volatility", "repeat_customer_ratio", "avg_gap_between_jobs",
-                "tool_investment_proxy", "upfront_payment_ratio",
-            ].into_iter().map(String::from).collect(),
+                "avg_job_value",
+                "material_cost_ratio",
+                "jobs_per_month",
+                "revenue_volatility",
+                "repeat_customer_ratio",
+                "avg_gap_between_jobs",
+                "tool_investment_proxy",
+                "upfront_payment_ratio",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
         }
     }
 
-    fn worker_type(&self) -> WorkerType { WorkerType::Artisan }
-    fn min_transactions(&self) -> usize { 20 }
+    fn worker_type(&self) -> WorkerType {
+        WorkerType::Artisan
+    }
+    fn min_transactions(&self) -> usize {
+        20
+    }
     fn feature_names(&self) -> Vec<&'static str> {
-        vec!["avg_job_value", "material_cost_ratio", "jobs_per_month",
-             "revenue_volatility", "repeat_customer_ratio", "avg_gap_between_jobs",
-             "tool_investment_proxy", "upfront_payment_ratio"]
+        vec![
+            "avg_job_value",
+            "material_cost_ratio",
+            "jobs_per_month",
+            "revenue_volatility",
+            "repeat_customer_ratio",
+            "avg_gap_between_jobs",
+            "tool_investment_proxy",
+            "upfront_payment_ratio",
+        ]
     }
 }

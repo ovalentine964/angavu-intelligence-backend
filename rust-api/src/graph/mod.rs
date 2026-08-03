@@ -3,11 +3,11 @@
 pub mod algorithms;
 pub mod cache;
 pub mod federated;
-pub mod ooda;
-pub mod pipeline;
-pub mod knowledge_graph;
-pub mod pg_knowledge_graph;
 pub mod harness_graph;
+pub mod knowledge_graph;
+pub mod ooda;
+pub mod pg_knowledge_graph;
+pub mod pipeline;
 pub mod unified_graph;
 
 use async_trait::async_trait;
@@ -63,18 +63,10 @@ pub trait GraphTraversal {
     async fn neighbors(&self, node_id: Uuid) -> anyhow::Result<Vec<(Self::Node, Self::Edge)>>;
 
     /// Get all nodes within N hops of a node.
-    async fn neighborhood(
-        &self,
-        node_id: Uuid,
-        max_hops: u32,
-    ) -> anyhow::Result<Vec<Self::Node>>;
+    async fn neighborhood(&self, node_id: Uuid, max_hops: u32) -> anyhow::Result<Vec<Self::Node>>;
 
     /// Find shortest path between two nodes.
-    async fn shortest_path(
-        &self,
-        from: Uuid,
-        to: Uuid,
-    ) -> anyhow::Result<Option<Vec<Self::Node>>>;
+    async fn shortest_path(&self, from: Uuid, to: Uuid) -> anyhow::Result<Option<Vec<Self::Node>>>;
 
     /// Get nodes similar to a given node (by embedding).
     async fn similar_nodes(
@@ -94,16 +86,19 @@ pub trait GraphMutation {
     async fn add_edge(&mut self, edge: Self::Edge) -> anyhow::Result<()>;
     async fn update_node(&mut self, node: Self::Node) -> anyhow::Result<()>;
     async fn remove_node(&mut self, node_id: Uuid) -> anyhow::Result<()>;
-    async fn remove_edge(&mut self, source_id: Uuid, target_id: Uuid, relationship: &str)
-        -> anyhow::Result<()>;
+    async fn remove_edge(
+        &mut self,
+        source_id: Uuid,
+        target_id: Uuid,
+        relationship: &str,
+    ) -> anyhow::Result<()>;
 }
 
 /// Trait for graph analytics operations.
 #[async_trait]
 pub trait GraphAnalytics {
     /// PageRank — rank nodes by importance.
-    async fn pagerank(&self, iterations: u32, damping: f64)
-        -> anyhow::Result<Vec<(Uuid, f64)>>;
+    async fn pagerank(&self, iterations: u32, damping: f64) -> anyhow::Result<Vec<(Uuid, f64)>>;
 
     /// Community detection — find clusters of related nodes.
     async fn detect_communities(&self) -> anyhow::Result<Vec<Vec<Uuid>>>;

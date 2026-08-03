@@ -1,7 +1,6 @@
 /// Control Charts Bridge — CUSUM, EWMA, process capability.
 ///
 /// Connects Rust backend to Python control_charts module.
-
 use serde_json::{json, Value};
 use std::process::Command;
 use tracing::{debug, error};
@@ -39,15 +38,25 @@ impl ControlChartsBridge {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        serde_json::from_str::<Value>(&stdout)
-            .map_err(|e| format!("JSON parse error: {}", e))
+        serde_json::from_str::<Value>(&stdout).map_err(|e| format!("JSON parse error: {}", e))
     }
 
     /// CUSUM chart for detecting small persistent shifts.
-    pub fn cusum(&self, data: &[f64], target: Option<f64>, sigma: Option<f64>, k_factor: f64, h_factor: f64) -> Result<CUSUMResult, String> {
+    pub fn cusum(
+        &self,
+        data: &[f64],
+        target: Option<f64>,
+        sigma: Option<f64>,
+        k_factor: f64,
+        h_factor: f64,
+    ) -> Result<CUSUMResult, String> {
         let mut args = json!({"data": data, "k_factor": k_factor, "h_factor": h_factor});
-        if let Some(t) = target { args["target"] = json!(t); }
-        if let Some(s) = sigma { args["sigma"] = json!(s); }
+        if let Some(t) = target {
+            args["target"] = json!(t);
+        }
+        if let Some(s) = sigma {
+            args["sigma"] = json!(s);
+        }
         let result = self.execute("cusum", args)?;
         if let Some(err) = result.get("error") {
             return Err(err.as_str().unwrap_or("Unknown error").to_string());
@@ -56,10 +65,21 @@ impl ControlChartsBridge {
     }
 
     /// EWMA chart for smooth monitoring.
-    pub fn ewma(&self, data: &[f64], target: Option<f64>, sigma: Option<f64>, lambda_param: f64, L: f64) -> Result<EWMAResult, String> {
+    pub fn ewma(
+        &self,
+        data: &[f64],
+        target: Option<f64>,
+        sigma: Option<f64>,
+        lambda_param: f64,
+        L: f64,
+    ) -> Result<EWMAResult, String> {
         let mut args = json!({"data": data, "lambda": lambda_param, "L": L});
-        if let Some(t) = target { args["target"] = json!(t); }
-        if let Some(s) = sigma { args["sigma"] = json!(s); }
+        if let Some(t) = target {
+            args["target"] = json!(t);
+        }
+        if let Some(s) = sigma {
+            args["sigma"] = json!(s);
+        }
         let result = self.execute("ewma", args)?;
         if let Some(err) = result.get("error") {
             return Err(err.as_str().unwrap_or("Unknown error").to_string());
@@ -68,7 +88,12 @@ impl ControlChartsBridge {
     }
 
     /// Process capability (Cp, Cpk).
-    pub fn process_capability(&self, data: &[f64], usl: f64, lsl: f64) -> Result<ProcessCapabilityResult, String> {
+    pub fn process_capability(
+        &self,
+        data: &[f64],
+        usl: f64,
+        lsl: f64,
+    ) -> Result<ProcessCapabilityResult, String> {
         let args = json!({"data": data, "usl": usl, "lsl": lsl});
         let result = self.execute("process_capability", args)?;
         if let Some(err) = result.get("error") {

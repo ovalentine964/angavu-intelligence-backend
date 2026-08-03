@@ -2,23 +2,21 @@
 // Not per-request, but continuous: Observe → Orient → Decide → Act
 // Four independent timer-driven loops: fast, medium, slow, deep
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
 use tokio::time::interval;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use tracing::{info, warn, error, instrument, Instrument};
+use tracing::{error, info, instrument, warn, Instrument};
 use uuid::Uuid;
 
-use super::metrics::LoopMetrics;
 use super::drift_detection::DriftDetector;
+use super::metrics::LoopMetrics;
 use super::pipeline_feedback::PipelineFeedbackChannel;
-use crate::graph::knowledge_graph::{
-    EpisodicMemory, EpisodicEventType, MemoryConsolidator,
-};
+use crate::graph::knowledge_graph::{EpisodicEventType, EpisodicMemory, MemoryConsolidator};
+use crate::graph::unified_graph::{UnifiedGraphOps, UnifiedKnowledgeLayer};
 use crate::graph::NodeStatus;
-use crate::graph::unified_graph::{UnifiedKnowledgeLayer, UnifiedGraphOps};
 
 // ─── OODA Phase Definitions ───────────────────────────────────────────────
 
@@ -41,9 +39,9 @@ pub enum LoopSpeed {
 impl LoopSpeed {
     pub fn interval(&self) -> Duration {
         match self {
-            LoopSpeed::Fast => Duration::from_secs(1),      // event-driven, poll at 1s
+            LoopSpeed::Fast => Duration::from_secs(1), // event-driven, poll at 1s
             LoopSpeed::Medium => Duration::from_secs(3600), // 1 hour
-            LoopSpeed::Slow => Duration::from_secs(86400),  // 24 hours
+            LoopSpeed::Slow => Duration::from_secs(86400), // 24 hours
             LoopSpeed::Deep => Duration::from_secs(604800), // 7 days
         }
     }
@@ -174,7 +172,7 @@ pub struct MarketSignal {
     pub region: String,
     pub product_category: String,
     pub demand_velocity: f64,
-    pub price_trend: f64,       // -1.0 to 1.0 (declining to rising)
+    pub price_trend: f64, // -1.0 to 1.0 (declining to rising)
     pub volatility: f64,
     pub sample_size: u32,
     pub timestamp: DateTime<Utc>,
@@ -224,9 +222,16 @@ pub trait OodaDatabase: Send + Sync {
     /// Get cohort health metrics
     async fn get_cohort_health(&self) -> Result<Vec<CohortHealthMetric>, String>;
     /// Update worker profiles in batch
-    async fn batch_update_worker_profiles(&self, updates: &[WorkerProfileUpdate]) -> Result<u64, String>;
+    async fn batch_update_worker_profiles(
+        &self,
+        updates: &[WorkerProfileUpdate],
+    ) -> Result<u64, String>;
     /// Update daily summary counters
-    async fn update_daily_summaries(&self, region: &str, transactions: &[TransactionSummary]) -> Result<(), String>;
+    async fn update_daily_summaries(
+        &self,
+        region: &str,
+        transactions: &[TransactionSummary],
+    ) -> Result<(), String>;
     /// Insert anomaly flag
     async fn flag_anomaly(&self, device_id: &str, error_count: usize) -> Result<(), String>;
     /// Get hourly market signals aggregated from sync data
@@ -344,7 +349,11 @@ pub trait KnowledgeUpdater: Send + Sync {
     /// Run memory consolidation: episodic → semantic.
     async fn consolidate_memories(&self, min_occurrences: usize) -> Result<usize, String>;
     /// Apply confidence decay to prevent inflation.
-    async fn apply_confidence_decay(&self, half_life_days: f64, min_confidence: f64) -> Result<usize, String>;
+    async fn apply_confidence_decay(
+        &self,
+        half_life_days: f64,
+        min_confidence: f64,
+    ) -> Result<usize, String>;
     /// Prune low-confidence semantic memories.
     async fn prune_stale_knowledge(&self, threshold: f64) -> Result<usize, String>;
 }
@@ -362,7 +371,9 @@ impl KnowledgeUpdater for UnifiedKnowledgeLayer {
         let mut kg = graph.write().await;
 
         // Gather episodic memories
-        let episodes: Vec<EpisodicMemory> = kg.nodes().values()
+        let episodes: Vec<EpisodicMemory> = kg
+            .nodes()
+            .values()
             .filter_map(|n| match n {
                 crate::graph::knowledge_graph::MemoryNode::Episodic(m) => Some(m.clone()),
                 _ => None,
@@ -374,7 +385,8 @@ impl KnowledgeUpdater for UnifiedKnowledgeLayer {
         }
 
         // Consolidate with category inference
-        let new_semantics = MemoryConsolidator::consolidate_with_categories(&episodes, min_occurrences);
+        let new_semantics =
+            MemoryConsolidator::consolidate_with_categories(&episodes, min_occurrences);
         let count = new_semantics.len();
 
         for sem in new_semantics {
@@ -384,7 +396,11 @@ impl KnowledgeUpdater for UnifiedKnowledgeLayer {
         Ok(count)
     }
 
-    async fn apply_confidence_decay(&self, half_life_days: f64, min_confidence: f64) -> Result<usize, String> {
+    async fn apply_confidence_decay(
+        &self,
+        half_life_days: f64,
+        min_confidence: f64,
+    ) -> Result<usize, String> {
         let graph = self.memory_graph();
         let mut kg = graph.write().await;
         Ok(kg.apply_confidence_decay(half_life_days, min_confidence))
@@ -465,7 +481,10 @@ impl OodaSupervisor {
 
     // ─── Fast Loop: Per-Sync Event ────────────────────────────────────────
 
-    #[instrument(skip(self), fields(cycle_id, loop_speed = "fast", iteration, device_id, worker_id, region))]
+    #[instrument(
+        skip(self),
+        fields(cycle_id, loop_speed = "fast", iteration, device_id, worker_id, region)
+    )]
     async fn run_fast_loop(self: Arc<Self>) {
         let mut tick = interval(self.config.fast_interval);
         let mut rx = self.sync_event_tx.subscribe();
@@ -546,19 +565,25 @@ impl OodaSupervisor {
 
         // ORIENT: Validate and classify incoming data
         cycle.phase = OodaPhase::Orient;
-        tracing::info!(phase = "orient", "OODA fast cycle: orienting — validating sync event");
+        tracing::info!(
+            phase = "orient",
+            "OODA fast cycle: orienting — validating sync event"
+        );
         let validation = self.validate_sync_event(&event);
         if !validation.is_valid {
             cycle.error_count += 1;
-            self.pipeline_feedback.send_error(
-                &event.device_id,
-                &validation.errors,
-            ).await;
+            self.pipeline_feedback
+                .send_error(&event.device_id, &validation.errors)
+                .await;
         }
 
         // DECIDE: Determine actions based on observations
         cycle.phase = OodaPhase::Decide;
-        tracing::info!(phase = "decide", valid = validation.is_valid, "OODA fast cycle: deciding actions");
+        tracing::info!(
+            phase = "decide",
+            valid = validation.is_valid,
+            "OODA fast cycle: deciding actions"
+        );
         let actions = self.decide_fast_actions(&event, &validation);
         cycle.decision = Some(Decision {
             action_type: "fast_sync_process".to_string(),
@@ -573,7 +598,11 @@ impl OodaSupervisor {
 
         // ACT: Execute decisions
         cycle.phase = OodaPhase::Act;
-        tracing::info!(phase = "act", action_count = actions.len(), "OODA fast cycle: executing actions");
+        tracing::info!(
+            phase = "act",
+            action_count = actions.len(),
+            "OODA fast cycle: executing actions"
+        );
         let start = std::time::Instant::now();
         let mut results = Vec::new();
         for action in &actions {
@@ -591,8 +620,10 @@ impl OodaSupervisor {
                 event_type: EpisodicEventType::Transaction,
                 description: format!(
                     "Sync from {} ({}): {} transactions in {}",
-                    event.worker_id, event.business_type,
-                    event.transactions.len(), event.region
+                    event.worker_id,
+                    event.business_type,
+                    event.transactions.len(),
+                    event.region
                 ),
                 timestamp: Utc::now(),
                 participants: vec![event.worker_id.clone()],
@@ -605,7 +636,12 @@ impl OodaSupervisor {
                     "tx_count": event.transactions.len(),
                     "valid": validation.is_valid,
                 }),
-                outcome: Some(if all_success { "processed" } else { "partial_failure" }).map(String::from),
+                outcome: Some(if all_success {
+                    "processed"
+                } else {
+                    "partial_failure"
+                })
+                .map(String::from),
                 embedding: None,
                 status: NodeStatus::Completed,
             };
@@ -626,7 +662,11 @@ impl OodaSupervisor {
                 "worker_profile_updated": results.iter().any(|r| r.output.get("profile_updated").and_then(|v| v.as_bool()).unwrap_or(false)),
             }),
             duration_ms: duration,
-            error: if all_success { None } else { Some("Some actions failed".to_string()) },
+            error: if all_success {
+                None
+            } else {
+                Some("Some actions failed".to_string())
+            },
         });
 
         cycle
@@ -689,7 +729,10 @@ impl OodaSupervisor {
         // OBSERVE: Collect hourly market signals from database
         cycle.phase = OodaPhase::Observe;
         span.record("cycle_id", &cycle.cycle_id.to_string());
-        tracing::info!(phase = "observe", "OODA medium cycle: collecting market signals");
+        tracing::info!(
+            phase = "observe",
+            "OODA medium cycle: collecting market signals"
+        );
         let (aggregates, signals) = match (
             self.db.get_hourly_transaction_aggregates().await,
             self.db.aggregate_hourly_market_signals().await,
@@ -742,8 +785,12 @@ impl OodaSupervisor {
                 "check_anomalies": has_anomalies,
             }),
             confidence: if has_anomalies { 0.7 } else { 0.9 },
-            reasoning: format!("{} market signals from {} regions, anomalies: {}",
-                signals.len(), aggregates.len(), anomaly_count),
+            reasoning: format!(
+                "{} market signals from {} regions, anomalies: {}",
+                signals.len(),
+                aggregates.len(),
+                anomaly_count
+            ),
         });
 
         // ACT: Update Soko Pulse with real data
@@ -823,7 +870,10 @@ impl OodaSupervisor {
         // OBSERVE: Gather daily aggregates + model metrics
         cycle.phase = OodaPhase::Observe;
         span.record("cycle_id", &cycle.cycle_id.to_string());
-        tracing::info!(phase = "observe", "OODA slow cycle: gathering daily intelligence");
+        tracing::info!(
+            phase = "observe",
+            "OODA slow cycle: gathering daily intelligence"
+        );
         let report_data = self.db.get_daily_report_data().await;
         let model_metrics = self.db.get_model_metrics().await;
 
@@ -859,9 +909,11 @@ impl OodaSupervisor {
         // ORIENT: Analyze patterns, assess retraining need
         cycle.phase = OodaPhase::Orient;
         let needs_retrain = drift_report.drift_detected
-            && matches!(drift_report.recommendation,
+            && matches!(
+                drift_report.recommendation,
                 super::drift_detection::DriftRecommendation::Retrain
-                | super::drift_detection::DriftRecommendation::Rollback);
+                    | super::drift_detection::DriftRecommendation::Rollback
+            );
 
         // DECIDE: Generate report, optionally trigger retraining
         cycle.phase = OodaPhase::Decide;
@@ -874,7 +926,10 @@ impl OodaSupervisor {
             }),
             confidence: 0.85,
             reasoning: if needs_retrain {
-                format!("Drift detected ({:?}) — triggering retraining", drift_report.drift_type)
+                format!(
+                    "Drift detected ({:?}) — triggering retraining",
+                    drift_report.drift_type
+                )
             } else {
                 "Normal daily cycle".to_string()
             },
@@ -901,18 +956,27 @@ impl OodaSupervisor {
                         ),
                         Err(_) => "Data unavailable".to_string(),
                     },
-                    data_points: report_data.as_ref().map(|d| d.total_syncs as u32).unwrap_or(0),
+                    data_points: report_data
+                        .as_ref()
+                        .map(|d| d.total_syncs as u32)
+                        .unwrap_or(0),
                     confidence: if report_data.is_ok() { 0.9 } else { 0.3 },
                 },
                 ReportSection {
                     title: "Model Health".to_string(),
                     content: format!(
                         "Accuracy: {:.1}%, Drift: {}, Recommendation: {:?}",
-                        model_metrics.as_ref().map(|m| m.accuracy * 100.0).unwrap_or(0.0),
+                        model_metrics
+                            .as_ref()
+                            .map(|m| m.accuracy * 100.0)
+                            .unwrap_or(0.0),
                         drift_report.drift_detected,
                         drift_report.recommendation
                     ),
-                    data_points: model_metrics.as_ref().map(|m| m.sample_count as u32).unwrap_or(0),
+                    data_points: model_metrics
+                        .as_ref()
+                        .map(|m| m.sample_count as u32)
+                        .unwrap_or(0),
                     confidence: drift_report.confidence,
                 },
             ],
@@ -1067,7 +1131,10 @@ impl OodaSupervisor {
         // OBSERVE: Collect FL gradients and economic indicator state
         cycle.phase = OodaPhase::Observe;
         span.record("cycle_id", &cycle.cycle_id.to_string());
-        tracing::info!(phase = "observe", "OODA deep cycle: collecting FL gradients and economic indicators");
+        tracing::info!(
+            phase = "observe",
+            "OODA deep cycle: collecting FL gradients and economic indicators"
+        );
         let gradient_batches = self.db.get_fl_gradient_batches().await;
         let eco_freshness = self.db.get_economic_indicator_freshness().await;
         let cohort_health = self.db.get_cohort_health().await;
@@ -1086,10 +1153,14 @@ impl OodaSupervisor {
 
         // ORIENT: Analyze aggregate patterns, cohort health
         cycle.phase = OodaPhase::Orient;
-        let stale_cohorts: Vec<_> = cohort_health.as_ref()
-            .map(|cohorts| cohorts.iter()
-                .filter(|c| c.avg_accuracy < 0.7 || c.member_count < 10)
-                .collect())
+        let stale_cohorts: Vec<_> = cohort_health
+            .as_ref()
+            .map(|cohorts| {
+                cohorts
+                    .iter()
+                    .filter(|c| c.avg_accuracy < 0.7 || c.member_count < 10)
+                    .collect()
+            })
             .unwrap_or_default();
 
         // DECIDE: Aggregate FL gradients, update economic indicators, recalibrate
@@ -1105,7 +1176,9 @@ impl OodaSupervisor {
             confidence: 0.75,
             reasoning: format!(
                 "Weekly deep cycle #{}: {} gradient batches, {} stale cohorts",
-                iteration, batch_count, stale_cohorts.len()
+                iteration,
+                batch_count,
+                stale_cohorts.len()
             ),
         });
 
@@ -1151,7 +1224,9 @@ impl OodaSupervisor {
                 event_type: EpisodicEventType::Learning,
                 description: format!(
                     "Weekly FL round #{}: {} gradient batches, {} stale cohorts",
-                    iteration, batch_count, stale_cohorts.len()
+                    iteration,
+                    batch_count,
+                    stale_cohorts.len()
                 ),
                 timestamp: Utc::now(),
                 participants: vec![],
@@ -1163,7 +1238,10 @@ impl OodaSupervisor {
                     "gradient_batches": batch_count,
                     "stale_cohorts": stale_cohorts.len(),
                 }),
-                outcome: Some(format!("FL round completed, {} batches aggregated", batch_count)),
+                outcome: Some(format!(
+                    "FL round completed, {} batches aggregated",
+                    batch_count
+                )),
                 embedding: None,
                 status: NodeStatus::Completed,
             };
@@ -1229,9 +1307,11 @@ impl OodaSupervisor {
             *grad *= 1.0 / (1.0 + mu); // proximal damping
         }
 
-        let global_loss: f64 = batches.iter()
+        let global_loss: f64 = batches
+            .iter()
             .map(|b| b.local_loss * b.sample_count as f64)
-            .sum::<f64>() / total_samples as f64;
+            .sum::<f64>()
+            / total_samples as f64;
 
         Ok(AggregatedModel {
             model_name: "alama_score".to_string(),
@@ -1263,7 +1343,10 @@ impl OodaSupervisor {
 
         for tx in &event.transactions {
             if tx.count == 0 {
-                errors.push(format!("zero-count transaction in category '{}'", tx.category));
+                errors.push(format!(
+                    "zero-count transaction in category '{}'",
+                    tx.category
+                ));
             }
             if tx.hour_of_day > 23 {
                 errors.push(format!("invalid hour_of_day: {}", tx.hour_of_day));
@@ -1276,7 +1359,11 @@ impl OodaSupervisor {
         }
     }
 
-    fn decide_fast_actions(&self, event: &SyncEvent, validation: &ValidationResult) -> Vec<FastAction> {
+    fn decide_fast_actions(
+        &self,
+        event: &SyncEvent,
+        validation: &ValidationResult,
+    ) -> Vec<FastAction> {
         let mut actions = Vec::new();
 
         if validation.is_valid {
@@ -1285,8 +1372,14 @@ impl OodaSupervisor {
                 region: event.region.clone(),
                 business_type: event.business_type.clone(),
                 active_days_delta: 1,
-                transaction_volume_bucket: Self::bucket_transaction_volume(event.transactions.len()),
-                product_categories: event.transactions.iter().map(|t| t.category.clone()).collect(),
+                transaction_volume_bucket: Self::bucket_transaction_volume(
+                    event.transactions.len(),
+                ),
+                product_categories: event
+                    .transactions
+                    .iter()
+                    .map(|t| t.category.clone())
+                    .collect(),
                 consistency_score: 1.0,
                 last_active: Utc::now(),
             }));
@@ -1310,7 +1403,11 @@ impl OodaSupervisor {
     async fn execute_fast_action(&self, action: &FastAction) -> ActionResult {
         match action {
             FastAction::UpdateWorkerProfile(profile) => {
-                match self.db.batch_update_worker_profiles(&[profile.clone()]).await {
+                match self
+                    .db
+                    .batch_update_worker_profiles(&[profile.clone()])
+                    .await
+                {
                     Ok(_) => ActionResult {
                         success: true,
                         output: serde_json::json!({"profile_updated": true}),
@@ -1325,28 +1422,35 @@ impl OodaSupervisor {
                     },
                 }
             }
-            FastAction::UpdateDailySummary { region, transactions } => {
-                match self.db.update_daily_summaries(region, transactions).await {
-                    Ok(_) => ActionResult {
-                        success: true,
-                        output: serde_json::json!({
-                            "summary_updated": true,
-                            "region": region,
-                            "tx_count": transactions.len()
-                        }),
-                        duration_ms: 0,
-                        error: None,
-                    },
-                    Err(e) => ActionResult {
-                        success: false,
-                        output: serde_json::json!({"error": e}),
-                        duration_ms: 0,
-                        error: Some(e),
-                    },
-                }
-            }
-            FastAction::FlagAnomaly { device_id, error_count } => {
-                warn!("Anomaly flagged: device={}, errors={}", device_id, error_count);
+            FastAction::UpdateDailySummary {
+                region,
+                transactions,
+            } => match self.db.update_daily_summaries(region, transactions).await {
+                Ok(_) => ActionResult {
+                    success: true,
+                    output: serde_json::json!({
+                        "summary_updated": true,
+                        "region": region,
+                        "tx_count": transactions.len()
+                    }),
+                    duration_ms: 0,
+                    error: None,
+                },
+                Err(e) => ActionResult {
+                    success: false,
+                    output: serde_json::json!({"error": e}),
+                    duration_ms: 0,
+                    error: Some(e),
+                },
+            },
+            FastAction::FlagAnomaly {
+                device_id,
+                error_count,
+            } => {
+                warn!(
+                    "Anomaly flagged: device={}, errors={}",
+                    device_id, error_count
+                );
                 let _ = self.db.flag_anomaly(device_id, *error_count).await;
                 ActionResult {
                     success: true,
@@ -1414,31 +1518,84 @@ impl OodaDatabase for PgOodaDatabase {
         // Production: aggregate from sync_events or worker_daily_summaries
         Ok(vec![])
     }
-    async fn get_active_regions(&self) -> Result<Vec<RegionActivity>, String> { Ok(vec![]) }
-    async fn get_price_trends(&self, _region: &str) -> Result<Vec<PriceTrendData>, String> { Ok(vec![]) }
-    async fn get_recent_anomaly_count(&self) -> Result<u64, String> { Ok(0) }
+    async fn get_active_regions(&self) -> Result<Vec<RegionActivity>, String> {
+        Ok(vec![])
+    }
+    async fn get_price_trends(&self, _region: &str) -> Result<Vec<PriceTrendData>, String> {
+        Ok(vec![])
+    }
+    async fn get_recent_anomaly_count(&self) -> Result<u64, String> {
+        Ok(0)
+    }
     async fn get_model_metrics(&self) -> Result<ModelMetricsSnapshot, String> {
-        Ok(ModelMetricsSnapshot { accuracy: 0.85, calibration_error: 0.05, sample_count: 1000, model_version: "v1".to_string() })
+        Ok(ModelMetricsSnapshot {
+            accuracy: 0.85,
+            calibration_error: 0.05,
+            sample_count: 1000,
+            model_version: "v1".to_string(),
+        })
     }
-    async fn get_fl_pending_batches(&self) -> Result<u64, String> { Ok(0) }
+    async fn get_fl_pending_batches(&self) -> Result<u64, String> {
+        Ok(0)
+    }
     async fn get_economic_indicator_freshness(&self) -> Result<EconomicFreshness, String> {
-        Ok(EconomicFreshness { indicator_count: 0, stale_count: 0, oldest_update: Utc::now() })
+        Ok(EconomicFreshness {
+            indicator_count: 0,
+            stale_count: 0,
+            oldest_update: Utc::now(),
+        })
     }
-    async fn get_cohort_health(&self) -> Result<Vec<CohortHealthMetric>, String> { Ok(vec![]) }
-    async fn batch_update_worker_profiles(&self, _: &[WorkerProfileUpdate]) -> Result<u64, String> { Ok(0) }
-    async fn update_daily_summaries(&self, _: &str, _: &[TransactionSummary]) -> Result<(), String> { Ok(()) }
-    async fn flag_anomaly(&self, _: &str, _: usize) -> Result<(), String> { Ok(()) }
-    async fn aggregate_hourly_market_signals(&self) -> Result<Vec<MarketSignal>, String> { Ok(vec![]) }
-    async fn update_soko_pulse(&self, _: &[MarketSignal]) -> Result<u64, String> { Ok(0) }
+    async fn get_cohort_health(&self) -> Result<Vec<CohortHealthMetric>, String> {
+        Ok(vec![])
+    }
+    async fn batch_update_worker_profiles(&self, _: &[WorkerProfileUpdate]) -> Result<u64, String> {
+        Ok(0)
+    }
+    async fn update_daily_summaries(
+        &self,
+        _: &str,
+        _: &[TransactionSummary],
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    async fn flag_anomaly(&self, _: &str, _: usize) -> Result<(), String> {
+        Ok(())
+    }
+    async fn aggregate_hourly_market_signals(&self) -> Result<Vec<MarketSignal>, String> {
+        Ok(vec![])
+    }
+    async fn update_soko_pulse(&self, _: &[MarketSignal]) -> Result<u64, String> {
+        Ok(0)
+    }
     async fn get_daily_report_data(&self) -> Result<DailyReportData, String> {
-        Ok(DailyReportData { date: "2024-01-01".to_string(), total_syncs: 0, total_devices: 0, regions_active: 0, anomaly_count: 0, top_categories: vec![] })
+        Ok(DailyReportData {
+            date: "2024-01-01".to_string(),
+            total_syncs: 0,
+            total_devices: 0,
+            regions_active: 0,
+            anomaly_count: 0,
+            top_categories: vec![],
+        })
     }
-    async fn store_intelligence_report(&self, _: &IntelligenceReport) -> Result<(), String> { Ok(()) }
-    async fn get_fl_gradient_batches(&self) -> Result<Vec<GradientBatch>, String> { Ok(vec![]) }
-    async fn store_fl_model_update(&self, _: &AggregatedModel) -> Result<(), String> { Ok(()) }
-    async fn update_economic_indicators(&self) -> Result<u64, String> { Ok(0) }
+    async fn store_intelligence_report(&self, _: &IntelligenceReport) -> Result<(), String> {
+        Ok(())
+    }
+    async fn get_fl_gradient_batches(&self) -> Result<Vec<GradientBatch>, String> {
+        Ok(vec![])
+    }
+    async fn store_fl_model_update(&self, _: &AggregatedModel) -> Result<(), String> {
+        Ok(())
+    }
+    async fn update_economic_indicators(&self) -> Result<u64, String> {
+        Ok(0)
+    }
     async fn recalibrate_alama_score(&self) -> Result<CalibrationResult, String> {
-        Ok(CalibrationResult { pre_calibration_accuracy: 0.82, post_calibration_accuracy: 0.85, calibration_error: 0.03, sample_count: 500 })
+        Ok(CalibrationResult {
+            pre_calibration_accuracy: 0.82,
+            post_calibration_accuracy: 0.85,
+            calibration_error: 0.03,
+            sample_count: 500,
+        })
     }
 }
 
@@ -1485,31 +1642,87 @@ mod tests {
                 top_categories: vec![("vegetables".to_string(), 50)],
             }])
         }
-        async fn get_active_regions(&self) -> Result<Vec<RegionActivity>, String> { Ok(vec![]) }
-        async fn get_price_trends(&self, _region: &str) -> Result<Vec<PriceTrendData>, String> { Ok(vec![]) }
-        async fn get_recent_anomaly_count(&self) -> Result<u64, String> { Ok(0) }
+        async fn get_active_regions(&self) -> Result<Vec<RegionActivity>, String> {
+            Ok(vec![])
+        }
+        async fn get_price_trends(&self, _region: &str) -> Result<Vec<PriceTrendData>, String> {
+            Ok(vec![])
+        }
+        async fn get_recent_anomaly_count(&self) -> Result<u64, String> {
+            Ok(0)
+        }
         async fn get_model_metrics(&self) -> Result<ModelMetricsSnapshot, String> {
-            Ok(ModelMetricsSnapshot { accuracy: 0.85, calibration_error: 0.05, sample_count: 1000, model_version: "v1".to_string() })
+            Ok(ModelMetricsSnapshot {
+                accuracy: 0.85,
+                calibration_error: 0.05,
+                sample_count: 1000,
+                model_version: "v1".to_string(),
+            })
         }
-        async fn get_fl_pending_batches(&self) -> Result<u64, String> { Ok(0) }
+        async fn get_fl_pending_batches(&self) -> Result<u64, String> {
+            Ok(0)
+        }
         async fn get_economic_indicator_freshness(&self) -> Result<EconomicFreshness, String> {
-            Ok(EconomicFreshness { indicator_count: 10, stale_count: 2, oldest_update: Utc::now() })
+            Ok(EconomicFreshness {
+                indicator_count: 10,
+                stale_count: 2,
+                oldest_update: Utc::now(),
+            })
         }
-        async fn get_cohort_health(&self) -> Result<Vec<CohortHealthMetric>, String> { Ok(vec![]) }
-        async fn batch_update_worker_profiles(&self, _: &[WorkerProfileUpdate]) -> Result<u64, String> { Ok(1) }
-        async fn update_daily_summaries(&self, _: &str, _: &[TransactionSummary]) -> Result<(), String> { Ok(()) }
-        async fn flag_anomaly(&self, _: &str, _: usize) -> Result<(), String> { Ok(()) }
-        async fn aggregate_hourly_market_signals(&self) -> Result<Vec<MarketSignal>, String> { Ok(vec![]) }
-        async fn update_soko_pulse(&self, _: &[MarketSignal]) -> Result<u64, String> { Ok(0) }
+        async fn get_cohort_health(&self) -> Result<Vec<CohortHealthMetric>, String> {
+            Ok(vec![])
+        }
+        async fn batch_update_worker_profiles(
+            &self,
+            _: &[WorkerProfileUpdate],
+        ) -> Result<u64, String> {
+            Ok(1)
+        }
+        async fn update_daily_summaries(
+            &self,
+            _: &str,
+            _: &[TransactionSummary],
+        ) -> Result<(), String> {
+            Ok(())
+        }
+        async fn flag_anomaly(&self, _: &str, _: usize) -> Result<(), String> {
+            Ok(())
+        }
+        async fn aggregate_hourly_market_signals(&self) -> Result<Vec<MarketSignal>, String> {
+            Ok(vec![])
+        }
+        async fn update_soko_pulse(&self, _: &[MarketSignal]) -> Result<u64, String> {
+            Ok(0)
+        }
         async fn get_daily_report_data(&self) -> Result<DailyReportData, String> {
-            Ok(DailyReportData { date: "2024-01-01".to_string(), total_syncs: 100, total_devices: 50, regions_active: 5, anomaly_count: 2, top_categories: vec![] })
+            Ok(DailyReportData {
+                date: "2024-01-01".to_string(),
+                total_syncs: 100,
+                total_devices: 50,
+                regions_active: 5,
+                anomaly_count: 2,
+                top_categories: vec![],
+            })
         }
-        async fn store_intelligence_report(&self, _: &IntelligenceReport) -> Result<(), String> { Ok(()) }
-        async fn get_fl_gradient_batches(&self) -> Result<Vec<GradientBatch>, String> { Ok(vec![]) }
-        async fn store_fl_model_update(&self, _: &AggregatedModel) -> Result<(), String> { Ok(()) }
-        async fn update_economic_indicators(&self) -> Result<u64, String> { Ok(5) }
+        async fn store_intelligence_report(&self, _: &IntelligenceReport) -> Result<(), String> {
+            Ok(())
+        }
+        async fn get_fl_gradient_batches(&self) -> Result<Vec<GradientBatch>, String> {
+            Ok(vec![])
+        }
+        async fn store_fl_model_update(&self, _: &AggregatedModel) -> Result<(), String> {
+            Ok(())
+        }
+        async fn update_economic_indicators(&self) -> Result<u64, String> {
+            Ok(5)
+        }
         async fn recalibrate_alama_score(&self) -> Result<CalibrationResult, String> {
-            Ok(CalibrationResult { pre_calibration_accuracy: 0.82, post_calibration_accuracy: 0.85, calibration_error: 0.03, sample_count: 500 })
+            Ok(CalibrationResult {
+                pre_calibration_accuracy: 0.82,
+                post_calibration_accuracy: 0.85,
+                calibration_error: 0.03,
+                sample_count: 500,
+            })
         }
     }
 
@@ -1520,7 +1733,11 @@ mod tests {
         let drift_detector = Arc::new(RwLock::new(DriftDetector::new(Default::default())));
         let pipeline_feedback = Arc::new(PipelineFeedbackChannel::new());
         let supervisor = OodaSupervisor::new(
-            LoopConfig::default(), metrics, drift_detector, pipeline_feedback, db,
+            LoopConfig::default(),
+            metrics,
+            drift_detector,
+            pipeline_feedback,
+            db,
         );
 
         let valid_event = SyncEvent {

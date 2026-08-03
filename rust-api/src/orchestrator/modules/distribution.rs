@@ -75,7 +75,10 @@ impl DistributionAnalyzer {
             count += 1;
         }
 
-        tracing::info!(gaps = count, "DistributionAnalyzer state loaded from PostgreSQL");
+        tracing::info!(
+            gaps = count,
+            "DistributionAnalyzer state loaded from PostgreSQL"
+        );
         Ok(())
     }
 
@@ -94,12 +97,16 @@ impl DistributionAnalyzer {
 
         for key in keys {
             let parts: Vec<&str> = key.splitn(2, ':').collect();
-            if parts.len() != 2 { continue; }
+            if parts.len() != 2 {
+                continue;
+            }
             let (region, category) = (parts[0], parts[1]);
 
             let supply = self.supply_index.get(&key).copied().unwrap_or(0.0);
             let demand = self.demand_index.get(&key).copied().unwrap_or(0.0);
-            let history_json = self.gap_history.get(&key)
+            let history_json = self
+                .gap_history
+                .get(&key)
                 .map(|h| serde_json::to_string(h).unwrap_or_default())
                 .unwrap_or_else(|| "[]".to_string());
 
@@ -123,7 +130,10 @@ impl DistributionAnalyzer {
             .map_err(|e| format!("Failed to persist distribution_gaps: {}", e))?;
         }
 
-        tracing::info!(gaps = keys.len(), "DistributionAnalyzer state persisted to PostgreSQL");
+        tracing::info!(
+            gaps = keys.len(),
+            "DistributionAnalyzer state persisted to PostgreSQL"
+        );
         Ok(())
     }
 }
@@ -147,7 +157,8 @@ impl CapabilityModule for DistributionAnalyzer {
             } => {
                 let mut by_category: HashMap<String, f64> = HashMap::new();
                 for tx in &transactions {
-                    *by_category.entry(tx.product_category.clone())
+                    *by_category
+                        .entry(tx.product_category.clone())
                         .or_insert(0.0) += tx.quantity.unwrap_or(1.0);
                 }
 
@@ -175,8 +186,7 @@ impl CapabilityModule for DistributionAnalyzer {
 
                 let gap_ratio = if supply > 0.0 { demand / supply } else { 2.0 };
 
-                let history = self.gap_history.entry(key.clone())
-                    .or_insert_with(Vec::new);
+                let history = self.gap_history.entry(key.clone()).or_insert_with(Vec::new);
                 history.push(gap_ratio);
                 if history.len() > 168 {
                     history.remove(0);
@@ -204,7 +214,10 @@ impl CapabilityModule for DistributionAnalyzer {
     async fn shutdown(&self) {
         tracing::info!("DistributionAnalyzer shutting down");
         if let Err(e) = self.persist_state().await {
-            tracing::error!("Failed to persist DistributionAnalyzer state on shutdown: {}", e);
+            tracing::error!(
+                "Failed to persist DistributionAnalyzer state on shutdown: {}",
+                e
+            );
         }
     }
 
@@ -219,7 +232,8 @@ impl CapabilityModule for DistributionAnalyzer {
             supply_index: self.supply_index.clone(),
             demand_index: self.demand_index.clone(),
             gap_history: self.gap_history.clone(),
-        }).ok()
+        })
+        .ok()
     }
 
     fn restore_state(&mut self, data: &[u8]) {
@@ -233,7 +247,10 @@ impl CapabilityModule for DistributionAnalyzer {
             self.supply_index = snap.supply_index;
             self.demand_index = snap.demand_index;
             self.gap_history = snap.gap_history;
-            tracing::info!(keys = self.supply_index.len(), "DistributionAnalyzer state restored (fallback bincode)");
+            tracing::info!(
+                keys = self.supply_index.len(),
+                "DistributionAnalyzer state restored (fallback bincode)"
+            );
         }
     }
 }

@@ -3,7 +3,6 @@
 /// Executes Python nonparametric_extended_runner.py methods via subprocess.
 /// Methods: Friedman test, Kolmogorov-Smirnov, Anderson-Darling,
 /// LOESS regression, Bootstrap BCa, Spline regression.
-
 use serde_json::{json, Value};
 use std::process::Command;
 use tracing::{debug, error};
@@ -43,7 +42,10 @@ impl ExtendedNonparametricBridge {
             "args": args
         });
 
-        debug!(method = method, "Executing Python extended nonparametric method");
+        debug!(
+            method = method,
+            "Executing Python extended nonparametric method"
+        );
 
         let output = Command::new(&self.python_path)
             .arg(&self.script_path)
@@ -73,10 +75,7 @@ impl ExtendedNonparametricBridge {
     /// Extension of sign test to multiple treatments.
     /// Application: Compare worker income across repeated time periods.
     pub fn friedman(&self, data: &[Vec<f64>]) -> Result<FriedmanResult, String> {
-        let result = self.execute_python(
-            "friedman",
-            json!({ "data": data }),
-        )?;
+        let result = self.execute_python("friedman", json!({ "data": data }))?;
         serde_json::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
     }
 
@@ -84,11 +83,7 @@ impl ExtendedNonparametricBridge {
     ///
     /// Tests whether a sample comes from a specified distribution.
     /// D = sup|F_n(x) - F_0(x)|
-    pub fn ks_one_sample(
-        &self,
-        data: &[f64],
-        distribution: &str,
-    ) -> Result<KSResult, String> {
+    pub fn ks_one_sample(&self, data: &[f64], distribution: &str) -> Result<KSResult, String> {
         let result = self.execute_python(
             "ks_one_sample",
             json!({
@@ -102,11 +97,7 @@ impl ExtendedNonparametricBridge {
     /// Two-sample Kolmogorov-Smirnov test.
     ///
     /// Tests whether two samples come from the same distribution.
-    pub fn ks_two_sample(
-        &self,
-        sample1: &[f64],
-        sample2: &[f64],
-    ) -> Result<KSResult, String> {
+    pub fn ks_two_sample(&self, sample1: &[f64], sample2: &[f64]) -> Result<KSResult, String> {
         let result = self.execute_python(
             "ks_two_sample",
             json!({

@@ -12,10 +12,10 @@ use std::collections::HashMap;
 /// Market structure classification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MarketStructure {
-    PerfectCompetition,   // HHI < 1500
-    MonopolisticComp,     // HHI 1500-2500
-    Oligopoly,            // HHI > 2500
-    Monopoly,             // Single dominant seller
+    PerfectCompetition, // HHI < 1500
+    MonopolisticComp,   // HHI 1500-2500
+    Oligopoly,          // HHI > 2500
+    Monopoly,           // Single dominant seller
 }
 
 /// Market concentration metrics for a sector/region
@@ -23,13 +23,13 @@ pub enum MarketStructure {
 pub struct ConcentrationMetrics {
     pub sector: String,
     pub region: String,
-    pub hhi: f64,                // Herfindahl-Hirschman Index
-    pub cr1: f64,                // Top 1 market share
-    pub cr4: f64,                // Top 4 market share
-    pub cr8: f64,                // Top 8 market share
+    pub hhi: f64, // Herfindahl-Hirschman Index
+    pub cr1: f64, // Top 1 market share
+    pub cr4: f64, // Top 4 market share
+    pub cr8: f64, // Top 8 market share
     pub num_sellers: usize,
     pub num_effective_competitors: f64, // 1/HHI × 10000
-    pub entropy: f64,            // Shannon entropy
+    pub entropy: f64,                   // Shannon entropy
     pub market_structure: MarketStructure,
     pub period: String,
 }
@@ -38,7 +38,7 @@ pub struct ConcentrationMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SellerData {
     pub seller_id: String,
-    pub market_share: f64,       // 0.0-1.0
+    pub market_share: f64, // 0.0-1.0
     pub revenue: f64,
     pub transactions: u64,
 }
@@ -75,7 +75,8 @@ impl MarketConcentrationTracker {
     ///
     /// H = -Σ(share_i × ln(share_i))
     pub fn compute_entropy(market_shares: &[f64]) -> f64 {
-        -market_shares.iter()
+        -market_shares
+            .iter()
             .filter(|&&s| s > 0.0)
             .map(|&s| s * s.ln())
             .sum::<f64>()
@@ -107,7 +108,11 @@ impl MarketConcentrationTracker {
         let cr8 = Self::compute_crk(&shares, 8);
         let entropy = Self::compute_entropy(&shares);
 
-        let num_effective = if hhi > 0.0 { 10000.0 / hhi } else { sellers.len() as f64 };
+        let num_effective = if hhi > 0.0 {
+            10000.0 / hhi
+        } else {
+            sellers.len() as f64
+        };
 
         ConcentrationMetrics {
             sector: sector.to_string(),
@@ -138,7 +143,9 @@ impl MarketConcentrationTracker {
     pub fn trend(&self, sector: &str, region: &str) -> Option<ConcentrationTrend> {
         let key = format!("{}:{}", sector, region);
         let history = self.history.get(&key)?;
-        if history.len() < 2 { return None; }
+        if history.len() < 2 {
+            return None;
+        }
         let recent = history.last()?;
         let previous = &history[history.len() - 2];
 
@@ -147,7 +154,8 @@ impl MarketConcentrationTracker {
             region: region.to_string(),
             hhi_change: recent.hhi - previous.hhi,
             cr4_change: recent.cr4 - previous.cr4,
-            structure_changed: std::mem::discriminant(&recent.market_structure) != std::mem::discriminant(&previous.market_structure),
+            structure_changed: std::mem::discriminant(&recent.market_structure)
+                != std::mem::discriminant(&previous.market_structure),
         })
     }
 }
@@ -170,14 +178,22 @@ mod tests {
         // 100 equal sellers: each has 1% share
         let shares = vec![0.01; 100];
         let hhi = MarketConcentrationTracker::compute_hhi(&shares);
-        assert!((hhi - 100.0).abs() < 1.0, "HHI for 100 equal sellers should be ~100, got {}", hhi);
+        assert!(
+            (hhi - 100.0).abs() < 1.0,
+            "HHI for 100 equal sellers should be ~100, got {}",
+            hhi
+        );
     }
 
     #[test]
     fn test_hhi_monopoly() {
         let shares = vec![1.0];
         let hhi = MarketConcentrationTracker::compute_hhi(&shares);
-        assert!((hhi - 10000.0).abs() < 1.0, "HHI for monopoly should be 10000, got {}", hhi);
+        assert!(
+            (hhi - 10000.0).abs() < 1.0,
+            "HHI for monopoly should be 10000, got {}",
+            hhi
+        );
     }
 
     #[test]
@@ -193,19 +209,50 @@ mod tests {
         let concentrated = vec![0.90, 0.05, 0.03, 0.02];
         let entropy_equal = MarketConcentrationTracker::compute_entropy(&equal_shares);
         let entropy_concentrated = MarketConcentrationTracker::compute_entropy(&concentrated);
-        assert!(entropy_equal > entropy_concentrated, "Equal market should have higher entropy");
+        assert!(
+            entropy_equal > entropy_concentrated,
+            "Equal market should have higher entropy"
+        );
     }
 
     #[test]
     fn test_full_metrics() {
         let sellers = vec![
-            SellerData { seller_id: "a".into(), market_share: 0.4, revenue: 4000.0, transactions: 100 },
-            SellerData { seller_id: "b".into(), market_share: 0.3, revenue: 3000.0, transactions: 80 },
-            SellerData { seller_id: "c".into(), market_share: 0.2, revenue: 2000.0, transactions: 50 },
-            SellerData { seller_id: "d".into(), market_share: 0.1, revenue: 1000.0, transactions: 20 },
+            SellerData {
+                seller_id: "a".into(),
+                market_share: 0.4,
+                revenue: 4000.0,
+                transactions: 100,
+            },
+            SellerData {
+                seller_id: "b".into(),
+                market_share: 0.3,
+                revenue: 3000.0,
+                transactions: 80,
+            },
+            SellerData {
+                seller_id: "c".into(),
+                market_share: 0.2,
+                revenue: 2000.0,
+                transactions: 50,
+            },
+            SellerData {
+                seller_id: "d".into(),
+                market_share: 0.1,
+                revenue: 1000.0,
+                transactions: 20,
+            },
         ];
-        let metrics = MarketConcentrationTracker::compute_metrics(&sellers, "groceries", "nairobi", "2026-08");
+        let metrics = MarketConcentrationTracker::compute_metrics(
+            &sellers,
+            "groceries",
+            "nairobi",
+            "2026-08",
+        );
         assert!(metrics.hhi > 1500.0); // Concentrated
-        assert!(matches!(metrics.market_structure, MarketStructure::MonopolisticComp | MarketStructure::Oligopoly));
+        assert!(matches!(
+            metrics.market_structure,
+            MarketStructure::MonopolisticComp | MarketStructure::Oligopoly
+        ));
     }
 }

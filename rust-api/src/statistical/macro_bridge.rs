@@ -106,14 +106,30 @@ pub fn islm_solve(
     price_level: Option<f64>,
 ) -> EconometricResult {
     let mut args = serde_json::json!({});
-    if let Some(v) = consumption_intercept { args["consumption_intercept"] = serde_json::json!(v); }
-    if let Some(v) = mpc { args["mpc"] = serde_json::json!(v); }
-    if let Some(v) = tax_rate { args["tax_rate"] = serde_json::json!(v); }
-    if let Some(v) = investment_intercept { args["investment_intercept"] = serde_json::json!(v); }
-    if let Some(v) = investment_sensitivity { args["investment_sensitivity"] = serde_json::json!(v); }
-    if let Some(v) = government_spending { args["government_spending"] = serde_json::json!(v); }
-    if let Some(v) = money_supply { args["money_supply"] = serde_json::json!(v); }
-    if let Some(v) = price_level { args["price_level"] = serde_json::json!(v); }
+    if let Some(v) = consumption_intercept {
+        args["consumption_intercept"] = serde_json::json!(v);
+    }
+    if let Some(v) = mpc {
+        args["mpc"] = serde_json::json!(v);
+    }
+    if let Some(v) = tax_rate {
+        args["tax_rate"] = serde_json::json!(v);
+    }
+    if let Some(v) = investment_intercept {
+        args["investment_intercept"] = serde_json::json!(v);
+    }
+    if let Some(v) = investment_sensitivity {
+        args["investment_sensitivity"] = serde_json::json!(v);
+    }
+    if let Some(v) = government_spending {
+        args["government_spending"] = serde_json::json!(v);
+    }
+    if let Some(v) = money_supply {
+        args["money_supply"] = serde_json::json!(v);
+    }
+    if let Some(v) = price_level {
+        args["price_level"] = serde_json::json!(v);
+    }
     run_macro_method("islm_solve", args)
 }
 
@@ -126,11 +142,21 @@ pub fn solow_steady_state(
     capital_share: Option<f64>,
 ) -> EconometricResult {
     let mut args = serde_json::json!({});
-    if let Some(v) = savings_rate { args["savings_rate"] = serde_json::json!(v); }
-    if let Some(v) = population_growth { args["population_growth"] = serde_json::json!(v); }
-    if let Some(v) = depreciation { args["depreciation"] = serde_json::json!(v); }
-    if let Some(v) = technology_growth { args["technology_growth"] = serde_json::json!(v); }
-    if let Some(v) = capital_share { args["capital_share"] = serde_json::json!(v); }
+    if let Some(v) = savings_rate {
+        args["savings_rate"] = serde_json::json!(v);
+    }
+    if let Some(v) = population_growth {
+        args["population_growth"] = serde_json::json!(v);
+    }
+    if let Some(v) = depreciation {
+        args["depreciation"] = serde_json::json!(v);
+    }
+    if let Some(v) = technology_growth {
+        args["technology_growth"] = serde_json::json!(v);
+    }
+    if let Some(v) = capital_share {
+        args["capital_share"] = serde_json::json!(v);
+    }
     run_macro_method("solow_steady_state", args)
 }
 
@@ -145,24 +171,40 @@ pub fn taylor_rule(
         "inflation": inflation,
         "output_gap": output_gap,
     });
-    if let Some(v) = target_inflation { args["target_inflation"] = serde_json::json!(v); }
-    if let Some(v) = real_rate { args["real_rate"] = serde_json::json!(v); }
+    if let Some(v) = target_inflation {
+        args["target_inflation"] = serde_json::json!(v);
+    }
+    if let Some(v) = real_rate {
+        args["real_rate"] = serde_json::json!(v);
+    }
     run_macro_method("taylor_rule", args)
 }
 
 /// Predict unemployment change from GDP growth via Okun's Law.
 pub fn okun_predict(gdp_growth: f64, okun_coefficient: Option<f64>) -> EconometricResult {
     let mut args = serde_json::json!({ "gdp_growth": gdp_growth });
-    if let Some(v) = okun_coefficient { args["okun_coefficient"] = serde_json::json!(v); }
+    if let Some(v) = okun_coefficient {
+        args["okun_coefficient"] = serde_json::json!(v);
+    }
     run_macro_method("okun_predict", args)
 }
 
 /// Fisher equation calculator.
-pub fn fisher(nominal_rate: Option<f64>, real_rate: Option<f64>, inflation_rate: Option<f64>) -> EconometricResult {
+pub fn fisher(
+    nominal_rate: Option<f64>,
+    real_rate: Option<f64>,
+    inflation_rate: Option<f64>,
+) -> EconometricResult {
     let mut args = serde_json::json!({});
-    if let Some(v) = nominal_rate { args["nominal_rate"] = serde_json::json!(v); }
-    if let Some(v) = real_rate { args["real_rate"] = serde_json::json!(v); }
-    if let Some(v) = inflation_rate { args["inflation_rate"] = serde_json::json!(v); }
+    if let Some(v) = nominal_rate {
+        args["nominal_rate"] = serde_json::json!(v);
+    }
+    if let Some(v) = real_rate {
+        args["real_rate"] = serde_json::json!(v);
+    }
+    if let Some(v) = inflation_rate {
+        args["inflation_rate"] = serde_json::json!(v);
+    }
     run_macro_method("fisher", args)
 }
 
@@ -173,9 +215,15 @@ pub fn money_multiplier(
     currency_deposit_ratio: Option<f64>,
 ) -> EconometricResult {
     let mut args = serde_json::json!({});
-    if let Some(v) = monetary_base { args["monetary_base"] = serde_json::json!(v); }
-    if let Some(v) = reserve_ratio { args["reserve_ratio"] = serde_json::json!(v); }
-    if let Some(v) = currency_deposit_ratio { args["currency_deposit_ratio"] = serde_json::json!(v); }
+    if let Some(v) = monetary_base {
+        args["monetary_base"] = serde_json::json!(v);
+    }
+    if let Some(v) = reserve_ratio {
+        args["reserve_ratio"] = serde_json::json!(v);
+    }
+    if let Some(v) = currency_deposit_ratio {
+        args["currency_deposit_ratio"] = serde_json::json!(v);
+    }
     run_macro_method("money_multiplier", args)
 }
 
@@ -186,18 +234,30 @@ mod tests {
     #[test]
     fn test_taylor_rule_basic() {
         let result = taylor_rule(5.0, 1.0, Some(2.5), Some(2.0));
-        assert!(result.error.is_none(), "Taylor rule should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "Taylor rule should not error: {:?}",
+            result.error
+        );
     }
 
     #[test]
     fn test_fisher_basic() {
         let result = fisher(Some(10.0), None, Some(5.0));
-        assert!(result.error.is_none(), "Fisher equation should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "Fisher equation should not error: {:?}",
+            result.error
+        );
     }
 
     #[test]
     fn test_money_multiplier_basic() {
         let result = money_multiplier(Some(1000.0), Some(0.0425), Some(0.3));
-        assert!(result.error.is_none(), "Money multiplier should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "Money multiplier should not error: {:?}",
+            result.error
+        );
     }
 }

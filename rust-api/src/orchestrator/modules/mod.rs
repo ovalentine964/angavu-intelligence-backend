@@ -1,23 +1,23 @@
 // src/orchestrator/modules/mod.rs
 
-pub mod market;
 pub mod credit;
 pub mod distribution;
-pub mod fmcg;
-pub mod health;
 pub mod economic;
-pub mod service_price_discovery;
-pub mod inequality; // P1: Inequality tracker (Gini, Palma, Theil) for economic analysis
-pub mod gender_inequality; // Gender-disaggregated Gini, Theil, wage gap
-pub mod occupation_hazard_matrix; // Formal risk scoring per worker type
-pub mod health_economics; // QALY/DALY calculations
-pub mod trade_gravity; // Gravity model for trade flow prediction
 pub mod fiscal_impact; // Policy impact on informal workers
+pub mod fmcg;
+pub mod gender_inequality; // Gender-disaggregated Gini, Theil, wage gap
+pub mod governance_quality;
+pub mod health;
+pub mod health_economics; // QALY/DALY calculations
+pub mod inequality; // P1: Inequality tracker (Gini, Palma, Theil) for economic analysis
+pub mod market;
 pub mod market_concentration; // HHI, concentration ratios by sector
+pub mod occupation_hazard_matrix; // Formal risk scoring per worker type
 pub mod property_rights; // Informal property documentation scoring
-pub mod governance_quality; // Institutional quality measurement
+pub mod service_price_discovery;
+pub mod trade_gravity; // Gravity model for trade flow prediction // Institutional quality measurement
 
-use super::message_bus::{ModuleMessage, ModuleId};
+use super::message_bus::{ModuleId, ModuleMessage};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,12 +40,16 @@ pub trait CapabilityModule: Send + Sync {
     async fn shutdown(&self) {}
 
     /// Current queue depth (for health reporting)
-    fn queue_depth(&self) -> u64 { 0 }
+    fn queue_depth(&self) -> u64 {
+        0
+    }
 
     /// Serialize module state for periodic persistence.
     /// Returns None if the module has no state worth persisting.
     /// Default implementation returns None.
-    fn snapshot_state(&self) -> Option<Vec<u8>> { None }
+    fn snapshot_state(&self) -> Option<Vec<u8>> {
+        None
+    }
 
     /// Restore module state from a previous snapshot.
     /// Default implementation is a no-op.
@@ -84,7 +88,9 @@ impl ModuleStateStore {
             if let Err(e) = std::fs::write(&path, &data_owned) {
                 error!(module = ?module_id, error = %e, "Failed to persist module state");
             }
-        }).await.ok();
+        })
+        .await
+        .ok();
     }
 
     /// Load a module's snapshot from cache or disk.
@@ -121,9 +127,7 @@ pub async fn periodic_state_persistence(
     store: Arc<ModuleStateStore>,
     interval_secs: u64,
 ) {
-    let mut interval = tokio::time::interval(
-        std::time::Duration::from_secs(interval_secs)
-    );
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {

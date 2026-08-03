@@ -4,8 +4,8 @@
 //! graph stored in PostgreSQL (kg_edges, kg_worker_cohorts, kg_product_categories, etc.).
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque, BinaryHeap};
 use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 /// Wrapper for f64 that implements Ord using total_cmp.
@@ -89,10 +89,7 @@ impl AlgorithmGraph {
 
     /// Add a directed edge with weight.
     pub fn add_edge(&mut self, from: Uuid, to: Uuid, weight: f64) {
-        self.adjacency
-            .entry(from)
-            .or_default()
-            .push((to, weight));
+        self.adjacency.entry(from).or_default().push((to, weight));
         self.reverse_adjacency
             .entry(to)
             .or_default()
@@ -154,11 +151,8 @@ impl AlgorithmGraph {
         }
 
         // Out-degree for each node
-        let out_degree: HashMap<Uuid, usize> = self
-            .adjacency
-            .iter()
-            .map(|(k, v)| (*k, v.len()))
-            .collect();
+        let out_degree: HashMap<Uuid, usize> =
+            self.adjacency.iter().map(|(k, v)| (*k, v.len())).collect();
 
         // Power iteration
         for _ in 0..iterations {
@@ -183,7 +177,8 @@ impl AlgorithmGraph {
                             .iter()
                             .map(|(from, _)| {
                                 let from_rank = ranks.get(from).copied().unwrap_or(0.0);
-                                let from_out = out_degree.get(from).copied().unwrap_or(1).max(1) as f64;
+                                let from_out =
+                                    out_degree.get(from).copied().unwrap_or(1).max(1) as f64;
                                 from_rank / from_out
                             })
                             .sum()
@@ -207,7 +202,11 @@ impl AlgorithmGraph {
             })
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results
     }
 
@@ -331,7 +330,11 @@ impl AlgorithmGraph {
             .into_iter()
             .map(|node| {
                 let out_degree = self.adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
-                let in_degree = self.reverse_adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
+                let in_degree = self
+                    .reverse_adjacency
+                    .get(&node)
+                    .map(|e| e.len())
+                    .unwrap_or(0);
                 CentralityResult {
                     node_id: node,
                     degree: in_degree + out_degree,
@@ -540,14 +543,22 @@ impl AlgorithmGraph {
         let mut degree: HashMap<Uuid, usize> = HashMap::new();
         for &node in &nodes {
             let out = self.adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
-            let inc = self.reverse_adjacency.get(&node).map(|e| e.len()).unwrap_or(0);
+            let inc = self
+                .reverse_adjacency
+                .get(&node)
+                .map(|e| e.len())
+                .unwrap_or(0);
             // For undirected interpretation, count unique neighbors
             let mut neighbors: HashSet<Uuid> = HashSet::new();
             if let Some(edges) = self.adjacency.get(&node) {
-                for (n, _) in edges { neighbors.insert(*n); }
+                for (n, _) in edges {
+                    neighbors.insert(*n);
+                }
             }
             if let Some(edges) = self.reverse_adjacency.get(&node) {
-                for (n, _) in edges { neighbors.insert(*n); }
+                for (n, _) in edges {
+                    neighbors.insert(*n);
+                }
             }
             degree.insert(node, neighbors.len());
         }
@@ -578,10 +589,14 @@ impl AlgorithmGraph {
                 // Decrease degree of all neighbors
                 let mut neighbors: HashSet<Uuid> = HashSet::new();
                 if let Some(edges) = self.adjacency.get(&node) {
-                    for (n, _) in edges { neighbors.insert(*n); }
+                    for (n, _) in edges {
+                        neighbors.insert(*n);
+                    }
                 }
                 if let Some(edges) = self.reverse_adjacency.get(&node) {
-                    for (n, _) in edges { neighbors.insert(*n); }
+                    for (n, _) in edges {
+                        neighbors.insert(*n);
+                    }
                 }
 
                 for neighbor in neighbors {
@@ -649,7 +664,11 @@ impl AlgorithmGraph {
                 for (neighbor, weight) in neighbors {
                     // Inverse weight: stronger edges have lower cost
                     // Clamp to avoid division by zero
-                    let cost = if *weight > 0.001 { 1.0 / weight } else { 1000.0 };
+                    let cost = if *weight > 0.001 {
+                        1.0 / weight
+                    } else {
+                        1000.0
+                    };
                     let new_dist = current_dist + cost;
                     let known_dist = *dist.get(neighbor).unwrap_or(&f64::INFINITY);
 
@@ -931,27 +950,36 @@ impl GraphReasoner {
         let neighbor_ids: Vec<Uuid> = neighborhood.iter().map(|(id, _)| *id).collect();
 
         // Classify neighbors by label prefix
-        let suppliers: Vec<Uuid> = neighbor_ids.iter()
+        let suppliers: Vec<Uuid> = neighbor_ids
+            .iter()
             .filter(|id| {
-                self.graph.node_labels.get(id)
+                self.graph
+                    .node_labels
+                    .get(id)
                     .map(|l| l.starts_with("supply:"))
                     .unwrap_or(false)
             })
             .copied()
             .collect();
 
-        let alternatives: Vec<Uuid> = neighbor_ids.iter()
+        let alternatives: Vec<Uuid> = neighbor_ids
+            .iter()
             .filter(|id| {
-                self.graph.node_labels.get(id)
+                self.graph
+                    .node_labels
+                    .get(id)
                     .map(|l| l.starts_with("product:"))
                     .unwrap_or(false)
             })
             .copied()
             .collect();
 
-        let markets: Vec<Uuid> = neighbor_ids.iter()
+        let markets: Vec<Uuid> = neighbor_ids
+            .iter()
             .filter(|id| {
-                self.graph.node_labels.get(id)
+                self.graph
+                    .node_labels
+                    .get(id)
                     .map(|l| l.starts_with("market:"))
                     .unwrap_or(false)
             })
@@ -959,15 +987,27 @@ impl GraphReasoner {
             .collect();
 
         // Find shortest path to cheapest alternative (highest-weight = strongest relationship)
-        let cheapest_alternative_path = alternatives.iter()
+        let cheapest_alternative_path = alternatives
+            .iter()
             .filter_map(|alt| self.graph.weighted_shortest_path(product_id, *alt))
-            .min_by(|a, b| a.total_weight.partial_cmp(&b.total_weight).unwrap_or(std::cmp::Ordering::Equal));
+            .min_by(|a, b| {
+                a.total_weight
+                    .partial_cmp(&b.total_weight)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
         // Find community peers
         let communities = self.graph.detect_communities();
-        let community_peers = communities.iter()
+        let community_peers = communities
+            .iter()
             .find(|c| c.members.contains(&product_id))
-            .map(|c| c.members.iter().copied().filter(|id| *id != product_id).collect())
+            .map(|c| {
+                c.members
+                    .iter()
+                    .copied()
+                    .filter(|id| *id != product_id)
+                    .collect()
+            })
             .unwrap_or_default();
 
         ProductReasoning {
@@ -983,15 +1023,23 @@ impl GraphReasoner {
     /// Reason about credit risk: find contributing factors and similar cohorts.
     pub fn reason_about_credit(&self, cohort_id: Uuid) -> CreditReasoning {
         let pagerank = self.graph.pagerank(30, 0.85);
-        let pagerank_score = pagerank.iter()
+        let pagerank_score = pagerank
+            .iter()
             .find(|r| r.node_id == cohort_id)
             .map(|r| r.score)
             .unwrap_or(0.0);
 
         let communities = self.graph.detect_communities();
-        let peer_cohorts = communities.iter()
+        let peer_cohorts = communities
+            .iter()
             .find(|c| c.members.contains(&cohort_id))
-            .map(|c| c.members.iter().copied().filter(|id| *id != cohort_id).collect())
+            .map(|c| {
+                c.members
+                    .iter()
+                    .copied()
+                    .filter(|id| *id != cohort_id)
+                    .collect()
+            })
             .unwrap_or_default();
 
         let similar_cohorts = self.graph.similar_nodes(cohort_id, 5);
@@ -1016,17 +1064,25 @@ impl GraphReasoner {
 
         let community_id = community.map(|c| c.id);
         let community_members = community
-            .map(|c| c.members.iter().copied().filter(|id| *id != node_id).collect())
+            .map(|c| {
+                c.members
+                    .iter()
+                    .copied()
+                    .filter(|id| *id != node_id)
+                    .collect()
+            })
             .unwrap_or_default();
 
         let pagerank = self.graph.pagerank(30, 0.85);
-        let local_pagerank = pagerank.iter()
+        let local_pagerank = pagerank
+            .iter()
             .find(|r| r.node_id == node_id)
             .map(|r| r.score)
             .unwrap_or(0.0);
 
         let betweenness = self.graph.betweenness_centrality(100);
-        let betweenness_score = betweenness.iter()
+        let betweenness_score = betweenness
+            .iter()
             .find(|(id, _)| *id == node_id)
             .map(|(_, s)| *s)
             .unwrap_or(0.0);
@@ -1056,13 +1112,17 @@ impl GraphReasoner {
                 let b = &nodes[j];
 
                 // Skip if edge already exists
-                if self.graph.adjacency.get(a)
+                if self
+                    .graph
+                    .adjacency
+                    .get(a)
                     .map_or(false, |edges| edges.iter().any(|(n, _)| n == b))
                 {
                     continue;
                 }
 
-                if let (Some(emb_a), Some(emb_b)) = (self.embeddings.get(a), self.embeddings.get(b)) {
+                if let (Some(emb_a), Some(emb_b)) = (self.embeddings.get(a), self.embeddings.get(b))
+                {
                     let sim = cosine_similarity(emb_a, emb_b);
                     if sim > threshold {
                         predictions.push((*a, *b, sim));
@@ -1114,71 +1174,57 @@ pub async fn build_graph_from_db(
     // 2. Load ALL node types with labels
 
     // Worker cohorts
-    let cohorts = sqlx::query!(
-        "SELECT id, worker_type, region_id FROM kg_worker_cohorts"
-    )
-    .fetch_all(pool)
-    .await?;
+    let cohorts = sqlx::query!("SELECT id, worker_type, region_id FROM kg_worker_cohorts")
+        .fetch_all(pool)
+        .await?;
     for c in &cohorts {
         graph.set_label(c.id, format!("cohort:{}:{}", c.worker_type, c.region_id));
     }
 
     // Product categories
-    let products = sqlx::query!(
-        "SELECT id, category_code FROM kg_product_categories"
-    )
-    .fetch_all(pool)
-    .await?;
+    let products = sqlx::query!("SELECT id, category_code FROM kg_product_categories")
+        .fetch_all(pool)
+        .await?;
     for p in &products {
         graph.set_label(p.id, format!("product:{}", p.category_code));
     }
 
     // Regional markets
-    let markets = sqlx::query!(
-        "SELECT id, region_code FROM kg_regional_markets"
-    )
-    .fetch_all(pool)
-    .await?;
+    let markets = sqlx::query!("SELECT id, region_code FROM kg_regional_markets")
+        .fetch_all(pool)
+        .await?;
     for m in &markets {
         graph.set_label(m.id, format!("market:{}", m.region_code));
     }
 
     // Credit risk profiles
-    let credit = sqlx::query!(
-        "SELECT id, risk_tier FROM kg_credit_risk_profiles"
-    )
-    .fetch_all(pool)
-    .await?;
+    let credit = sqlx::query!("SELECT id, risk_tier FROM kg_credit_risk_profiles")
+        .fetch_all(pool)
+        .await?;
     for c in &credit {
         graph.set_label(c.id, format!("credit:{}", c.risk_tier));
     }
 
     // Supply chain entities
-    let supply = sqlx::query!(
-        "SELECT id, entity_type, entity_name FROM kg_supply_chain_entities"
-    )
-    .fetch_all(pool)
-    .await?;
+    let supply = sqlx::query!("SELECT id, entity_type, entity_name FROM kg_supply_chain_entities")
+        .fetch_all(pool)
+        .await?;
     for s in &supply {
         graph.set_label(s.id, format!("supply:{}:{}", s.entity_type, s.entity_name));
     }
 
     // Economic indicators
-    let indicators = sqlx::query!(
-        "SELECT id, indicator_code FROM kg_economic_indicators"
-    )
-    .fetch_all(pool)
-    .await?;
+    let indicators = sqlx::query!("SELECT id, indicator_code FROM kg_economic_indicators")
+        .fetch_all(pool)
+        .await?;
     for i in &indicators {
         graph.set_label(i.id, format!("indicator:{}", i.indicator_code));
     }
 
     // Financial products
-    let financial = sqlx::query!(
-        "SELECT id, product_type FROM kg_financial_products"
-    )
-    .fetch_all(pool)
-    .await?;
+    let financial = sqlx::query!("SELECT id, product_type FROM kg_financial_products")
+        .fetch_all(pool)
+        .await?;
     for f in &financial {
         graph.set_label(f.id, format!("financial:{}", f.product_type));
     }
@@ -1204,11 +1250,10 @@ pub async fn build_graph_with_embeddings(
     let mut embeddings: HashMap<Uuid, Vec<f64>> = HashMap::new();
 
     // Load embeddings from cohorts
-    let cohort_embs = sqlx::query!(
-        "SELECT id, embedding FROM kg_worker_cohorts WHERE embedding IS NOT NULL"
-    )
-    .fetch_all(pool)
-    .await?;
+    let cohort_embs =
+        sqlx::query!("SELECT id, embedding FROM kg_worker_cohorts WHERE embedding IS NOT NULL")
+            .fetch_all(pool)
+            .await?;
     for row in &cohort_embs {
         if let Some(ref emb) = row.embedding {
             embeddings.insert(row.id, emb.clone());
@@ -1216,11 +1261,10 @@ pub async fn build_graph_with_embeddings(
     }
 
     // Load embeddings from products
-    let product_embs = sqlx::query!(
-        "SELECT id, embedding FROM kg_product_categories WHERE embedding IS NOT NULL"
-    )
-    .fetch_all(pool)
-    .await?;
+    let product_embs =
+        sqlx::query!("SELECT id, embedding FROM kg_product_categories WHERE embedding IS NOT NULL")
+            .fetch_all(pool)
+            .await?;
     for row in &product_embs {
         if let Some(ref emb) = row.embedding {
             embeddings.insert(row.id, emb.clone());
@@ -1228,11 +1272,10 @@ pub async fn build_graph_with_embeddings(
     }
 
     // Load embeddings from markets
-    let market_embs = sqlx::query!(
-        "SELECT id, embedding FROM kg_regional_markets WHERE embedding IS NOT NULL"
-    )
-    .fetch_all(pool)
-    .await?;
+    let market_embs =
+        sqlx::query!("SELECT id, embedding FROM kg_regional_markets WHERE embedding IS NOT NULL")
+            .fetch_all(pool)
+            .await?;
     for row in &market_embs {
         if let Some(ref emb) = row.embedding {
             embeddings.insert(row.id, emb.clone());
@@ -1380,7 +1423,10 @@ mod tests {
         // Node A (center, connecting bridge) should have highest betweenness
         let center = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         assert_eq!(results[0].node_id, center);
-        assert!(results[0].score > 0.0, "Center node should have non-zero betweenness");
+        assert!(
+            results[0].score > 0.0,
+            "Center node should have non-zero betweenness"
+        );
     }
 
     #[test]
@@ -1399,9 +1445,21 @@ mod tests {
 
         let results = graph.betweenness_centrality(4);
         // B and C are bridges; they should have highest betweenness
-        let b_score = results.iter().find(|(id, _)| *id == b).map(|(_, s)| *s).unwrap_or(0.0);
-        let c_score = results.iter().find(|(id, _)| *id == c).map(|(_, s)| *s).unwrap_or(0.0);
-        let a_score = results.iter().find(|(id, _)| *id == a).map(|(_, s)| *s).unwrap_or(0.0);
+        let b_score = results
+            .iter()
+            .find(|(id, _)| *id == b)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0);
+        let c_score = results
+            .iter()
+            .find(|(id, _)| *id == c)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0);
+        let a_score = results
+            .iter()
+            .find(|(id, _)| *id == a)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0);
         assert!(b_score > a_score, "B should have higher betweenness than A");
         assert!(c_score > a_score, "C should have higher betweenness than A");
     }
@@ -1447,14 +1505,17 @@ mod tests {
         let c = Uuid::parse_str("00000000-0000-0000-0000-000000000003").unwrap();
 
         // Strong edge A→B (weight 10.0) and weak edge A→C (weight 0.1), C→B (weight 0.1)
-        graph.add_edge(a, b, 10.0);  // cost = 1/10 = 0.1
-        graph.add_edge(a, c, 0.1);   // cost = 1/0.1 = 10
-        graph.add_edge(c, b, 0.1);   // cost = 1/0.1 = 10
+        graph.add_edge(a, b, 10.0); // cost = 1/10 = 0.1
+        graph.add_edge(a, c, 0.1); // cost = 1/0.1 = 10
+        graph.add_edge(c, b, 0.1); // cost = 1/0.1 = 10
 
         // Weighted shortest should prefer the direct strong edge A→B
         let result = graph.weighted_shortest_path(a, b).unwrap();
         assert_eq!(result.path, vec![a, b]);
-        assert!((result.total_weight - 0.1).abs() < 0.001, "Cost should be 1/10 = 0.1");
+        assert!(
+            (result.total_weight - 0.1).abs() < 0.001,
+            "Cost should be 1/10 = 0.1"
+        );
     }
 
     #[test]
@@ -1498,12 +1559,10 @@ mod tests {
         graph.add_edge(b, c, 1.0);
 
         // Heuristic: closer to C means lower value
-        let distances = std::collections::HashMap::from([
-            (a, 3.0),
-            (b, 1.0),
-            (c, 0.0),
-        ]);
-        let result = graph.a_star(a, c, |n| *distances.get(&n).unwrap_or(&0.0)).unwrap();
+        let distances = std::collections::HashMap::from([(a, 3.0), (b, 1.0), (c, 0.0)]);
+        let result = graph
+            .a_star(a, c, |n| *distances.get(&n).unwrap_or(&0.0))
+            .unwrap();
         assert_eq!(result.path, vec![a, b, c]);
         assert!((result.total_weight - 3.0).abs() < 0.001);
     }
@@ -1541,11 +1600,7 @@ mod tests {
         graph.add_edge(a, c, 2.0);
         graph.add_edge(b, c, 1.0);
 
-        let distances = std::collections::HashMap::from([
-            (a, 2.0),
-            (b, 1.0),
-            (c, 0.0),
-        ]);
+        let distances = std::collections::HashMap::from([(a, 2.0), (b, 1.0), (c, 0.0)]);
         let result = graph.greedy_best_first(a, c, |n| *distances.get(&n).unwrap_or(&0.0));
         assert!(result.is_some());
     }

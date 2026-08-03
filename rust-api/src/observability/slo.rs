@@ -1,10 +1,10 @@
 // SLO (Service Level Objective) definitions and tracking
 // Defines and monitors SLOs for Angavu Intelligence Backend
 
-use std::sync::Arc;
+use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use tracing::warn;
 
 /// SLO definitions for Angavu Intelligence Backend
@@ -96,7 +96,8 @@ impl SloTracker {
             let is_met = current_value >= def.target_percent;
             let error_budget_total = 100.0 - def.target_percent;
             let error_budget_used = 100.0 - current_value;
-            let error_budget_remaining = ((error_budget_total - error_budget_used) / error_budget_total * 100.0).max(0.0);
+            let error_budget_remaining =
+                ((error_budget_total - error_budget_used) / error_budget_total * 100.0).max(0.0);
 
             if !is_met {
                 warn!(
@@ -130,7 +131,12 @@ impl SloTracker {
 
     /// Get SLOs that are currently breached.
     pub fn breached_slos(&self) -> Vec<SloStatus> {
-        self.statuses.read().iter().filter(|s| !s.is_met).cloned().collect()
+        self.statuses
+            .read()
+            .iter()
+            .filter(|s| !s.is_met)
+            .cloned()
+            .collect()
     }
 
     /// Export SLO statuses as JSON (for API endpoint).

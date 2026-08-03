@@ -77,7 +77,10 @@ impl ServicePriceDiscoveryEngine {
 
         let mut count = 0;
         for row in rows {
-            let key = format!("{}:{}:{}", row.service_category, row.service_type, row.region);
+            let key = format!(
+                "{}:{}:{}",
+                row.service_category, row.service_type, row.region
+            );
             let factors: Vec<PricingFactor> =
                 serde_json::from_str(&row.factors).unwrap_or_default();
 
@@ -91,21 +94,24 @@ impl ServicePriceDiscoveryEngine {
                 other => ServiceCategory::Other(other.to_string()),
             };
 
-            self.signals.insert(key, ServiceMarketSignal {
-                signal_id: uuid::Uuid::new_v4(),
-                service_category: category,
-                service_type: row.service_type,
-                region: row.region,
-                price_avg: row.price_avg,
-                price_min: row.price_min,
-                price_max: row.price_max,
-                price_trend: row.price_trend,
-                demand_velocity: row.demand_velocity,
-                volatility: row.volatility,
-                sample_size: row.sample_size as u32,
-                factors,
-                updated_at: chrono::Utc::now(),
-            });
+            self.signals.insert(
+                key,
+                ServiceMarketSignal {
+                    signal_id: uuid::Uuid::new_v4(),
+                    service_category: category,
+                    service_type: row.service_type,
+                    region: row.region,
+                    price_avg: row.price_avg,
+                    price_min: row.price_min,
+                    price_max: row.price_max,
+                    price_trend: row.price_trend,
+                    demand_velocity: row.demand_velocity,
+                    volatility: row.volatility,
+                    sample_size: row.sample_size as u32,
+                    factors,
+                    updated_at: chrono::Utc::now(),
+                },
+            );
             count += 1;
         }
 
@@ -123,7 +129,10 @@ impl ServicePriceDiscoveryEngine {
 
         let mut broadcast_count = 0;
         for row in broadcasts {
-            let key = format!("{}:{}:{}", row.service_category, row.service_type, row.region);
+            let key = format!(
+                "{}:{}:{}",
+                row.service_category, row.service_type, row.region
+            );
             self.pending_broadcasts
                 .entry(key)
                 .or_insert_with(Vec::new)
@@ -153,7 +162,9 @@ impl ServicePriceDiscoveryEngine {
         // Upsert all current signals
         for (key, signal) in &self.signals {
             let parts: Vec<&str> = key.splitn(3, ':').collect();
-            if parts.len() != 3 { continue; }
+            if parts.len() != 3 {
+                continue;
+            }
 
             let factors_json = serde_json::to_string(&signal.factors).unwrap_or_default();
             let category_str = match &signal.service_category {
@@ -202,7 +213,10 @@ impl ServicePriceDiscoveryEngine {
             .map_err(|e| format!("Failed to persist service_prices: {}", e))?;
         }
 
-        tracing::info!(signals = self.signals.len(), "ServicePriceDiscoveryEngine state persisted");
+        tracing::info!(
+            signals = self.signals.len(),
+            "ServicePriceDiscoveryEngine state persisted"
+        );
         Ok(())
     }
 
@@ -282,9 +296,14 @@ impl ServicePriceDiscoveryEngine {
         let price_max = prices.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
         // Volatility (CV)
-        let variance = prices.iter().map(|p| (p - price_avg).powi(2)).sum::<f64>() / (n - 1.0).max(1.0);
+        let variance =
+            prices.iter().map(|p| (p - price_avg).powi(2)).sum::<f64>() / (n - 1.0).max(1.0);
         let stddev = variance.sqrt();
-        let volatility = if price_avg > 0.0 { stddev / price_avg } else { 0.0 };
+        let volatility = if price_avg > 0.0 {
+            stddev / price_avg
+        } else {
+            0.0
+        };
 
         // Price trend: compare recent vs older half
         let price_trend = if prices.len() >= 4 {
@@ -344,7 +363,9 @@ impl ServicePriceDiscoveryEngine {
         };
 
         let parts: Vec<&str> = key.splitn(3, ':').collect();
-        if parts.len() != 3 { return Ok(()); }
+        if parts.len() != 3 {
+            return Ok(());
+        }
 
         sqlx::query!(
             "UPDATE service_price_broadcasts SET processed = TRUE
@@ -395,7 +416,10 @@ impl CapabilityModule for ServicePriceDiscoveryEngine {
                     ServiceCategory::Cleaning => "Cleaning",
                     ServiceCategory::Other(s) => s.as_str(),
                 };
-                let key = format!("{}:{}:{}", category_str, broadcast.service_type, broadcast.region);
+                let key = format!(
+                    "{}:{}:{}",
+                    category_str, broadcast.service_type, broadcast.region
+                );
 
                 self.pending_broadcasts
                     .entry(key.clone())
@@ -431,13 +455,18 @@ impl CapabilityModule for ServicePriceDiscoveryEngine {
 
                 Ok(None)
             }
-            ModuleMessage::RouteCommand { command: ModuleCommand::Recalculate, .. } => {
+            ModuleMessage::RouteCommand {
+                command: ModuleCommand::Recalculate,
+                ..
+            } => {
                 // Recompute all signals from pending broadcasts
                 let mut last_signal = None;
                 let keys: Vec<String> = self.pending_broadcasts.keys().cloned().collect();
                 for key in keys {
                     let parts: Vec<&str> = key.splitn(3, ':').collect();
-                    if parts.len() != 3 { continue; }
+                    if parts.len() != 3 {
+                        continue;
+                    }
 
                     let category = match parts[0] {
                         "Transport" => ServiceCategory::Transport,
@@ -450,9 +479,9 @@ impl CapabilityModule for ServicePriceDiscoveryEngine {
                     };
 
                     if let Some(broadcasts) = self.pending_broadcasts.get(&key) {
-                        if let Some(signal) = self.compute_signal(
-                            &category, parts[1], parts[2], broadcasts,
-                        ) {
+                        if let Some(signal) =
+                            self.compute_signal(&category, parts[1], parts[2], broadcasts)
+                        {
                             if let Err(e) = self.mark_processed(&key).await {
                                 tracing::error!("Failed to mark processed: {}", e);
                             }
@@ -471,7 +500,10 @@ impl CapabilityModule for ServicePriceDiscoveryEngine {
     }
 
     async fn shutdown(&self) {
-        tracing::info!("ServicePriceDiscoveryEngine shutting down, {} signals active", self.signals.len());
+        tracing::info!(
+            "ServicePriceDiscoveryEngine shutting down, {} signals active",
+            self.signals.len()
+        );
         if let Err(e) = self.persist_state().await {
             tracing::error!("Failed to persist ServicePriceDiscoveryEngine state: {}", e);
         }
@@ -486,7 +518,8 @@ impl CapabilityModule for ServicePriceDiscoveryEngine {
         bincode::serialize(&Snapshot {
             pending_broadcasts: self.pending_broadcasts.clone(),
             signals: self.signals.clone(),
-        }).ok()
+        })
+        .ok()
     }
 
     fn restore_state(&mut self, data: &[u8]) {

@@ -76,11 +76,14 @@ impl FMCGIntelligence {
 
             let brand_volumes: HashMap<String, f64> =
                 serde_json::from_str(&row.brand_volumes).unwrap_or_default();
-            self.brand_data.insert(key.clone(), BrandTracker {
-                brand_volumes,
-                total_volume: row.total_volume,
-                last_updated: chrono::Utc::now(),
-            });
+            self.brand_data.insert(
+                key.clone(),
+                BrandTracker {
+                    brand_volumes,
+                    total_volume: row.total_volume,
+                    last_updated: chrono::Utc::now(),
+                },
+            );
 
             let elasticity: Vec<(f64, f64)> =
                 serde_json::from_str(&row.elasticity_data).unwrap_or_default();
@@ -91,7 +94,10 @@ impl FMCGIntelligence {
             count += 1;
         }
 
-        tracing::info!(signals = count, "FMCGIntelligence state loaded from PostgreSQL");
+        tracing::info!(
+            signals = count,
+            "FMCGIntelligence state loaded from PostgreSQL"
+        );
         Ok(())
     }
 
@@ -109,16 +115,24 @@ impl FMCGIntelligence {
 
         for key in keys {
             let parts: Vec<&str> = key.splitn(2, ':').collect();
-            if parts.len() != 2 { continue; }
+            if parts.len() != 2 {
+                continue;
+            }
             let (region, category) = (parts[0], parts[1]);
 
-            let brand_volumes_json = self.brand_data.get(&key)
+            let brand_volumes_json = self
+                .brand_data
+                .get(&key)
                 .map(|t| serde_json::to_string(&t.brand_volumes).unwrap_or_default())
                 .unwrap_or_else(|| "{}".to_string());
-            let total_volume = self.brand_data.get(&key)
+            let total_volume = self
+                .brand_data
+                .get(&key)
                 .map(|t| t.total_volume)
                 .unwrap_or(0.0);
-            let elasticity_json = self.elasticity_data.get(&key)
+            let elasticity_json = self
+                .elasticity_data
+                .get(&key)
                 .map(|d| serde_json::to_string(d).unwrap_or_default())
                 .unwrap_or_else(|| "[]".to_string());
 
@@ -142,7 +156,10 @@ impl FMCGIntelligence {
             .map_err(|e| format!("Failed to persist fmcg_signals: {}", e))?;
         }
 
-        tracing::info!(signals = keys.len(), "FMCGIntelligence state persisted to PostgreSQL");
+        tracing::info!(
+            signals = keys.len(),
+            "FMCGIntelligence state persisted to PostgreSQL"
+        );
         Ok(())
     }
 
@@ -159,13 +176,13 @@ impl FMCGIntelligence {
         let mean_ln_p: f64 = ln_p.iter().sum::<f64>() / n;
         let mean_ln_q: f64 = ln_q.iter().sum::<f64>() / n;
 
-        let numerator: f64 = ln_p.iter().zip(ln_q.iter())
+        let numerator: f64 = ln_p
+            .iter()
+            .zip(ln_q.iter())
             .map(|(p, q)| (p - mean_ln_p) * (q - mean_ln_q))
             .sum();
 
-        let denominator: f64 = ln_p.iter()
-            .map(|p| (p - mean_ln_p).powi(2))
-            .sum();
+        let denominator: f64 = ln_p.iter().map(|p| (p - mean_ln_p).powi(2)).sum();
 
         if denominator.abs() < 1e-10 {
             return (-1.0, -3.0, 1.0, 0.0);
@@ -173,7 +190,9 @@ impl FMCGIntelligence {
 
         let beta_ols = numerator / denominator;
 
-        let residuals: Vec<f64> = ln_q.iter().zip(ln_p.iter())
+        let residuals: Vec<f64> = ln_q
+            .iter()
+            .zip(ln_p.iter())
             .map(|(q, p)| q - (mean_ln_q + beta_ols * (p - mean_ln_p)))
             .collect();
 
@@ -190,7 +209,11 @@ impl FMCGIntelligence {
 
         let ss_reg = beta_ols.powi(2) * denominator;
         let ss_res = residual_var * (n - 2.0);
-        let f_stat = if ss_res > 0.0 { (ss_reg / 1.0) / (ss_res / (n - 2.0)) } else { 0.0 };
+        let f_stat = if ss_res > 0.0 {
+            (ss_reg / 1.0) / (ss_res / (n - 2.0))
+        } else {
+            0.0
+        };
 
         (beta_corrected, ci_lower, ci_upper, f_stat)
     }
@@ -215,14 +238,19 @@ impl CapabilityModule for FMCGIntelligence {
             } => {
                 for tx in &transactions {
                     let key = format!("{}:{}", region, tx.product_category);
-                    let tracker = self.brand_data.entry(key.clone())
-                        .or_insert_with(|| BrandTracker {
-                            brand_volumes: HashMap::new(),
-                            total_volume: 0.0,
-                            last_updated: chrono::Utc::now(),
-                        });
+                    let tracker =
+                        self.brand_data
+                            .entry(key.clone())
+                            .or_insert_with(|| BrandTracker {
+                                brand_volumes: HashMap::new(),
+                                total_volume: 0.0,
+                                last_updated: chrono::Utc::now(),
+                            });
 
-                    let brand = tx.product_name.clone().unwrap_or_else(|| "unknown".to_string());
+                    let brand = tx
+                        .product_name
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
                     let volume = tx.quantity.unwrap_or(1.0);
 
                     *tracker.brand_volumes.entry(brand).or_insert(0.0) += volume;
@@ -242,8 +270,12 @@ impl CapabilityModule for FMCGIntelligence {
             } => {
                 let key = format!("{}:{}", region, product_category);
 
-                if let PriceTrend::Rising { rate_pct } | PriceTrend::Falling { rate_pct } = &price_trend {
-                    let data = self.elasticity_data.entry(key.clone())
+                if let PriceTrend::Rising { rate_pct } | PriceTrend::Falling { rate_pct } =
+                    &price_trend
+                {
+                    let data = self
+                        .elasticity_data
+                        .entry(key.clone())
                         .or_insert_with(Vec::new);
                     data.push((*rate_pct, demand_index));
                     if data.len() > 100 {
@@ -253,20 +285,29 @@ impl CapabilityModule for FMCGIntelligence {
 
                 if let Some(tracker) = self.brand_data.get(&key) {
                     if tracker.total_volume > 100.0 {
-                        let top_brand = tracker.brand_volumes.iter()
+                        let top_brand = tracker
+                            .brand_volumes
+                            .iter()
                             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
                             .map(|(b, _)| b.clone())
                             .unwrap_or_else(|| "unknown".to_string());
 
-                        let market_share = tracker.brand_volumes.get(&top_brand)
+                        let market_share = tracker
+                            .brand_volumes
+                            .get(&top_brand)
                             .copied()
-                            .unwrap_or(0.0) / tracker.total_volume;
+                            .unwrap_or(0.0)
+                            / tracker.total_volume;
 
-                        let (elasticity, elast_ci_lower, elast_ci_upper, _f_stat) = self.elasticity_data.get(&key)
+                        let (elasticity, elast_ci_lower, elast_ci_upper, _f_stat) = self
+                            .elasticity_data
+                            .get(&key)
                             .map(|d| self.estimate_elasticity(d))
                             .unwrap_or((-1.0, -3.0, 1.0, 0.0));
 
-                        let competitors: Vec<CompetitorData> = tracker.brand_volumes.iter()
+                        let competitors: Vec<CompetitorData> = tracker
+                            .brand_volumes
+                            .iter()
                             .filter(|(b, _)| *b != &top_brand)
                             .map(|(brand, volume)| CompetitorData {
                                 brand: brand.clone(),
@@ -304,7 +345,10 @@ impl CapabilityModule for FMCGIntelligence {
     async fn shutdown(&self) {
         tracing::info!("FMCGIntelligence shutting down");
         if let Err(e) = self.persist_state().await {
-            tracing::error!("Failed to persist FMCGIntelligence state on shutdown: {}", e);
+            tracing::error!(
+                "Failed to persist FMCGIntelligence state on shutdown: {}",
+                e
+            );
         }
     }
 
@@ -317,7 +361,8 @@ impl CapabilityModule for FMCGIntelligence {
         bincode::serialize(&Snapshot {
             brand_data: self.brand_data.clone(),
             elasticity_data: self.elasticity_data.clone(),
-        }).ok()
+        })
+        .ok()
     }
 
     fn restore_state(&mut self, data: &[u8]) {
@@ -329,7 +374,10 @@ impl CapabilityModule for FMCGIntelligence {
         if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
             self.brand_data = snap.brand_data;
             self.elasticity_data = snap.elasticity_data;
-            tracing::info!(brands = self.brand_data.len(), "FMCGIntelligence state restored (fallback bincode)");
+            tracing::info!(
+                brands = self.brand_data.len(),
+                "FMCGIntelligence state restored (fallback bincode)"
+            );
         }
     }
 }

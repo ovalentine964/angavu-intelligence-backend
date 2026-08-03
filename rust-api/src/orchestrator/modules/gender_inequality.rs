@@ -91,9 +91,13 @@ impl GenderInequalityTracker {
     /// Compute Gini coefficient from a sorted income distribution
     pub fn compute_gini(sorted_incomes: &[f64]) -> f64 {
         let n = sorted_incomes.len();
-        if n < 2 { return 0.0; }
+        if n < 2 {
+            return 0.0;
+        }
         let total: f64 = sorted_incomes.iter().sum();
-        if total <= 0.0 { return 0.0; }
+        if total <= 0.0 {
+            return 0.0;
+        }
         let n_f64 = n as f64;
         let weighted_sum: f64 = sorted_incomes
             .iter()
@@ -106,9 +110,13 @@ impl GenderInequalityTracker {
     /// Compute Theil index (GE(1))
     pub fn compute_theil(incomes: &[f64]) -> f64 {
         let n = incomes.len();
-        if n == 0 { return 0.0; }
+        if n == 0 {
+            return 0.0;
+        }
         let mean: f64 = incomes.iter().sum::<f64>() / n as f64;
-        if mean <= 0.0 { return 0.0; }
+        if mean <= 0.0 {
+            return 0.0;
+        }
         incomes
             .iter()
             .filter(|&&y| y > 0.0)
@@ -123,7 +131,9 @@ impl GenderInequalityTracker {
     /// Compute median from sorted values
     fn median(sorted: &[f64]) -> f64 {
         let n = sorted.len();
-        if n == 0 { return 0.0; }
+        if n == 0 {
+            return 0.0;
+        }
         if n % 2 == 0 {
             (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
         } else {
@@ -145,28 +155,40 @@ impl GenderInequalityTracker {
 
         let male_mean = if !male_sorted.is_empty() {
             male_sorted.iter().sum::<f64>() / male_sorted.len() as f64
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         let female_mean = if !female_sorted.is_empty() {
             female_sorted.iter().sum::<f64>() / female_sorted.len() as f64
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         let gender_income_ratio = if male_mean > 0.0 {
             female_mean / male_mean
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         let gender_wage_gap = if male_mean > 0.0 {
             ((male_mean - female_mean) / male_mean) * 100.0
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         // Participation rates (from counts vs total population estimate)
         let total_pop = (dist.male_count + dist.female_count) as f64;
         let male_participation = if total_pop > 0.0 {
             dist.male_count as f64 / total_pop
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let female_participation = if total_pop > 0.0 {
             dist.female_count as f64 / total_pop
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         GenderInequalityMetrics {
             overall_gini: Self::compute_gini(&all_incomes),
@@ -191,7 +213,10 @@ impl GenderInequalityTracker {
 
     /// Record metrics in history
     pub fn record(&mut self, metrics: GenderInequalityMetrics) {
-        let entry = self.history.entry(metrics.region.clone()).or_insert_with(Vec::new);
+        let entry = self
+            .history
+            .entry(metrics.region.clone())
+            .or_insert_with(Vec::new);
         entry.push(metrics);
         if entry.len() > self.max_history {
             entry.drain(0..entry.len() - self.max_history);
@@ -201,7 +226,9 @@ impl GenderInequalityTracker {
     /// Get trend for a region
     pub fn trend(&self, region: &str) -> Option<GenderInequalityTrend> {
         let history = self.history.get(region)?;
-        if history.len() < 2 { return None; }
+        if history.len() < 2 {
+            return None;
+        }
         let recent = history.last()?;
         let previous = &history[history.len() - 2];
 
@@ -252,9 +279,16 @@ mod tests {
             female_count: 4,
         };
         let metrics = GenderInequalityTracker::compute_metrics(&dist);
-        assert!(metrics.gender_wage_gap_pct > 30.0, "Expected significant wage gap, got {}", metrics.gender_wage_gap_pct);
+        assert!(
+            metrics.gender_wage_gap_pct > 30.0,
+            "Expected significant wage gap, got {}",
+            metrics.gender_wage_gap_pct
+        );
         assert!(metrics.gender_income_ratio < 0.7);
-        assert!(metrics.overall_gini > metrics.male_gini, "Overall Gini should exceed within-group Gini");
+        assert!(
+            metrics.overall_gini > metrics.male_gini,
+            "Overall Gini should exceed within-group Gini"
+        );
     }
 
     #[test]

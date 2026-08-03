@@ -37,9 +37,12 @@ impl IncomeProfile {
             return 0.0;
         }
 
-        let variance = self.daily_incomes.iter()
+        let variance = self
+            .daily_incomes
+            .iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / self.daily_incomes.len() as f64;
+            .sum::<f64>()
+            / self.daily_incomes.len() as f64;
         let cv = variance.sqrt() / mean; // Coefficient of variation
 
         // Lower CV = more stable = higher score
@@ -80,7 +83,8 @@ impl CapabilityModule for HealthMetrics {
                 region,
                 ..
             } => {
-                let profile = self.income_profiles
+                let profile = self
+                    .income_profiles
                     .entry(worker_id_hash.clone())
                     .or_insert_with(|| IncomeProfile {
                         daily_incomes: Vec::with_capacity(365),
@@ -90,7 +94,8 @@ impl CapabilityModule for HealthMetrics {
                     });
 
                 // Update income tracking
-                let daily_income: f64 = transactions.iter()
+                let daily_income: f64 = transactions
+                    .iter()
                     .filter(|t| t.amount > 0.0)
                     .map(|t| t.amount)
                     .sum();
@@ -116,9 +121,14 @@ impl CapabilityModule for HealthMetrics {
                 let eligible = profile.daily_incomes.len() >= 90 && stability > 0.5;
 
                 // Determine worker type from transaction patterns
-                let worker_type = if transactions.iter().any(|t| t.product_category.contains("vegetable") || t.product_category.contains("food")) {
+                let worker_type = if transactions.iter().any(|t| {
+                    t.product_category.contains("vegetable") || t.product_category.contains("food")
+                }) {
                     "mama_mboga"
-                } else if transactions.iter().any(|t| t.product_category.contains("transport")) {
+                } else if transactions
+                    .iter()
+                    .any(|t| t.product_category.contains("transport"))
+                {
                     "boda_boda"
                 } else {
                     "general"
@@ -142,7 +152,8 @@ impl CapabilityModule for HealthMetrics {
         struct Snapshot {
             profiles: Vec<(String, IncomeProfile)>,
         }
-        let profiles: Vec<(String, IncomeProfile)> = self.income_profiles
+        let profiles: Vec<(String, IncomeProfile)> = self
+            .income_profiles
             .iter()
             .map(|entry| (entry.key().clone(), entry.value().clone()))
             .collect();
@@ -158,7 +169,10 @@ impl CapabilityModule for HealthMetrics {
             for (id, profile) in snap.profiles {
                 self.income_profiles.insert(id, profile);
             }
-            tracing::info!(count = self.income_profiles.len(), "HealthMetrics state restored");
+            tracing::info!(
+                count = self.income_profiles.len(),
+                "HealthMetrics state restored"
+            );
         }
     }
 }

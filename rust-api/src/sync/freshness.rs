@@ -7,8 +7,8 @@
 // - Stale data triggers a "pull for fresh data" indicator
 // - Very stale data (> 7 days) triggers an alert
 
-use super::*;
 use super::receiver::AlamaScoreUpdate;
+use super::*;
 use chrono::Utc;
 
 /// Market data freshness threshold (1 hour in ms)
@@ -119,7 +119,8 @@ impl FreshnessChecker {
                 alert_type: "data_stale".to_string(),
                 severity: "info".to_string(),
                 title: "Fresh data available".to_string(),
-                body: "New market data and score updates are available. Pull to refresh.".to_string(),
+                body: "New market data and score updates are available. Pull to refresh."
+                    .to_string(),
                 timestamp: now,
                 action_url: Some("msaidizi://sync/pull".to_string()),
             }),
@@ -145,9 +146,7 @@ mod tests {
             ttl_seconds: 3600,
         };
 
-        let freshness = checker
-            .check_freshness(None, Some(&market), None)
-            .await;
+        let freshness = checker.check_freshness(None, Some(&market), None).await;
         assert!(freshness.market_data_fresh);
     }
 
@@ -164,9 +163,7 @@ mod tests {
             ttl_seconds: 3600,
         };
 
-        let freshness = checker
-            .check_freshness(None, Some(&market), None)
-            .await;
+        let freshness = checker.check_freshness(None, Some(&market), None).await;
         assert!(!freshness.market_data_fresh);
     }
 
@@ -184,9 +181,7 @@ mod tests {
         let now = Utc::now().timestamp_millis();
 
         // Recent sync
-        let freshness = checker
-            .check_freshness(Some(now - 1000), None, None)
-            .await;
+        let freshness = checker.check_freshness(Some(now - 1000), None, None).await;
         assert_eq!(freshness.staleness, "fresh");
 
         // 2 days ago
@@ -206,9 +201,13 @@ mod tests {
     fn test_needs_refresh() {
         let now = Utc::now().timestamp_millis();
         assert!(!FreshnessChecker::needs_market_refresh(now));
-        assert!(FreshnessChecker::needs_market_refresh(now - 2 * 60 * 60 * 1000));
+        assert!(FreshnessChecker::needs_market_refresh(
+            now - 2 * 60 * 60 * 1000
+        ));
         assert!(!FreshnessChecker::needs_score_refresh(now));
-        assert!(FreshnessChecker::needs_score_refresh(now - 25 * 60 * 60 * 1000));
+        assert!(FreshnessChecker::needs_score_refresh(
+            now - 25 * 60 * 60 * 1000
+        ));
     }
 
     #[test]

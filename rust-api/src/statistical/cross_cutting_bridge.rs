@@ -6,7 +6,6 @@
 /// decentralization tracking, practical validation, and internship tracking.
 ///
 /// Academic references: ECO 404, Development Economics
-
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -162,7 +161,10 @@ pub struct CitizenServiceParams {
 
 /// Track service delivery for a county
 pub fn citizen_service_delivery(params: CitizenServiceParams) -> EconometricResult {
-    run_cross_cutting_method("citizen_service_delivery", serde_json::to_value(params).unwrap())
+    run_cross_cutting_method(
+        "citizen_service_delivery",
+        serde_json::to_value(params).unwrap(),
+    )
 }
 
 /// Devolution assessment parameters
@@ -223,12 +225,23 @@ impl VoiceEmotionBridge {
         }
 
         // Energy (RMS)
-        let energy: f64 = audio.iter().map(|x| (*x as f64).powi(2)).sum::<f64>().sqrt()
+        let energy: f64 = audio
+            .iter()
+            .map(|x| (*x as f64).powi(2))
+            .sum::<f64>()
+            .sqrt()
             / audio.len() as f64;
 
         // Zero-crossing rate
-        let zcr: f64 = audio.windows(2)
-            .map(|w| if (w[0] >= 0.0) != (w[1] >= 0.0) { 1.0 } else { 0.0 })
+        let zcr: f64 = audio
+            .windows(2)
+            .map(|w| {
+                if (w[0] >= 0.0) != (w[1] >= 0.0) {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
             .sum::<f64>()
             / audio.len() as f64;
 

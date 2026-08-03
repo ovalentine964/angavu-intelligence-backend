@@ -35,10 +35,12 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
 
-use super::{WebhookEvent, WebhookEventType, WebhookSource, WebhookState, route_to_ooda, store_webhook_event};
+use super::{
+    route_to_ooda, store_webhook_event, WebhookEvent, WebhookEventType, WebhookSource, WebhookState,
+};
 
 // ═══════════════════════════════════════════════════════════
 //  STK PUSH CALLBACK
@@ -118,10 +120,14 @@ pub async fn handle_mpesa_callback(
     // However, we validate that the shortcode matches our configured one.
     if state.mpesa_config.passkey.is_empty() {
         error!(event_id = %event_id, "M-Pesa passkey not configured — rejecting callback");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-            "ResultCode": 1,
-            "ResultDesc": "Server configuration error"
-        }))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "ResultCode": 1,
+                "ResultDesc": "Server configuration error"
+            })),
+        )
+            .into_response();
     }
 
     // Check if payment was successful
@@ -149,8 +155,9 @@ pub async fn handle_mpesa_callback(
             Json(serde_json::json!({
                 "ResultCode": 0,
                 "ResultDesc": "Callback received"
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // Extract payment details from metadata
@@ -172,15 +179,21 @@ pub async fn handle_mpesa_callback(
             "Amount" => amount = item.value.as_f64().unwrap_or(0.0),
             "MpesaReceiptNumber" => receipt = item.value.as_str().unwrap_or("").to_string(),
             "PhoneNumber" => {
-                phone = item.value.as_i64()
+                phone = item
+                    .value
+                    .as_i64()
                     .map(|p| p.to_string())
                     .or_else(|| item.value.as_str().map(|s| s.to_string()))
                     .unwrap_or_default()
             }
-            "TransactionDate" => txn_date = item.value.as_str()
-                .or_else(|| item.value.as_i64().map(|_| ""))
-                .unwrap_or("")
-                .to_string(),
+            "TransactionDate" => {
+                txn_date = item
+                    .value
+                    .as_str()
+                    .or_else(|| item.value.as_i64().map(|_| ""))
+                    .unwrap_or("")
+                    .to_string()
+            }
             _ => {}
         }
     }
@@ -220,8 +233,9 @@ pub async fn handle_mpesa_callback(
         Json(serde_json::json!({
             "ResultCode": 0,
             "ResultDesc": "Success"
-        }))
-    ).into_response()
+        })),
+    )
+        .into_response()
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -271,9 +285,13 @@ pub async fn handle_c2b_confirmation(
     // S7: Validate M-Pesa signature for C2B callbacks
     if state.mpesa_config.passkey.is_empty() {
         error!(event_id = %event_id, "M-Pesa passkey not configured");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-            "ResultCode": 1, "ResultDesc": "Server configuration error"
-        }))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "ResultCode": 1, "ResultDesc": "Server configuration error"
+            })),
+        )
+            .into_response();
     }
 
     // Verify the shortcode matches our configuration
@@ -284,9 +302,13 @@ pub async fn handle_c2b_confirmation(
             received = %payload.business_shortcode,
             "C2B callback shortcode mismatch — possible spoofing attempt"
         );
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({
-            "ResultCode": 1, "ResultDesc": "Invalid shortcode"
-        }))).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "ResultCode": 1, "ResultDesc": "Invalid shortcode"
+            })),
+        )
+            .into_response();
     }
 
     info!(
@@ -301,7 +323,9 @@ pub async fn handle_c2b_confirmation(
         "{} {}",
         payload.first_name.as_deref().unwrap_or(""),
         payload.last_name.as_deref().unwrap_or("")
-    ).trim().to_string();
+    )
+    .trim()
+    .to_string();
 
     let payment_event = serde_json::json!({
         "source": "mpesa_c2b",
@@ -333,8 +357,9 @@ pub async fn handle_c2b_confirmation(
         Json(serde_json::json!({
             "ResultCode": 0,
             "ResultDesc": "Confirmation received successfully"
-        }))
-    ).into_response()
+        })),
+    )
+        .into_response()
 }
 
 /// Handle C2B Validation — pre-payment check (accept or reject).
@@ -354,9 +379,13 @@ pub async fn handle_c2b_validation(
             received = %payload.business_shortcode,
             "C2B validation shortcode mismatch — rejecting"
         );
-        return (StatusCode::OK, Json(serde_json::json!({
-            "ResultCode": 1, "ResultDesc": "Invalid shortcode"
-        }))).into_response();
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ResultCode": 1, "ResultDesc": "Invalid shortcode"
+            })),
+        )
+            .into_response();
     }
 
     info!(
@@ -381,8 +410,9 @@ pub async fn handle_c2b_validation(
             Json(serde_json::json!({
                 "ResultCode": 1,
                 "ResultDesc": "Amount exceeds transaction limit"
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // Store validation event
@@ -402,8 +432,9 @@ pub async fn handle_c2b_validation(
         Json(serde_json::json!({
             "ResultCode": 0,
             "ResultDesc": "Validation successful"
-        }))
-    ).into_response()
+        })),
+    )
+        .into_response()
 }
 
 /// Validate M-Pesa callback signature using passkey + timestamp HMAC.

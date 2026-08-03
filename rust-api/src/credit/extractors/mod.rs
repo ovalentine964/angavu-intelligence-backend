@@ -2,24 +2,24 @@
 //
 // Now supports all 12 worker archetypes plus legacy types.
 
-pub mod farmer;
-pub mod boda_boda;
-pub mod fisherman;
-pub mod vendor;
-pub mod jua_kali;
-pub mod mpesa_agent;
-pub mod construction;
-pub mod mining;
-pub mod food_service;
-pub mod artisan;
-pub mod service_provider;
-pub mod livestock;
 pub mod agent_broker;
-pub mod digital_worker;
+pub mod artisan;
+pub mod boda_boda;
 pub mod casual_laborer;
 pub mod community_care;
+pub mod construction;
+pub mod digital_worker;
+pub mod farmer;
+pub mod fisherman;
+pub mod food_service;
+pub mod jua_kali;
+pub mod livestock;
+pub mod mining;
+pub mod mpesa_agent;
+pub mod service_provider;
+pub mod vendor;
 
-use crate::credit::types::{WorkerType, TypeFeatures};
+use crate::credit::types::{TypeFeatures, WorkerType};
 
 /// Trait that all worker-type feature extractors implement.
 /// Extracts credit signals unique to a worker type from transaction data.
@@ -92,15 +92,23 @@ pub fn create_extractor(worker_type: WorkerType) -> Option<Box<dyn WorkerTypeFea
         WorkerType::Vendor => Some(Box::new(vendor::VendorFeatureExtractor::new())),
         WorkerType::FoodService => Some(Box::new(food_service::FoodServiceFeatureExtractor::new())),
         WorkerType::Artisan => Some(Box::new(artisan::ArtisanFeatureExtractor::new())),
-        WorkerType::ServiceProvider => Some(Box::new(service_provider::ServiceProviderFeatureExtractor::new())),
+        WorkerType::ServiceProvider => Some(Box::new(
+            service_provider::ServiceProviderFeatureExtractor::new(),
+        )),
         WorkerType::TransportOperator => Some(Box::new(boda_boda::BodaBodaFeatureExtractor::new())),
         WorkerType::CropFarmer => Some(Box::new(farmer::FarmerFeatureExtractor::new())),
         WorkerType::LivestockKeeper => Some(Box::new(livestock::LivestockFeatureExtractor::new())),
         WorkerType::Fisher => Some(Box::new(fisherman::FishermanFeatureExtractor::new())),
         WorkerType::AgentBroker => Some(Box::new(agent_broker::AgentBrokerFeatureExtractor::new())),
-        WorkerType::DigitalWorker => Some(Box::new(digital_worker::DigitalWorkerFeatureExtractor::new())),
-        WorkerType::CasualLaborer => Some(Box::new(casual_laborer::CasualLaborerFeatureExtractor::new())),
-        WorkerType::CommunityCareWorker => Some(Box::new(community_care::CommunityCareFeatureExtractor::new())),
+        WorkerType::DigitalWorker => Some(Box::new(
+            digital_worker::DigitalWorkerFeatureExtractor::new(),
+        )),
+        WorkerType::CasualLaborer => Some(Box::new(
+            casual_laborer::CasualLaborerFeatureExtractor::new(),
+        )),
+        WorkerType::CommunityCareWorker => Some(Box::new(
+            community_care::CommunityCareFeatureExtractor::new(),
+        )),
         // Legacy types (backward compatibility)
         WorkerType::Farmer => Some(Box::new(farmer::FarmerFeatureExtractor::new())),
         WorkerType::BodaBodaRider => Some(Box::new(boda_boda::BodaBodaFeatureExtractor::new())),
@@ -108,7 +116,9 @@ pub fn create_extractor(worker_type: WorkerType) -> Option<Box<dyn WorkerTypeFea
         WorkerType::MarketVendor => Some(Box::new(vendor::VendorFeatureExtractor::new())),
         WorkerType::JuaKaliArtisan => Some(Box::new(jua_kali::JuaKaliFeatureExtractor::new())),
         WorkerType::MpesaAgent => Some(Box::new(mpesa_agent::MpesaAgentFeatureExtractor::new())),
-        WorkerType::ConstructionWorker => Some(Box::new(construction::ConstructionFeatureExtractor::new())),
+        WorkerType::ConstructionWorker => {
+            Some(Box::new(construction::ConstructionFeatureExtractor::new()))
+        }
         WorkerType::MiningWorker => Some(Box::new(mining::MiningFeatureExtractor::new())),
         WorkerType::Generic => None,
     }

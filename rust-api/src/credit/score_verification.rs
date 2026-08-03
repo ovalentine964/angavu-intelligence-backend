@@ -186,7 +186,9 @@ pub fn verify_score(score: &FusedAlamaScore) -> ScoreVerificationResult {
     let verification_confidence = compute_verification_confidence(score, &issues);
 
     ScoreVerificationResult {
-        passed: !issues.iter().any(|i| matches!(i.severity, IssueSeverity::High)),
+        passed: !issues
+            .iter()
+            .any(|i| matches!(i.severity, IssueSeverity::High)),
         issues,
         warnings,
         corrected_score,
@@ -261,10 +263,10 @@ mod tests {
         let score = make_score(250, 0.5);
         let result = verify_score(&score);
         assert!(!result.passed, "Score below 300 should fail");
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            ScoreVerificationIssueType::OutOfRange
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, ScoreVerificationIssueType::OutOfRange)));
     }
 
     #[test]

@@ -19,12 +19,7 @@
 //   3. Returns 429 if limit exceeded
 //   4. Logs the event to ClickHouse asynchronously
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -276,7 +271,9 @@ pub async fn usage_metering_middleware(
             "application/json".parse().unwrap(),
         );
         let retry = seconds_until_midnight_utc().to_string();
-        response.headers_mut().insert("Retry-After", retry.parse().unwrap());
+        response
+            .headers_mut()
+            .insert("Retry-After", retry.parse().unwrap());
         return Ok(response);
     }
 
@@ -312,10 +309,9 @@ pub async fn usage_metering_middleware(
     // 6. Add usage headers to response
     let mut response = response;
     let remaining = limit.saturating_sub(monthly_count);
-    response.headers_mut().insert(
-        "X-RateLimit-Limit",
-        limit.to_string().parse().unwrap(),
-    );
+    response
+        .headers_mut()
+        .insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
     response.headers_mut().insert(
         "X-RateLimit-Remaining",
         remaining.to_string().parse().unwrap(),
@@ -412,8 +408,8 @@ pub async fn persist_monthly_usage(
 
 /// Log a usage event to ClickHouse for analytics.
 async fn log_usage_event_ch(event: &UsageEvent) -> Result<(), anyhow::Error> {
-    let url = std::env::var("CLICKHOUSE_URL")
-        .unwrap_or_else(|_| "http://localhost:8123".to_string());
+    let url =
+        std::env::var("CLICKHOUSE_URL").unwrap_or_else(|_| "http://localhost:8123".to_string());
 
     let client = clickhouse::Client::default().with_url(&url);
 

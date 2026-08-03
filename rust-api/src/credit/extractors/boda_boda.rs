@@ -1,9 +1,11 @@
 // Credit Scoring — Boda Boda Rider Feature Extractor
 // Extracts credit signals unique to motorcycle transport workers
 
+use super::{
+    PaymentMethod, Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor,
+};
+use crate::credit::types::{AssetValueBucket, TypeFeatures, WorkerType};
 use serde::{Deserialize, Serialize};
-use super::{Transaction, TransactionCategory, PaymentMethod, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures, AssetValueBucket};
 
 /// Boda boda rider-specific credit features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,7 +60,9 @@ impl BodaBodaFeatureExtractor {
                 tx.category == TransactionCategory::Expense
                     && tx.product.as_ref().map_or(false, |p| {
                         let lower = p.to_lowercase();
-                        lower.contains("fuel") || lower.contains("petrol") || lower.contains("mafuta")
+                        lower.contains("fuel")
+                            || lower.contains("petrol")
+                            || lower.contains("mafuta")
                     })
             })
             .map(|tx| tx.amount)
@@ -101,7 +105,8 @@ impl BodaBodaFeatureExtractor {
 
         // Count unique days
         let day_seconds = 86400;
-        let mut daily_counts: std::collections::HashMap<i64, u32> = std::collections::HashMap::new();
+        let mut daily_counts: std::collections::HashMap<i64, u32> =
+            std::collections::HashMap::new();
         for tx in &fare_txns {
             let day = tx.timestamp / day_seconds;
             *daily_counts.entry(day).or_insert(0) += 1;
@@ -128,7 +133,8 @@ impl BodaBodaFeatureExtractor {
         }
 
         let day_seconds = 86400;
-        let mut daily_revenue: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+        let mut daily_revenue: std::collections::HashMap<i64, f64> =
+            std::collections::HashMap::new();
         for tx in &sales {
             let day = tx.timestamp / day_seconds;
             *daily_revenue.entry(day).or_insert(0.0) += tx.amount;
@@ -151,7 +157,8 @@ impl BodaBodaFeatureExtractor {
         }
 
         let day_seconds = 86400;
-        let mut daily_revenue: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+        let mut daily_revenue: std::collections::HashMap<i64, f64> =
+            std::collections::HashMap::new();
         for tx in &sales {
             let day = tx.timestamp / day_seconds;
             *daily_revenue.entry(day).or_insert(0.0) += tx.amount;
@@ -167,7 +174,8 @@ impl BodaBodaFeatureExtractor {
             return 0.0;
         }
 
-        let variance = revenues.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / revenues.len() as f64;
+        let variance =
+            revenues.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / revenues.len() as f64;
         variance.sqrt() / mean
     }
 
@@ -192,7 +200,11 @@ impl BodaBodaFeatureExtractor {
             .map(|tx| tx.amount)
             .sum();
 
-        if total > 0.0 { peak / total } else { 0.5 }
+        if total > 0.0 {
+            peak / total
+        } else {
+            0.5
+        }
     }
 
     /// Maintenance frequency (days between repairs)
@@ -266,7 +278,8 @@ impl BodaBodaFeatureExtractor {
 
     /// Regular passengers (counterparties with >5 transactions)
     fn regular_passenger_count(&self, transactions: &[Transaction]) -> u32 {
-        let mut counterparty_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut counterparty_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         for tx in transactions {
             if tx.category == TransactionCategory::Sale {
                 if let Some(ref cp) = tx.counterparty_id {
@@ -274,7 +287,10 @@ impl BodaBodaFeatureExtractor {
                 }
             }
         }
-        counterparty_counts.values().filter(|&&count| count > 5).count() as u32
+        counterparty_counts
+            .values()
+            .filter(|&&count| count > 5)
+            .count() as u32
     }
 }
 
@@ -308,10 +324,10 @@ impl WorkerTypeFeatureExtractor for BodaBodaFeatureExtractor {
             (fuel_cost / 500.0).min(1.0), // normalize to 500 KES max
             fuel_ratio,
             (trip_count as f64 / 30.0).min(1.0), // normalize to 30 trips max
-            1.0 - revenue_cv.min(1.0), // lower CV = better
+            1.0 - revenue_cv.min(1.0),           // lower CV = better
             peak_ratio,
             (1.0 - (maint_freq as f64 / 90.0)).max(0.0), // more frequent = better maintenance
-            (weekend_ratio - 0.5).abs().min(1.0), // closer to 1.0 = balanced
+            (weekend_ratio - 0.5).abs().min(1.0),        // closer to 1.0 = balanced
             (regular_count as f64 / 20.0).min(1.0),
             0.5, // income_trajectory placeholder
         ];
@@ -334,9 +350,16 @@ impl WorkerTypeFeatureExtractor for BodaBodaFeatureExtractor {
 
     fn feature_names(&self) -> Vec<&'static str> {
         vec![
-            "asset_value", "fuel_cost", "fuel_ratio", "trip_count",
-            "revenue_stability", "peak_utilization", "maintenance_frequency",
-            "weekend_balance", "regular_passengers", "income_trajectory",
+            "asset_value",
+            "fuel_cost",
+            "fuel_ratio",
+            "trip_count",
+            "revenue_stability",
+            "peak_utilization",
+            "maintenance_frequency",
+            "weekend_balance",
+            "regular_passengers",
+            "income_trajectory",
         ]
     }
 }

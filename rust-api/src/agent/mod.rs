@@ -16,14 +16,14 @@
 //          AgentMemory (3 tiers)
 // =============================================================================
 
-pub mod tool_registry;
-pub mod function_calling;
 pub mod autonomous;
+pub mod function_calling;
 pub mod memory;
+pub mod tool_registry;
 
 // Re-export key types for convenience
-pub use tool_registry::{ToolRegistry, ToolDefinition, ToolResult, ToolExecutor, ToolError};
-pub use function_calling::{FunctionCallingEngine, FunctionCallParser, LlmAction};
-pub use autonomous::{AutonomousAgent, AgentConfig, AgentTask, AgentResult, AgentState};
-pub use autonomous::{CreditDecisionAgent, MarketIntelligenceAgent, LlmClientAdapter};
-pub use memory::{AgentMemory, MemoryConfig, ShortTermMemory, WorkingMemory, LongTermMemory};
+pub use autonomous::{AgentConfig, AgentResult, AgentState, AgentTask, AutonomousAgent};
+pub use autonomous::{CreditDecisionAgent, LlmClientAdapter, MarketIntelligenceAgent};
+pub use function_calling::{FunctionCallParser, FunctionCallingEngine, LlmAction};
+pub use memory::{AgentMemory, LongTermMemory, MemoryConfig, ShortTermMemory, WorkingMemory};
+pub use tool_registry::{ToolDefinition, ToolError, ToolExecutor, ToolRegistry, ToolResult};

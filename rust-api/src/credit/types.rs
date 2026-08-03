@@ -135,10 +135,10 @@ pub struct DetectionSignal {
 /// Asset value bucket (used across multiple extractors)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssetValueBucket {
-    Low,      // < 50,000 KES
-    Medium,   // 50,000 - 200,000 KES
-    High,     // 200,000 - 500,000 KES
-    Premium,  // > 500,000 KES
+    Low,     // < 50,000 KES
+    Medium,  // 50,000 - 200,000 KES
+    High,    // 200,000 - 500,000 KES
+    Premium, // > 500,000 KES
 }
 
 /// Type-erased features from any extractor
@@ -146,6 +146,6 @@ pub enum AssetValueBucket {
 pub struct TypeFeatures {
     pub worker_type: WorkerType,
     pub features: serde_json::Value, // type-specific features as JSON
-    pub feature_vector: Vec<f64>,     // normalized numeric features for model input
-    pub feature_names: Vec<String>,   // feature names for interpretability
+    pub feature_vector: Vec<f64>,    // normalized numeric features for model input
+    pub feature_names: Vec<String>,  // feature names for interpretability
 }

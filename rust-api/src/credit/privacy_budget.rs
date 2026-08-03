@@ -136,7 +136,12 @@ pub struct QueryTypeBudget {
 }
 
 impl QueryTypeBudget {
-    fn new(query_type: QueryType, budget: f64, window_start: DateTime<Utc>, window_end: DateTime<Utc>) -> Self {
+    fn new(
+        query_type: QueryType,
+        budget: f64,
+        window_start: DateTime<Utc>,
+        window_end: DateTime<Utc>,
+    ) -> Self {
         Self {
             query_type,
             budget_epsilon: budget,
@@ -292,16 +297,14 @@ impl PrivacyBudgetTracker {
         let mut budgets = self.budgets.write().await;
 
         // Ensure the query type budget exists
-        let budget = budgets
-            .entry(query_type)
-            .or_insert_with(|| {
-                QueryTypeBudget::new(
-                    query_type,
-                    self.default_epsilon,
-                    now,
-                    now + self.window_duration,
-                )
-            });
+        let budget = budgets.entry(query_type).or_insert_with(|| {
+            QueryTypeBudget::new(
+                query_type,
+                self.default_epsilon,
+                now,
+                now + self.window_duration,
+            )
+        });
 
         // Reset window if expired
         budget.maybe_reset(now);
@@ -424,14 +427,20 @@ mod tests {
         let tracker = PrivacyBudgetTracker::with_config(0.5, 24);
 
         // First query: ε_RDP = 0.4
-        let rdp1 = RdpParameters { alpha: 2.0, epsilon_rdp: 0.4 };
+        let rdp1 = RdpParameters {
+            alpha: 2.0,
+            epsilon_rdp: 0.4,
+        };
         let r1 = tracker
             .check_and_record(QueryType::General, rdp1, "/test".into(), None)
             .await;
         assert!(r1.allowed);
 
         // Second query: ε_RDP = 0.3 → total would be 0.7 > 0.5
-        let rdp2 = RdpParameters { alpha: 2.0, epsilon_rdp: 0.3 };
+        let rdp2 = RdpParameters {
+            alpha: 2.0,
+            epsilon_rdp: 0.3,
+        };
         let r2 = tracker
             .check_and_record(QueryType::General, rdp2, "/test".into(), None)
             .await;
@@ -444,13 +453,19 @@ mod tests {
         let tracker = PrivacyBudgetTracker::with_config(1.0, 24);
 
         // Exhaust credit score budget
-        let rdp = RdpParameters { alpha: 2.0, epsilon_rdp: 0.9 };
+        let rdp = RdpParameters {
+            alpha: 2.0,
+            epsilon_rdp: 0.9,
+        };
         tracker
             .check_and_record(QueryType::CreditScore, rdp, "/credit".into(), None)
             .await;
 
         // Market analysis should still have its own budget
-        let rdp2 = RdpParameters { alpha: 2.0, epsilon_rdp: 0.9 };
+        let rdp2 = RdpParameters {
+            alpha: 2.0,
+            epsilon_rdp: 0.9,
+        };
         let result = tracker
             .check_and_record(QueryType::MarketAnalysis, rdp2, "/market".into(), None)
             .await;

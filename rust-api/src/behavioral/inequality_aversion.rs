@@ -21,7 +21,6 @@
 ///
 /// Reference: Fehr, E., & Schmidt, K. M. (1999). A Theory of Fairness,
 ///            Competition, and Cooperation. Quarterly Journal of Economics.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -170,8 +169,8 @@ impl InequalityAversionEngine {
             .map(|(id, records)| {
                 let amounts: Vec<f64> = records.iter().map(|r| r.amount).collect();
                 let avg = amounts.iter().sum::<f64>() / amounts.len() as f64;
-                let on_time_rate = records.iter().filter(|r| r.on_time).count() as f64
-                    / records.len() as f64;
+                let on_time_rate =
+                    records.iter().filter(|r| r.on_time).count() as f64 / records.len() as f64;
                 let penalty_rate = records.iter().filter(|r| r.penalty_applied).count() as f64
                     / records.len() as f64;
                 let cycle_count = records.len();
@@ -203,17 +202,13 @@ impl InequalityAversionEngine {
                 continue;
             }
 
-            let (alpha, beta) = self.estimate_inequality_aversion(stats, group_avg, expected_contribution);
+            let (alpha, beta) =
+                self.estimate_inequality_aversion(stats, group_avg, expected_contribution);
 
             let fairness_type = self.classify_fairness_type(alpha, beta);
 
             // Utility score: how happy is this member with the current distribution?
-            let utility = self.compute_utility(
-                stats.avg_contribution,
-                group_avg,
-                alpha,
-                beta,
-            );
+            let utility = self.compute_utility(stats.avg_contribution, group_avg, alpha, beta);
 
             // Defection risk
             let defection_risk = self.estimate_defection_risk(
@@ -290,8 +285,8 @@ impl InequalityAversionEngine {
 
         let alpha = if !above_avg_contributions.is_empty() && group_avg > 0.0 {
             // How much does the member reduce contributions when above average?
-            let avg_above = above_avg_contributions.iter().sum::<f64>()
-                / above_avg_contributions.len() as f64;
+            let avg_above =
+                above_avg_contributions.iter().sum::<f64>() / above_avg_contributions.len() as f64;
             let excess = (avg_above - group_avg) / group_avg;
             // Members who barely go above average have high α (strong envy)
             // Members who go far above have low α (don't mind)
@@ -302,7 +297,11 @@ impl InequalityAversionEngine {
 
         // β (guilt): estimated from consistency and on-time behavior
         // Members with high β feel guilty about under-contributing
-        let below_expected_count = stats.amounts.iter().filter(|&&a| a < expected * 0.9).count();
+        let below_expected_count = stats
+            .amounts
+            .iter()
+            .filter(|&&a| a < expected * 0.9)
+            .count();
         let below_rate = below_expected_count as f64 / stats.amounts.len() as f64;
 
         let beta = if expected > 0.0 {
@@ -379,7 +378,12 @@ impl InequalityAversionEngine {
     }
 
     /// Recommend intervention for a member
-    fn recommend_intervention(&self, fairness: FairnessType, risk: f64, stats: &MemberStats) -> String {
+    fn recommend_intervention(
+        &self,
+        fairness: FairnessType,
+        risk: f64,
+        stats: &MemberStats,
+    ) -> String {
         if risk > 0.7 {
             return format!(
                 "🚨 MTU HUYU ANA HATARI KUBWA YA KUONDOKA (risk: {:.0}%). \
@@ -449,8 +453,8 @@ impl InequalityAversionEngine {
         }
 
         // Low average utility → less stable
-        let avg_utility = profiles.iter().map(|p| p.utility_score).sum::<f64>()
-            / profiles.len() as f64;
+        let avg_utility =
+            profiles.iter().map(|p| p.utility_score).sum::<f64>() / profiles.len() as f64;
         if avg_utility < 0.0 {
             score -= 0.2;
         }
@@ -494,18 +498,15 @@ impl InequalityAversionEngine {
 
         let high_defection = profiles.iter().filter(|p| p.defection_risk > 0.6).count();
         if high_defection > 0 {
-            interventions.push(
-                format!(
-                    "🔔 Wanachama {} wanaweza kuondoka. Ongea nao na pendekeza mabadiliko.",
-                    high_defection
-                ),
-            );
+            interventions.push(format!(
+                "🔔 Wanachama {} wanaweza kuondoka. Ongea nao na pendekeza mabadiliko.",
+                high_defection
+            ));
         }
 
         if interventions.is_empty() {
-            interventions.push(
-                "✅ Chama iko sawa! Endelea na michango ya kawaida na uwazi.".to_string(),
-            );
+            interventions
+                .push("✅ Chama iko sawa! Endelea na michango ya kawaida na uwazi.".to_string());
         }
 
         interventions
@@ -531,7 +532,12 @@ struct MemberStats {
 mod tests {
     use super::*;
 
-    fn make_contribution(member: &str, amount: f64, cycle: usize, on_time: bool) -> ContributionRecord {
+    fn make_contribution(
+        member: &str,
+        amount: f64,
+        cycle: usize,
+        on_time: bool,
+    ) -> ContributionRecord {
         ContributionRecord {
             member_id: member.to_string(),
             amount,
@@ -562,7 +568,9 @@ mod tests {
             make_contribution("C", 850.0, 3, true),
         ];
 
-        let analysis = engine.analyze_chama("chama_1", &contributions, 1000.0).unwrap();
+        let analysis = engine
+            .analyze_chama("chama_1", &contributions, 1000.0)
+            .unwrap();
 
         assert_eq!(analysis.member_profiles.len(), 3);
         assert!(analysis.gini_coefficient > 0.0);
@@ -599,19 +607,28 @@ mod tests {
         let engine = InequalityAversionEngine::new();
 
         // High α, high β → Egalitarian
-        assert_eq!(engine.classify_fairness_type(0.8, 0.6), FairnessType::Egalitarian);
+        assert_eq!(
+            engine.classify_fairness_type(0.8, 0.6),
+            FairnessType::Egalitarian
+        );
         // High α, low β → Envious
-        assert_eq!(engine.classify_fairness_type(0.7, 0.2), FairnessType::Envious);
+        assert_eq!(
+            engine.classify_fairness_type(0.7, 0.2),
+            FairnessType::Envious
+        );
         // Low α, high β → AltruisticFair
-        assert_eq!(engine.classify_fairness_type(0.3, 0.5), FairnessType::AltruisticFair);
+        assert_eq!(
+            engine.classify_fairness_type(0.3, 0.5),
+            FairnessType::AltruisticFair
+        );
     }
 
     #[test]
     fn test_insufficient_members() {
         let engine = InequalityAversionEngine::new();
-        let contributions = vec![
-            make_contribution("A", 1000.0, 1, true),
-        ];
-        assert!(engine.analyze_chama("chama_1", &contributions, 1000.0).is_none());
+        let contributions = vec![make_contribution("A", 1000.0, 1, true)];
+        assert!(engine
+            .analyze_chama("chama_1", &contributions, 1000.0)
+            .is_none());
     }
 }

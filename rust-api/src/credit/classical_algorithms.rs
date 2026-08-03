@@ -63,10 +63,12 @@ impl ClassicalCreditScorer {
 
     /// Compute log-odds: z = intercept + Σ(coef_i * x_i)
     fn log_odds(&self, features: &[f64]) -> f64 {
-        self.intercept + features.iter()
-            .zip(self.coefficients.iter())
-            .map(|(x, w)| x * w)
-            .sum::<f64>()
+        self.intercept
+            + features
+                .iter()
+                .zip(self.coefficients.iter())
+                .map(|(x, w)| x * w)
+                .sum::<f64>()
     }
 
     /// Map probability to Alama score (300-850 range)
@@ -76,12 +78,19 @@ impl ClassicalCreditScorer {
 
     /// IRLS (Iteratively Reweighted Least Squares) training for logistic regression.
     /// This is the classical MLE implementation.
-    fn train_irls(&mut self, data: &CreditTrainingData, max_iter: usize, tol: f64) -> Result<(), AlgorithmError> {
+    fn train_irls(
+        &mut self,
+        data: &CreditTrainingData,
+        max_iter: usize,
+        tol: f64,
+    ) -> Result<(), AlgorithmError> {
         let n = data.features.len();
         let p = data.feature_names.len();
 
         if n == 0 || p == 0 {
-            return Err(AlgorithmError::TrainingFailed("Empty training data".to_string()));
+            return Err(AlgorithmError::TrainingFailed(
+                "Empty training data".to_string(),
+            ));
         }
 
         // Initialize coefficients to zero
@@ -90,13 +99,24 @@ impl ClassicalCreditScorer {
 
         for iteration in 0..max_iter {
             // Compute predictions
-            let predictions: Vec<f64> = data.features.iter().map(|x| {
-                let z = beta[0] + x.iter().zip(beta[1..].iter()).map(|(xi, bi)| xi * bi).sum::<f64>();
-                Self::sigmoid(z)
-            }).collect();
+            let predictions: Vec<f64> = data
+                .features
+                .iter()
+                .map(|x| {
+                    let z = beta[0]
+                        + x.iter()
+                            .zip(beta[1..].iter())
+                            .map(|(xi, bi)| xi * bi)
+                            .sum::<f64>();
+                    Self::sigmoid(z)
+                })
+                .collect();
 
             // Compute log-likelihood
-            let ll: f64 = data.labels.iter().zip(predictions.iter())
+            let ll: f64 = data
+                .labels
+                .iter()
+                .zip(predictions.iter())
                 .map(|(&y, &p)| {
                     let y_f = y as f64;
                     (y_f * p.max(1e-15).ln() + (1.0 - y_f) * (1.0 - p).max(1e-15).ln())
@@ -154,11 +174,18 @@ impl ClassicalCreditScorer {
         self.trained = true;
 
         // Compute final metrics
-        let predictions: Vec<f64> = data.features.iter().map(|x| {
-            let z = self.intercept + x.iter().zip(self.coefficients.iter())
-                .map(|(xi, bi)| xi * bi).sum::<f64>();
-            Self::sigmoid(z)
-        }).collect();
+        let predictions: Vec<f64> = data
+            .features
+            .iter()
+            .map(|x| {
+                let z = self.intercept
+                    + x.iter()
+                        .zip(self.coefficients.iter())
+                        .map(|(xi, bi)| xi * bi)
+                        .sum::<f64>();
+                Self::sigmoid(z)
+            })
+            .collect();
 
         let auc = compute_auc_roc(&predictions, &data.labels);
         let accuracy = compute_accuracy(&predictions, &data.labels, 0.5);
@@ -185,7 +212,10 @@ impl CreditScoringAlgorithm for ClassicalCreditScorer {
         AlgorithmTier::Classical
     }
 
-    async fn train(&mut self, training_data: &CreditTrainingData) -> Result<TrainingResult, AlgorithmError> {
+    async fn train(
+        &mut self,
+        training_data: &CreditTrainingData,
+    ) -> Result<TrainingResult, AlgorithmError> {
         let start = std::time::Instant::now();
         self.train_irls(training_data, 100, 1e-6)?;
         let duration = start.elapsed().as_millis() as u64;
@@ -206,12 +236,16 @@ impl CreditScoringAlgorithm for ClassicalCreditScorer {
 
     async fn predict(&self, features: &[f64]) -> Result<CreditPrediction, AlgorithmError> {
         if !self.trained {
-            return Err(AlgorithmError::PredictionFailed("Model not trained".to_string()));
+            return Err(AlgorithmError::PredictionFailed(
+                "Model not trained".to_string(),
+            ));
         }
         if features.len() != self.coefficients.len() {
-            return Err(AlgorithmError::PredictionFailed(
-                format!("Feature count mismatch: expected {}, got {}", self.coefficients.len(), features.len())
-            ));
+            return Err(AlgorithmError::PredictionFailed(format!(
+                "Feature count mismatch: expected {}, got {}",
+                self.coefficients.len(),
+                features.len()
+            )));
         }
 
         let z = self.log_odds(features);
@@ -219,7 +253,9 @@ impl CreditScoringAlgorithm for ClassicalCreditScorer {
         let alama_score = Self::probability_to_alama(probability);
         let confidence = (2.0 * (probability - 0.5).abs()).min(1.0);
 
-        let contributing_factors: Vec<(String, f64)> = self.feature_names.iter()
+        let contributing_factors: Vec<(String, f64)> = self
+            .feature_names
+            .iter()
             .zip(features.iter())
             .zip(self.coefficients.iter())
             .map(|((name, &x), &w)| (name.clone(), x * w))
@@ -233,7 +269,10 @@ impl CreditScoringAlgorithm for ClassicalCreditScorer {
         })
     }
 
-    async fn predict_batch(&self, features: &[Vec<f64>]) -> Result<Vec<CreditPrediction>, AlgorithmError> {
+    async fn predict_batch(
+        &self,
+        features: &[Vec<f64>],
+    ) -> Result<Vec<CreditPrediction>, AlgorithmError> {
         let mut results = Vec::with_capacity(features.len());
         for f in features {
             results.push(self.predict(f).await?);
@@ -242,7 +281,8 @@ impl CreditScoringAlgorithm for ClassicalCreditScorer {
     }
 
     fn feature_importance(&self) -> Vec<(String, f64)> {
-        self.feature_names.iter()
+        self.feature_names
+            .iter()
             .zip(self.coefficients.iter())
             .map(|(name, &coef)| (name.clone(), coef.abs()))
             .collect()
@@ -307,22 +347,37 @@ impl SimulatedAnnealingOptimizer {
 
     /// Solve a combinatorial optimization problem using simulated annealing.
     /// Works with QUBO-formatted problems for quantum annealing compatibility.
-    pub fn solve_qubo(&self, problem: &OptimizationProblem) -> Result<OptimizationSolution, AlgorithmError> {
+    pub fn solve_qubo(
+        &self,
+        problem: &OptimizationProblem,
+    ) -> Result<OptimizationSolution, AlgorithmError> {
         let n = problem.variables.len();
         if n == 0 {
-            return Err(AlgorithmError::Internal("No variables in problem".to_string()));
+            return Err(AlgorithmError::Internal(
+                "No variables in problem".to_string(),
+            ));
         }
 
         let mut rng = rand::thread_rng();
 
         // Initialize random solution
-        let mut current_solution: Vec<f64> = problem.variables.iter().map(|v| {
-            match v.var_type {
-                VariableType::Binary => if rng.gen_bool(0.5) { 1.0 } else { 0.0 },
-                VariableType::Integer => rng.gen_range(v.lower_bound as i64..=v.upper_bound as i64) as f64,
+        let mut current_solution: Vec<f64> = problem
+            .variables
+            .iter()
+            .map(|v| match v.var_type {
+                VariableType::Binary => {
+                    if rng.gen_bool(0.5) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }
+                VariableType::Integer => {
+                    rng.gen_range(v.lower_bound as i64..=v.upper_bound as i64) as f64
+                }
                 VariableType::Continuous => rng.gen_range(v.lower_bound..=v.upper_bound),
-            }
-        }).collect();
+            })
+            .collect();
 
         let mut current_cost = self.evaluate_cost(problem, &current_solution);
         let mut best_solution = current_solution.clone();
@@ -339,11 +394,18 @@ impl SimulatedAnnealingOptimizer {
                 let idx = rng.gen_range(0..n);
                 let var = &problem.variables[idx];
                 let neighbor_value = match var.var_type {
-                    VariableType::Binary => if current_solution[idx] > 0.5 { 0.0 } else { 1.0 },
+                    VariableType::Binary => {
+                        if current_solution[idx] > 0.5 {
+                            0.0
+                        } else {
+                            1.0
+                        }
+                    }
                     VariableType::Integer => {
                         let delta = rng.gen_range(-2..=2);
                         ((current_solution[idx] as i64) + delta)
-                            .clamp(var.lower_bound as i64, var.upper_bound as i64) as f64
+                            .clamp(var.lower_bound as i64, var.upper_bound as i64)
+                            as f64
                     }
                     VariableType::Continuous => {
                         let range = var.upper_bound - var.lower_bound;
@@ -371,7 +433,9 @@ impl SimulatedAnnealingOptimizer {
             temp *= self.cooling_rate;
         }
 
-        let variable_values: Vec<(String, f64)> = problem.variables.iter()
+        let variable_values: Vec<(String, f64)> = problem
+            .variables
+            .iter()
             .zip(best_solution.iter())
             .map(|(v, &val)| (v.name.clone(), val))
             .collect();
@@ -405,9 +469,14 @@ impl SimulatedAnnealingOptimizer {
         // Constraint penalties (quadratic penalty method)
         let penalty_weight = 1000.0;
         for constraint in &problem.constraints {
-            let lhs: f64 = constraint.coefficients.iter()
+            let lhs: f64 = constraint
+                .coefficients
+                .iter()
                 .filter_map(|(name, coeff)| {
-                    problem.variables.iter().position(|v| &v.name == name)
+                    problem
+                        .variables
+                        .iter()
+                        .position(|v| &v.name == name)
                         .map(|idx| coeff * solution[idx])
                 })
                 .sum();
@@ -435,7 +504,10 @@ impl OptimizationAlgorithm for SimulatedAnnealingOptimizer {
         AlgorithmTier::QuantumInspired
     }
 
-    async fn solve(&self, problem: &OptimizationProblem) -> Result<OptimizationSolution, AlgorithmError> {
+    async fn solve(
+        &self,
+        problem: &OptimizationProblem,
+    ) -> Result<OptimizationSolution, AlgorithmError> {
         self.solve_qubo(problem)
     }
 
@@ -461,7 +533,9 @@ pub struct ClassicalSearchEngine {
 
 impl ClassicalSearchEngine {
     pub fn new() -> Self {
-        Self { min_similarity: 0.3 }
+        Self {
+            min_similarity: 0.3,
+        }
     }
 
     /// Cosine similarity between two vectors
@@ -483,7 +557,8 @@ impl ClassicalSearchEngine {
         if job_skills.is_empty() {
             return 1.0;
         }
-        let matches = worker_skills.iter()
+        let matches = worker_skills
+            .iter()
             .filter(|s| job_skills.contains(s))
             .count();
         matches as f64 / job_skills.len() as f64
@@ -634,9 +709,7 @@ impl DecisionTreeClassifier {
             return None;
         }
 
-        let parent_gini = Self::gini(
-            &indices.iter().map(|&i| labels[i]).collect::<Vec<_>>(),
-        );
+        let parent_gini = Self::gini(&indices.iter().map(|&i| labels[i]).collect::<Vec<_>>());
 
         let n_features = features[0].len();
         let mut best_gain = 0.0_f64;
@@ -677,8 +750,7 @@ impl DecisionTreeClassifier {
                 let n = indices.len() as f64;
                 let left_gini = Self::gini(&left_labels);
                 let right_gini = Self::gini(&right_labels);
-                let weighted_gini =
-                    (left_labels.len() as f64 / n) * left_gini
+                let weighted_gini = (left_labels.len() as f64 / n) * left_gini
                     + (right_labels.len() as f64 / n) * right_gini;
                 let gain = parent_gini - weighted_gini;
 
@@ -712,7 +784,11 @@ impl DecisionTreeClassifier {
         let positive_rate = labels_subset.iter().filter(|&&l| l == 1).count() as f64 / n as f64;
 
         // Stopping conditions
-        if depth >= max_depth || n < min_samples_split || positive_rate == 0.0 || positive_rate == 1.0 {
+        if depth >= max_depth
+            || n < min_samples_split
+            || positive_rate == 0.0
+            || positive_rate == 1.0
+        {
             return TreeNode::Leaf {
                 probability: positive_rate,
                 sample_count: n,
@@ -739,12 +815,22 @@ impl DecisionTreeClassifier {
             }
 
             let left = Self::build_tree(
-                features, labels, &left_indices, depth + 1,
-                max_depth, min_samples_split, min_samples_leaf,
+                features,
+                labels,
+                &left_indices,
+                depth + 1,
+                max_depth,
+                min_samples_split,
+                min_samples_leaf,
             );
             let right = Self::build_tree(
-                features, labels, &right_indices, depth + 1,
-                max_depth, min_samples_split, min_samples_leaf,
+                features,
+                labels,
+                &right_indices,
+                depth + 1,
+                max_depth,
+                min_samples_split,
+                min_samples_leaf,
             );
 
             TreeNode::Split {
@@ -851,7 +937,12 @@ pub struct RandomForestClassifier {
 }
 
 impl RandomForestClassifier {
-    pub fn new(n_trees: usize, max_depth: usize, min_samples_split: usize, min_samples_leaf: usize) -> Self {
+    pub fn new(
+        n_trees: usize,
+        max_depth: usize,
+        min_samples_split: usize,
+        min_samples_leaf: usize,
+    ) -> Self {
         Self {
             trees: Vec::new(),
             n_trees,
@@ -896,7 +987,11 @@ impl RandomForestClassifier {
     /// Get averaged feature importance across all trees.
     pub fn feature_importance(&self) -> Vec<(String, f64)> {
         if self.trees.is_empty() {
-            return self.feature_names.iter().map(|n| (n.clone(), 0.0)).collect();
+            return self
+                .feature_names
+                .iter()
+                .map(|n| (n.clone(), 0.0))
+                .collect();
         }
         let mut combined: Vec<f64> = vec![0.0; self.feature_names.len()];
         for tree in &self.trees {
@@ -945,9 +1040,13 @@ fn gauss_seidel_solve(a: &[Vec<f64>], b: &[f64], max_iter: usize, tol: f64) -> V
 /// Compute AUC-ROC (area under receiver operating characteristic curve)
 fn compute_auc_roc(predictions: &[f64], labels: &[u8]) -> f64 {
     let n = predictions.len();
-    if n == 0 { return 0.0; }
+    if n == 0 {
+        return 0.0;
+    }
 
-    let mut pairs: Vec<(f64, u8)> = predictions.iter().zip(labels.iter())
+    let mut pairs: Vec<(f64, u8)> = predictions
+        .iter()
+        .zip(labels.iter())
         .map(|(&p, &l)| (p, l))
         .collect();
     pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -981,7 +1080,9 @@ fn compute_auc_roc(predictions: &[f64], labels: &[u8]) -> f64 {
 
 /// Compute accuracy at a given threshold
 fn compute_accuracy(predictions: &[f64], labels: &[u8], threshold: f64) -> f64 {
-    let correct = predictions.iter().zip(labels.iter())
+    let correct = predictions
+        .iter()
+        .zip(labels.iter())
         .filter(|(&p, &l)| (p >= threshold && l == 1) || (p < threshold && l == 0))
         .count();
     correct as f64 / predictions.len().max(1) as f64
@@ -1008,12 +1109,18 @@ mod tests {
     #[test]
     fn test_simulated_annealing_acceptance() {
         // Better solution always accepted
-        assert_eq!(SimulatedAnnealingOptimizer::acceptance_probability(-1.0, 1.0), 1.0);
+        assert_eq!(
+            SimulatedAnnealingOptimizer::acceptance_probability(-1.0, 1.0),
+            1.0
+        );
         // Worse solution at high temp: ~37% chance
         let prob = SimulatedAnnealingOptimizer::acceptance_probability(1.0, 1.0);
         assert!((prob - 0.368).abs() < 0.01);
         // Worse solution at zero temp: 0% chance
-        assert_eq!(SimulatedAnnealingOptimizer::acceptance_probability(1.0, 0.0), 0.0);
+        assert_eq!(
+            SimulatedAnnealingOptimizer::acceptance_probability(1.0, 0.0),
+            0.0
+        );
     }
 
     #[test]
@@ -1067,7 +1174,10 @@ mod tests {
         // Predict on training data — should get reasonable separation
         let p_high = tree.predict_one(&[1.0, 0.0]);
         let p_low = tree.predict_one(&[0.0, 1.0]);
-        assert!(p_high > p_low, "High-feature sample should have higher positive probability");
+        assert!(
+            p_high > p_low,
+            "High-feature sample should have higher positive probability"
+        );
     }
 
     #[test]

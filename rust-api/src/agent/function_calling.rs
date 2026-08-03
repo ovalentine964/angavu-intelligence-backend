@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-use super::tool_registry::{ToolRegistry, ToolResult, ToolError};
+use super::tool_registry::{ToolError, ToolRegistry, ToolResult};
 
 // ── LLM Message Types (OpenAI Compatible) ───────────────────────────────────
 
@@ -168,14 +168,12 @@ impl FunctionCallParser {
                 warn!("LLM returned finish_reason=tool_calls but no parseable tool calls");
                 LlmAction::Empty
             }
-            Some("stop") => LlmAction::FinalResponse(
-                choice.message.content.clone().unwrap_or_default(),
-            ),
+            Some("stop") => {
+                LlmAction::FinalResponse(choice.message.content.clone().unwrap_or_default())
+            }
             Some("length") => {
                 warn!("LLM response truncated due to max_tokens");
-                LlmAction::FinalResponse(
-                    choice.message.content.clone().unwrap_or_default(),
-                )
+                LlmAction::FinalResponse(choice.message.content.clone().unwrap_or_default())
             }
             _ => LlmAction::Empty,
         }
@@ -412,7 +410,10 @@ impl ArgumentValidator {
                     });
                 }
                 // Check maxItems
-                if let (Some(arr), Some(max)) = (value.as_array(), schema.get("maxItems").and_then(|m| m.as_u64())) {
+                if let (Some(arr), Some(max)) = (
+                    value.as_array(),
+                    schema.get("maxItems").and_then(|m| m.as_u64()),
+                ) {
                     if arr.len() as u64 > max {
                         return Err(ValidationError::OutOfRange {
                             field: field.to_string(),
@@ -499,7 +500,9 @@ impl FunctionCallingEngine {
     /// Execute a parsed function call: validate → execute → return result
     pub async fn execute_call(&self, call: &ParsedFunctionCall) -> ToolCallResult {
         // Validate arguments
-        if let Err(e) = ArgumentValidator::validate(&call.tool_name, &call.arguments, &self.registry) {
+        if let Err(e) =
+            ArgumentValidator::validate(&call.tool_name, &call.arguments, &self.registry)
+        {
             warn!(
                 tool = %call.tool_name,
                 error = %e,
@@ -516,7 +519,10 @@ impl FunctionCallingEngine {
         }
 
         // Execute via registry
-        let result = self.registry.execute_tool(&call.tool_name, call.arguments.clone()).await;
+        let result = self
+            .registry
+            .execute_tool(&call.tool_name, call.arguments.clone())
+            .await;
 
         ToolCallResult {
             tool_call_id: call.tool_call_id.clone(),
@@ -530,10 +536,7 @@ impl FunctionCallingEngine {
 
     /// Execute multiple function calls (parallel where possible)
     pub async fn execute_calls(&self, calls: &[ParsedFunctionCall]) -> Vec<ToolCallResult> {
-        let futures: Vec<_> = calls
-            .iter()
-            .map(|call| self.execute_call(call))
-            .collect();
+        let futures: Vec<_> = calls.iter().map(|call| self.execute_call(call)).collect();
 
         futures::future::join_all(futures).await
     }
@@ -595,15 +598,19 @@ impl SystemPromptBuilder {
         prompt.push_str("informal economy intelligence in East Africa.\n\n");
 
         prompt.push_str("You have access to the following tools. Use them to gather data, ");
-        prompt.push_str("analyze markets, assess credit risk, and generate intelligence reports.\n\n");
+        prompt.push_str(
+            "analyze markets, assess credit risk, and generate intelligence reports.\n\n",
+        );
 
         prompt.push_str("## Available Tools\n\n");
 
         for tool in &tools {
             prompt.push_str(&format!("### {}\n", tool.name));
             prompt.push_str(&format!("{}\n", tool.description));
-            prompt.push_str(&format!("Category: {:?} | Risk: {:?} | Read-only: {}\n",
-                tool.category, tool.risk_level, tool.read_only));
+            prompt.push_str(&format!(
+                "Category: {:?} | Risk: {:?} | Read-only: {}\n",
+                tool.category, tool.risk_level, tool.read_only
+            ));
 
             if let Some(ref required) = tool.parameters.required {
                 if !required.is_empty() {
@@ -633,7 +640,7 @@ impl SystemPromptBuilder {
         let tools = registry.all_definitions();
         let mut prompt = String::from(
             "Select the most appropriate tool for the given task. \
-             Respond with a JSON object: {\"tool\": \"tool_name\", \"reason\": \"why\"}\n\n"
+             Respond with a JSON object: {\"tool\": \"tool_name\", \"reason\": \"why\"}\n\n",
         );
 
         for tool in &tools {
@@ -647,7 +654,9 @@ impl SystemPromptBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::tool_registry::{ToolDefinition, ToolParameterSchema, ToolCategory, ToolRiskLevel};
+    use crate::agent::tool_registry::{
+        ToolCategory, ToolDefinition, ToolParameterSchema, ToolRiskLevel,
+    };
     use async_trait::async_trait;
 
     struct MockExecutor;
@@ -659,7 +668,9 @@ mod tests {
         fn validate_input(&self, _: &serde_json::Value) -> Result<(), ToolError> {
             Ok(())
         }
-        fn name(&self) -> &str { "mock" }
+        fn name(&self) -> &str {
+            "mock"
+        }
     }
 
     fn make_registry() -> Arc<ToolRegistry> {

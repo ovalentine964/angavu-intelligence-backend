@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::graph::algorithms::{AlgorithmGraph, PageRankResult, Community, CentralityResult, ShortestPathResult};
+use crate::graph::algorithms::{
+    AlgorithmGraph, CentralityResult, Community, PageRankResult, ShortestPathResult,
+};
 
 /// The GraphQL schema type.
 pub type AngavuSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
@@ -359,8 +361,16 @@ impl QueryRoot {
         let limit = f.limit.unwrap_or(100).min(1000);
         let offset = f.offset.unwrap_or(0);
 
-        let source_uuid = f.source_id.as_ref().map(|id| Uuid::parse_str(id)).transpose()?;
-        let target_uuid = f.target_id.as_ref().map(|id| Uuid::parse_str(id)).transpose()?;
+        let source_uuid = f
+            .source_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(id))
+            .transpose()?;
+        let target_uuid = f
+            .target_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(id))
+            .transpose()?;
 
         let rows = sqlx::query!(
             "SELECT id, source_type, source_id, target_type, target_id,
@@ -415,11 +425,13 @@ impl QueryRoot {
         // Build in-memory graph from DB
         let graph = crate::graph::algorithms::build_graph_from_db(&state.pool, None).await?;
 
-        Ok(graph.shortest_path(from_uuid, to_uuid).map(|r| GqlShortestPath {
-            path: r.path.iter().map(|id| ID::from(id.to_string())).collect(),
-            total_weight: r.total_weight,
-            hop_count: r.hop_count as i64,
-        }))
+        Ok(graph
+            .shortest_path(from_uuid, to_uuid)
+            .map(|r| GqlShortestPath {
+                path: r.path.iter().map(|id| ID::from(id.to_string())).collect(),
+                total_weight: r.total_weight,
+                hop_count: r.hop_count as i64,
+            }))
     }
 
     /// Get a subgraph centered on a node within N hops.
@@ -438,7 +450,11 @@ impl QueryRoot {
         let graph = crate::graph::algorithms::build_graph_from_db(&state.pool, None).await?;
         let neighborhood = graph.neighborhood(center_uuid, hops);
 
-        let node_ids: Vec<Uuid> = neighborhood.iter().take(node_limit).map(|(id, _)| *id).collect();
+        let node_ids: Vec<Uuid> = neighborhood
+            .iter()
+            .take(node_limit)
+            .map(|(id, _)| *id)
+            .collect();
         let node_id_set: std::collections::HashSet<Uuid> = node_ids.iter().cloned().collect();
 
         // Fetch node details
@@ -547,7 +563,11 @@ impl QueryRoot {
             .filter(|c| c.members.len() >= min)
             .map(|c| GqlCommunity {
                 id: c.id as i64,
-                members: c.members.iter().map(|id| ID::from(id.to_string())).collect(),
+                members: c
+                    .members
+                    .iter()
+                    .map(|id| ID::from(id.to_string()))
+                    .collect(),
                 internal_edges: c.internal_edges as i64,
                 modularity_score: c.modularity_score,
             })

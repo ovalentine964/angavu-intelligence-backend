@@ -197,16 +197,86 @@ impl HarnessGraph {
 
         // ── Tools (from ToolGraph) ────────────────────────────────────
         let tools = vec![
-            ("transaction-recorder", "Finance", "VoiceText", "TransactionRecord", 200, 0.95),
-            ("market-price-lookup", "Market", "ProductQuery", "PriceData", 500, 0.92),
-            ("credit-scorer", "Credit", "WorkerProfile", "AlamaScore", 1500, 0.89),
-            ("cfo-report-generator", "Analytics", "TimeRange", "FinancialReport", 3000, 0.91),
-            ("inventory-tracker", "Inventory", "StockUpdate", "InventoryState", 300, 0.94),
-            ("weather-api", "External", "Location", "WeatherData", 800, 0.98),
-            ("chama-manager", "Social", "ChamaCommand", "ChamaState", 400, 0.90),
-            ("job-matcher", "Employment", "WorkerProfile", "JobMatches", 2000, 0.85),
-            ("supplier-finder", "SupplyChain", "ProductNeed", "SupplierList", 1200, 0.88),
-            ("savings-advisor", "Finance", "FinancialState", "SavingsPlan", 1000, 0.87),
+            (
+                "transaction-recorder",
+                "Finance",
+                "VoiceText",
+                "TransactionRecord",
+                200,
+                0.95,
+            ),
+            (
+                "market-price-lookup",
+                "Market",
+                "ProductQuery",
+                "PriceData",
+                500,
+                0.92,
+            ),
+            (
+                "credit-scorer",
+                "Credit",
+                "WorkerProfile",
+                "AlamaScore",
+                1500,
+                0.89,
+            ),
+            (
+                "cfo-report-generator",
+                "Analytics",
+                "TimeRange",
+                "FinancialReport",
+                3000,
+                0.91,
+            ),
+            (
+                "inventory-tracker",
+                "Inventory",
+                "StockUpdate",
+                "InventoryState",
+                300,
+                0.94,
+            ),
+            (
+                "weather-api",
+                "External",
+                "Location",
+                "WeatherData",
+                800,
+                0.98,
+            ),
+            (
+                "chama-manager",
+                "Social",
+                "ChamaCommand",
+                "ChamaState",
+                400,
+                0.90,
+            ),
+            (
+                "job-matcher",
+                "Employment",
+                "WorkerProfile",
+                "JobMatches",
+                2000,
+                0.85,
+            ),
+            (
+                "supplier-finder",
+                "SupplyChain",
+                "ProductNeed",
+                "SupplierList",
+                1200,
+                0.88,
+            ),
+            (
+                "savings-advisor",
+                "Finance",
+                "FinancialState",
+                "SavingsPlan",
+                1000,
+                0.87,
+            ),
         ];
 
         for (name, cat, input, output, latency, success) in &tools {
@@ -233,9 +303,27 @@ impl HarnessGraph {
 
         // ── Councils ──────────────────────────────────────────────────
         let councils = vec![
-            ("credit-council", "CreditApproval", vec!["credit-scorer", "approval-gate"], "majority_vote", 3),
-            ("market-council", "MarketAnalysis", vec!["market-price-lookup", "weather-api"], "weighted_consensus", 2),
-            ("social-council", "SocialDynamics", vec!["chama-manager", "job-matcher"], "deliberation", 2),
+            (
+                "credit-council",
+                "CreditApproval",
+                vec!["credit-scorer", "approval-gate"],
+                "majority_vote",
+                3,
+            ),
+            (
+                "market-council",
+                "MarketAnalysis",
+                vec!["market-price-lookup", "weather-api"],
+                "weighted_consensus",
+                2,
+            ),
+            (
+                "social-council",
+                "SocialDynamics",
+                vec!["chama-manager", "job-matcher"],
+                "deliberation",
+                2,
+            ),
         ];
 
         for (id, ctype, members, method, quorum) in &councils {
@@ -258,10 +346,30 @@ impl HarnessGraph {
 
         // ── OODA Loops ────────────────────────────────────────────────
         let loops = vec![
-            ("loop-fast", "fast", 1000, vec!["observe", "orient", "decide", "act"]),
-            ("loop-hourly", "hourly", 3600000, vec!["observe", "orient", "decide", "act"]),
-            ("loop-daily", "daily", 86400000, vec!["observe", "orient", "decide", "act", "learn"]),
-            ("loop-weekly", "weekly", 604800000, vec!["observe", "orient", "decide", "act", "learn", "retrain"]),
+            (
+                "loop-fast",
+                "fast",
+                1000,
+                vec!["observe", "orient", "decide", "act"],
+            ),
+            (
+                "loop-hourly",
+                "hourly",
+                3600000,
+                vec!["observe", "orient", "decide", "act"],
+            ),
+            (
+                "loop-daily",
+                "daily",
+                86400000,
+                vec!["observe", "orient", "decide", "act", "learn"],
+            ),
+            (
+                "loop-weekly",
+                "weekly",
+                604800000,
+                vec!["observe", "orient", "decide", "act", "learn", "retrain"],
+            ),
         ];
 
         for (id, ltype, interval, phases) in &loops {
@@ -301,11 +409,41 @@ impl HarnessGraph {
 
         // ── Model Providers ───────────────────────────────────────────
         let models = vec![
-            ("deepseek-reasoner", "DeepSeek", "deepseek-reasoner", "classical", vec!["reasoning", "credit_analysis"]),
-            ("deepseek-chat", "DeepSeek", "deepseek-chat", "classical", vec!["conversation", "general"]),
-            ("qwen-7b", "Qwen", "qwen-7b", "classical", vec!["multilingual", "conversation"]),
-            ("qwen-0.8b", "Qwen", "qwen-0.8b-on-device", "classical", vec!["intent_classification", "on_device"]),
-            ("agi-placeholder", "Future", "agi-v1", "agi", vec!["reasoning", "planning", "creative", "social"]),
+            (
+                "deepseek-reasoner",
+                "DeepSeek",
+                "deepseek-reasoner",
+                "classical",
+                vec!["reasoning", "credit_analysis"],
+            ),
+            (
+                "deepseek-chat",
+                "DeepSeek",
+                "deepseek-chat",
+                "classical",
+                vec!["conversation", "general"],
+            ),
+            (
+                "qwen-7b",
+                "Qwen",
+                "qwen-7b",
+                "classical",
+                vec!["multilingual", "conversation"],
+            ),
+            (
+                "qwen-0.8b",
+                "Qwen",
+                "qwen-0.8b-on-device",
+                "classical",
+                vec!["intent_classification", "on_device"],
+            ),
+            (
+                "agi-placeholder",
+                "Future",
+                "agi-v1",
+                "agi",
+                vec!["reasoning", "planning", "creative", "social"],
+            ),
         ];
 
         for (id, provider, model, tier, caps) in &models {
@@ -321,8 +459,20 @@ impl HarnessGraph {
         // ── External Services ─────────────────────────────────────────
         let externals = vec![
             ("mpesa-api", "M-Pesa", "REST", 0.999, "per_transaction"),
-            ("weather-service", "OpenWeather", "REST", 0.99, "per_request"),
-            ("market-feed", "Gikomba Market Feed", "WebSocket", 0.95, "subscription"),
+            (
+                "weather-service",
+                "OpenWeather",
+                "REST",
+                0.99,
+                "per_request",
+            ),
+            (
+                "market-feed",
+                "Gikomba Market Feed",
+                "WebSocket",
+                0.95,
+                "subscription",
+            ),
         ];
 
         for (id, name, api, reliability, cost) in &externals {
@@ -425,9 +575,7 @@ impl HarnessGraph {
                 | HarnessEdge::ControlFlow { source, target, .. }
                 | HarnessEdge::Dependency { source, target, .. }
                 | HarnessEdge::Feedback { source, target, .. } => (source.clone(), target.clone()),
-                HarnessEdge::Routing {
-                    router, target, ..
-                } => (router.clone(), target.clone()),
+                HarnessEdge::Routing { router, target, .. } => (router.clone(), target.clone()),
             };
 
             adj.entry(source).or_default().push(target);
@@ -444,28 +592,48 @@ impl HarnessGraph {
         node_ids.dedup();
 
         let n = node_ids.len();
-        let id_to_idx: HashMap<&str, usize> =
-            node_ids.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
+        let id_to_idx: HashMap<&str, usize> = node_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (id.as_str(), i))
+            .collect();
 
         let mut matrix = vec![vec![0.0f64; n]; n];
 
         for edge in &self.edges {
             let (source, target, weight) = match edge {
-                HarnessEdge::DataFlow { source, target, frequency_hz, .. } => {
-                    (source.as_str(), target.as_str(), frequency_hz.log2().max(0.1))
-                }
+                HarnessEdge::DataFlow {
+                    source,
+                    target,
+                    frequency_hz,
+                    ..
+                } => (
+                    source.as_str(),
+                    target.as_str(),
+                    frequency_hz.log2().max(0.1),
+                ),
                 HarnessEdge::ControlFlow { source, target, .. } => {
                     (source.as_str(), target.as_str(), 1.0)
                 }
-                HarnessEdge::Dependency { source, target, critical, .. } => {
-                    (source.as_str(), target.as_str(), if *critical { 2.0 } else { 1.0 })
-                }
+                HarnessEdge::Dependency {
+                    source,
+                    target,
+                    critical,
+                    ..
+                } => (
+                    source.as_str(),
+                    target.as_str(),
+                    if *critical { 2.0 } else { 1.0 },
+                ),
                 HarnessEdge::Feedback { source, target, .. } => {
                     (source.as_str(), target.as_str(), 0.5)
                 }
-                HarnessEdge::Routing { router, target, probability, .. } => {
-                    (router.as_str(), target.as_str(), *probability)
-                }
+                HarnessEdge::Routing {
+                    router,
+                    target,
+                    probability,
+                    ..
+                } => (router.as_str(), target.as_str(), *probability),
             };
 
             if let (Some(&si), Some(&ti)) = (id_to_idx.get(source), id_to_idx.get(target)) {
@@ -548,8 +716,16 @@ mod tests {
     #[test]
     fn test_harness_graph_builds() {
         let graph = HarnessGraph::build_from_config();
-        assert!(graph.nodes.len() > 20, "Expected >20 nodes, got {}", graph.nodes.len());
-        assert!(graph.edges.len() > 10, "Expected >10 edges, got {}", graph.edges.len());
+        assert!(
+            graph.nodes.len() > 20,
+            "Expected >20 nodes, got {}",
+            graph.nodes.len()
+        );
+        assert!(
+            graph.edges.len() > 10,
+            "Expected >10 edges, got {}",
+            graph.edges.len()
+        );
     }
 
     #[test]

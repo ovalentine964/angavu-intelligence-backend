@@ -10,11 +10,7 @@
 // All child spans (OODA phases, DB queries, Redis ops) automatically
 // inherit this context through OpenTelemetry's parent-child relationship.
 
-use axum::{
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, middleware::Next, response::Response};
 use std::time::Instant;
 
 use super::correlation::CorrelationId;

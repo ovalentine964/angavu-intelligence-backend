@@ -1,7 +1,6 @@
 /// Stationarity & Causality Bridge — KPSS, Granger causality, CIs, bootstrap.
 ///
 /// Connects Rust backend to Python stationarity_causality module.
-
 use serde_json::{json, Value};
 use std::process::Command;
 use tracing::{debug, error};
@@ -39,12 +38,16 @@ impl StationarityBridge {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        serde_json::from_str::<Value>(&stdout)
-            .map_err(|e| format!("JSON parse error: {}", e))
+        serde_json::from_str::<Value>(&stdout).map_err(|e| format!("JSON parse error: {}", e))
     }
 
     /// KPSS stationarity test (complement to ADF).
-    pub fn kpss_test(&self, data: &[f64], regression: &str, lags: Option<usize>) -> Result<KPSSResult, String> {
+    pub fn kpss_test(
+        &self,
+        data: &[f64],
+        regression: &str,
+        lags: Option<usize>,
+    ) -> Result<KPSSResult, String> {
         let mut args = json!({"data": data, "regression": regression});
         if let Some(l) = lags {
             args["lags"] = json!(l);
@@ -57,7 +60,12 @@ impl StationarityBridge {
     }
 
     /// Granger causality test.
-    pub fn granger_causality(&self, x: &[f64], y: &[f64], max_lag: usize) -> Result<GrangerCausalityResult, String> {
+    pub fn granger_causality(
+        &self,
+        x: &[f64],
+        y: &[f64],
+        max_lag: usize,
+    ) -> Result<GrangerCausalityResult, String> {
         let args = json!({"x": x, "y": y, "max_lag": max_lag, "significance": 0.05});
         let result = self.execute("granger_causality", args)?;
         if let Some(err) = result.get("error") {
@@ -67,7 +75,12 @@ impl StationarityBridge {
     }
 
     /// Confidence interval for mean.
-    pub fn ci_mean(&self, data: &[f64], confidence: f64, method: &str) -> Result<ConfidenceIntervalResult, String> {
+    pub fn ci_mean(
+        &self,
+        data: &[f64],
+        confidence: f64,
+        method: &str,
+    ) -> Result<ConfidenceIntervalResult, String> {
         let args = json!({"data": data, "confidence": confidence, "ci_method": method});
         let result = self.execute("ci_mean", args)?;
         if let Some(err) = result.get("error") {
@@ -77,7 +90,13 @@ impl StationarityBridge {
     }
 
     /// BCa bootstrap confidence interval.
-    pub fn bootstrap_bca(&self, data: &[f64], statistic: &str, confidence: f64, n_bootstrap: usize) -> Result<Value, String> {
+    pub fn bootstrap_bca(
+        &self,
+        data: &[f64],
+        statistic: &str,
+        confidence: f64,
+        n_bootstrap: usize,
+    ) -> Result<Value, String> {
         let args = json!({"data": data, "statistic": statistic, "confidence": confidence, "n_bootstrap": n_bootstrap});
         self.execute("bootstrap_bca", args)
     }

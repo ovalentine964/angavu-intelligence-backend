@@ -76,7 +76,10 @@ impl ErrorResponse {
     }
 
     pub fn forbidden() -> Self {
-        Self::new("FORBIDDEN", "You do not have permission to access this resource.")
+        Self::new(
+            "FORBIDDEN",
+            "You do not have permission to access this resource.",
+        )
     }
 
     pub fn not_found(resource: impl Into<String>) -> Self {
@@ -90,7 +93,10 @@ impl ErrorResponse {
     pub fn rate_limited(retry_after_secs: u64) -> Self {
         Self::new(
             "RATE_LIMITED",
-            format!("Too many requests. Try again in {} seconds.", retry_after_secs),
+            format!(
+                "Too many requests. Try again in {} seconds.",
+                retry_after_secs
+            ),
         )
     }
 
@@ -111,7 +117,10 @@ impl ErrorResponse {
     pub fn not_implemented(tool: impl Into<String>) -> Self {
         Self::new(
             "NOT_IMPLEMENTED",
-            format!("{} is not yet available. This endpoint is coming soon.", tool.into()),
+            format!(
+                "{} is not yet available. This endpoint is coming soon.",
+                tool.into()
+            ),
         )
     }
 
@@ -131,13 +140,20 @@ impl ErrorResponse {
     }
 
     pub fn internal() -> Self {
-        Self::new("INTERNAL_ERROR", "An unexpected error occurred. Please try again later.")
+        Self::new(
+            "INTERNAL_ERROR",
+            "An unexpected error occurred. Please try again later.",
+        )
     }
 
     pub fn validation(field: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::new(
             "VALIDATION_ERROR",
-            format!("Validation failed for '{}': {}", field.into(), reason.into()),
+            format!(
+                "Validation failed for '{}': {}",
+                field.into(),
+                reason.into()
+            ),
         )
     }
 

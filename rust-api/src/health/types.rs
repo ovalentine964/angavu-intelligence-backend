@@ -31,10 +31,10 @@ pub enum OccupationType {
 /// Severity levels for individual hazards.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HazardSeverity {
-    Low,       // 1.0–1.5x multiplier
-    Moderate,  // 1.5–2.5x multiplier
-    High,      // 2.5–3.5x multiplier
-    Critical,  // 3.5–5.0x multiplier
+    Low,      // 1.0–1.5x multiplier
+    Moderate, // 1.5–2.5x multiplier
+    High,     // 2.5–3.5x multiplier
+    Critical, // 3.5–5.0x multiplier
 }
 
 /// Categories of occupational hazards (ILO/WHO classification).
@@ -55,16 +55,16 @@ pub enum HazardCategory {
 /// A single hazard within an occupation's risk profile.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hazard {
-    pub id: String,                          // e.g., "boda_accident_road"
+    pub id: String, // e.g., "boda_accident_road"
     pub category: HazardCategory,
-    pub name: String,                        // Human-readable name
-    pub description: String,                 // What this hazard is
+    pub name: String,        // Human-readable name
+    pub description: String, // What this hazard is
     pub severity: HazardSeverity,
-    pub base_risk_multiplier: f64,           // 1.0–5.0
-    pub prevalence: f64,                     // 0.0–1.0, fraction of workers affected
-    pub data_signals: Vec<DataSignal>,       // What we can observe from transaction data
-    pub mitigation_factors: Vec<String>,     // What reduces this risk
-    pub who_reference: Option<String>,       // WHO/ILO reference code
+    pub base_risk_multiplier: f64,       // 1.0–5.0
+    pub prevalence: f64,                 // 0.0–1.0, fraction of workers affected
+    pub data_signals: Vec<DataSignal>,   // What we can observe from transaction data
+    pub mitigation_factors: Vec<String>, // What reduces this risk
+    pub who_reference: Option<String>,   // WHO/ILO reference code
     pub recommended_insurance: Vec<InsuranceProductType>,
 }
 
@@ -79,30 +79,30 @@ pub struct DataSignal {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DataSource {
-    TransactionPatterns,  // Inferred from transaction timing/amounts
-    WorkHours,            // Inferred from activity patterns
-    LocationData,         // Coarse location (urban/rural, region)
-    SelfReported,         // Worker-provided occupation details
-    SeasonalPatterns,     // Time-of-year risk variation
+    TransactionPatterns, // Inferred from transaction timing/amounts
+    WorkHours,           // Inferred from activity patterns
+    LocationData,        // Coarse location (urban/rural, region)
+    SelfReported,        // Worker-provided occupation details
+    SeasonalPatterns,    // Time-of-year risk variation
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RiskDirection {
-    Increases,  // Higher signal value → higher risk
-    Decreases,  // Higher signal value → lower risk (protective)
+    Increases, // Higher signal value → higher risk
+    Decreases, // Higher signal value → lower risk (protective)
 }
 
 /// Complete risk profile for an occupation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OccupationRiskProfile {
     pub occupation: OccupationType,
-    pub display_name: String,                  // "Boda Boda Rider"
-    pub display_name_sw: String,               // "Msafiri wa Boda Boda"
-    pub overall_risk_multiplier: f64,          // Composite multiplier
+    pub display_name: String,         // "Boda Boda Rider"
+    pub display_name_sw: String,      // "Msafiri wa Boda Boda"
+    pub overall_risk_multiplier: f64, // Composite multiplier
     pub hazards: Vec<Hazard>,
     pub typical_work_hours_per_day: f64,
-    pub exposure_duration_years_avg: f64,      // Average years in occupation
-    pub notes: String,                         // Context for risk assessors
+    pub exposure_duration_years_avg: f64, // Average years in occupation
+    pub notes: String,                    // Context for risk assessors
 }
 
 /// The computed risk output for a specific worker.
@@ -111,9 +111,9 @@ pub struct OccupationalRiskProfile {
     pub occupation: OccupationType,
     pub overall_risk_multiplier: f64,
     pub hazard_scores: Vec<HazardScore>,
-    pub top_risks: Vec<TopRisk>,               // Top 3 risks for explanation
-    pub protective_factors: Vec<String>,       // What reduces their risk
-    pub risk_tier: RiskTier,                   // Low / Moderate / High / Critical
+    pub top_risks: Vec<TopRisk>,         // Top 3 risks for explanation
+    pub protective_factors: Vec<String>, // What reduces their risk
+    pub risk_tier: RiskTier,             // Low / Moderate / High / Critical
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,42 +122,42 @@ pub struct HazardScore {
     pub hazard_name: String,
     pub category: HazardCategory,
     pub base_severity: HazardSeverity,
-    pub adjusted_severity: HazardSeverity,     // After location/signal adjustment
-    pub risk_contribution: f64,                // Contribution to overall score
-    pub exposure_level: ExposureLevel,         // Inferred from data signals
+    pub adjusted_severity: HazardSeverity, // After location/signal adjustment
+    pub risk_contribution: f64,            // Contribution to overall score
+    pub exposure_level: ExposureLevel,     // Inferred from data signals
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExposureLevel {
-    Minimal,    // Very low exposure
-    Low,        // Below typical for occupation
-    Moderate,   // Typical exposure
-    High,       // Above typical (e.g., very long hours)
-    Extreme,    // Maximum exposure (e.g., 14+ hour days)
+    Minimal,  // Very low exposure
+    Low,      // Below typical for occupation
+    Moderate, // Typical exposure
+    High,     // Above typical (e.g., very long hours)
+    Extreme,  // Maximum exposure (e.g., 14+ hour days)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopRisk {
-    pub rank: u8,                              // 1, 2, or 3
+    pub rank: u8, // 1, 2, or 3
     pub hazard_name: String,
-    pub hazard_name_local: String,             // Swahili name
+    pub hazard_name_local: String, // Swahili name
     pub severity: HazardSeverity,
-    pub explanation: String,                   // "You ride 10+ hours daily on busy roads"
-    pub actionable_advice: String,             // "Wear a helmet, avoid night riding"
+    pub explanation: String,       // "You ride 10+ hours daily on busy roads"
+    pub actionable_advice: String, // "Wear a helmet, avoid night riding"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RiskTier {
-    Low,        // Score 1.0–1.5
-    Moderate,   // Score 1.5–2.5
-    High,       // Score 2.5–3.5
-    Critical,   // Score 3.5–5.0
+    Low,      // Score 1.0–1.5
+    Moderate, // Score 1.5–2.5
+    High,     // Score 2.5–3.5
+    Critical, // Score 3.5–5.0
 }
 
 /// The composite health risk score combining all factors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompositeHealthRisk {
-    pub overall_score: f64,              // 1.0 (lowest risk) to 5.0 (highest risk)
+    pub overall_score: f64, // 1.0 (lowest risk) to 5.0 (highest risk)
     pub risk_tier: RiskTier,
     pub components: RiskComponents,
     pub explanation: RiskExplanation,
@@ -165,20 +165,20 @@ pub struct CompositeHealthRisk {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskComponents {
-    pub occupation_risk_score: f64,      // From occupation-hazard matrix
-    pub location_risk_score: f64,        // From location adjustment
-    pub exposure_adjustment: f64,        // From data signals (work hours, patterns)
-    pub income_stability_factor: f64,    // RETAINED but reduced weight
-    pub protective_factors_adjustment: f64,  // Negative (reduces risk)
+    pub occupation_risk_score: f64,   // From occupation-hazard matrix
+    pub location_risk_score: f64,     // From location adjustment
+    pub exposure_adjustment: f64,     // From data signals (work hours, patterns)
+    pub income_stability_factor: f64, // RETAINED but reduced weight
+    pub protective_factors_adjustment: f64, // Negative (reduces risk)
 }
 
 /// Worker-facing explanation of their risk score.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskExplanation {
-    pub summary: String,                 // One-line summary
-    pub summary_local: String,           // In Swahili
-    pub top_risks: Vec<TopRisk>,         // Top 3 risks with explanations
-    pub protective_actions: Vec<String>, // What they can do to reduce risk
+    pub summary: String,                  // One-line summary
+    pub summary_local: String,            // In Swahili
+    pub top_risks: Vec<TopRisk>,          // Top 3 risks with explanations
+    pub protective_actions: Vec<String>,  // What they can do to reduce risk
     pub insurance_recommendation: String, // Plain language insurance advice
 }
 
@@ -200,7 +200,7 @@ impl CompositeHealthRisk {
         occupation_risk: &OccupationalRiskProfile,
         location_risk: &LocationRiskAdjustment,
         exposure_signals: &ExposureSignals,
-        income_stability: f64,  // 0.0 (volatile) to 1.0 (stable)
+        income_stability: f64, // 0.0 (volatile) to 1.0 (stable)
     ) -> Self {
         let occupation_score = occupation_risk.overall_risk_multiplier;
         let location_mult = location_risk.calculate_multiplier();
@@ -213,7 +213,8 @@ impl CompositeHealthRisk {
         // Protective factors reduce risk (observed from data)
         let protective_adj = occupation_risk.protective_adjustment();
 
-        let raw_score = occupation_score * location_mult * exposure_adj * income_factor - protective_adj;
+        let raw_score =
+            occupation_score * location_mult * exposure_adj * income_factor - protective_adj;
         let overall_score = raw_score.clamp(1.0, 5.0);
 
         let risk_tier = match overall_score {
@@ -241,12 +242,12 @@ impl CompositeHealthRisk {
 /// Observable signals from transaction patterns that modify risk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExposureSignals {
-    pub estimated_daily_hours: f64,      // Inferred from transaction timing
-    pub night_activity_ratio: f64,       // Fraction of activity after 8PM
-    pub weekend_activity_ratio: f64,     // No rest days = higher risk
-    pub seasonal_consistency: f64,       // How consistent across seasons
-    pub income_volatility: f64,          // Coefficient of variation
-    pub cash_dominance: f64,             // Fraction of cash vs M-Pesa
+    pub estimated_daily_hours: f64,  // Inferred from transaction timing
+    pub night_activity_ratio: f64,   // Fraction of activity after 8PM
+    pub weekend_activity_ratio: f64, // No rest days = higher risk
+    pub seasonal_consistency: f64,   // How consistent across seasons
+    pub income_volatility: f64,      // Coefficient of variation
+    pub cash_dominance: f64,         // Fraction of cash vs M-Pesa
 }
 
 impl ExposureSignals {
@@ -262,7 +263,7 @@ impl ExposureSignals {
         } else if self.estimated_daily_hours > 10.0 {
             adjustment += 0.08;
         } else if self.estimated_daily_hours < 6.0 {
-            adjustment -= 0.05;  // Part-time = lower exposure
+            adjustment -= 0.05; // Part-time = lower exposure
         }
 
         // Night activity increases risk (accidents, robbery)

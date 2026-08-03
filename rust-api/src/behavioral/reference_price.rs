@@ -17,7 +17,6 @@
 /// Reference: Kahneman, D., & Tversky, A. (1979). Prospect Theory.
 ///            Mazumdar, T., Raj, S. P., & Sinha, I. (2005). Reference
 ///            Price Research: Review and Propositions.
-
 use serde::{Deserialize, Serialize};
 
 /// A price observation from transaction data
@@ -162,8 +161,7 @@ impl ReferencePriceEngine {
         let weighted_obs: Vec<(f64, f64)> = product_obs
             .iter()
             .map(|obs| {
-                let days_ago =
-                    (current_timestamp as f64 - obs.timestamp as f64) / 86400.0;
+                let days_ago = (current_timestamp as f64 - obs.timestamp as f64) / 86400.0;
                 let weight = self.decay_factor.powf(days_ago.max(0.0));
                 (obs.price, weight)
             })
@@ -356,7 +354,10 @@ mod tests {
         let ref_price = engine.estimate("nyanya", 1700000000).unwrap();
 
         let bias = ref_price.anchoring_bias.unwrap();
-        assert!(bias.deviation_pct > 20.0, "Should detect significant anchoring");
+        assert!(
+            bias.deviation_pct > 20.0,
+            "Should detect significant anchoring"
+        );
         assert!(matches!(
             bias.severity,
             BiasSeverity::Moderate | BiasSeverity::Severe

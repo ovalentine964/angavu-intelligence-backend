@@ -14,9 +14,9 @@
 //! - All payloads are logged to audit trail
 //! - Rate limiting applied per source
 
-pub mod mpesa;
-pub mod market_feed;
 pub mod handlers;
+pub mod market_feed;
+pub mod mpesa;
 
 use axum::{
     extract::{Json, State},
@@ -33,10 +33,22 @@ use tracing::{error, info, warn};
 pub fn webhook_router(state: WebhookState) -> Router {
     Router::new()
         .route("/api/v1/webhooks/mpesa", post(mpesa::handle_mpesa_callback))
-        .route("/api/v1/webhooks/mpesa/confirmation", post(mpesa::handle_c2b_confirmation))
-        .route("/api/v1/webhooks/mpesa/validation", post(mpesa::handle_c2b_validation))
-        .route("/api/v1/webhooks/market", post(market_feed::handle_market_feed))
-        .route("/api/v1/webhooks/generic", post(handlers::handle_generic_webhook))
+        .route(
+            "/api/v1/webhooks/mpesa/confirmation",
+            post(mpesa::handle_c2b_confirmation),
+        )
+        .route(
+            "/api/v1/webhooks/mpesa/validation",
+            post(mpesa::handle_c2b_validation),
+        )
+        .route(
+            "/api/v1/webhooks/market",
+            post(market_feed::handle_market_feed),
+        )
+        .route(
+            "/api/v1/webhooks/generic",
+            post(handlers::handle_generic_webhook),
+        )
         .with_state(state)
 }
 
@@ -167,8 +179,9 @@ pub async fn route_to_ooda(
 
     let module_id = match &event.event_type {
         // M-Pesa payment events → Credit module (fast loop)
-        WebhookEventType::MpesaStkCallback
-        | WebhookEventType::MpesaC2BConfirmation => ModuleId::CreditScorer,
+        WebhookEventType::MpesaStkCallback | WebhookEventType::MpesaC2BConfirmation => {
+            ModuleId::CreditScorer
+        }
 
         // Market events → Market module (hourly loop)
         WebhookEventType::MarketPriceUpdate

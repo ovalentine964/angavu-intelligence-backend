@@ -120,7 +120,7 @@ pub struct Subscription {
     pub tier: SubscriptionTier,
     pub status: SubscriptionStatus,
     pub mpesa_phone: Option<String>,
-    pub billing_cycle_day: u8,          // day of month (1-28) for renewal
+    pub billing_cycle_day: u8, // day of month (1-28) for renewal
     pub current_period_start: DateTime<Utc>,
     pub current_period_end: DateTime<Utc>,
     pub trial_start: Option<DateTime<Utc>>,
@@ -155,7 +155,9 @@ pub async fn create_subscription(
     .await?;
 
     if existing.is_some() {
-        anyhow::bail!("Organization already has an active subscription. Cancel or modify the existing one.");
+        anyhow::bail!(
+            "Organization already has an active subscription. Cancel or modify the existing one."
+        );
     }
 
     let id = Uuid::new_v4().to_string();
@@ -403,8 +405,13 @@ pub async fn process_renewals(
             &sub.org_id,
             &sub.id,
             sub.tier.monthly_price_kes(),
-            &format!("{} subscription - {}", sub.tier.as_str(), sub.current_period_end.format("%B %Y")),
-        ).await;
+            &format!(
+                "{} subscription - {}",
+                sub.tier.as_str(),
+                sub.current_period_end.format("%B %Y")
+            ),
+        )
+        .await;
 
         match invoice {
             Ok(inv) => {
@@ -491,13 +498,11 @@ pub async fn process_renewals(
 
     for row in expired {
         let sub = row.into_subscription();
-        sqlx::query(
-            "UPDATE subscriptions SET status = 'suspended', updated_at = $1 WHERE id = $2",
-        )
-        .bind(now)
-        .bind(&sub.id)
-        .execute(db)
-        .await?;
+        sqlx::query("UPDATE subscriptions SET status = 'suspended', updated_at = $1 WHERE id = $2")
+            .bind(now)
+            .bind(&sub.id)
+            .execute(db)
+            .await?;
 
         report.suspended += 1;
         tracing::warn!(
@@ -540,10 +545,7 @@ async fn advance_billing_period(
 }
 
 /// Mark a subscription as PastDue and start the grace period.
-async fn mark_past_due(
-    db: &sqlx::PgPool,
-    sub: &Subscription,
-) -> Result<(), anyhow::Error> {
+async fn mark_past_due(db: &sqlx::PgPool, sub: &Subscription) -> Result<(), anyhow::Error> {
     let now = Utc::now();
     let grace_end = now + Duration::days(7);
 
@@ -589,7 +591,8 @@ pub async fn confirm_payment(
     let now = Utc::now();
 
     // Find the subscription
-    let sub = get_active_subscription(db, org_id).await?
+    let sub = get_active_subscription(db, org_id)
+        .await?
         .ok_or_else(|| anyhow::anyhow!("No subscription found for org"))?;
 
     // Verify amount matches expected

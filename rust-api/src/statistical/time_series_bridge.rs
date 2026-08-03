@@ -85,7 +85,12 @@ pub fn run_time_series_method(method: &str, args: serde_json::Value) -> Economet
 }
 
 /// Identify best ARIMA(p,d,q) order via AIC grid search.
-pub fn arima_identify(data: &[f64], max_p: Option<usize>, max_d: Option<usize>, max_q: Option<usize>) -> EconometricResult {
+pub fn arima_identify(
+    data: &[f64],
+    max_p: Option<usize>,
+    max_d: Option<usize>,
+    max_q: Option<usize>,
+) -> EconometricResult {
     let args = serde_json::json!({
         "data": data,
         "max_p": max_p.unwrap_or(5),
@@ -114,7 +119,11 @@ pub fn arima_diagnose(residuals: &[f64], n_params: Option<usize>) -> Econometric
 }
 
 /// Fit SARIMA(p,d,q)(P,D,Q)s model.
-pub fn sarima_fit(data: &[f64], order: (usize, usize, usize), seasonal_order: (usize, usize, usize, usize)) -> EconometricResult {
+pub fn sarima_fit(
+    data: &[f64],
+    order: (usize, usize, usize),
+    seasonal_order: (usize, usize, usize, usize),
+) -> EconometricResult {
     let args = serde_json::json!({
         "data": data,
         "order": [order.0, order.1, order.2],
@@ -124,7 +133,11 @@ pub fn sarima_fit(data: &[f64], order: (usize, usize, usize), seasonal_order: (u
 }
 
 /// Fit ETS model.
-pub fn ets_fit(data: &[f64], model_type: &str, seasonal_period: Option<usize>) -> EconometricResult {
+pub fn ets_fit(
+    data: &[f64],
+    model_type: &str,
+    seasonal_period: Option<usize>,
+) -> EconometricResult {
     let args = serde_json::json!({
         "data": data,
         "model_type": model_type,
@@ -163,7 +176,12 @@ pub fn cusum_test(y: &[f64], x: &[Vec<f64>], alpha: Option<f64>) -> EconometricR
 }
 
 /// Bai-Perron test for multiple structural breaks.
-pub fn bai_perron(y: &[f64], x: &[Vec<f64>], max_breaks: Option<usize>, min_segment: Option<usize>) -> EconometricResult {
+pub fn bai_perron(
+    y: &[f64],
+    x: &[Vec<f64>],
+    max_breaks: Option<usize>,
+    min_segment: Option<usize>,
+) -> EconometricResult {
     let args = serde_json::json!({
         "y": y,
         "X": x,
@@ -186,14 +204,30 @@ mod tests {
             data[t] = 0.7 * data[t - 1] + 0.1 * (t as f64 * 0.01).sin();
         }
         let result = arima_fit(&data, (1, 0, 0));
-        assert!(result.error.is_none(), "ARIMA fit should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "ARIMA fit should not error: {:?}",
+            result.error
+        );
     }
 
     #[test]
     fn test_chow_test_basic() {
-        let y: Vec<f64> = (0..100).map(|i| if i < 50 { i as f64 * 0.5 } else { 25.0 + (i - 50) as f64 * 1.5 }).collect();
+        let y: Vec<f64> = (0..100)
+            .map(|i| {
+                if i < 50 {
+                    i as f64 * 0.5
+                } else {
+                    25.0 + (i - 50) as f64 * 1.5
+                }
+            })
+            .collect();
         let x: Vec<Vec<f64>> = (0..100).map(|i| vec![i as f64]).collect();
         let result = chow_test(&y, &x, 50);
-        assert!(result.error.is_none(), "Chow test should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "Chow test should not error: {:?}",
+            result.error
+        );
     }
 }

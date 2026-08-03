@@ -24,7 +24,7 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use crate::webhook::{MpesaConfig, MpesaEnvironment};
 
@@ -202,20 +202,30 @@ pub async fn initiate_stk_push(
     let body: DarajaStkResponse = response.json().await?;
 
     if !status.is_success() || body.error_code.is_some() {
-        let error_msg = body.error_message
+        let error_msg = body
+            .error_message
             .or_else(|| body.response_description.clone())
             .unwrap_or_else(|| format!("Daraja API error: HTTP {}", status));
 
         // Store failed payment
-        store_payment(db, &txn_id, org_id, &phone, req.amount, PaymentState::Failed, &error_msg, None, None).await?;
+        store_payment(
+            db,
+            &txn_id,
+            org_id,
+            &phone,
+            req.amount,
+            PaymentState::Failed,
+            &error_msg,
+            None,
+            None,
+        )
+        .await?;
 
         anyhow::bail!("STK Push failed: {}", error_msg);
     }
 
-    let checkout_id = body.checkout_request_id.clone()
-        .unwrap_or_default();
-    let merchant_id = body.merchant_request_id.clone()
-        .unwrap_or_default();
+    let checkout_id = body.checkout_request_id.clone().unwrap_or_default();
+    let merchant_id = body.merchant_request_id.clone().unwrap_or_default();
 
     // Store pending payment
     store_payment(
@@ -228,7 +238,8 @@ pub async fn initiate_stk_push(
         "",
         Some(&checkout_id),
         Some(&merchant_id),
-    ).await?;
+    )
+    .await?;
 
     // Cache in Redis for fast callback lookup
     let cache_key = format!("payment:checkout:{}", checkout_id);
@@ -331,7 +342,9 @@ pub async fn process_stk_callback(
             .bind(checkout_request_id)
             .fetch_optional(db)
             .await?
-            .ok_or_else(|| anyhow::anyhow!("Payment not found for checkout: {}", checkout_request_id))?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Payment not found for checkout: {}", checkout_request_id)
+            })?
         }
     };
 
@@ -444,7 +457,10 @@ async fn get_oauth_token(
     );
 
     let client = reqwest::Client::new();
-    let url = format!("{}/oauth/v1/generate?grant_type=client_credentials", config.base_url());
+    let url = format!(
+        "{}/oauth/v1/generate?grant_type=client_credentials",
+        config.base_url()
+    );
 
     let response = client
         .get(&url)
@@ -454,11 +470,12 @@ async fn get_oauth_token(
 
     let body: OAuthResponse = response.json().await?;
 
-    let token = body.access_token
-        .ok_or_else(|| {
-            let err = body.error_message.unwrap_or_else(|| "Unknown OAuth error".to_string());
-            anyhow::anyhow!("OAuth failed: {}", err)
-        })?;
+    let token = body.access_token.ok_or_else(|| {
+        let err = body
+            .error_message
+            .unwrap_or_else(|| "Unknown OAuth error".to_string());
+        anyhow::anyhow!("OAuth failed: {}", err)
+    })?;
 
     // Cache for 50 minutes (token expires in 60 minutes)
     let _ = redis::cmd("SET")
@@ -498,7 +515,10 @@ fn normalize_phone(phone: &str) -> Result<String, anyhow::Error> {
     } else if cleaned.len() == 10 && !cleaned.starts_with("0") {
         format!("254{}", cleaned)
     } else {
-        anyhow::bail!("Invalid phone number format: {}. Expected 254XXXXXXXXX", phone);
+        anyhow::bail!(
+            "Invalid phone number format: {}. Expected 254XXXXXXXXX",
+            phone
+        );
     };
 
     // Validate prefix (Safaricom: 254[710-729, 740-749, 757-759, 768-769, 790-799, 110-119])
@@ -638,9 +658,8 @@ mod tests {
         // Should be base64 of "174379test_passkey20260801205300"
         assert!(!password.is_empty());
         // Verify it's valid base64
-        assert!(base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &password
-        ).is_ok());
+        assert!(
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &password).is_ok()
+        );
     }
 }

@@ -194,6 +194,10 @@ mod tests {
         let x = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0], vec![5.0]];
         let y = vec![3.1, 4.9, 7.2, 8.8, 11.1];
         let result = ols(&x, &y, None);
-        assert!(result.error.is_none(), "OLS should not error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "OLS should not error: {:?}",
+            result.error
+        );
     }
 }

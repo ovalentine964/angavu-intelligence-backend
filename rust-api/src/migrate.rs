@@ -6,11 +6,10 @@ use std::path::Path;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| {
-            eprintln!("WARNING: DATABASE_URL not set — using local development default (no password)");
-            "postgresql://angavu@localhost:5432/angavu".to_string()
-        });
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        eprintln!("WARNING: DATABASE_URL not set — using local development default (no password)");
+        "postgresql://angavu@localhost:5432/angavu".to_string()
+    });
 
     println!("Connecting to database...");
     let pool = PgPoolOptions::new()

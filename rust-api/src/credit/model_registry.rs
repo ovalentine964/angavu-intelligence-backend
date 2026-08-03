@@ -24,7 +24,10 @@ pub struct ModelVersionId(pub String);
 
 impl ModelVersionId {
     pub fn new() -> Self {
-        Self(format!("mvr_{}", Uuid::new_v4().to_string()[..12].to_string()))
+        Self(format!(
+            "mvr_{}",
+            Uuid::new_v4().to_string()[..12].to_string()
+        ))
     }
 }
 
@@ -50,10 +53,10 @@ pub enum DeploymentStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelVersion {
     pub id: ModelVersionId,
-    pub version_semantic: String,           // e.g., "1.2.0"
-    pub algorithm: String,                  // e.g., "logistic_regression_irls"
+    pub version_semantic: String, // e.g., "1.2.0"
+    pub algorithm: String,        // e.g., "logistic_regression_irls"
     pub deployment_status: DeploymentStatus,
-    pub training_data_hash: String,         // SHA-256 of training dataset
+    pub training_data_hash: String, // SHA-256 of training dataset
     pub training_samples: u64,
     pub feature_count: usize,
     pub trained_at: DateTime<Utc>,
@@ -98,9 +101,9 @@ pub struct ABTestConfig {
     pub test_id: String,
     pub champion_id: ModelVersionId,
     pub challenger_id: ModelVersionId,
-    pub challenger_traffic_pct: f64,       // 0.0-1.0
+    pub challenger_traffic_pct: f64, // 0.0-1.0
     pub min_samples_per_arm: u64,
-    pub significance_level: f64,           // typically 0.05
+    pub significance_level: f64, // typically 0.05
     pub started_at: DateTime<Utc>,
     pub ends_at: Option<DateTime<Utc>>,
     pub status: ABTestStatus,
@@ -166,7 +169,9 @@ impl ModelRegistry {
 
     /// Deploy a model version as champion (replaces current champion)
     pub fn deploy_champion(&mut self, model_id: &ModelVersionId) -> Result<(), String> {
-        let version = self.versions.get_mut(model_id)
+        let version = self
+            .versions
+            .get_mut(model_id)
             .ok_or_else(|| format!("Model version {} not found", model_id.0))?;
 
         // Archive current champion
@@ -194,7 +199,9 @@ impl ModelRegistry {
         traffic_pct: f64,
         min_samples: u64,
     ) -> Result<String, String> {
-        let champion_id = self.champion_id.clone()
+        let champion_id = self
+            .champion_id
+            .clone()
             .ok_or("No champion model deployed")?;
 
         if !self.versions.contains_key(challenger_id) {
@@ -264,7 +271,9 @@ impl ModelRegistry {
 
     /// Get the current champion model
     pub fn champion(&self) -> Option<&ModelVersion> {
-        self.champion_id.as_ref().and_then(|id| self.versions.get(id))
+        self.champion_id
+            .as_ref()
+            .and_then(|id| self.versions.get(id))
     }
 
     /// Get a specific model version
@@ -287,7 +296,10 @@ impl ModelRegistry {
 
     /// List active A/B tests
     pub fn list_ab_tests(&self) -> Vec<&ABTestConfig> {
-        self.ab_tests.values().filter(|t| t.status == ABTestStatus::Running).collect()
+        self.ab_tests
+            .values()
+            .filter(|t| t.status == ABTestStatus::Running)
+            .collect()
     }
 
     /// Record outcome for A/B test evaluation
@@ -300,23 +312,25 @@ impl ModelRegistry {
     ) {
         if let Some(test) = self.ab_tests.get_mut(test_id) {
             let observed = if *model_id == test.champion_id {
-                test.champion_observed.get_or_insert_with(|| ObservedMetrics {
-                    total_predictions: 0,
-                    default_rate: 0.0,
-                    avg_score: 0.0,
-                    score_stddev: 0.0,
-                    approval_rate: 0.0,
-                    actual_default_rate: 0.0,
-                })
+                test.champion_observed
+                    .get_or_insert_with(|| ObservedMetrics {
+                        total_predictions: 0,
+                        default_rate: 0.0,
+                        avg_score: 0.0,
+                        score_stddev: 0.0,
+                        approval_rate: 0.0,
+                        actual_default_rate: 0.0,
+                    })
             } else if *model_id == test.challenger_id {
-                test.challenger_observed.get_or_insert_with(|| ObservedMetrics {
-                    total_predictions: 0,
-                    default_rate: 0.0,
-                    avg_score: 0.0,
-                    score_stddev: 0.0,
-                    approval_rate: 0.0,
-                    actual_default_rate: 0.0,
-                })
+                test.challenger_observed
+                    .get_or_insert_with(|| ObservedMetrics {
+                        total_predictions: 0,
+                        default_rate: 0.0,
+                        avg_score: 0.0,
+                        score_stddev: 0.0,
+                        approval_rate: 0.0,
+                        actual_default_rate: 0.0,
+                    })
             } else {
                 return;
             };
@@ -326,11 +340,9 @@ impl ModelRegistry {
             observed.total_predictions += 1;
             observed.avg_score = (observed.avg_score * n + predicted_score) / (n + 1.0);
             if actual_default {
-                observed.actual_default_rate =
-                    (observed.actual_default_rate * n + 1.0) / (n + 1.0);
+                observed.actual_default_rate = (observed.actual_default_rate * n + 1.0) / (n + 1.0);
             } else {
-                observed.actual_default_rate =
-                    (observed.actual_default_rate * n) / (n + 1.0);
+                observed.actual_default_rate = (observed.actual_default_rate * n) / (n + 1.0);
             }
         }
     }
@@ -514,6 +526,9 @@ mod tests {
 
         registry.deploy_champion(&v2).unwrap();
         assert_eq!(registry.champion().unwrap().id.0, "v2");
-        assert_eq!(registry.get(&v1).unwrap().deployment_status, DeploymentStatus::Archived);
+        assert_eq!(
+            registry.get(&v1).unwrap().deployment_status,
+            DeploymentStatus::Archived
+        );
     }
 }

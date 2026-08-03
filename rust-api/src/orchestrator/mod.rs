@@ -1,16 +1,16 @@
 // src/orchestrator/mod.rs
 
-pub mod message_bus;
 pub mod collective_intelligence;
+pub mod message_bus;
 pub mod modules;
 pub mod supervisor;
 
+use chrono::{DateTime, Utc};
 use message_bus::*;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info, warn};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// The OODA loop phase
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,10 +140,10 @@ impl Default for OrchestratorConfig {
     fn default() -> Self {
         Self {
             cycle_interval_ms: 60_000,       // 1 minute medium loop
-            phase_timeout_ms: 10_000,         // 10 seconds per phase
-            deep_analysis_interval: 60,       // Deep analysis every 60 cycles (~1 hour)
-            anomaly_escalation_threshold: 5,  // Escalate after 5 concurrent anomalies
-            restart_cooldown_secs: 30,        // Wait 30s between restarts
+            phase_timeout_ms: 10_000,        // 10 seconds per phase
+            deep_analysis_interval: 60,      // Deep analysis every 60 cycles (~1 hour)
+            anomaly_escalation_threshold: 5, // Escalate after 5 concurrent anomalies
+            restart_cooldown_secs: 30,       // Wait 30s between restarts
         }
     }
 }

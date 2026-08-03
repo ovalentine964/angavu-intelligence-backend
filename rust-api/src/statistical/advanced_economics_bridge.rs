@@ -7,7 +7,6 @@
 /// revenue equivalence theorem.
 ///
 /// Academic references: ECO 311, ECO 404, ECO 414
-
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -101,7 +100,10 @@ pub struct RationalExpectationsParams {
 
 /// Solve rational expectations cobweb model
 pub fn rational_expectations_cobweb(params: RationalExpectationsParams) -> EconometricResult {
-    run_advanced_economics_method("rational_expectations_cobweb", serde_json::to_value(params).unwrap())
+    run_advanced_economics_method(
+        "rational_expectations_cobweb",
+        serde_json::to_value(params).unwrap(),
+    )
 }
 
 /// Edgeworth box parameters
@@ -179,7 +181,10 @@ pub struct RicardianParams {
 
 /// Run Ricardian equivalence comparison
 pub fn ricardian_equivalence(params: RicardianParams) -> EconometricResult {
-    run_advanced_economics_method("ricardian_equivalence", serde_json::to_value(params).unwrap())
+    run_advanced_economics_method(
+        "ricardian_equivalence",
+        serde_json::to_value(params).unwrap(),
+    )
 }
 
 /// New Keynesian Phillips Curve parameters

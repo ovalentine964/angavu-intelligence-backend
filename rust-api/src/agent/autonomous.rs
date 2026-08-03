@@ -31,9 +31,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use super::function_calling::{
-    ChatMessage, ChatCompletionResponse, FunctionCallParser, FunctionCallingEngine,
-    LlmAction, ParsedFunctionCall, ToolCallResult, SystemPromptBuilder,
-    ToolEnabledRequest, ToolChoice,
+    ChatCompletionResponse, ChatMessage, FunctionCallParser, FunctionCallingEngine, LlmAction,
+    ParsedFunctionCall, SystemPromptBuilder, ToolCallResult, ToolChoice, ToolEnabledRequest,
 };
 use super::memory::{AgentMemory, MemoryConfig, WorkingMemory};
 use super::tool_registry::{ToolRegistry, ToolResult};
@@ -134,9 +133,7 @@ pub enum AgentTask {
         scope: String,
     },
     /// General-purpose query (free-form)
-    GeneralQuery {
-        query: String,
-    },
+    GeneralQuery { query: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,7 +216,9 @@ impl LlmClientAdapter {
         tools: &[serde_json::Value],
         temperature: f32,
     ) -> Result<ChatCompletionResponse, AgentError> {
-        let api_key = self.api_key.as_ref()
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or_else(|| AgentError::LlmUnavailable("No API key configured".to_string()))?;
 
         let url = format!("{}/chat/completions", self.base_url);
@@ -232,7 +231,8 @@ impl LlmClientAdapter {
             "max_tokens": 4096,
         });
 
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -244,10 +244,14 @@ impl LlmClientAdapter {
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(AgentError::LlmUnavailable(format!("LLM API error {}: {}", status, body)));
+            return Err(AgentError::LlmUnavailable(format!(
+                "LLM API error {}: {}",
+                status, body
+            )));
         }
 
-        response.json::<ChatCompletionResponse>()
+        response
+            .json::<ChatCompletionResponse>()
             .await
             .map_err(|e| AgentError::LlmUnavailable(format!("Parse error: {}", e)))
     }
@@ -298,10 +302,7 @@ impl AutonomousAgent {
         // Build system prompt with tool definitions
         let tools = self.engine.registry().openai_functions();
         let context = self.memory.full_context().await;
-        let system_prompt = SystemPromptBuilder::build(
-            self.engine.registry(),
-            Some(&context),
-        );
+        let system_prompt = SystemPromptBuilder::build(self.engine.registry(), Some(&context));
 
         // Initialize conversation
         self.memory.short_term.add("system", &system_prompt).await;
@@ -317,27 +318,35 @@ impl AutonomousAgent {
         for iteration in 0..self.config.max_iterations {
             // Check circuit breaker
             if circuit_failures >= self.config.circuit_breaker_threshold {
-                warn!("Circuit breaker open after {} consecutive failures", circuit_failures);
+                warn!(
+                    "Circuit breaker open after {} consecutive failures",
+                    circuit_failures
+                );
                 *self.state.write().await = AgentState::CircuitOpen;
-                final_response = "Agent stopped: too many consecutive tool failures. Please retry later.".to_string();
+                final_response =
+                    "Agent stopped: too many consecutive tool failures. Please retry later."
+                        .to_string();
                 break;
             }
 
             // Update working memory
-            self.memory.working.add_reasoning_step(
-                &format!("Iteration {} starting", iteration + 1),
-                None,
-            ).await;
+            self.memory
+                .working
+                .add_reasoning_step(&format!("Iteration {} starting", iteration + 1), None)
+                .await;
 
             // ── ORIENT (LLM Reasoning) ──────────────────────────────────
             let messages = self.memory.short_term.as_messages().await;
 
-            let llm_result = self.llm_client.chat_completion(
-                &self.config.reasoning_model,
-                &messages,
-                &tools,
-                self.config.reasoning_temperature,
-            ).await;
+            let llm_result = self
+                .llm_client
+                .chat_completion(
+                    &self.config.reasoning_model,
+                    &messages,
+                    &tools,
+                    self.config.reasoning_temperature,
+                )
+                .await;
 
             let response = match llm_result {
                 Ok(r) => r,
@@ -365,20 +374,30 @@ impl AutonomousAgent {
             match action {
                 LlmAction::ToolCalls(calls) => {
                     // LLM wants to use tools
-                    let assistant_content = response.choices.first()
+                    let assistant_content = response
+                        .choices
+                        .first()
                         .and_then(|c| c.message.content.clone())
                         .unwrap_or_default();
 
                     // Record assistant message with tool calls
-                    self.memory.short_term.add_assistant_with_tools(&assistant_content).await;
+                    self.memory
+                        .short_term
+                        .add_assistant_with_tools(&assistant_content)
+                        .await;
 
                     reasoning_trace.push(ReasoningTraceEntry {
                         iteration,
                         phase: "decide".to_string(),
                         thought: assistant_content.clone(),
-                        action: Some(format!("Calling {} tools: {}",
+                        action: Some(format!(
+                            "Calling {} tools: {}",
                             calls.len(),
-                            calls.iter().map(|c| c.tool_name.as_str()).collect::<Vec<_>>().join(", ")
+                            calls
+                                .iter()
+                                .map(|c| c.tool_name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         )),
                         observation: None,
                         timestamp: Utc::now(),
@@ -406,27 +425,38 @@ impl AutonomousAgent {
                     // Process results and add to conversation
                     for result in &results {
                         let tool_msg = FunctionCallingEngine::build_tool_result_message(result);
-                        self.memory.short_term.add_tool_result(
-                            &result.tool_call_id,
-                            &result.tool_name,
-                            tool_msg.content.as_deref().unwrap_or(""),
-                        ).await;
+                        self.memory
+                            .short_term
+                            .add_tool_result(
+                                &result.tool_call_id,
+                                &result.tool_name,
+                                tool_msg.content.as_deref().unwrap_or(""),
+                            )
+                            .await;
 
                         // Add to working memory observations
                         let obs_content = if result.success {
-                            format!("[{}] {}", result.tool_name, 
-                                serde_json::to_string(&result.output).unwrap_or_default())
-                        } else {
-                            format!("[{}] Error: {}",
+                            format!(
+                                "[{}] {}",
                                 result.tool_name,
-                                result.error_message.as_deref().unwrap_or("unknown"))
+                                serde_json::to_string(&result.output).unwrap_or_default()
+                            )
+                        } else {
+                            format!(
+                                "[{}] Error: {}",
+                                result.tool_name,
+                                result.error_message.as_deref().unwrap_or("unknown")
+                            )
                         };
                         observations.push(obs_content.clone());
-                        self.memory.working.add_observation(
-                            &result.tool_name,
-                            &obs_content,
-                            Some(&result.tool_name),
-                        ).await;
+                        self.memory
+                            .working
+                            .add_observation(
+                                &result.tool_name,
+                                &obs_content,
+                                Some(&result.tool_name),
+                            )
+                            .await;
 
                         reasoning_trace.push(ReasoningTraceEntry {
                             iteration,
@@ -436,7 +466,10 @@ impl AutonomousAgent {
                             observation: Some(if result.success {
                                 format!("Success ({}ms)", result.execution_ms)
                             } else {
-                                format!("Failed: {}", result.error_message.as_deref().unwrap_or("unknown"))
+                                format!(
+                                    "Failed: {}",
+                                    result.error_message.as_deref().unwrap_or("unknown")
+                                )
                             }),
                             timestamp: Utc::now(),
                         });
@@ -463,11 +496,10 @@ impl AutonomousAgent {
                         timestamp: Utc::now(),
                     });
 
-                    self.memory.working.record_decision(
-                        "final_response",
-                        &text,
-                        0.8,
-                    ).await;
+                    self.memory
+                        .working
+                        .record_decision("final_response", &text, 0.8)
+                        .await;
 
                     *self.state.write().await = AgentState::Completed;
                     break;
@@ -485,9 +517,13 @@ impl AutonomousAgent {
                     });
 
                     // Nudge the LLM to respond
-                    self.memory.short_term.add("user",
-                        "Please continue your analysis and provide a response."
-                    ).await;
+                    self.memory
+                        .short_term
+                        .add(
+                            "user",
+                            "Please continue your analysis and provide a response.",
+                        )
+                        .await;
                 }
             }
 
@@ -513,30 +549,46 @@ impl AutonomousAgent {
         // Update metrics
         let state = *self.state.read().await;
         match state {
-            AgentState::Completed => { self.tasks_completed.fetch_add(1, Ordering::Relaxed); }
-            _ => { self.tasks_failed.fetch_add(1, Ordering::Relaxed); }
+            AgentState::Completed => {
+                self.tasks_completed.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {
+                self.tasks_failed.fetch_add(1, Ordering::Relaxed);
+            }
         }
-        self.total_tool_calls.fetch_add(tool_calls_count as u64, Ordering::Relaxed);
+        self.total_tool_calls
+            .fetch_add(tool_calls_count as u64, Ordering::Relaxed);
 
         // Store successful strategy in long-term memory
         if state == AgentState::Completed && tool_calls_count > 0 {
-            let tools_used: Vec<String> = reasoning_trace.iter()
-                .filter_map(|t| t.action.as_ref().filter(|a| !a.starts_with("Calling")).cloned())
+            let tools_used: Vec<String> = reasoning_trace
+                .iter()
+                .filter_map(|t| {
+                    t.action
+                        .as_ref()
+                        .filter(|a| !a.starts_with("Calling"))
+                        .cloned()
+                })
                 .collect();
 
             if !tools_used.is_empty() {
-                self.memory.long_term.store_strategy(super::memory::SuccessfulStrategy {
-                    id: format!("strat_{}", Utc::now().timestamp()),
-                    task_type: Self::task_type_name(&task),
-                    strategy_description: format!("Completed with {} iterations, {} tool calls",
-                        reasoning_trace.len(), tool_calls_count),
-                    tools_used,
-                    reasoning_pattern: "ReAct".to_string(),
-                    success_count: 1,
-                    failure_count: 0,
-                    avg_confidence: 0.8,
-                    last_used: Utc::now(),
-                });
+                self.memory
+                    .long_term
+                    .store_strategy(super::memory::SuccessfulStrategy {
+                        id: format!("strat_{}", Utc::now().timestamp()),
+                        task_type: Self::task_type_name(&task),
+                        strategy_description: format!(
+                            "Completed with {} iterations, {} tool calls",
+                            reasoning_trace.len(),
+                            tool_calls_count
+                        ),
+                        tools_used,
+                        reasoning_pattern: "ReAct".to_string(),
+                        success_count: 1,
+                        failure_count: 0,
+                        avg_confidence: 0.8,
+                        last_used: Utc::now(),
+                    });
             }
         }
 
@@ -558,7 +610,11 @@ impl AutonomousAgent {
             total_execution_ms: elapsed,
             reasoning_trace,
             observations,
-            confidence: if state == AgentState::Completed { 0.85 } else { 0.5 },
+            confidence: if state == AgentState::Completed {
+                0.85
+            } else {
+                0.5
+            },
             memory_snapshot: self.memory.stats().await,
         }
     }
@@ -587,16 +643,31 @@ impl AutonomousAgent {
 
     fn task_to_description(task: &AgentTask) -> String {
         match task {
-            AgentTask::CreditAnalysis { cohort_hash, worker_type, region, .. } => {
-                format!("Credit analysis for {} cohort {} in {}", worker_type, &cohort_hash[..8], region)
+            AgentTask::CreditAnalysis {
+                cohort_hash,
+                worker_type,
+                region,
+                ..
+            } => {
+                format!(
+                    "Credit analysis for {} cohort {} in {}",
+                    worker_type,
+                    &cohort_hash[..8],
+                    region
+                )
             }
-            AgentTask::MarketIntelligence { category, region, .. } => {
+            AgentTask::MarketIntelligence {
+                category, region, ..
+            } => {
                 format!("Market intelligence: {} in {}", category, region)
             }
             AgentTask::IntelligenceReport { report_type, scope } => {
                 format!("Generate {} report for {:?}", report_type, scope.region)
             }
-            AgentTask::AnomalyInvestigation { anomaly_description, scope } => {
+            AgentTask::AnomalyInvestigation {
+                anomaly_description,
+                scope,
+            } => {
                 format!("Investigate anomaly: {} ({})", anomaly_description, scope)
             }
             AgentTask::GeneralQuery { query } => {
@@ -617,7 +688,12 @@ impl AutonomousAgent {
 
     fn build_initial_prompt(task: &AgentTask) -> String {
         match task {
-            AgentTask::CreditAnalysis { cohort_hash, worker_type, region, loan_amount } => {
+            AgentTask::CreditAnalysis {
+                cohort_hash,
+                worker_type,
+                region,
+                loan_amount,
+            } => {
                 let mut prompt = format!(
                     "Perform a comprehensive credit risk analysis for the following:\n\n\
                      - Cohort: {}\n\
@@ -636,7 +712,11 @@ impl AutonomousAgent {
                 prompt.push_str("5. Provide a credit decision recommendation with reasoning\n");
                 prompt
             }
-            AgentTask::MarketIntelligence { category, region, depth } => {
+            AgentTask::MarketIntelligence {
+                category,
+                region,
+                depth,
+            } => {
                 format!(
                     "Conduct {:?}-depth market intelligence analysis:\n\n\
                      - Category: {}\n\
@@ -652,9 +732,7 @@ impl AutonomousAgent {
                 )
             }
             AgentTask::IntelligenceReport { report_type, scope } => {
-                let mut prompt = format!(
-                    "Generate a {} intelligence report.\n\n", report_type
-                );
+                let mut prompt = format!("Generate a {} intelligence report.\n\n", report_type);
                 if let Some(ref region) = scope.region {
                     prompt.push_str(&format!("Region: {}\n", region));
                 }
@@ -668,7 +746,10 @@ impl AutonomousAgent {
                 prompt.push_str("4. Generate the report with findings and recommendations\n");
                 prompt
             }
-            AgentTask::AnomalyInvestigation { anomaly_description, scope } => {
+            AgentTask::AnomalyInvestigation {
+                anomaly_description,
+                scope,
+            } => {
                 format!(
                     "Investigate the following anomaly:\n\n\
                      Description: {}\n\
@@ -725,10 +806,7 @@ pub struct CreditDecisionAgent {
 }
 
 impl CreditDecisionAgent {
-    pub fn new(
-        registry: Arc<ToolRegistry>,
-        llm_client: Arc<LlmClientAdapter>,
-    ) -> Self {
+    pub fn new(registry: Arc<ToolRegistry>, llm_client: Arc<LlmClientAdapter>) -> Self {
         let config = AgentConfig {
             max_iterations: 8,
             max_tool_calls_per_iteration: 4,
@@ -774,10 +852,7 @@ pub struct MarketIntelligenceAgent {
 }
 
 impl MarketIntelligenceAgent {
-    pub fn new(
-        registry: Arc<ToolRegistry>,
-        llm_client: Arc<LlmClientAdapter>,
-    ) -> Self {
+    pub fn new(registry: Arc<ToolRegistry>, llm_client: Arc<LlmClientAdapter>) -> Self {
         let config = AgentConfig {
             max_iterations: 10,
             max_tool_calls_per_iteration: 5,
@@ -793,12 +868,7 @@ impl MarketIntelligenceAgent {
     }
 
     /// Gather market intelligence for a category/region
-    pub async fn analyze(
-        &self,
-        category: &str,
-        region: &str,
-        depth: AnalysisDepth,
-    ) -> AgentResult {
+    pub async fn analyze(&self, category: &str, region: &str, depth: AnalysisDepth) -> AgentResult {
         let task = AgentTask::MarketIntelligence {
             category: category.to_string(),
             region: region.to_string(),
@@ -815,7 +885,9 @@ impl MarketIntelligenceAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::tool_registry::{ToolExecutor, ToolError, ToolDefinition, ToolParameterSchema, ToolCategory, ToolRiskLevel};
+    use crate::agent::tool_registry::{
+        ToolCategory, ToolDefinition, ToolError, ToolExecutor, ToolParameterSchema, ToolRiskLevel,
+    };
     use async_trait::async_trait;
 
     struct MockExecutor;
@@ -824,8 +896,12 @@ mod tests {
         async fn execute(&self, input: serde_json::Value) -> Result<serde_json::Value, ToolError> {
             Ok(serde_json::json!({"status": "ok", "input_received": input}))
         }
-        fn validate_input(&self, _: &serde_json::Value) -> Result<(), ToolError> { Ok(()) }
-        fn name(&self) -> &str { "mock" }
+        fn validate_input(&self, _: &serde_json::Value) -> Result<(), ToolError> {
+            Ok(())
+        }
+        fn name(&self) -> &str {
+            "mock"
+        }
     }
 
     fn make_test_registry() -> Arc<ToolRegistry> {

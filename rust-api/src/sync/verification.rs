@@ -8,27 +8,35 @@
 // - Worker type consistent with transaction patterns
 // - Hour/day values in valid ranges
 
-use super::*;
 use super::receiver::DeviceState;
+use super::*;
 use tracing::warn;
 
 /// Valid transaction categories accepted by the backend
 const VALID_CATEGORIES: &[&str] = &[
-    "sale", "expense", "purchase", "income", "transfer",
-    "service", "wage", "commission", "loan", "repayment",
-    "rent", "transport", "food", "utilities", "stock",
+    "sale",
+    "expense",
+    "purchase",
+    "income",
+    "transfer",
+    "service",
+    "wage",
+    "commission",
+    "loan",
+    "repayment",
+    "rent",
+    "transport",
+    "food",
+    "utilities",
+    "stock",
     "other",
 ];
 
 /// Valid payment methods
-const VALID_PAYMENT_METHODS: &[&str] = &[
-    "cash", "mpesa", "bank", "credit", "airtel", "other",
-];
+const VALID_PAYMENT_METHODS: &[&str] = &["cash", "mpesa", "bank", "credit", "airtel", "other"];
 
 /// Maximum plausible amount bucket index (for anomaly detection)
-const MAX_AMOUNT_BUCKET: &[&str] = &[
-    "0-100", "100-500", "500-1000", "1000-5000", "5000+",
-];
+const MAX_AMOUNT_BUCKET: &[&str] = &["0-100", "100-500", "500-1000", "1000-5000", "5000+"];
 
 /// Maximum acceptable sync payload size
 const MAX_TRANSACTIONS_PER_SYNC: usize = 500;
@@ -51,15 +59,59 @@ struct AmountThreshold {
 impl SyncVerifier {
     pub fn new() -> Self {
         let mut thresholds = std::collections::HashMap::new();
-        thresholds.insert("sale".to_string(), AmountThreshold { median: 500.0, max_plausible: 50000.0 });
-        thresholds.insert("expense".to_string(), AmountThreshold { median: 200.0, max_plausible: 20000.0 });
-        thresholds.insert("purchase".to_string(), AmountThreshold { median: 1000.0, max_plausible: 100000.0 });
-        thresholds.insert("income".to_string(), AmountThreshold { median: 800.0, max_plausible: 80000.0 });
-        thresholds.insert("service".to_string(), AmountThreshold { median: 300.0, max_plausible: 30000.0 });
-        thresholds.insert("wage".to_string(), AmountThreshold { median: 1500.0, max_plausible: 150000.0 });
-        thresholds.insert("transport".to_string(), AmountThreshold { median: 100.0, max_plausible: 10000.0 });
+        thresholds.insert(
+            "sale".to_string(),
+            AmountThreshold {
+                median: 500.0,
+                max_plausible: 50000.0,
+            },
+        );
+        thresholds.insert(
+            "expense".to_string(),
+            AmountThreshold {
+                median: 200.0,
+                max_plausible: 20000.0,
+            },
+        );
+        thresholds.insert(
+            "purchase".to_string(),
+            AmountThreshold {
+                median: 1000.0,
+                max_plausible: 100000.0,
+            },
+        );
+        thresholds.insert(
+            "income".to_string(),
+            AmountThreshold {
+                median: 800.0,
+                max_plausible: 80000.0,
+            },
+        );
+        thresholds.insert(
+            "service".to_string(),
+            AmountThreshold {
+                median: 300.0,
+                max_plausible: 30000.0,
+            },
+        );
+        thresholds.insert(
+            "wage".to_string(),
+            AmountThreshold {
+                median: 1500.0,
+                max_plausible: 150000.0,
+            },
+        );
+        thresholds.insert(
+            "transport".to_string(),
+            AmountThreshold {
+                median: 100.0,
+                max_plausible: 10000.0,
+            },
+        );
 
-        Self { amount_thresholds: thresholds }
+        Self {
+            amount_thresholds: thresholds,
+        }
     }
 
     /// Verify all transactions in a sync request.
@@ -221,25 +273,23 @@ impl SyncVerifier {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::receiver::DeviceState;
+    use super::*;
 
     fn sample_request() -> SyncRequest {
         SyncRequest {
             device_id: "test-device".to_string(),
             business_category: "Trade".to_string(),
             ward: "Test Ward".to_string(),
-            transactions: vec![
-                AnonymizedTransaction {
-                    amount_bucket: "500-1000".to_string(),
-                    category: "sale".to_string(),
-                    payment_method: "cash".to_string(),
-                    hour_of_day: 14,
-                    day_of_week: 3,
-                    is_service: false,
-                    dedup_key: Some("key-001".to_string()),
-                },
-            ],
+            transactions: vec![AnonymizedTransaction {
+                amount_bucket: "500-1000".to_string(),
+                category: "sale".to_string(),
+                payment_method: "cash".to_string(),
+                hour_of_day: 14,
+                day_of_week: 3,
+                is_service: false,
+                dedup_key: Some("key-001".to_string()),
+            }],
             learned_patterns: vec![],
             vocabulary_hashes: vec![],
             anomaly_stats: AnomalyStats {
@@ -319,15 +369,17 @@ mod tests {
     async fn test_oversized_payload_rejected() {
         let verifier = SyncVerifier::new();
         let mut request = sample_request();
-        request.transactions = (0..600).map(|i| AnonymizedTransaction {
-            amount_bucket: "100-500".to_string(),
-            category: "sale".to_string(),
-            payment_method: "cash".to_string(),
-            hour_of_day: 12,
-            day_of_week: 3,
-            is_service: false,
-            dedup_key: Some(format!("key-{}", i)),
-        }).collect();
+        request.transactions = (0..600)
+            .map(|i| AnonymizedTransaction {
+                amount_bucket: "100-500".to_string(),
+                category: "sale".to_string(),
+                payment_method: "cash".to_string(),
+                hour_of_day: 12,
+                day_of_week: 3,
+                is_service: false,
+                dedup_key: Some(format!("key-{}", i)),
+            })
+            .collect();
         let state = empty_device_state();
 
         let result = verifier.verify_sync(&request, &state).await;

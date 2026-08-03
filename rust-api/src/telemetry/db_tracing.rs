@@ -20,11 +20,7 @@ use std::time::Instant;
 
 /// Execute a PostgreSQL query inside an OTel span.
 /// Records operation, table, duration, status, and row count.
-pub async fn traced_pg_query<F, T, E>(
-    operation: &str,
-    table: &str,
-    query_fn: F,
-) -> Result<T, E>
+pub async fn traced_pg_query<F, T, E>(operation: &str, table: &str, query_fn: F) -> Result<T, E>
 where
     F: std::future::Future<Output = Result<T, E>>,
     E: std::fmt::Display,
@@ -74,11 +70,7 @@ where
 
 /// Execute a Redis operation inside an OTel span.
 /// Records command, key pattern, duration, and status.
-pub async fn traced_redis_op<F, T, E>(
-    command: &str,
-    key: &str,
-    op_fn: F,
-) -> Result<T, E>
+pub async fn traced_redis_op<F, T, E>(command: &str, key: &str, op_fn: F) -> Result<T, E>
 where
     F: std::future::Future<Output = Result<T, E>>,
     E: std::fmt::Display,
@@ -126,11 +118,7 @@ where
 }
 
 /// Execute a ClickHouse query inside an OTel span.
-pub async fn traced_ch_query<F, T, E>(
-    operation: &str,
-    table: &str,
-    query_fn: F,
-) -> Result<T, E>
+pub async fn traced_ch_query<F, T, E>(operation: &str, table: &str, query_fn: F) -> Result<T, E>
 where
     F: std::future::Future<Output = Result<T, E>>,
     E: std::fmt::Display,

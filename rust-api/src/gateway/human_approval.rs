@@ -84,7 +84,7 @@ pub struct ResolveApprovalRequest {
 #[derive(Debug, Serialize)]
 pub struct ApprovalResolvedResponse {
     pub confirmation_id: String,
-    pub status: String,  // "approved", "rejected", "expired", "not_found"
+    pub status: String, // "approved", "rejected", "expired", "not_found"
     pub message: String,
 }
 
@@ -93,7 +93,7 @@ pub struct ApprovalResolvedResponse {
 pub struct ChamaProposalRequest {
     pub chama_id: i64,
     pub proposer_phone: String,
-    pub action: String,  // "withdrawal", "contribution_change", etc.
+    pub action: String, // "withdrawal", "contribution_change", etc.
     pub description: String,
     pub amount: Option<f64>,
 }
@@ -103,7 +103,7 @@ pub struct ChamaProposalRequest {
 pub struct ChamaVoteRequest {
     pub proposal_id: String,
     pub voter_phone: String,
-    pub vote: String,  // "approve" or "reject"
+    pub vote: String, // "approve" or "reject"
     pub comment: Option<String>,
 }
 
@@ -111,7 +111,7 @@ pub struct ChamaVoteRequest {
 #[derive(Debug, Deserialize)]
 pub struct EscalationRequest {
     pub escalation_id: String,
-    pub resolution: String,  // "approved", "corrected", "rejected"
+    pub resolution: String, // "approved", "corrected", "rejected"
     pub corrected_output: Option<String>,
     pub user_comment: Option<String>,
 }
@@ -121,14 +121,14 @@ pub struct EscalationRequest {
 /// Sensitive action types that require human confirmation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ApprovalActionType {
-    Transaction,        // Large transaction (> KES 5,000)
-    LoanApplication,    // Applying for a loan
-    CreditDecision,     // Credit/loan eligibility
-    TaxFiling,          // Tax report submission
-    ChamaWithdrawal,    // Withdrawing from chama
-    GroupContribution,  // Contributing to chama/group
-    LargeExpense,       // Large expense
-    ReportDelivery,     // Sending reports
+    Transaction,       // Large transaction (> KES 5,000)
+    LoanApplication,   // Applying for a loan
+    CreditDecision,    // Credit/loan eligibility
+    TaxFiling,         // Tax report submission
+    ChamaWithdrawal,   // Withdrawing from chama
+    GroupContribution, // Contributing to chama/group
+    LargeExpense,      // Large expense
+    ReportDelivery,    // Sending reports
 }
 
 impl ApprovalActionType {
@@ -259,21 +259,27 @@ pub async fn create_approval(
         .await;
 
     // Audit log with client IP
-    state.audit.log(super::audit::AuditLogEntry {
-        id: uuid::Uuid::new_v4(),
-        timestamp: chrono::Utc::now(),
-        org_id: req.user_id.clone(),
-        key_id: "human_approval".to_string(),
-        endpoint: "/api/v1/approval/create".to_string(),
-        method: "POST".to_string(),
-        status_code: 201,
-        response_time_ms: 0,
-        ip_address: client_ip,
-        user_agent: None,
-        k_anonymity_suppressed: false,
-        query_hash: Some(format!("action={}&confirmation_id={}", req.action_type, confirmation_id)),
-        rate_limit_remaining: 0,
-    }).await;
+    state
+        .audit
+        .log(super::audit::AuditLogEntry {
+            id: uuid::Uuid::new_v4(),
+            timestamp: chrono::Utc::now(),
+            org_id: req.user_id.clone(),
+            key_id: "human_approval".to_string(),
+            endpoint: "/api/v1/approval/create".to_string(),
+            method: "POST".to_string(),
+            status_code: 201,
+            response_time_ms: 0,
+            ip_address: client_ip,
+            user_agent: None,
+            k_anonymity_suppressed: false,
+            query_hash: Some(format!(
+                "action={}&confirmation_id={}",
+                req.action_type, confirmation_id
+            )),
+            rate_limit_remaining: 0,
+        })
+        .await;
 
     tracing::info!(
         confirmation_id = %confirmation_id,
@@ -331,10 +337,10 @@ pub async fn resolve_approval(
         .unwrap_or(None);
 
     let pending: PendingApproval = match data {
-        Some(d) => serde_json::from_str(&d)
-            .map_err(|e| super::error::ErrorResponse::bad_request(
-                &format!("Invalid approval data: {}", e)
-            ).into_response())?,
+        Some(d) => serde_json::from_str(&d).map_err(|e| {
+            super::error::ErrorResponse::bad_request(&format!("Invalid approval data: {}", e))
+                .into_response()
+        })?,
         None => {
             return super::error::ErrorResponse::not_found("Approval request")
                 .with_request_id(&req.confirmation_id)
@@ -370,7 +376,7 @@ pub async fn resolve_approval(
             .unwrap_or(());
 
         return super::error::ErrorResponse::expired(
-            "Muda umekwisha. Kitendo hiki kimefutwa kwa usalama wako."
+            "Muda umekwisha. Kitendo hiki kimefutwa kwa usalama wako.",
         )
         .with_request_id(&req.confirmation_id)
         .into_response();
@@ -384,33 +390,33 @@ pub async fn resolve_approval(
         .unwrap_or(());
 
     let (status, message) = if req.approved {
-        (
-            "approved",
-            "Imeidhinishwa. Inaendelea...",
-        )
+        ("approved", "Imeidhinishwa. Inaendelea...")
     } else {
-        (
-            "rejected",
-            "Imekataliwa. Kitendo hakijafanyika.",
-        )
+        ("rejected", "Imekataliwa. Kitendo hakijafanyika.")
     };
 
     // Audit log with client IP
-    state.audit.log(super::audit::AuditLogEntry {
-        id: uuid::Uuid::new_v4(),
-        timestamp: chrono::Utc::now(),
-        org_id: pending.user_id.clone(),
-        key_id: "human_approval".to_string(),
-        endpoint: "/api/v1/approval/resolve".to_string(),
-        method: "POST".to_string(),
-        status_code: 200,
-        response_time_ms: 0,
-        ip_address: client_ip,
-        user_agent: None,
-        k_anonymity_suppressed: false,
-        query_hash: Some(format!("confirmation_id={}&approved={}", req.confirmation_id, req.approved)),
-        rate_limit_remaining: 0,
-    }).await;
+    state
+        .audit
+        .log(super::audit::AuditLogEntry {
+            id: uuid::Uuid::new_v4(),
+            timestamp: chrono::Utc::now(),
+            org_id: pending.user_id.clone(),
+            key_id: "human_approval".to_string(),
+            endpoint: "/api/v1/approval/resolve".to_string(),
+            method: "POST".to_string(),
+            status_code: 200,
+            response_time_ms: 0,
+            ip_address: client_ip,
+            user_agent: None,
+            k_anonymity_suppressed: false,
+            query_hash: Some(format!(
+                "confirmation_id={}&approved={}",
+                req.confirmation_id, req.approved
+            )),
+            rate_limit_remaining: 0,
+        })
+        .await;
 
     tracing::info!(
         confirmation_id = %req.confirmation_id,
@@ -521,15 +527,16 @@ fn build_confirmation_prompt(
     amount: Option<f64>,
     description: &str,
 ) -> String {
-    let amount_str = amount
-        .map(|a| format!("KES {:,.0}", a))
-        .unwrap_or_default();
+    let amount_str = amount.map(|a| format!("KES {:,.0}", a)).unwrap_or_default();
 
     match action_type {
         ApprovalActionType::Transaction => {
             if let Some(a) = amount {
                 if a > 5_000.0 {
-                    format!("Hii ni muamamala mkubwa wa {}. {}. Unakubali?", amount_str, description)
+                    format!(
+                        "Hii ni muamamala mkubwa wa {}. {}. Unakubali?",
+                        amount_str, description
+                    )
                 } else {
                     format!("Unakubali {}?", description)
                 }
@@ -538,7 +545,10 @@ fn build_confirmation_prompt(
             }
         }
         ApprovalActionType::LoanApplication => {
-            format!("Unataka kuomba mkopo wa {}. {}. Unakubali kuomba?", amount_str, description)
+            format!(
+                "Unataka kuomba mkopo wa {}. {}. Unakubali kuomba?",
+                amount_str, description
+            )
         }
         ApprovalActionType::CreditDecision => {
             format!(
@@ -547,16 +557,28 @@ fn build_confirmation_prompt(
             )
         }
         ApprovalActionType::TaxFiling => {
-            format!("Unataka kuwasilisha ripoti ya kodi. {}. Unakubali?", description)
+            format!(
+                "Unataka kuwasilisha ripoti ya kodi. {}. Unakubali?",
+                description
+            )
         }
         ApprovalActionType::ChamaWithdrawal => {
-            format!("Unataka kutoa {} kutoka chama. {}. Unakubali?", amount_str, description)
+            format!(
+                "Unataka kutoa {} kutoka chama. {}. Unakubali?",
+                amount_str, description
+            )
         }
         ApprovalActionType::GroupContribution => {
-            format!("Unataka kuchangia {} kwenye chama. {}. Unakubali?", amount_str, description)
+            format!(
+                "Unataka kuchangia {} kwenye chama. {}. Unakubali?",
+                amount_str, description
+            )
         }
         ApprovalActionType::LargeExpense => {
-            format!("Hii ni gharama kubwa ya {}. {}. Unakubali?", amount_str, description)
+            format!(
+                "Hii ni gharama kubwa ya {}. {}. Unakubali?",
+                amount_str, description
+            )
         }
         ApprovalActionType::ReportDelivery => {
             format!("Unataka kutuma ripoti. {}. Unakubali kutuma?", description)
@@ -566,7 +588,10 @@ fn build_confirmation_prompt(
 
 // ─── Router ──────────────────────────────────────────────────
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 
 /// Build the human approval sub-router
 pub fn human_approval_router(state: HumanApprovalState) -> Router {

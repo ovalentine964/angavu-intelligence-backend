@@ -155,7 +155,9 @@ impl GraphTraversal {
         for &node in self.adjacency.keys() {
             if !visited.contains(&node) {
                 let result = self.bfs(node);
-                let component: Vec<usize> = result.visited.iter()
+                let component: Vec<usize> = result
+                    .visited
+                    .iter()
                     .filter(|n| !visited.contains(n))
                     .copied()
                     .collect();
@@ -302,7 +304,9 @@ impl GraphTraversal {
     /// BFS within a distance limit (k-hop neighborhood).
     pub fn k_hop_neighborhood(&self, source: usize, k: usize) -> Vec<usize> {
         let result = self.bfs(source);
-        result.visited.into_iter()
+        result
+            .visited
+            .into_iter()
             .filter(|n| result.depths.get(n).copied().unwrap_or(usize::MAX) <= k)
             .collect()
     }

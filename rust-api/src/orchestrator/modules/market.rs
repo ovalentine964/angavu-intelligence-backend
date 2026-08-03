@@ -68,16 +68,19 @@ impl RollingWindow {
     }
 
     fn mean_price(&self) -> f64 {
-        if self.prices.is_empty() { return 0.0; }
+        if self.prices.is_empty() {
+            return 0.0;
+        }
         self.prices.iter().sum::<f64>() / self.prices.len() as f64
     }
 
     fn price_stddev(&self) -> f64 {
-        if self.prices.len() < 2 { return 0.0; }
+        if self.prices.len() < 2 {
+            return 0.0;
+        }
         let mean = self.mean_price();
-        let variance = self.prices.iter()
-            .map(|p| (p - mean).powi(2))
-            .sum::<f64>() / (self.prices.len() - 1) as f64;
+        let variance = self.prices.iter().map(|p| (p - mean).powi(2)).sum::<f64>()
+            / (self.prices.len() - 1) as f64;
         variance.sqrt()
     }
 
@@ -102,11 +105,17 @@ impl RollingWindow {
         let volatility = self.price_stddev() / self.mean_price().max(0.01) * 100.0;
 
         if volatility > 15.0 {
-            PriceTrend::Volatile { range_pct: volatility }
+            PriceTrend::Volatile {
+                range_pct: volatility,
+            }
         } else if change_pct > 5.0 {
-            PriceTrend::Rising { rate_pct: change_pct }
+            PriceTrend::Rising {
+                rate_pct: change_pct,
+            }
         } else if change_pct < -5.0 {
-            PriceTrend::Falling { rate_pct: change_pct.abs() }
+            PriceTrend::Falling {
+                rate_pct: change_pct.abs(),
+            }
         } else {
             PriceTrend::Stable
         }
@@ -119,7 +128,8 @@ impl RollingWindow {
 
     /// Shannon entropy for market diversity
     fn compute_entropy(&self, market_shares: &[f64]) -> f64 {
-        -market_shares.iter()
+        -market_shares
+            .iter()
             .filter(|&&s| s > 0.0)
             .map(|&s| s * s.ln())
             .sum::<f64>()
@@ -184,7 +194,10 @@ impl MarketAnalyzer {
             }
         }
 
-        tracing::info!(windows = count, "MarketAnalyzer state loaded from PostgreSQL");
+        tracing::info!(
+            windows = count,
+            "MarketAnalyzer state loaded from PostgreSQL"
+        );
         Ok(())
     }
 
@@ -197,7 +210,9 @@ impl MarketAnalyzer {
 
         for (key, window) in &self.windows {
             let parts: Vec<&str> = key.splitn(2, ':').collect();
-            if parts.len() != 2 { continue; }
+            if parts.len() != 2 {
+                continue;
+            }
             let (region, category) = (parts[0], parts[1]);
 
             let prices_json = serde_json::to_string(&window.prices).unwrap_or_default();
@@ -231,7 +246,10 @@ impl MarketAnalyzer {
             .map_err(|e| format!("Failed to persist market_windows: {}", e))?;
         }
 
-        tracing::info!(windows = self.windows.len(), "MarketAnalyzer state persisted to PostgreSQL");
+        tracing::info!(
+            windows = self.windows.len(),
+            "MarketAnalyzer state persisted to PostgreSQL"
+        );
         Ok(())
     }
 }
@@ -255,7 +273,8 @@ impl CapabilityModule for MarketAnalyzer {
             } => {
                 let mut by_category: HashMap<String, Vec<&TransactionRecord>> = HashMap::new();
                 for tx in &transactions {
-                    by_category.entry(tx.product_category.clone())
+                    by_category
+                        .entry(tx.product_category.clone())
                         .or_default()
                         .push(tx);
                 }
@@ -267,17 +286,19 @@ impl CapabilityModule for MarketAnalyzer {
                     }
 
                     let key = format!("{}:{}", region, category);
-                    let window = self.windows.entry(key.clone())
+                    let window = self
+                        .windows
+                        .entry(key.clone())
                         .or_insert_with(|| RollingWindow::new(168));
 
-                    let avg_price: f64 = txs.iter().map(|t| t.amount).sum::<f64>() / txs.len() as f64;
-                    let total_volume: f64 = txs.iter()
-                        .map(|t| t.quantity.unwrap_or(1.0))
-                        .sum();
+                    let avg_price: f64 =
+                        txs.iter().map(|t| t.amount).sum::<f64>() / txs.len() as f64;
+                    let total_volume: f64 = txs.iter().map(|t| t.quantity.unwrap_or(1.0)).sum();
 
                     window.push(avg_price, total_volume, chrono::Utc::now());
 
-                    let avg_volume = window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
+                    let avg_volume =
+                        window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
                     let demand_index = if avg_volume > 0.0 {
                         total_volume / avg_volume
                     } else {
@@ -285,16 +306,21 @@ impl CapabilityModule for MarketAnalyzer {
                     };
 
                     let demand_se = if window.volumes.len() > 1 {
-                        let vol_mean = window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
-                        let vol_var = window.volumes.iter()
+                        let vol_mean =
+                            window.volumes.iter().sum::<f64>() / window.volumes.len() as f64;
+                        let vol_var = window
+                            .volumes
+                            .iter()
                             .map(|v| (v - vol_mean).powi(2))
-                            .sum::<f64>() / (window.volumes.len() - 1) as f64;
+                            .sum::<f64>()
+                            / (window.volumes.len() - 1) as f64;
                         vol_var.sqrt() / (window.volumes.len() as f64).sqrt()
                     } else {
                         demand_index * 0.5
                     };
                     let z_95 = 1.96;
-                    let demand_ci_lower = (demand_index - z_95 * demand_se / avg_volume.max(0.01)).max(0.0);
+                    let demand_ci_lower =
+                        (demand_index - z_95 * demand_se / avg_volume.max(0.01)).max(0.0);
                     let demand_ci_upper = demand_index + z_95 * demand_se / avg_volume.max(0.01);
 
                     signals.push(ModuleMessage::MarketSignal {
@@ -313,15 +339,19 @@ impl CapabilityModule for MarketAnalyzer {
 
                 Ok(signals.into_iter().next())
             }
-            ModuleMessage::RouteCommand { command: ModuleCommand::Recalculate, .. } => {
-                Ok(None)
-            }
+            ModuleMessage::RouteCommand {
+                command: ModuleCommand::Recalculate,
+                ..
+            } => Ok(None),
             _ => Ok(None),
         }
     }
 
     async fn shutdown(&self) {
-        tracing::info!("MarketAnalyzer shutting down, {} windows active", self.windows.len());
+        tracing::info!(
+            "MarketAnalyzer shutting down, {} windows active",
+            self.windows.len()
+        );
         if let Err(e) = self.persist_state().await {
             tracing::error!("Failed to persist MarketAnalyzer state on shutdown: {}", e);
         }
@@ -349,7 +379,10 @@ impl CapabilityModule for MarketAnalyzer {
         if let Ok(snap) = bincode::deserialize::<Snapshot>(data) {
             self.windows = snap.windows;
             self.min_sample_size = snap.min_sample_size;
-            tracing::info!(count = self.windows.len(), "MarketAnalyzer state restored (fallback bincode)");
+            tracing::info!(
+                count = self.windows.len(),
+                "MarketAnalyzer state restored (fallback bincode)"
+            );
         }
     }
 }

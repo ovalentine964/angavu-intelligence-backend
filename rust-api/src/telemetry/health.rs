@@ -10,14 +10,7 @@
 // - Load balancer health checks
 // - CI/CD deploy verification
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Json,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde::Serialize;
 use std::sync::Arc;
 use sysinfo::System;
@@ -56,18 +49,21 @@ async fn readiness(State(state): State<Arc<HealthState>>) -> impl IntoResponse {
 
     // PostgreSQL check
     let db_start = std::time::Instant::now();
-    let db_ok = sqlx::query("SELECT 1")
-        .execute(&state.db)
-        .await
-        .is_ok();
+    let db_ok = sqlx::query("SELECT 1").execute(&state.db).await.is_ok();
     let db_ms = db_start.elapsed().as_millis() as u64;
     checks.push(HealthCheck {
         component: "postgresql".to_string(),
         status: if db_ok { "ok" } else { "error" }.to_string(),
         latency_ms: db_ms,
-        message: if db_ok { None } else { Some("Connection failed".to_string()) },
+        message: if db_ok {
+            None
+        } else {
+            Some("Connection failed".to_string())
+        },
     });
-    if !db_ok { all_ok = false; }
+    if !db_ok {
+        all_ok = false;
+    }
 
     // Redis check
     let redis_start = std::time::Instant::now();
@@ -83,9 +79,15 @@ async fn readiness(State(state): State<Arc<HealthState>>) -> impl IntoResponse {
         component: "redis".to_string(),
         status: if redis_ok { "ok" } else { "error" }.to_string(),
         latency_ms: redis_ms,
-        message: if redis_ok { None } else { Some("PING failed".to_string()) },
+        message: if redis_ok {
+            None
+        } else {
+            Some("PING failed".to_string())
+        },
     });
-    if !redis_ok { all_ok = false; }
+    if !redis_ok {
+        all_ok = false;
+    }
 
     // ClickHouse check (optional)
     if let Some(ref ch_url) = state.clickhouse_url {
@@ -99,9 +101,15 @@ async fn readiness(State(state): State<Arc<HealthState>>) -> impl IntoResponse {
             component: "clickhouse".to_string(),
             status: if ch_ok { "ok" } else { "error" }.to_string(),
             latency_ms: ch_ms,
-            message: if ch_ok { None } else { Some("Ping failed".to_string()) },
+            message: if ch_ok {
+                None
+            } else {
+                Some("Ping failed".to_string())
+            },
         });
-        if !ch_ok { all_ok = false; }
+        if !ch_ok {
+            all_ok = false;
+        }
     }
 
     let response = ReadinessResponse {
@@ -110,9 +118,17 @@ async fn readiness(State(state): State<Arc<HealthState>>) -> impl IntoResponse {
     };
 
     if all_ok {
-        (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+        (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap()),
+        )
+            .into_response()
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::to_value(response).unwrap())).into_response()
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::to_value(response).unwrap()),
+        )
+            .into_response()
     }
 }
 
@@ -123,10 +139,7 @@ async fn detailed_health(State(state): State<Arc<HealthState>>) -> impl IntoResp
 
     // PostgreSQL
     let db_start = std::time::Instant::now();
-    let db_ok = sqlx::query("SELECT 1")
-        .execute(&state.db)
-        .await
-        .is_ok();
+    let db_ok = sqlx::query("SELECT 1").execute(&state.db).await.is_ok();
     let db_ms = db_start.elapsed().as_millis() as u64;
     let pool_stats = PoolStats {
         active: state.db.size(),
@@ -193,7 +206,10 @@ async fn detailed_health(State(state): State<Arc<HealthState>>) -> impl IntoResp
         checks,
     };
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 // ── Response Types ──────────────────────────────────────────────────────

@@ -255,8 +255,7 @@ pub async fn jwt_auth_middleware(
     let headers = request.headers();
 
     // Extract token from Authorization header
-    let token = extract_bearer_token(headers)
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let token = extract_bearer_token(headers).ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Validate JWT and extract claims
     let claims = decode::<Claims>(
@@ -344,39 +343,35 @@ pub async fn issue_token(
     // SECURITY FIX (P0): Look up the user's actual tier from the database
     // instead of trusting the client-claimed tier. A free user could previously
     // claim "enterprise" tier to bypass rate limits and access restrictions.
-    let tier = match crate::billing::subscription::get_active_subscription(
-        &state.db,
-        &req.org_id,
-    )
-    .await
-    {
-        Ok(Some(sub)) => BuyerTier::from(sub.tier),
-        Ok(None) => {
-            // No active subscription — default to Free tier (most restrictive)
-            tracing::info!(
-                org_id = %req.org_id,
-                "No active subscription found during token issuance, defaulting to Free tier"
-            );
-            BuyerTier::Free
-        }
-        Err(e) => {
-            tracing::error!(
-                error = %e,
-                org_id = %req.org_id,
-                "Failed to look up subscription tier during token issuance"
-            );
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": {
-                        "code": "TIER_LOOKUP_FAILED",
-                        "message": "Failed to verify subscription tier"
-                    }
-                })),
-            )
-                .into_response();
-        }
-    };
+    let tier =
+        match crate::billing::subscription::get_active_subscription(&state.db, &req.org_id).await {
+            Ok(Some(sub)) => BuyerTier::from(sub.tier),
+            Ok(None) => {
+                // No active subscription — default to Free tier (most restrictive)
+                tracing::info!(
+                    org_id = %req.org_id,
+                    "No active subscription found during token issuance, defaulting to Free tier"
+                );
+                BuyerTier::Free
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    org_id = %req.org_id,
+                    "Failed to look up subscription tier during token issuance"
+                );
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": {
+                            "code": "TIER_LOOKUP_FAILED",
+                            "message": "Failed to verify subscription tier"
+                        }
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
     let access_token = match generate_access_token(
         &state.jwt_config,
@@ -400,26 +395,22 @@ pub async fn issue_token(
         }
     };
 
-    let refresh_token = match generate_refresh_token(
-        &state.jwt_config,
-        &req.org_id,
-        &tier,
-        &req.api_key,
-    ) {
-        Ok(t) => t,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": {
-                        "code": "TOKEN_GENERATION_FAILED",
-                        "message": "Failed to generate refresh token"
-                    }
-                })),
-            )
-                .into_response();
-        }
-    };
+    let refresh_token =
+        match generate_refresh_token(&state.jwt_config, &req.org_id, &tier, &req.api_key) {
+            Ok(t) => t,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": {
+                            "code": "TOKEN_GENERATION_FAILED",
+                            "message": "Failed to generate refresh token"
+                        }
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
     (
         StatusCode::OK,
@@ -479,7 +470,10 @@ pub async fn refresh_token(
     }
 
     // Check if refresh token has been revoked
-    if is_token_revoked(&mut redis, &claims.jti).await.unwrap_or(false) {
+    if is_token_revoked(&mut redis, &claims.jti)
+        .await
+        .unwrap_or(false)
+    {
         return (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({
@@ -504,7 +498,12 @@ pub async fn refresh_token(
         &claims.org_id,
         &claims.tier,
         &claims.key_id,
-        claims.permissions.iter().filter(|p| *p != "refresh").cloned().collect(),
+        claims
+            .permissions
+            .iter()
+            .filter(|p| *p != "refresh")
+            .cloned()
+            .collect(),
     ) {
         Ok(t) => t,
         Err(_) => {

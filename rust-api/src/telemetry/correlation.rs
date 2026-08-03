@@ -5,12 +5,7 @@
 // The ID is injected into the tracing span, added to response headers, and
 // included in every structured log entry via the tracing span fields.
 
-use axum::{
-    extract::Request,
-    http::HeaderValue,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::HeaderValue, middleware::Next, response::Response};
 use uuid::Uuid;
 
 /// Header name for correlation ID propagation.
@@ -69,7 +64,9 @@ pub async fn correlation_middleware(mut request: Request, next: Next) -> Respons
 
     // Add correlation ID to response headers
     if let Ok(header_value) = HeaderValue::from_str(&correlation.0) {
-        response.headers_mut().insert(CORRELATION_HEADER, header_value);
+        response
+            .headers_mut()
+            .insert(CORRELATION_HEADER, header_value);
     }
 
     response

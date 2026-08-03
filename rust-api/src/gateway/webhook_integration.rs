@@ -6,8 +6,8 @@
 use axum::Router;
 use std::sync::Arc;
 
-use crate::webhook::{self, WebhookState, MpesaConfig, MpesaEnvironment};
 use crate::gateway::rate_limit::IpRateLimiter;
+use crate::webhook::{self, MpesaConfig, MpesaEnvironment, WebhookState};
 use std::sync::Arc;
 
 /// Create the webhook state from environment variables and shared resources.
@@ -17,15 +17,12 @@ pub fn create_webhook_state(
     message_bus: Arc<crate::orchestrator::message_bus::ModuleMessageBus>,
 ) -> WebhookState {
     let mpesa_config = MpesaConfig {
-        passkey: std::env::var("MPESA_PASSKEY")
-            .unwrap_or_else(|_| {
-                tracing::error!("MPESA_PASSKEY environment variable is not set");
-                String::new()
-            }),
-        shortcode: std::env::var("MPESA_SHORTCODE")
-            .unwrap_or_else(|_| "174379".to_string()),
-        initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD")
-            .unwrap_or_default(),
+        passkey: std::env::var("MPESA_PASSKEY").unwrap_or_else(|_| {
+            tracing::error!("MPESA_PASSKEY environment variable is not set");
+            String::new()
+        }),
+        shortcode: std::env::var("MPESA_SHORTCODE").unwrap_or_else(|_| "174379".to_string()),
+        initiator_password: std::env::var("MPESA_INITIATOR_PASSWORD").unwrap_or_default(),
         environment: match std::env::var("MPESA_ENVIRONMENT").as_deref() {
             Ok("production") => MpesaEnvironment::Production,
             _ => MpesaEnvironment::Sandbox,

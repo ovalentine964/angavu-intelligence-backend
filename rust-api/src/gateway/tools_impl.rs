@@ -81,29 +81,40 @@ pub async fn compute_credit_score(
         "POST /api/v1/tools/credit-scores",
     );
     if k_result.suppressed {
-        return ErrorResponse::k_anonymity_violation(member_count as usize, state.k_anonymity.k_threshold()).into_response();
+        return ErrorResponse::k_anonymity_violation(
+            member_count as usize,
+            state.k_anonymity.k_threshold(),
+        )
+        .into_response();
     }
 
     // ── Privacy budget check (RDP composition) ──
     let rdp = crate::credit::privacy_budget::RdpParameters::gaussian(1.0, 1.0, 4.0);
-    let budget_result = state.privacy_budget
+    let budget_result = state
+        .privacy_budget
         .check_and_record(
             crate::credit::privacy_budget::QueryType::CreditScore,
             rdp,
             "POST /api/v1/tools/credit-scores".into(),
             Some(req.cohort_hash.clone()),
-        ).await;
+        )
+        .await;
     if !budget_result.allowed {
         return ErrorResponse::privacy_budget_exhausted(
             "credit_score",
             budget_result.remaining_rdp_epsilon,
-            &budget_result.window_reset_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        ).into_response();
+            &budget_result
+                .window_reset_at
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+        )
+        .into_response();
     }
 
     // P2: Parallelize independent DB queries for 3× latency reduction
     let transaction_consistency = compute_consistency(avg_txn, txn_stddev);
-    let revenue_stability = compute_stability(avg_revenue, req.transaction_history_months.unwrap_or(6));
+    let revenue_stability =
+        compute_stability(avg_revenue, req.transaction_history_months.unwrap_or(6));
     let seasonal_adjustment = compute_seasonal_factor(&req.worker_type);
 
     // Run payment_diversity and peer_rank queries in parallel
@@ -184,7 +195,7 @@ fn compute_stability(avg_revenue: f64, months: i32) -> f64 {
 
 fn compute_seasonal_factor(worker_type: &str) -> f64 {
     match worker_type {
-        "farmer" | "fisherman" => 0.6, // highly seasonal
+        "farmer" | "fisherman" => 0.6,      // highly seasonal
         "boda_boda" | "mpesa_agent" => 0.9, // stable year-round
         "vendor" | "jua_kali" => 0.75,
         _ => 0.7,
@@ -201,7 +212,7 @@ async fn query_payment_diversity(db: &sqlx::PgPool, cohort_hash: &str) -> f64 {
 
     match result {
         Ok((count,)) => (count as f64 / 5.0).min(1.0), // max 5 channels
-        Err(_) => 0.5, // default if no data
+        Err(_) => 0.5,                                 // default if no data
     }
 }
 
@@ -282,12 +293,18 @@ pub async fn get_market_analysis(
             let avg = prices.iter().sum::<f64>() / n as f64;
             let first = prices.first().copied().unwrap_or(avg);
             let last = prices.last().copied().unwrap_or(avg);
-            let change = if first > 0.0 { ((last - first) / first) * 100.0 } else { 0.0 };
+            let change = if first > 0.0 {
+                ((last - first) / first) * 100.0
+            } else {
+                0.0
+            };
             let trend = if change > 5.0 {
                 "rising"
             } else if change < -5.0 {
                 "falling"
-            } else if prices.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f64>() / n as f64 > avg * 0.1 {
+            } else if prices.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f64>() / n as f64
+                > avg * 0.1
+            {
                 "volatile"
             } else {
                 "stable"
@@ -327,19 +344,25 @@ pub async fn get_market_analysis(
 
     // ── Privacy budget check (RDP composition) ──
     let rdp = crate::credit::privacy_budget::RdpParameters::gaussian(1.0, 1.0, 4.0);
-    let budget_result = state.privacy_budget
+    let budget_result = state
+        .privacy_budget
         .check_and_record(
             crate::credit::privacy_budget::QueryType::MarketAnalysis,
             rdp,
             "GET /api/v1/tools/market-analyses".into(),
             Some(cohort_key.clone()),
-        ).await;
+        )
+        .await;
     if !budget_result.allowed {
         return ErrorResponse::privacy_budget_exhausted(
             "market_analysis",
             budget_result.remaining_rdp_epsilon,
-            &budget_result.window_reset_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        ).into_response();
+            &budget_result
+                .window_reset_at
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+        )
+        .into_response();
     }
 
     let demand_signal = query_demand_signal(&state.db, &query.category, &query.region).await;
@@ -470,19 +493,25 @@ pub async fn get_demand_forecast(
 
     // ── Privacy budget check (RDP composition) ──
     let rdp = crate::credit::privacy_budget::RdpParameters::gaussian(1.0, 1.0, 4.0);
-    let budget_result = state.privacy_budget
+    let budget_result = state
+        .privacy_budget
         .check_and_record(
             crate::credit::privacy_budget::QueryType::DemandForecast,
             rdp,
             "GET /api/v1/tools/demand-forecasts".into(),
             Some(cohort_key.clone()),
-        ).await;
+        )
+        .await;
     if !budget_result.allowed {
         return ErrorResponse::privacy_budget_exhausted(
             "demand_forecast",
             budget_result.remaining_rdp_epsilon,
-            &budget_result.window_reset_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-        ).into_response();
+            &budget_result
+                .window_reset_at
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+        )
+        .into_response();
     }
 
     // Get historical daily transaction counts
@@ -506,22 +535,28 @@ pub async fn get_demand_forecast(
             let counts: Vec<f64> = rows.iter().map(|r| r.1 as f64).collect();
             let recent_avg = counts[counts.len() - 7..].iter().sum::<f64>() / 7.0;
             let overall_avg = counts.iter().sum::<f64>() / counts.len() as f64;
-            let stddev = (counts.iter().map(|c| (c - overall_avg).powi(2)).sum::<f64>()
+            let stddev = (counts
+                .iter()
+                .map(|c| (c - overall_avg).powi(2))
+                .sum::<f64>()
                 / counts.len() as f64)
                 .sqrt();
 
             // Simple moving average forecast
             let last_date = match rows.last() {
                 Some(row) => row.0,
-                None => return Json(DemandForecastResponse {
-                    category: query.category,
-                    region: query.region,
-                    forecast_horizon_days: horizon,
-                    predicted_demand: "insufficient_data".to_string(),
-                    confidence: 0.1,
-                    daily_forecast: vec![],
-                    seasonal_pattern: "weekly".to_string(),
-                }).into_response(),
+                None => {
+                    return Json(DemandForecastResponse {
+                        category: query.category,
+                        region: query.region,
+                        forecast_horizon_days: horizon,
+                        predicted_demand: "insufficient_data".to_string(),
+                        confidence: 0.1,
+                        daily_forecast: vec![],
+                        seasonal_pattern: "weekly".to_string(),
+                    })
+                    .into_response()
+                }
             };
             let forecasts: Vec<DailyForecast> = (1..=horizon)
                 .map(|day| {
@@ -557,11 +592,7 @@ pub async fn get_demand_forecast(
             let conf = (counts.len() as f64 / 90.0).min(0.9);
             (forecasts, demand.to_string(), conf)
         }
-        _ => (
-            vec![],
-            "insufficient_data".to_string(),
-            0.1,
-        ),
+        _ => (vec![], "insufficient_data".to_string(), 0.1),
     };
 
     // ── ε-DP: Add Laplace noise to each daily forecast prediction ──
@@ -614,41 +645,56 @@ pub struct BillingTier {
 
 /// GET /api/v1/billing/tiers
 #[tracing::instrument(skip(state))]
-pub async fn list_billing_tiers(
-    State(state): State<GatewayState>,
-) -> impl IntoResponse {
-    let tiers: Result<Vec<(String, String, String, i32, serde_json::Value, i32, i32, bool)>, _> =
-        sqlx::query_as(
-            r#"
+pub async fn list_billing_tiers(State(state): State<GatewayState>) -> impl IntoResponse {
+    let tiers: Result<
+        Vec<(
+            String,
+            String,
+            String,
+            i32,
+            serde_json::Value,
+            i32,
+            i32,
+            bool,
+        )>,
+        _,
+    > = sqlx::query_as(
+        r#"
             SELECT id, name, name_sw, price_kes_month, features,
                    api_calls_per_day, credit_reports_per_month, is_active
             FROM billing_tiers
             WHERE is_active = true
             ORDER BY price_kes_month ASC
             "#,
-        )
-        .fetch_all(&state.db)
-        .await;
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match tiers {
         Ok(rows) => {
             let tier_list: Vec<BillingTier> = rows
                 .into_iter()
-                .map(|(id, name, name_sw, price, features, api_calls, reports, active)| {
-                    BillingTier {
-                        id,
-                        name,
-                        name_sw,
-                        price_kes_month: price,
-                        features: features
-                            .as_array()
-                            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                            .unwrap_or_default(),
-                        api_calls_per_day: api_calls,
-                        credit_reports_per_month: reports,
-                        is_active: active,
-                    }
-                })
+                .map(
+                    |(id, name, name_sw, price, features, api_calls, reports, active)| {
+                        BillingTier {
+                            id,
+                            name,
+                            name_sw,
+                            price_kes_month: price,
+                            features: features
+                                .as_array()
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                            api_calls_per_day: api_calls,
+                            credit_reports_per_month: reports,
+                            is_active: active,
+                        }
+                    },
+                )
                 .collect();
             Json(serde_json::json!(tier_list)).into_response()
         }
@@ -660,7 +706,11 @@ pub async fn list_billing_tiers(
                     name: "Free".to_string(),
                     name_sw: "Bure".to_string(),
                     price_kes_month: 0,
-                    features: vec!["Basic dashboard".into(), "10 API calls/day".into(), "Voice input".into()],
+                    features: vec![
+                        "Basic dashboard".into(),
+                        "10 API calls/day".into(),
+                        "Voice input".into(),
+                    ],
                     api_calls_per_day: 10,
                     credit_reports_per_month: 1,
                     is_active: true,
@@ -671,8 +721,11 @@ pub async fn list_billing_tiers(
                     name_sw: "Biashara".to_string(),
                     price_kes_month: 500,
                     features: vec![
-                        "Full dashboard".into(), "500 API calls/day".into(),
-                        "5 credit reports/month".into(), "Market analysis".into(), "Voice input".into(),
+                        "Full dashboard".into(),
+                        "500 API calls/day".into(),
+                        "5 credit reports/month".into(),
+                        "Market analysis".into(),
+                        "Voice input".into(),
                     ],
                     api_calls_per_day: 500,
                     credit_reports_per_month: 5,
@@ -684,9 +737,12 @@ pub async fn list_billing_tiers(
                     name_sw: "Chama Pro".to_string(),
                     price_kes_month: 2000,
                     features: vec![
-                        "Everything in Biashara".into(), "Unlimited API calls".into(),
-                        "Unlimited credit reports".into(), "Chama management".into(),
-                        "Group analytics".into(), "Priority support".into(),
+                        "Everything in Biashara".into(),
+                        "Unlimited API calls".into(),
+                        "Unlimited credit reports".into(),
+                        "Chama management".into(),
+                        "Group analytics".into(),
+                        "Priority support".into(),
                     ],
                     api_calls_per_day: -1,
                     credit_reports_per_month: -1,
@@ -770,14 +826,14 @@ pub async fn explain_credit_score(
                 },
             };
 
-            Json(serde_json::to_value(response).unwrap_or_else(|_| {
-                serde_json::json!({"error": "serialization_failed"})
-            }))
+            Json(
+                serde_json::to_value(response)
+                    .unwrap_or_else(|_| serde_json::json!({"error": "serialization_failed"})),
+            )
             .into_response()
         }
-        Ok(None) => {
-            ErrorResponse::not_found(&format!("Credit score '{}' not found", score_id)).into_response()
-        }
+        Ok(None) => ErrorResponse::not_found(&format!("Credit score '{}' not found", score_id))
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "Failed to query credit score explanation");
             ErrorResponse::internal().into_response()
@@ -807,9 +863,7 @@ pub struct FederatedStatusResponse {
 
 /// GET /api/v1/tools/federated-learning/status
 #[tracing::instrument(skip(state))]
-pub async fn get_federated_status(
-    State(state): State<GatewayState>,
-) -> impl IntoResponse {
+pub async fn get_federated_status(State(state): State<GatewayState>) -> impl IntoResponse {
     // Query federated learning state
     let fl_state: Result<(i64, i64, String, Option<chrono::NaiveDateTime>, f64, i64), _> =
         sqlx::query_as(
@@ -831,11 +885,7 @@ pub async fn get_federated_status(
 
     let (active_nodes, current_round, model_version, last_agg, privacy_budget, cohorts) = fl_state;
 
-    let status = if active_nodes > 0 {
-        "active"
-    } else {
-        "idle"
-    };
+    let status = if active_nodes > 0 { "active" } else { "idle" };
 
     // Fetch privacy budget status from RDP tracker
     let dp_budget_status = state.privacy_budget.status().await;

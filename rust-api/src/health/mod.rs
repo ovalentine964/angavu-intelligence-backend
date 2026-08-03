@@ -7,12 +7,12 @@
 //! - Insurance eligibility engine
 //! - Differential privacy on all outputs
 
-pub mod types;
-pub mod occupation_hazards;
-pub mod location_risk;
 pub mod insurance;
+pub mod location_risk;
+pub mod occupation_hazards;
+pub mod types;
 
 // Re-export key types for convenience
-pub use types::*;
-pub use location_risk::LocationRiskAdjustment;
 pub use insurance::{InsuranceEligibility, InsuranceEligibilityEngine};
+pub use location_risk::LocationRiskAdjustment;
+pub use types::*;

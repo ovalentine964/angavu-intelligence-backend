@@ -7,20 +7,22 @@
 // - Request tracing from API gateway through all modules
 // - Health check endpoints: /health, /health/ready, /health/detailed
 
-use angavu_intelligence_backend::graphql;
-use angavu_intelligence_backend::orchestrator::message_bus::{ModuleMessageBus, MessageBusConfig};
-use angavu_intelligence_backend::webhook::{self as webhook_module, WebhookState, MpesaConfig, MpesaEnvironment, webhook_router};
-use angavu_intelligence_backend::orchestrator::OODAOrchestrator;
-use angavu_intelligence_backend::orchestrator::supervisor::OrchestratorConfig;
-use angavu_intelligence_backend::gateway::{GatewayState, build_gateway_router};
-use angavu_intelligence_backend::gateway::auth::JwtConfig;
-use angavu_intelligence_backend::gateway::rate_limit::RateLimiter;
-use angavu_intelligence_backend::gateway::k_anonymity::KAnonymityEnforcer;
-use angavu_intelligence_backend::gateway::audit::AuditLogger;
 use angavu_intelligence_backend::credit::privacy_budget::PrivacyBudgetTracker;
-use angavu_intelligence_backend::statistical::DifferentialPrivacyEngine;
+use angavu_intelligence_backend::gateway::audit::AuditLogger;
+use angavu_intelligence_backend::gateway::auth::JwtConfig;
+use angavu_intelligence_backend::gateway::k_anonymity::KAnonymityEnforcer;
+use angavu_intelligence_backend::gateway::rate_limit::RateLimiter;
+use angavu_intelligence_backend::gateway::{build_gateway_router, GatewayState};
+use angavu_intelligence_backend::graphql;
 use angavu_intelligence_backend::loops;
+use angavu_intelligence_backend::orchestrator::message_bus::{MessageBusConfig, ModuleMessageBus};
+use angavu_intelligence_backend::orchestrator::supervisor::OrchestratorConfig;
+use angavu_intelligence_backend::orchestrator::OODAOrchestrator;
+use angavu_intelligence_backend::statistical::DifferentialPrivacyEngine;
 use angavu_intelligence_backend::telemetry;
+use angavu_intelligence_backend::webhook::{
+    self as webhook_module, webhook_router, MpesaConfig, MpesaEnvironment, WebhookState,
+};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -32,18 +34,20 @@ async fn main() -> anyhow::Result<()> {
     //   RUST_LOG=angavu=info,tower_http=info,...
     let _otel_tracer_guard = telemetry::init_json_logging();
 
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting Angavu Intelligence Backend");
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "Starting Angavu Intelligence Backend"
+    );
 
     // ── Load Configuration ──────────────────────────────────────
     // Security: JWT_SECRET and MPESA_PASSKEY MUST be set via environment variables.
     // We fail fast if missing to prevent running with insecure defaults.
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| {
-            tracing::warn!("DATABASE_URL not set — using local development default (no password)");
-            "postgresql://angavu@localhost:5432/angavu".to_string()
-        });
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        tracing::warn!("DATABASE_URL not set — using local development default (no password)");
+        "postgresql://angavu@localhost:5432/angavu".to_string()
+    });
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379/0".to_string());
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
         let generated = generate_random_secret();
         tracing::warn!(
@@ -107,14 +111,18 @@ async fn main() -> anyhow::Result<()> {
             interval.tick().await;
             let entries = bus_clone.flush_audit().await;
             if !entries.is_empty() {
-                tracing::debug!(count = entries.len(), "Audit buffer flushed (timer fallback)");
+                tracing::debug!(
+                    count = entries.len(),
+                    "Audit buffer flushed (timer fallback)"
+                );
             }
         }
     });
 
     // P2: Cache warming on startup — pre-populate Redis caches from DB
     // Eliminates cold-start latency for first requests after restart
-    let graph_cache = angavu_intelligence_backend::graph::cache::GraphCache::new(redis_conn.clone());
+    let graph_cache =
+        angavu_intelligence_backend::graph::cache::GraphCache::new(redis_conn.clone());
     let pg_pool_warm = pg_pool.clone();
     let cache_warm_handle = tokio::spawn(async move {
         // Warm graph statistics (use tables that exist: kg_edges, kg_worker_cohorts)
@@ -123,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
              'node_count', (SELECT COUNT(*) FROM kg_edges), \
              'edge_count', (SELECT COUNT(*) FROM kg_edges), \
              'worker_count', (SELECT COALESCE(SUM(member_count), 0) FROM kg_worker_cohorts) \
-             )"
+             )",
         )
         .fetch_one(&pg_pool_warm)
         .await;
@@ -150,7 +158,7 @@ async fn main() -> anyhow::Result<()> {
             v.set_audience(&["angavu-api"]);
             v
         },
-        access_token_ttl: 900,         // 15 minutes (P1: reduced from 1 hour for security)
+        access_token_ttl: 900, // 15 minutes (P1: reduced from 1 hour for security)
         refresh_token_ttl: 86400 * 30, // 30 days
     };
 
@@ -161,7 +169,9 @@ async fn main() -> anyhow::Result<()> {
         rate_limiter: Arc::new(RateLimiter::new(10)),
         k_anonymity: Arc::new(KAnonymityEnforcer::new(10)),
         privacy_budget: Arc::new(PrivacyBudgetTracker::new()),
-        dp_engine: Arc::new(parking_lot::RwLock::new(DifferentialPrivacyEngine::new(0.1))),
+        dp_engine: Arc::new(parking_lot::RwLock::new(DifferentialPrivacyEngine::new(
+            0.1,
+        ))),
         audit: Arc::new(AuditLogger::with_pool(1024, pg_pool.clone())),
         sync_state,
         db: pg_pool.clone(),
@@ -204,9 +214,9 @@ async fn main() -> anyhow::Result<()> {
     sqlx::query(angavu_intelligence_backend::gateway::audit::AUDIT_LOG_MIGRATION)
         .execute(&pg_pool)
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "Audit log table migration skipped (may already exist)")
-        })
+        .map_err(
+            |e| tracing::warn!(error = %e, "Audit log table migration skipped (may already exist)"),
+        )
         .ok();
 
     // Run webhook_events table migration
@@ -232,18 +242,18 @@ async fn main() -> anyhow::Result<()> {
     sqlx::query(angavu_intelligence_backend::billing::mpesa::PAYMENTS_MIGRATION)
         .execute(&pg_pool)
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "Payments table migration skipped (may already exist)")
-        })
+        .map_err(
+            |e| tracing::warn!(error = %e, "Payments table migration skipped (may already exist)"),
+        )
         .ok();
 
     // Invoice generation tables
     sqlx::query(angavu_intelligence_backend::billing::invoice::INVOICE_MIGRATION)
         .execute(&pg_pool)
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "Invoice table migration skipped (may already exist)")
-        })
+        .map_err(
+            |e| tracing::warn!(error = %e, "Invoice table migration skipped (may already exist)"),
+        )
         .ok();
 
     // Subscription lifecycle tables
@@ -282,7 +292,8 @@ async fn main() -> anyhow::Result<()> {
         redis: redis_conn.clone(),
         audit: Arc::new(AuditLogger::with_pool(1024, pg_pool.clone())),
     };
-    let approval_router = angavu_intelligence_backend::gateway::human_approval::human_approval_router(approval_state);
+    let approval_router =
+        angavu_intelligence_backend::gateway::human_approval::human_approval_router(approval_state);
     tracing::info!("Human-in-the-Loop approval system initialized (credit decisions, sensitive actions, escalation, reports, chama governance)");
 
     // ── Initialize GraphQL ──────────────────────────────────────
@@ -317,9 +328,12 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     // Use into_make_service_with_connect_info so ConnectInfo<SocketAddr>
     // is available to middleware (auth, audit) for client IP extraction.
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     // ── Graceful Shutdown ───────────────────────────────────────
     tracing::info!("Shutting down...");
@@ -340,7 +354,9 @@ fn generate_random_secret() -> String {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

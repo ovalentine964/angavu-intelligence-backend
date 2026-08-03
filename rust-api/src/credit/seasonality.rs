@@ -2,9 +2,9 @@
 // Detects periodic income patterns (weekly, monthly, seasonal, annual)
 // Computes period-over-period baselines instead of penalizing seasonal variance
 
-use std::collections::BTreeMap;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Seasonality detector using autocorrelation analysis.
 /// Identifies periodic patterns in income time series.
@@ -118,7 +118,11 @@ impl SeasonalityDetector {
         }
 
         // Sort by strength
-        detected.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
+        detected.sort_by(|a, b| {
+            b.strength
+                .partial_cmp(&a.strength)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         self.detected_periods = detected.clone();
 
@@ -426,8 +430,7 @@ mod tests {
         // Simulate farmer: high income in months 3-5 (harvest), low rest of year
         let baseline = SeasonalBaseline {
             monthly_baselines: [
-                100.0, 100.0, 500.0, 800.0, 600.0, 200.0, 100.0, 100.0, 100.0, 100.0, 200.0,
-                300.0,
+                100.0, 100.0, 500.0, 800.0, 600.0, 200.0, 100.0, 100.0, 100.0, 100.0, 200.0, 300.0,
             ],
             weekly_baselines: [0.0; 7],
             is_seasonal: true,
@@ -437,9 +440,15 @@ mod tests {
         };
 
         // Current year follows same pattern (on-track farmer)
-        let current = [110.0, 90.0, 520.0, 780.0, 610.0, 190.0, 105.0, 95.0, 110.0, 95.0, 210.0, 310.0];
+        let current = [
+            110.0, 90.0, 520.0, 780.0, 610.0, 190.0, 105.0, 95.0, 110.0, 95.0, 210.0, 310.0,
+        ];
         let stability = baseline.adjusted_stability(&current);
-        assert!(stability > 0.7, "On-track seasonal farmer should have high stability, got {}", stability);
+        assert!(
+            stability > 0.7,
+            "On-track seasonal farmer should have high stability, got {}",
+            stability
+        );
 
         // Non-seasonal worker with same income variation would score worse
         let non_seasonal = SeasonalBaseline {
@@ -461,8 +470,7 @@ mod tests {
     fn test_is_on_track() {
         let baseline = SeasonalBaseline {
             monthly_baselines: [
-                100.0, 100.0, 500.0, 800.0, 600.0, 200.0, 100.0, 100.0, 100.0, 100.0, 200.0,
-                300.0,
+                100.0, 100.0, 500.0, 800.0, 600.0, 200.0, 100.0, 100.0, 100.0, 100.0, 200.0, 300.0,
             ],
             weekly_baselines: [0.0; 7],
             is_seasonal: true,
@@ -485,6 +493,9 @@ mod tests {
             detector.record_day(start + chrono::Duration::days(i), 1000.0);
         }
         let result = detector.detect();
-        assert!(result.is_none(), "Constant income should not be detected as seasonal");
+        assert!(
+            result.is_none(),
+            "Constant income should not be detected as seasonal"
+        );
     }
 }

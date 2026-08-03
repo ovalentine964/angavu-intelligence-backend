@@ -16,7 +16,6 @@
 ///
 /// Reference: Holt, C. A., & Laury, S. K. (2002). Risk Aversion and
 ///            Incentive Effects. American Economic Review, 92(5).
-
 use serde::{Deserialize, Serialize};
 
 /// Risk attitude classification
@@ -196,7 +195,8 @@ impl RiskAttitudeEngine {
         let savings_score = self.score_savings_instrument(data.safe_savings_ratio);
         let reinvestment_score = self.score_reinvestment(data.reinvestment_rate);
         let insurance_score = self.score_insurance(data.has_insurance);
-        let diversification_score = self.score_diversification(data.income_streams, data.variable_income_ratio);
+        let diversification_score =
+            self.score_diversification(data.income_streams, data.variable_income_ratio);
         let negotiation_score = self.score_negotiation(data.negotiation_aggressiveness);
         let debt_score = self.score_debt(data.debt_to_income, data.has_defaulted);
 
@@ -332,11 +332,9 @@ impl RiskAttitudeEngine {
                  Tumia chama kwa akiba, na uwekeze kidogo kwenye biashara yako."
                     .to_string()
             }
-            RiskAttitude::RiskNeutral => {
-                "Wewe ni wa wastani — huna hofu nyingi wala upuuzi. \
+            RiskAttitude::RiskNeutral => "Wewe ni wa wastani — huna hofu nyingi wala upuuzi. \
                  Endelea na mchanganyiko wa akiba na uwekezaji."
-                    .to_string()
-            }
+                .to_string(),
             RiskAttitude::RiskSeeking => {
                 format!(
                     "Unapenda hatari — hii inaweza kukusaidia kupata zaidi, \
@@ -473,9 +471,6 @@ mod tests {
 
         // Different attitudes should recommend different products
         assert_ne!(averse.risk_attitude, seeking.risk_attitude);
-        assert_ne!(
-            averse.recommended_products,
-            seeking.recommended_products
-        );
+        assert_ne!(averse.recommended_products, seeking.recommended_products);
     }
 }

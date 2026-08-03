@@ -1,9 +1,11 @@
 // Credit Scoring — Farmer Feature Extractor
 // Extracts credit signals unique to agricultural workers
 
+use super::{
+    PaymentMethod, Transaction, TransactionCategory, WorkerContext, WorkerTypeFeatureExtractor,
+};
+use crate::credit::types::{CropType, LandSizeBucket, TypeFeatures, WorkerType};
 use serde::{Deserialize, Serialize};
-use super::{Transaction, TransactionCategory, PaymentMethod, WorkerContext, WorkerTypeFeatureExtractor};
-use crate::credit::types::{WorkerType, TypeFeatures, CropType, LandSizeBucket};
 
 /// Farmer-specific credit features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,19 +31,32 @@ impl FarmerFeatureExtractor {
 
     /// Detect crop type from product names in transactions
     fn detect_crop(&self, transactions: &[Transaction]) -> CropType {
-        let mut crop_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut crop_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         let crop_keywords = [
-            ("maize", "maize"), ("mahindi", "maize"), ("corn", "maize"),
-            ("beans", "beans"), ("maharagwe", "beans"),
-            ("tomato", "vegetables"), ("nyanya", "vegetables"),
-            ("spinach", "vegetables"), ("sukuma", "vegetables"),
-            ("mango", "fruit"), ("embe", "fruit"),
-            ("banana", "fruit"), ("ndizi", "fruit"),
-            ("tea", "tea"), ("chai", "tea"),
-            ("coffee", "coffee"), ("kahawa", "coffee"),
-            ("rice", "rice"), ("mpunga", "rice"),
-            ("wheat", "wheat"), ("ngano", "wheat"),
-            ("sugarcane", "sugarcane"), ("miwa", "sugarcane"),
+            ("maize", "maize"),
+            ("mahindi", "maize"),
+            ("corn", "maize"),
+            ("beans", "beans"),
+            ("maharagwe", "beans"),
+            ("tomato", "vegetables"),
+            ("nyanya", "vegetables"),
+            ("spinach", "vegetables"),
+            ("sukuma", "vegetables"),
+            ("mango", "fruit"),
+            ("embe", "fruit"),
+            ("banana", "fruit"),
+            ("ndizi", "fruit"),
+            ("tea", "tea"),
+            ("chai", "tea"),
+            ("coffee", "coffee"),
+            ("kahawa", "coffee"),
+            ("rice", "rice"),
+            ("mpunga", "rice"),
+            ("wheat", "wheat"),
+            ("ngano", "wheat"),
+            ("sugarcane", "sugarcane"),
+            ("miwa", "sugarcane"),
         ];
 
         for tx in transactions {
@@ -111,7 +126,8 @@ impl FarmerFeatureExtractor {
         }
 
         // Build daily income series
-        let mut daily_income: std::collections::BTreeMap<i64, f64> = std::collections::BTreeMap::new();
+        let mut daily_income: std::collections::BTreeMap<i64, f64> =
+            std::collections::BTreeMap::new();
         let day_seconds = 86400;
         for tx in &sales {
             let day = tx.timestamp / day_seconds;
@@ -154,9 +170,12 @@ impl FarmerFeatureExtractor {
 
     /// Check for cooperative membership (recurring payments to same entity)
     fn detect_cooperative(&self, transactions: &[Transaction]) -> bool {
-        let mut entity_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut entity_counts: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
         for tx in transactions {
-            if tx.category == TransactionCategory::Expense || tx.category == TransactionCategory::Transfer {
+            if tx.category == TransactionCategory::Expense
+                || tx.category == TransactionCategory::Transfer
+            {
                 if let Some(ref name) = tx.counterparty_name {
                     let lower = name.to_lowercase();
                     if lower.contains("cooperative")
@@ -336,7 +355,9 @@ impl WorkerTypeFeatureExtractor for FarmerFeatureExtractor {
         let feature_vector = vec![
             primary_crop.normalize(),
             land_size.normalize(),
-            harvest_cycle.map(|c| (c as f64 / 365.0).min(1.0)).unwrap_or(0.5),
+            harvest_cycle
+                .map(|c| (c as f64 / 365.0).min(1.0))
+                .unwrap_or(0.5),
             intra_season_stability,
             (seasonal_ratio / 10.0).min(1.0),
             input_ratio,
@@ -364,9 +385,16 @@ impl WorkerTypeFeatureExtractor for FarmerFeatureExtractor {
 
     fn feature_names(&self) -> Vec<&'static str> {
         vec![
-            "crop_type", "land_size", "harvest_cycle", "intra_season_stability",
-            "seasonal_ratio", "input_investment", "cooperative_membership",
-            "post_harvest_savings", "buyer_diversity", "storage_duration",
+            "crop_type",
+            "land_size",
+            "harvest_cycle",
+            "intra_season_stability",
+            "seasonal_ratio",
+            "input_investment",
+            "cooperative_membership",
+            "post_harvest_savings",
+            "buyer_diversity",
+            "storage_duration",
         ]
     }
 }

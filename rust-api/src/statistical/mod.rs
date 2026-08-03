@@ -1,3 +1,21 @@
+/// Advanced economics: DSGE, rational expectations, Edgeworth box, Pareto efficiency, Stiglitz-Weiss, endogenous growth, Ricardian equivalence, NKPC, Arrow's theorem, revenue equivalence
+pub mod advanced_economics_bridge;
+/// STA 346: CUSUM, EWMA control charts, process capability (Cp, Cpk)
+pub mod control_charts_bridge;
+/// Cross-cutting models: voice emotion, cultural sensitivity, health risk, wage gap, care economy, property rights, citizen monitoring, decentralization, practical validation, internship tracking
+pub mod cross_cutting_bridge;
+/// S10: Differential privacy implementation using the Laplace mechanism
+pub mod differential_privacy;
+/// STA 241/341: Distribution fitting, MGF, CLT, goodness-of-fit
+pub mod distributions_bridge;
+/// ECO 414/424: Econometrics bridge (OLS, 2SLS, GMM, Panel, Probit/Logit, VAR/VECM)
+pub mod econometrics_bridge;
+/// STA 442/443: Extended non-parametric methods (Friedman, KS, AD, LOESS, BCa, Splines)
+pub mod extended_nonparametric_bridge;
+/// ECO 311/414: Phillips curve, IS-LM, Solow growth, Taylor rule, Okun's law, Fisher equation, money multiplier
+pub mod macro_bridge;
+/// STA 343/346: Multivariate analysis bridge (PCA, DBSCAN, LDA, QDA, MANOVA)
+pub mod multivariate_bridge;
 /// Angavu Intelligence Backend — Statistical Methods Module
 ///
 /// Bridges Python statistical methods to the Rust backend.
@@ -73,38 +91,19 @@
 ///   - OkunsLaw: GDP-unemployment relationship
 ///   - FisherEquation: Nominal vs real interest rates
 ///   - MoneyMultiplier: Money supply creation process
-
 pub mod nonparametric_bridge;
-/// STA 442/443: Extended non-parametric methods (Friedman, KS, AD, LOESS, BCa, Splines)
-pub mod extended_nonparametric_bridge;
-/// STA 343/346: Multivariate analysis bridge (PCA, DBSCAN, LDA, QDA, MANOVA)
-pub mod multivariate_bridge;
-/// ECO 414/424: Econometrics bridge (OLS, 2SLS, GMM, Panel, Probit/Logit, VAR/VECM)
-pub mod econometrics_bridge;
-pub mod types;
-/// S10: Differential privacy implementation using the Laplace mechanism
-pub mod differential_privacy;
-/// STA 241/341: Distribution fitting, MGF, CLT, goodness-of-fit
-pub mod distributions_bridge;
 /// KPSS stationarity, Granger causality, confidence intervals, BCa bootstrap
 pub mod stationarity_bridge;
-/// STA 346: CUSUM, EWMA control charts, process capability (Cp, Cpk)
-pub mod control_charts_bridge;
 /// STA 244: ARIMA, SARIMA, ETS, structural break tests (Chow, CUSUM, Bai-Perron)
 pub mod time_series_bridge;
-/// ECO 311/414: Phillips curve, IS-LM, Solow growth, Taylor rule, Okun's law, Fisher equation, money multiplier
-pub mod macro_bridge;
-/// Advanced economics: DSGE, rational expectations, Edgeworth box, Pareto efficiency, Stiglitz-Weiss, endogenous growth, Ricardian equivalence, NKPC, Arrow's theorem, revenue equivalence
-pub mod advanced_economics_bridge;
-/// Cross-cutting models: voice emotion, cultural sensitivity, health risk, wage gap, care economy, property rights, citizen monitoring, decentralization, practical validation, internship tracking
-pub mod cross_cutting_bridge;
+pub mod types;
 
-pub use nonparametric_bridge::NonparametricBridge;
-pub use extended_nonparametric_bridge::ExtendedNonparametricBridge;
-pub use multivariate_bridge::MultivariateBridge;
-pub use econometrics_bridge::*;
-pub use types::*;
+pub use control_charts_bridge::ControlChartsBridge;
 pub use differential_privacy::{DifferentialPrivacyEngine, MechanismType};
 pub use distributions_bridge::DistributionBridge;
+pub use econometrics_bridge::*;
+pub use extended_nonparametric_bridge::ExtendedNonparametricBridge;
+pub use multivariate_bridge::MultivariateBridge;
+pub use nonparametric_bridge::NonparametricBridge;
 pub use stationarity_bridge::StationarityBridge;
-pub use control_charts_bridge::ControlChartsBridge;
+pub use types::*;

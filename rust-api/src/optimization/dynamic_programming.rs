@@ -150,7 +150,11 @@ pub fn inventory_dp(
         let mut expected_cost = 0.0;
         for d in 0..=max_demand {
             let demand = d as f64;
-            let prob = if d < demand_dist.len() { demand_dist[d] } else { 0.0 };
+            let prob = if d < demand_dist.len() {
+                demand_dist[d]
+            } else {
+                0.0
+            };
             let remaining = (total - demand).max(0.0);
             let shortage = (demand - total).max(0.0);
             expected_cost += prob * (holding_cost * remaining + shortage_cost * shortage);
@@ -185,7 +189,7 @@ pub fn inventory_dp(
 /// Allocates budget across investment options over multiple periods
 /// to maximize expected return.
 pub fn investment_dp(
-    returns: &[Vec<f64>],    // returns[option][period]
+    returns: &[Vec<f64>],       // returns[option][period]
     probabilities: &[Vec<f64>], // probabilities[option][period]
     budget_levels: usize,
     periods: usize,
@@ -209,7 +213,11 @@ pub fn investment_dp(
 
     let transition = |s: usize, a: usize, s_next: usize| {
         // Deterministic transition for simplicity
-        if s_next == s { 1.0 } else { 0.0 }
+        if s_next == s {
+            1.0
+        } else {
+            0.0
+        }
     };
 
     solver.solve(
@@ -267,11 +275,11 @@ mod tests {
         let demand_dist = vec![0.1, 0.3, 0.4, 0.2]; // demand 0,1,2,3
         let result = inventory_dp(
             &demand_dist,
-            1.0,  // holding cost
-            5.0,  // shortage cost
+            1.0, // holding cost
+            5.0, // shortage cost
             |order| if order > 0.0 { 10.0 + order * 2.0 } else { 0.0 },
-            10,   // max inventory
-            5,    // periods
+            10, // max inventory
+            5,  // periods
             0.95,
         );
 
@@ -285,12 +293,20 @@ mod tests {
         let solver = BellmanSolver::new(1.0);
 
         let reward = |_s: usize, a: usize| -> f64 {
-            if a == 1 { 1.0 } else { 0.0 }
+            if a == 1 {
+                1.0
+            } else {
+                0.0
+            }
         };
 
         let transition = |s: usize, a: usize, s_next: usize| -> f64 {
             let next = (s + a).min(4);
-            if s_next == next { 1.0 } else { 0.0 }
+            if s_next == next {
+                1.0
+            } else {
+                0.0
+            }
         };
 
         let result = solver.solve(reward, transition, 5, 2, 4, |_| 0.0);

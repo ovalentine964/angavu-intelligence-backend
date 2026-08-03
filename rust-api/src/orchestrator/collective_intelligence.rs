@@ -1,9 +1,9 @@
 // src/orchestrator/collective_intelligence.rs
 
 use super::message_bus::*;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// CollectiveIntelligence: Emergent patterns from cross-module correlation
 ///
@@ -80,7 +80,10 @@ impl CollectiveIntelligence {
 
         match message {
             ModuleMessage::MarketSignal {
-                region, demand_index, volatility, ..
+                region,
+                demand_index,
+                volatility,
+                ..
             } => {
                 self.market_signals
                     .entry(region.clone())
@@ -95,7 +98,10 @@ impl CollectiveIntelligence {
                 self.prune_old(region, &mut self.market_signals);
             }
             ModuleMessage::CreditAssessment {
-                worker_id_hash, alama_score, risk_level, ..
+                worker_id_hash,
+                alama_score,
+                risk_level,
+                ..
             } => {
                 // Aggregate by worker's region (would need region lookup in production)
                 let region = "aggregate".to_string();
@@ -111,7 +117,10 @@ impl CollectiveIntelligence {
                     });
             }
             ModuleMessage::HealthAssessment {
-                region, income_stability_score, health_risk_score, ..
+                region,
+                income_stability_score,
+                health_risk_score,
+                ..
             } => {
                 self.health_signals
                     .entry(region.clone())
@@ -125,7 +134,10 @@ impl CollectiveIntelligence {
                     });
             }
             ModuleMessage::EconomicIndicator {
-                region, inflation_rate, transaction_volume_index, ..
+                region,
+                inflation_rate,
+                transaction_volume_index,
+                ..
             } => {
                 self.economic_signals
                     .entry(region.clone())
@@ -139,7 +151,10 @@ impl CollectiveIntelligence {
                     });
             }
             ModuleMessage::DistributionGap {
-                region, gap_severity, opportunity_size_usd, ..
+                region,
+                gap_severity,
+                opportunity_size_usd,
+                ..
             } => {
                 self.distribution_signals
                     .entry(region.clone())
@@ -147,7 +162,7 @@ impl CollectiveIntelligence {
                     .push(TimestampedSignal {
                         data: DistributionSignalData {
                             gap_severity: *gap_severity,
-                            opportunity_size: * opportunity_size_usd,
+                            opportunity_size: *opportunity_size_usd,
                         },
                         timestamp: now,
                     });
@@ -207,7 +222,8 @@ impl CollectiveIntelligence {
         // Distribution gap + high demand = investment opportunity
         for (region, dist_data) in &self.distribution_signals {
             if let Some(market_data) = self.market_signals.get(region) {
-                let correlation = self.compute_distribution_demand_correlation(dist_data, market_data);
+                let correlation =
+                    self.compute_distribution_demand_correlation(dist_data, market_data);
                 if correlation > self.min_correlation_strength {
                     patterns.push(DetectedPattern {
                         pattern_type: PatternType::DistributionDemandMismatch,
@@ -259,9 +275,7 @@ impl CollectiveIntelligence {
         dist: &[TimestampedSignal<DistributionSignalData>],
         market: &[TimestampedSignal<MarketSignalData>],
     ) -> f64 {
-        let pairs = self.temporal_join(dist, market, |d, m| {
-            (d.gap_severity, m.demand_index)
-        });
+        let pairs = self.temporal_join(dist, market, |d, m| (d.gap_severity, m.demand_index));
 
         pearson_correlation(&pairs)
     }
@@ -281,7 +295,8 @@ impl CollectiveIntelligence {
 
         for a in signals_a {
             // Find closest b within window
-            if let Some(b) = signals_b.iter()
+            if let Some(b) = signals_b
+                .iter()
                 .filter(|b| (a.timestamp - b.timestamp).abs() < window)
                 .min_by_key(|b| (a.timestamp - b.timestamp).num_seconds().abs())
             {
@@ -292,7 +307,11 @@ impl CollectiveIntelligence {
         pairs
     }
 
-    fn prune_old<T>(&self, _region: &str, _signals: &mut HashMap<String, Vec<TimestampedSignal<T>>>) {
+    fn prune_old<T>(
+        &self,
+        _region: &str,
+        _signals: &mut HashMap<String, Vec<TimestampedSignal<T>>>,
+    ) {
         // In production: prune signals older than correlation_window_hours
     }
 }

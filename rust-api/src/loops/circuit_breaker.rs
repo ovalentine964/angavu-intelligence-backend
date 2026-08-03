@@ -2,13 +2,13 @@
 // WhatsApp API, payment processors, partner APIs
 // States: Closed → Open → Half-Open → Closed
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 // ─── Circuit Breaker State Machine ────────────────────────────────────────
 
@@ -71,9 +71,16 @@ pub enum FallbackStrategy {
 
 #[derive(Debug, Clone)]
 pub enum RequestOutcome {
-    Success { latency_ms: u64 },
-    Failure { error: String, is_system_error: bool },
-    Rejected { reason: String }, // circuit is open
+    Success {
+        latency_ms: u64,
+    },
+    Failure {
+        error: String,
+        is_system_error: bool,
+    },
+    Rejected {
+        reason: String,
+    }, // circuit is open
 }
 
 // ─── Circuit Breaker ──────────────────────────────────────────────────────
@@ -112,7 +119,11 @@ struct TimestampedOutcome {
 }
 
 impl CircuitBreaker {
-    pub fn new(service_name: String, config: CircuitBreakerConfig, fallback: FallbackStrategy) -> Self {
+    pub fn new(
+        service_name: String,
+        config: CircuitBreakerConfig,
+        fallback: FallbackStrategy,
+    ) -> Self {
         Self {
             config,
             state: CircuitState::Closed,
@@ -244,9 +255,8 @@ impl CircuitBreaker {
 
     /// Get average latency within the rolling window.
     pub fn avg_latency_ms(&self) -> f64 {
-        let successes: Vec<&TimestampedOutcome> = self.recent_outcomes.iter()
-            .filter(|o| o.success)
-            .collect();
+        let successes: Vec<&TimestampedOutcome> =
+            self.recent_outcomes.iter().filter(|o| o.success).collect();
         if successes.is_empty() {
             return 0.0;
         }
@@ -316,7 +326,9 @@ impl CircuitBreaker {
     }
 
     fn prune_old_outcomes(&mut self) {
-        let cutoff = Utc::now() - chrono::Duration::from_std(self.config.rolling_window).unwrap_or(chrono::Duration::minutes(5));
+        let cutoff = Utc::now()
+            - chrono::Duration::from_std(self.config.rolling_window)
+                .unwrap_or(chrono::Duration::minutes(5));
         self.recent_outcomes.retain(|o| o.timestamp > cutoff);
     }
 }
@@ -357,11 +369,7 @@ impl CircuitBreakerRegistry {
         config: CircuitBreakerConfig,
         fallback: FallbackStrategy,
     ) {
-        let breaker = CircuitBreaker::new(
-            service_name.to_string(),
-            config,
-            fallback,
-        );
+        let breaker = CircuitBreaker::new(service_name.to_string(), config, fallback);
         let mut breakers = self.breakers.write().await;
         breakers.insert(service_name.to_string(), Arc::new(RwLock::new(breaker)));
         info!("Circuit breaker registered for service: {}", service_name);
@@ -430,8 +438,11 @@ impl CircuitBreakerRegistry {
                 open_timeout: Duration::from_secs(60),
                 ..Default::default()
             },
-            FallbackStrategy::QueueForRetry { retry_after_seconds: 120 },
-        ).await;
+            FallbackStrategy::QueueForRetry {
+                retry_after_seconds: 120,
+            },
+        )
+        .await;
 
         // M-Pesa API
         self.register(
@@ -442,9 +453,11 @@ impl CircuitBreakerRegistry {
                 ..Default::default()
             },
             FallbackStrategy::DegradedResponse {
-                message: "Payment processing temporarily unavailable. Please try again shortly.".to_string(),
+                message: "Payment processing temporarily unavailable. Please try again shortly."
+                    .to_string(),
             },
-        ).await;
+        )
+        .await;
 
         // DeepSeek LLM API
         self.register(
@@ -454,8 +467,11 @@ impl CircuitBreakerRegistry {
                 open_timeout: Duration::from_secs(120),
                 ..Default::default()
             },
-            FallbackStrategy::CachedData { max_age_seconds: 3600 },
-        ).await;
+            FallbackStrategy::CachedData {
+                max_age_seconds: 3600,
+            },
+        )
+        .await;
 
         // Partner FMCG API
         self.register(
@@ -465,8 +481,11 @@ impl CircuitBreakerRegistry {
                 open_timeout: Duration::from_secs(60),
                 ..Default::default()
             },
-            FallbackStrategy::CachedData { max_age_seconds: 7200 },
-        ).await;
+            FallbackStrategy::CachedData {
+                max_age_seconds: 7200,
+            },
+        )
+        .await;
 
         // SMS Gateway
         self.register(
@@ -476,8 +495,11 @@ impl CircuitBreakerRegistry {
                 open_timeout: Duration::from_secs(60),
                 ..Default::default()
             },
-            FallbackStrategy::QueueForRetry { retry_after_seconds: 300 },
-        ).await;
+            FallbackStrategy::QueueForRetry {
+                retry_after_seconds: 300,
+            },
+        )
+        .await;
     }
 }
 
@@ -519,7 +541,9 @@ pub trait CircuitBreakerProtected: Send + Sync {
             }
             Err(e) => {
                 let is_system = is_system_error(&e.to_string());
-                registry.record_failure(self.service_name(), &e.to_string(), is_system).await;
+                registry
+                    .record_failure(self.service_name(), &e.to_string(), is_system)
+                    .await;
                 Err(ProtectedCallError::ServiceError(e))
             }
         }
@@ -536,14 +560,14 @@ pub enum ProtectedCallError<E> {
 
 fn is_system_error(error_msg: &str) -> bool {
     let lower = error_msg.to_lowercase();
-    lower.contains("timeout") ||
-    lower.contains("connection refused") ||
-    lower.contains("connection reset") ||
-    lower.contains("dns") ||
-    lower.contains("network") ||
-    lower.contains("503") ||
-    lower.contains("502") ||
-    lower.contains("504")
+    lower.contains("timeout")
+        || lower.contains("connection refused")
+        || lower.contains("connection reset")
+        || lower.contains("dns")
+        || lower.contains("network")
+        || lower.contains("503")
+        || lower.contains("502")
+        || lower.contains("504")
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────
@@ -561,7 +585,9 @@ mod tests {
                 open_timeout: Duration::from_secs(1),
                 ..Default::default()
             },
-            FallbackStrategy::FailFast { error: "circuit open".to_string() },
+            FallbackStrategy::FailFast {
+                error: "circuit open".to_string(),
+            },
         );
 
         // Initial state: closed
@@ -590,7 +616,9 @@ mod tests {
                 half_open_success_threshold: 2,
                 ..Default::default()
             },
-            FallbackStrategy::FailFast { error: "circuit open".to_string() },
+            FallbackStrategy::FailFast {
+                error: "circuit open".to_string(),
+            },
         );
 
         // Trip the circuit
@@ -619,7 +647,9 @@ mod tests {
                 failure_threshold: 2,
                 ..Default::default()
             },
-            FallbackStrategy::FailFast { error: "circuit open".to_string() },
+            FallbackStrategy::FailFast {
+                error: "circuit open".to_string(),
+            },
         );
 
         // Business errors (is_system_error=false) should not trip
@@ -634,7 +664,9 @@ mod tests {
         let mut cb = CircuitBreaker::new(
             "test".to_string(),
             CircuitBreakerConfig::default(),
-            FallbackStrategy::FailFast { error: "circuit open".to_string() },
+            FallbackStrategy::FailFast {
+                error: "circuit open".to_string(),
+            },
         );
 
         cb.record_success(100);
@@ -647,15 +679,26 @@ mod tests {
 
     #[test]
     fn test_fallback_strategies() {
-        let cached = FallbackStrategy::CachedData { max_age_seconds: 3600 };
+        let cached = FallbackStrategy::CachedData {
+            max_age_seconds: 3600,
+        };
         let degraded = FallbackStrategy::DegradedResponse {
             message: "Service unavailable".to_string(),
         };
-        let queued = FallbackStrategy::QueueForRetry { retry_after_seconds: 120 };
-        let fail = FallbackStrategy::FailFast { error: "error".to_string() };
+        let queued = FallbackStrategy::QueueForRetry {
+            retry_after_seconds: 120,
+        };
+        let fail = FallbackStrategy::FailFast {
+            error: "error".to_string(),
+        };
 
         // All should be cloneable and serializable
-        let _ = (cached.clone(), degraded.clone(), queued.clone(), fail.clone());
+        let _ = (
+            cached.clone(),
+            degraded.clone(),
+            queued.clone(),
+            fail.clone(),
+        );
     }
 
     #[test]

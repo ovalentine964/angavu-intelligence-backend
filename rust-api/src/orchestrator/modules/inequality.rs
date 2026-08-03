@@ -289,7 +289,11 @@ impl InequalityTracker {
         let d9_d1 = if n >= 10 {
             let p10 = sorted[(n as f64 * 0.1).floor() as usize];
             let p90 = sorted[(n as f64 * 0.9).floor() as usize];
-            if p10 > 0.0 { p90 / p10 } else { 0.0 }
+            if p10 > 0.0 {
+                p90 / p10
+            } else {
+                0.0
+            }
         } else {
             0.0
         };
@@ -386,14 +390,22 @@ mod tests {
     fn test_gini_perfect_equality() {
         let incomes = vec![100.0, 100.0, 100.0, 100.0];
         let gini = InequalityTracker::compute_gini(&incomes);
-        assert!((gini - 0.0).abs() < 1e-10, "Gini should be 0 for equal incomes, got {}", gini);
+        assert!(
+            (gini - 0.0).abs() < 1e-10,
+            "Gini should be 0 for equal incomes, got {}",
+            gini
+        );
     }
 
     #[test]
     fn test_gini_inequality() {
         let incomes = vec![10.0, 20.0, 30.0, 100.0, 500.0];
         let gini = InequalityTracker::compute_gini(&incomes);
-        assert!(gini > 0.3 && gini < 0.7, "Gini should be moderate, got {}", gini);
+        assert!(
+            gini > 0.3 && gini < 0.7,
+            "Gini should be moderate, got {}",
+            gini
+        );
     }
 
     #[test]
@@ -402,14 +414,22 @@ mod tests {
         // Top 10% = [500], share = 500/660
         let incomes = vec![10.0, 20.0, 30.0, 100.0, 500.0];
         let palma = InequalityTracker::compute_palma(&incomes);
-        assert!(palma > 1.0, "Palma should be > 1 for unequal distribution, got {}", palma);
+        assert!(
+            palma > 1.0,
+            "Palma should be > 1 for unequal distribution, got {}",
+            palma
+        );
     }
 
     #[test]
     fn test_theil_zero_for_equal() {
         let incomes = vec![50.0, 50.0, 50.0, 50.0];
         let theil = InequalityTracker::compute_theil(&incomes);
-        assert!((theil - 0.0).abs() < 1e-10, "Theil should be 0 for equal incomes, got {}", theil);
+        assert!(
+            (theil - 0.0).abs() < 1e-10,
+            "Theil should be 0 for equal incomes, got {}",
+            theil
+        );
     }
 
     #[test]

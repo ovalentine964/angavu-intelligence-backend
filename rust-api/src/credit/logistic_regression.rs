@@ -133,17 +133,27 @@ impl LogisticRegression {
 
     /// Predict probability P(Y=1|X) for a single observation
     pub fn predict_probability(&self, features: &[f64]) -> f64 {
-        assert_eq!(features.len(), self.coefficients.len(), "Feature count mismatch");
-        let z = self.intercept + features.iter()
-            .zip(self.coefficients.iter())
-            .map(|(x, b)| x * b)
-            .sum::<f64>();
+        assert_eq!(
+            features.len(),
+            self.coefficients.len(),
+            "Feature count mismatch"
+        );
+        let z = self.intercept
+            + features
+                .iter()
+                .zip(self.coefficients.iter())
+                .map(|(x, b)| x * b)
+                .sum::<f64>();
         Self::sigmoid(z)
     }
 
     /// Predict binary outcome (0 or 1) at given threshold
     pub fn predict(&self, features: &[f64], threshold: f64) -> u8 {
-        if self.predict_probability(features) >= threshold { 1 } else { 0 }
+        if self.predict_probability(features) >= threshold {
+            1
+        } else {
+            0
+        }
     }
 
     /// Predict probabilities for a batch
@@ -180,7 +190,12 @@ impl LogisticRegression {
         let p = X[0].len();
         for (i, row) in X.iter().enumerate() {
             if row.len() != p {
-                return Err(format!("Row {} has {} features, expected {}", i, row.len(), p));
+                return Err(format!(
+                    "Row {} has {} features, expected {}",
+                    i,
+                    row.len(),
+                    p
+                ));
             }
         }
 
@@ -202,10 +217,17 @@ impl LogisticRegression {
             iterations = iter + 1;
 
             // Compute predicted probabilities
-            let probs: Vec<f64> = X.iter().map(|x| {
-                let z = intercept + x.iter().zip(beta.iter()).map(|(xi, bi)| xi * bi).sum::<f64>();
-                Self::sigmoid(z)
-            }).collect();
+            let probs: Vec<f64> = X
+                .iter()
+                .map(|x| {
+                    let z = intercept
+                        + x.iter()
+                            .zip(beta.iter())
+                            .map(|(xi, bi)| xi * bi)
+                            .sum::<f64>();
+                    Self::sigmoid(z)
+                })
+                .collect();
 
             // Compute working weights and working response
             // W = diag(pᵢ(1-pᵢ)), z = Xβ + (y-p) / (p(1-p))
@@ -216,7 +238,12 @@ impl LogisticRegression {
                 let pi = probs[i].clamp(1e-10, 1.0 - 1e-10);
                 let wi = pi * (1.0 - pi);
                 weights.push(wi);
-                let eta = intercept + X[i].iter().zip(beta.iter()).map(|(x, b)| x * b).sum::<f64>();
+                let eta = intercept
+                    + X[i]
+                        .iter()
+                        .zip(beta.iter())
+                        .map(|(x, b)| x * b)
+                        .sum::<f64>();
                 working_response.push(eta + (y[i] as f64 - pi) / wi);
             }
 
@@ -259,7 +286,9 @@ impl LogisticRegression {
 
             // Check convergence
             let delta_intercept = (new_intercept - intercept).abs();
-            let delta_beta: f64 = new_beta.iter().zip(beta.iter())
+            let delta_beta: f64 = new_beta
+                .iter()
+                .zip(beta.iter())
                 .map(|(nb, ob)| (nb - ob).abs())
                 .sum();
 
@@ -273,22 +302,34 @@ impl LogisticRegression {
         }
 
         // Compute final metrics
-        let probs: Vec<f64> = X.iter().map(|x| {
-            let z = intercept + x.iter().zip(beta.iter()).map(|(xi, bi)| xi * bi).sum::<f64>();
-            Self::sigmoid(z)
-        }).collect();
+        let probs: Vec<f64> = X
+            .iter()
+            .map(|x| {
+                let z = intercept
+                    + x.iter()
+                        .zip(beta.iter())
+                        .map(|(xi, bi)| xi * bi)
+                        .sum::<f64>();
+                Self::sigmoid(z)
+            })
+            .collect();
 
         // Log-likelihood
-        let log_likelihood: f64 = y.iter().zip(probs.iter()).map(|(&yi, &pi)| {
-            let pi = pi.clamp(1e-10, 1.0 - 1e-10);
-            yi as f64 * pi.ln() + (1.0 - yi as f64) * (1.0 - pi).ln()
-        }).sum();
+        let log_likelihood: f64 = y
+            .iter()
+            .zip(probs.iter())
+            .map(|(&yi, &pi)| {
+                let pi = pi.clamp(1e-10, 1.0 - 1e-10);
+                yi as f64 * pi.ln() + (1.0 - yi as f64) * (1.0 - pi).ln()
+            })
+            .sum();
 
         // Null model log-likelihood (intercept only)
         let p_bar = y_sum / n_f;
-        let null_ll: f64 = y.iter().map(|&yi| {
-            yi as f64 * p_bar.ln() + (1.0 - yi as f64) * (1.0 - p_bar).ln()
-        }).sum();
+        let null_ll: f64 = y
+            .iter()
+            .map(|&yi| yi as f64 * p_bar.ln() + (1.0 - yi as f64) * (1.0 - p_bar).ln())
+            .sum();
 
         let k = (p + 1) as f64;
         let aic = -2.0 * log_likelihood + 2.0 * k;
@@ -340,7 +381,10 @@ impl LogisticRegression {
     ) -> Result<CrossValidationResult, String> {
         let n = X.len();
         if n < n_folds {
-            return Err(format!("Need at least {} samples for {}-fold CV", n_folds, n_folds));
+            return Err(format!(
+                "Need at least {} samples for {}-fold CV",
+                n_folds, n_folds
+            ));
         }
 
         let fold_size = n / n_folds;
@@ -350,7 +394,11 @@ impl LogisticRegression {
 
         for fold in 0..n_folds {
             let test_start = fold * fold_size;
-            let test_end = if fold == n_folds - 1 { n } else { test_start + fold_size };
+            let test_end = if fold == n_folds - 1 {
+                n
+            } else {
+                test_start + fold_size
+            };
 
             // Split into train/test
             let mut X_train = Vec::with_capacity(n - (test_end - test_start));
@@ -381,7 +429,11 @@ impl LogisticRegression {
         }
 
         let mean_auc = fold_aucs.iter().sum::<f64>() / n_folds as f64;
-        let var_auc = fold_aucs.iter().map(|a| (a - mean_auc).powi(2)).sum::<f64>() / n_folds as f64;
+        let var_auc = fold_aucs
+            .iter()
+            .map(|a| (a - mean_auc).powi(2))
+            .sum::<f64>()
+            / n_folds as f64;
         let mean_prec = fold_precisions.iter().sum::<f64>() / n_folds as f64;
         let mean_rec = fold_recalls.iter().sum::<f64>() / n_folds as f64;
 
@@ -406,7 +458,9 @@ impl LogisticRegression {
         }
 
         // Sort by descending score
-        let mut indexed: Vec<(f64, u8)> = y_scores.iter().zip(y_true.iter())
+        let mut indexed: Vec<(f64, u8)> = y_scores
+            .iter()
+            .zip(y_true.iter())
             .map(|(&s, &y)| (s, y))
             .collect();
         indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -424,7 +478,11 @@ impl LogisticRegression {
             let mut tie_pos = 0.0;
             let mut tie_neg = 0.0;
             while i < n && (indexed[i].0 - threshold).abs() < 1e-10 {
-                if indexed[i].1 == 1 { tie_pos += 1.0; } else { tie_neg += 1.0; }
+                if indexed[i].1 == 1 {
+                    tie_pos += 1.0;
+                } else {
+                    tie_neg += 1.0;
+                }
                 i += 1;
             }
             tp += tie_pos;
@@ -458,9 +516,21 @@ impl LogisticRegression {
             }
         }
 
-        let precision = if tp + fp > 0 { tp as f64 / (tp + fp) as f64 } else { 0.0 };
-        let recall = if tp + fn_ > 0 { tp as f64 / (tp + fn_) as f64 } else { 0.0 };
-        let f1 = if precision + recall > 0.0 { 2.0 * precision * recall / (precision + recall) } else { 0.0 };
+        let precision = if tp + fp > 0 {
+            tp as f64 / (tp + fp) as f64
+        } else {
+            0.0
+        };
+        let recall = if tp + fn_ > 0 {
+            tp as f64 / (tp + fn_) as f64
+        } else {
+            0.0
+        };
+        let f1 = if precision + recall > 0.0 {
+            2.0 * precision * recall / (precision + recall)
+        } else {
+            0.0
+        };
         let accuracy = (tp + tn) as f64 / (tp + tn + fp + fn_) as f64;
 
         ConfusionMatrix {
@@ -485,7 +555,9 @@ impl LogisticRegression {
         }
 
         // Sort by predicted probability
-        let mut indexed: Vec<(f64, u8)> = probs.iter().zip(y_true.iter())
+        let mut indexed: Vec<(f64, u8)> = probs
+            .iter()
+            .zip(y_true.iter())
             .map(|(&p, &y)| (p, y))
             .collect();
         indexed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -495,7 +567,11 @@ impl LogisticRegression {
 
         for g in 0..n_groups {
             let start = g * group_size;
-            let end = if g == n_groups - 1 { n } else { start + group_size };
+            let end = if g == n_groups - 1 {
+                n
+            } else {
+                start + group_size
+            };
             let group = &indexed[start..end];
 
             let observed: f64 = group.iter().map(|(_, y)| *y as f64).sum();
@@ -524,15 +600,18 @@ impl LogisticRegression {
         let p = self.coefficients.len();
 
         // Compute mean features
-        let mean_features: Vec<f64> = (0..p).map(|j| {
-            X.iter().map(|x| x[j]).sum::<f64>() / n
-        }).collect();
+        let mean_features: Vec<f64> = (0..p)
+            .map(|j| X.iter().map(|x| x[j]).sum::<f64>() / n)
+            .collect();
 
         // Compute p at means
         let p_bar = self.predict_probability(&mean_features);
 
         // Marginal effect = βᵢ × p̄ × (1 - p̄)
-        self.coefficients.iter().map(|b| b * p_bar * (1.0 - p_bar)).collect()
+        self.coefficients
+            .iter()
+            .map(|b| b * p_bar * (1.0 - p_bar))
+            .collect()
     }
 
     /// Generate ROC curve points
@@ -545,7 +624,9 @@ impl LogisticRegression {
             return vec![(0.0, 0.0), (1.0, 1.0)];
         }
 
-        let mut indexed: Vec<(f64, u8)> = y_scores.iter().zip(y_true.iter())
+        let mut indexed: Vec<(f64, u8)> = y_scores
+            .iter()
+            .zip(y_true.iter())
             .map(|(&s, &y)| (s, y))
             .collect();
         indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -558,7 +639,11 @@ impl LogisticRegression {
         while i < n {
             let threshold = indexed[i].0;
             while i < n && (indexed[i].0 - threshold).abs() < 1e-10 {
-                if indexed[i].1 == 1 { tp += 1.0; } else { fp += 1.0; }
+                if indexed[i].1 == 1 {
+                    tp += 1.0;
+                } else {
+                    fp += 1.0;
+                }
                 i += 1;
             }
             points.push((fp / n_neg, tp / n_pos));
@@ -628,8 +713,7 @@ fn chi_squared_p_value(chi_sq: f64, df: f64) -> f64 {
         return 1.0;
     }
     // Wilson-Hilferty normal approximation
-    let z = ((chi_sq / df).powf(1.0 / 3.0) - (1.0 - 2.0 / (9.0 * df)))
-        / (2.0 / (9.0 * df)).sqrt();
+    let z = ((chi_sq / df).powf(1.0 / 3.0) - (1.0 - 2.0 / (9.0 * df))) / (2.0 / (9.0 * df)).sqrt();
     // Standard normal survival function
     0.5 * (1.0 - erf(z / std::f64::consts::SQRT_2))
 }
@@ -672,7 +756,11 @@ mod tests {
             let x1 = rand_normal(&mut rng_state);
             let z = -1.0 + 2.0 * x1;
             let p = LogisticRegression::sigmoid(z);
-            let yi = if rand_uniform(&mut rng_state) < p { 1u8 } else { 0 };
+            let yi = if rand_uniform(&mut rng_state) < p {
+                1u8
+            } else {
+                0
+            };
             X.push(vec![x1]);
             y.push(yi);
         }
@@ -680,9 +768,17 @@ mod tests {
         let model = LogisticRegression::fit(&X, &y, 100, 1e-6, 0.0).unwrap();
         assert!(model.trained);
         // Coefficient should be positive (true value is 2.0)
-        assert!(model.coefficients[0] > 0.5, "Expected positive coeff, got {}", model.coefficients[0]);
+        assert!(
+            model.coefficients[0] > 0.5,
+            "Expected positive coeff, got {}",
+            model.coefficients[0]
+        );
         // Intercept should be negative (true value is -1.0)
-        assert!(model.intercept < 0.0, "Expected negative intercept, got {}", model.intercept);
+        assert!(
+            model.intercept < 0.0,
+            "Expected negative intercept, got {}",
+            model.intercept
+        );
     }
 
     #[test]
@@ -706,10 +802,7 @@ mod tests {
 
     #[test]
     fn test_cholesky_solve() {
-        let A = vec![
-            vec![4.0, 2.0],
-            vec![2.0, 3.0],
-        ];
+        let A = vec![vec![4.0, 2.0], vec![2.0, 3.0]];
         let b = vec![6.0, 5.0];
         let x = cholesky_solve(&A, &b).unwrap();
         // 4x + 2y = 6, 2x + 3y = 5 => x=1, y=1
@@ -719,7 +812,9 @@ mod tests {
 
     // Simple deterministic PRNG for tests
     fn rand_uniform(state: &mut u64) -> f64 {
-        *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((*state >> 33) as f64) / (1u64 << 31) as f64
     }
 

@@ -651,14 +651,16 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
                 name: "Drowning".into(),
                 description: "Capsizing, falling overboard, storms. \
                               Fishing has the highest occupational fatality rate of any sector \
-                              globally (FAO). Most fishermen cannot swim well.".into(),
+                              globally (FAO). Most fishermen cannot swim well."
+                    .into(),
                 severity: HazardSeverity::Critical,
                 base_risk_multiplier: 4.5,
-                prevalence: 0.05,  // 5% fatality risk per career
+                prevalence: 0.05, // 5% fatality risk per career
                 data_signals: vec![
                     DataSignal {
                         name: "lake_vs_ocean".into(),
-                        description: "Ocean fishing has higher drowning risk than lake fishing".into(),
+                        description: "Ocean fishing has higher drowning risk than lake fishing"
+                            .into(),
                         source: DataSource::SelfReported,
                         impact_on_risk: RiskDirection::Increases,
                     },
@@ -692,7 +694,8 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
                 category: HazardCategory::EnvironmentalExposure,
                 name: "UV and Sun Exposure".into(),
                 description: "Water reflects UV radiation, doubling exposure. \
-                              All-day sun causes skin damage, cataracts, and skin cancer.".into(),
+                              All-day sun causes skin damage, cataracts, and skin cancer."
+                    .into(),
                 severity: HazardSeverity::High,
                 base_risk_multiplier: 2.5,
                 prevalence: 0.90,
@@ -709,19 +712,19 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
                 id: "fisherman_waterborne_disease".into(),
                 category: HazardCategory::BiologicalExposure,
                 name: "Waterborne Diseases".into(),
-                description: "Schistosomiasis (bilharzia), leptospirosis, typhoid from contaminated water. \
-                              Lake Victoria region has highest bilharzia burden in Kenya.".into(),
+                description:
+                    "Schistosomiasis (bilharzia), leptospirosis, typhoid from contaminated water. \
+                              Lake Victoria region has highest bilharzia burden in Kenya."
+                        .into(),
                 severity: HazardSeverity::High,
                 base_risk_multiplier: 2.8,
                 prevalence: 0.30,
-                data_signals: vec![
-                    DataSignal {
-                        name: "water_body_type".into(),
-                        description: "Freshwater lakes have higher bilharzia risk than ocean".into(),
-                        source: DataSource::SelfReported,
-                        impact_on_risk: RiskDirection::Increases,
-                    },
-                ],
+                data_signals: vec![DataSignal {
+                    name: "water_body_type".into(),
+                    description: "Freshwater lakes have higher bilharzia risk than ocean".into(),
+                    source: DataSource::SelfReported,
+                    impact_on_risk: RiskDirection::Increases,
+                }],
                 mitigation_factors: vec![
                     "Protective footwear in water".into(),
                     "Clean water access".into(),
@@ -735,7 +738,8 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
                 category: HazardCategory::Accident,
                 name: "Fishing-Related Injuries".into(),
                 description: "Hook injuries, net entanglement, fish spine punctures, \
-                              cuts from fish knives. Often become infected.".into(),
+                              cuts from fish knives. Often become infected."
+                    .into(),
                 severity: HazardSeverity::Moderate,
                 base_risk_multiplier: 2.0,
                 prevalence: 0.40,
@@ -753,18 +757,17 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
                 category: HazardCategory::MentalHealth,
                 name: "Isolation and Financial Stress".into(),
                 description: "Long periods away from family, unpredictable catch, \
-                              middleman exploitation of catch prices.".into(),
+                              middleman exploitation of catch prices."
+                    .into(),
                 severity: HazardSeverity::Moderate,
                 base_risk_multiplier: 2.0,
                 prevalence: 0.35,
-                data_signals: vec![
-                    DataSignal {
-                        name: "income_volatility".into(),
-                        description: "Highly variable income from catch sales".into(),
-                        source: DataSource::TransactionPatterns,
-                        impact_on_risk: RiskDirection::Increases,
-                    },
-                ],
+                data_signals: vec![DataSignal {
+                    name: "income_volatility".into(),
+                    description: "Highly variable income from catch sales".into(),
+                    source: DataSource::TransactionPatterns,
+                    impact_on_risk: RiskDirection::Increases,
+                }],
                 mitigation_factors: vec![
                     "Community support".into(),
                     "Financial planning tools".into(),
@@ -775,7 +778,8 @@ fn fisherman_risk_profile() -> OccupationRiskProfile {
         ],
         notes: "FAO estimates fishing is the most dangerous occupation globally by fatality rate. \
                 In Kenya, ~500K fishermen work on Lake Victoria, Lake Turkana, and the coast. \
-                Most use small boats without safety equipment.".into(),
+                Most use small boats without safety equipment."
+            .into(),
     }
 }
 
@@ -1124,7 +1128,7 @@ fn translate_hazard_name(hazard_id: &str) -> String {
         "miner_heavy_metal" => "Sumu ya Metali",
         "construction_fall" => "Kuanguka kutoka Juu",
         "construction_musculoskeletal" => "Maumivu ya Mifupa",
-        "construction_dust" ⇒ "Vumbi/Dust",
+        "construction_dust" => "Vumbi/Dust",
         "farmer_pesticide" => "Sumu ya Dawa za Kilimo",
         "farmer_heat_stress" => "Joto/Jua",
         "farmer_snake_bite" => "Kuumwa na Nyoka",

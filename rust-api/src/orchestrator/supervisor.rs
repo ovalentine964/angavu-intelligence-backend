@@ -3,9 +3,9 @@
 use super::*;
 use dashmap::DashMap;
 use std::collections::HashMap;
-use tokio::task::JoinHandle;
-use std::time::Instant;
 use std::path::PathBuf;
+use std::time::Instant;
+use tokio::task::JoinHandle;
 
 /// The concrete OODA orchestrator implementation
 pub struct OODAOrchestrator {
@@ -32,8 +32,17 @@ impl OODAOrchestrator {
         Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"), None)
     }
 
-    pub fn with_pool(config: OrchestratorConfig, bus: Arc<ModuleMessageBus>, pool: sqlx::PgPool) -> Self {
-        Self::with_state_dir(config, bus, PathBuf::from("./data/module_state"), Some(pool))
+    pub fn with_pool(
+        config: OrchestratorConfig,
+        bus: Arc<ModuleMessageBus>,
+        pool: sqlx::PgPool,
+    ) -> Self {
+        Self::with_state_dir(
+            config,
+            bus,
+            PathBuf::from("./data/module_state"),
+            Some(pool),
+        )
     }
 
     pub fn with_state_dir(
@@ -126,7 +135,9 @@ impl OODAOrchestrator {
             }),
             (ModuleId::ServicePriceDiscovery, {
                 let mut m = if let Some(ref p) = pool {
-                    modules::service_price_discovery::ServicePriceDiscoveryEngine::with_pool(p.clone())
+                    modules::service_price_discovery::ServicePriceDiscoveryEngine::with_pool(
+                        p.clone(),
+                    )
                 } else {
                     modules::service_price_discovery::ServicePriceDiscoveryEngine::new()
                 };
@@ -175,9 +186,7 @@ impl OODAOrchestrator {
         let rx = self.bus.register_module(module_id);
         let bus = Arc::clone(&self.bus);
         let state_store = Arc::clone(&self.state_store);
-        let mut shutdown_rx = self.shutdown_tx.read().await.as_ref()
-            .unwrap()
-            .subscribe();
+        let mut shutdown_rx = self.shutdown_tx.read().await.as_ref().unwrap().subscribe();
 
         let handle = tokio::spawn(async move {
             info!(module = ?module_id, "Module task started");
@@ -186,7 +195,7 @@ impl OODAOrchestrator {
             let mut messages_since_snapshot: u64 = 0;
             let snapshot_interval: u64 = 100; // snapshot every 100 messages
             let mut snapshot_timer = tokio::time::interval(
-                std::time::Duration::from_secs(300) // or every 5 minutes
+                std::time::Duration::from_secs(300), // or every 5 minutes
             );
             snapshot_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -266,9 +275,7 @@ impl OODAOrchestrator {
     pub async fn run(&self) -> Result<(), OrchestratorError> {
         info!("OODA Orchestrator starting main loop");
 
-        let mut shutdown_rx = self.shutdown_tx.read().await.as_ref()
-            .unwrap()
-            .subscribe();
+        let mut shutdown_rx = self.shutdown_tx.read().await.as_ref().unwrap().subscribe();
 
         loop {
             tokio::select! {
@@ -347,15 +354,17 @@ impl OODAOrchestrator {
         };
 
         // Identify trends from recent patterns
-        let pattern_trends: Vec<PatternType> = state.recent_patterns.iter()
+        let pattern_trends: Vec<PatternType> = state
+            .recent_patterns
+            .iter()
             .filter(|p| p.strength > 0.6)
             .map(|p| p.pattern_type.clone())
             .collect();
 
         // Assess load
         let bus_metrics = self.bus.metrics();
-        let load_factor = bus_metrics.messages_published as f64 /
-            (self.config.cycle_interval_ms as f64 / 1000.0);
+        let load_factor =
+            bus_metrics.messages_published as f64 / (self.config.cycle_interval_ms as f64 / 1000.0);
 
         OrientResult {
             system_health,
@@ -390,13 +399,18 @@ impl OODAOrchestrator {
 
         // Action: Apply backpressure if overloaded
         if orient_result.load_factor > 1000.0 {
-            warn!(load = orient_result.load_factor, "System overloaded, applying backpressure");
+            warn!(
+                load = orient_result.load_factor,
+                "System overloaded, applying backpressure"
+            );
             actions.push(Action::ApplyBackpressure);
         }
 
         // Action: Escalate if too many anomalies
         let state = self.state.read().await;
-        let unresolved_anomalies = state.active_anomalies.iter()
+        let unresolved_anomalies = state
+            .active_anomalies
+            .iter()
             .filter(|a| !a.resolved)
             .count();
         if unresolved_anomalies >= self.config.anomaly_escalation_threshold as usize {
@@ -416,7 +430,10 @@ impl OODAOrchestrator {
         for action in actions {
             match action {
                 Action::RestartModule(module_id) => {
-                    match self.handle_module_failure(module_id, "health timeout".to_string()).await {
+                    match self
+                        .handle_module_failure(module_id, "health timeout".to_string())
+                        .await
+                    {
                         Ok(()) => {
                             results.push(format!("Restarted module {:?}", module_id));
                             self.last_restart.insert(module_id, Utc::now());
@@ -472,8 +489,8 @@ impl OODAOrchestrator {
         });
 
         // Update throughput (exponential moving average)
-        let current_rate = cycle_result.messages_processed as f64 /
-            (cycle_result.duration_ms as f64 / 1000.0);
+        let current_rate =
+            cycle_result.messages_processed as f64 / (cycle_result.duration_ms as f64 / 1000.0);
         state.throughput = 0.9 * state.throughput + 0.1 * current_rate;
     }
 }
@@ -556,10 +573,16 @@ impl Orchestrator for OODAOrchestrator {
             }
             ModuleMessage::AnomalyAlert { severity, .. } => {
                 // Anomalies → All modules (high priority)
-                self.bus.publish_priority(
-                    message,
-                    if *severity > 0.8 { Priority::Critical } else { Priority::High },
-                ).await?;
+                self.bus
+                    .publish_priority(
+                        message,
+                        if *severity > 0.8 {
+                            Priority::Critical
+                        } else {
+                            Priority::High
+                        },
+                    )
+                    .await?;
             }
             _ => {
                 // Default: broadcast to all
@@ -598,14 +621,21 @@ impl Orchestrator for OODAOrchestrator {
         let module: Box<dyn CapabilityModule> = match module_id {
             ModuleId::MarketAnalyzer => Box::new(modules::market::MarketAnalyzer::new()),
             ModuleId::CreditScorer => Box::new(modules::credit::CreditScorer::new()),
-            ModuleId::DistributionAnalyzer => Box::new(modules::distribution::DistributionAnalyzer::new()),
+            ModuleId::DistributionAnalyzer => {
+                Box::new(modules::distribution::DistributionAnalyzer::new())
+            }
             ModuleId::FMCGIntelligence => Box::new(modules::fmcg::FMCGIntelligence::new()),
-            ModuleId::ServicePriceDiscovery => Box::new(modules::service_price_discovery::ServicePriceDiscoveryEngine::new()),
+            ModuleId::ServicePriceDiscovery => {
+                Box::new(modules::service_price_discovery::ServicePriceDiscoveryEngine::new())
+            }
             ModuleId::HealthMetrics => Box::new(modules::health::HealthMetrics::new()),
             ModuleId::EconomicAnalyzer => Box::new(modules::economic::EconomicAnalyzer::new()),
-            _ => return Err(OrchestratorError::Internal(
-                format!("Cannot restart {:?}", module_id)
-            )),
+            _ => {
+                return Err(OrchestratorError::Internal(format!(
+                    "Cannot restart {:?}",
+                    module_id
+                )))
+            }
         };
 
         self.spawn_module(module_id, module).await?;
@@ -613,16 +643,20 @@ impl Orchestrator for OODAOrchestrator {
         // Update health
         {
             let mut state = self.state.write().await;
-            state.module_health.insert(module_id, ModuleHealth {
-                status: HealthStatus::Healthy,
-                queue_depth: 0,
-                processing_rate: 0.0,
-                last_heartbeat: Utc::now(),
-                restart_count: state.module_health
-                    .get(&module_id)
-                    .map(|h| h.restart_count)
-                    .unwrap_or(0),
-            });
+            state.module_health.insert(
+                module_id,
+                ModuleHealth {
+                    status: HealthStatus::Healthy,
+                    queue_depth: 0,
+                    processing_rate: 0.0,
+                    last_heartbeat: Utc::now(),
+                    restart_count: state
+                        .module_health
+                        .get(&module_id)
+                        .map(|h| h.restart_count)
+                        .unwrap_or(0),
+                },
+            );
         }
 
         info!(module = ?module_id, "Module restarted successfully");
@@ -638,7 +672,9 @@ impl Orchestrator for OODAOrchestrator {
         }
 
         // Wait for all module tasks to complete (with timeout)
-        let handles: Vec<_> = self.module_handles.iter()
+        let handles: Vec<_> = self
+            .module_handles
+            .iter()
             .map(|entry| (*entry.key(), entry.value().abort()))
             .collect();
 

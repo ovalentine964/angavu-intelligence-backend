@@ -279,7 +279,10 @@ pub fn compute_equalized_odds(
     // Group by region
     let mut groups: HashMap<String, Vec<(u8, u8)>> = HashMap::new();
     for (region, pred, actual) in predictions {
-        groups.entry(region.clone()).or_default().push((*pred, *actual));
+        groups
+            .entry(region.clone())
+            .or_default()
+            .push((*pred, *actual));
     }
 
     // Compute per-group TPR and FPR
@@ -328,8 +331,9 @@ pub fn compute_equalized_odds(
 
             // TPR comparison
             let tpr_diff = (metrics_a.tpr - metrics_b.tpr).abs();
-            let tpr_se_diff =
-                (metrics_a.tpr_standard_error.powi(2) + metrics_b.tpr_standard_error.powi(2)).sqrt();
+            let tpr_se_diff = (metrics_a.tpr_standard_error.powi(2)
+                + metrics_b.tpr_standard_error.powi(2))
+            .sqrt();
             let tpr_z = if tpr_se_diff > 0.0 {
                 tpr_diff / tpr_se_diff
             } else {
@@ -353,8 +357,9 @@ pub fn compute_equalized_odds(
 
             // FPR comparison
             let fpr_diff = (metrics_a.fpr - metrics_b.fpr).abs();
-            let fpr_se_diff =
-                (metrics_a.fpr_standard_error.powi(2) + metrics_b.fpr_standard_error.powi(2)).sqrt();
+            let fpr_se_diff = (metrics_a.fpr_standard_error.powi(2)
+                + metrics_b.fpr_standard_error.powi(2))
+            .sqrt();
             let fpr_z = if fpr_se_diff > 0.0 {
                 fpr_diff / fpr_se_diff
             } else {
@@ -429,7 +434,10 @@ pub fn compute_predictive_parity(
     // Group by group name
     let mut groups: HashMap<String, Vec<(u8, u8)>> = HashMap::new();
     for (group, pred, actual) in predictions {
-        groups.entry(group.clone()).or_default().push((*pred, *actual));
+        groups
+            .entry(group.clone())
+            .or_default()
+            .push((*pred, *actual));
     }
 
     // Compute per-group precision
@@ -551,7 +559,10 @@ pub fn run_fairness_audit(
                 threshold: config.equalized_odds_threshold,
                 description: format!(
                     "Equalized odds (TPR) violation: {} has TPR {:.1}% vs {:.1}% for {}",
-                    comp.group_a, comp.rate_a * 100.0, comp.rate_b * 100.0, comp.group_b
+                    comp.group_a,
+                    comp.rate_a * 100.0,
+                    comp.rate_b * 100.0,
+                    comp.group_b
                 ),
             });
         }
@@ -567,7 +578,10 @@ pub fn run_fairness_audit(
                 threshold: config.equalized_odds_threshold,
                 description: format!(
                     "Equalized odds (FPR) violation: {} has FPR {:.1}% vs {:.1}% for {}",
-                    comp.group_a, comp.rate_a * 100.0, comp.rate_b * 100.0, comp.group_b
+                    comp.group_a,
+                    comp.rate_a * 100.0,
+                    comp.rate_b * 100.0,
+                    comp.group_b
                 ),
             });
         }
@@ -585,7 +599,10 @@ pub fn run_fairness_audit(
                 threshold: config.predictive_parity_threshold,
                 description: format!(
                     "Predictive parity violation: {} has precision {:.1}% vs {:.1}% for {}",
-                    comp.group_a, comp.rate_a * 100.0, comp.rate_b * 100.0, comp.group_b
+                    comp.group_a,
+                    comp.rate_a * 100.0,
+                    comp.rate_b * 100.0,
+                    comp.group_b
                 ),
             });
         }
@@ -599,7 +616,12 @@ pub fn run_fairness_audit(
         ));
     }
 
-    let passed = dp.passed && eo.passed && pp.passed && violations.iter().all(|v| !matches!(v.severity, ViolationSeverity::Critical));
+    let passed = dp.passed
+        && eo.passed
+        && pp.passed
+        && violations
+            .iter()
+            .all(|v| !matches!(v.severity, ViolationSeverity::Critical));
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -693,17 +715,33 @@ mod tests {
         // Same TPR and FPR across regions
         let mut predictions = Vec::new();
         // Region A: 50 actual positives, TPR=0.8
-        for _ in 0..40 { predictions.push(("region_a".to_string(), 1u8, 1u8)); }
-        for _ in 0..10 { predictions.push(("region_a".to_string(), 0u8, 1u8)); }
+        for _ in 0..40 {
+            predictions.push(("region_a".to_string(), 1u8, 1u8));
+        }
+        for _ in 0..10 {
+            predictions.push(("region_a".to_string(), 0u8, 1u8));
+        }
         // Region A: 50 actual negatives, FPR=0.2
-        for _ in 0..10 { predictions.push(("region_a".to_string(), 1u8, 0u8)); }
-        for _ in 0..40 { predictions.push(("region_a".to_string(), 0u8, 0u8)); }
+        for _ in 0..10 {
+            predictions.push(("region_a".to_string(), 1u8, 0u8));
+        }
+        for _ in 0..40 {
+            predictions.push(("region_a".to_string(), 0u8, 0u8));
+        }
 
         // Region B: same rates
-        for _ in 0..40 { predictions.push(("region_b".to_string(), 1u8, 1u8)); }
-        for _ in 0..10 { predictions.push(("region_b".to_string(), 0u8, 1u8)); }
-        for _ in 0..10 { predictions.push(("region_b".to_string(), 1u8, 0u8)); }
-        for _ in 0..40 { predictions.push(("region_b".to_string(), 0u8, 0u8)); }
+        for _ in 0..40 {
+            predictions.push(("region_b".to_string(), 1u8, 1u8));
+        }
+        for _ in 0..10 {
+            predictions.push(("region_b".to_string(), 0u8, 1u8));
+        }
+        for _ in 0..10 {
+            predictions.push(("region_b".to_string(), 1u8, 0u8));
+        }
+        for _ in 0..40 {
+            predictions.push(("region_b".to_string(), 0u8, 0u8));
+        }
 
         let config = FairnessConfig::default();
         let result = compute_equalized_odds(&predictions, &config);
@@ -714,14 +752,26 @@ mod tests {
     fn test_predictive_parity() {
         let mut predictions = Vec::new();
         // Group A: precision = 0.8 (40 TP out of 50 predicted positive)
-        for _ in 0..40 { predictions.push(("group_a".to_string(), 1u8, 1u8)); }
-        for _ in 0..10 { predictions.push(("group_a".to_string(), 1u8, 0u8)); }
-        for _ in 0..50 { predictions.push(("group_a".to_string(), 0u8, 0u8)); }
+        for _ in 0..40 {
+            predictions.push(("group_a".to_string(), 1u8, 1u8));
+        }
+        for _ in 0..10 {
+            predictions.push(("group_a".to_string(), 1u8, 0u8));
+        }
+        for _ in 0..50 {
+            predictions.push(("group_a".to_string(), 0u8, 0u8));
+        }
 
         // Group B: precision = 0.8 (40 TP out of 50 predicted positive)
-        for _ in 0..40 { predictions.push(("group_b".to_string(), 1u8, 1u8)); }
-        for _ in 0..10 { predictions.push(("group_b".to_string(), 1u8, 0u8)); }
-        for _ in 0..50 { predictions.push(("group_b".to_string(), 0u8, 0u8)); }
+        for _ in 0..40 {
+            predictions.push(("group_b".to_string(), 1u8, 1u8));
+        }
+        for _ in 0..10 {
+            predictions.push(("group_b".to_string(), 1u8, 0u8));
+        }
+        for _ in 0..50 {
+            predictions.push(("group_b".to_string(), 0u8, 0u8));
+        }
 
         let config = FairnessConfig::default();
         let result = compute_predictive_parity(&predictions, &config);

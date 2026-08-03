@@ -4,11 +4,11 @@
 
 pub mod schema;
 
-use axum::{routing::get, Router};
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use axum::{routing::get, Router};
 
-pub use schema::{AngavuSchema, build_schema, create_schema};
+pub use schema::{build_schema, create_schema, AngavuSchema};
 
 /// Build the GraphQL Axum router with playground and endpoint.
 pub fn graphql_router(schema: AngavuSchema) -> Router {

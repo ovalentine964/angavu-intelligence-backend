@@ -93,9 +93,9 @@ impl Default for ApprovalGateConfig {
     fn default() -> Self {
         Self {
             auto_approve_threshold: 0.95,
-            auto_approve_max_amount: 1000.0,  // KES 1,000
+            auto_approve_max_amount: 1000.0, // KES 1,000
             timeout_seconds: 30,
-            require_voice_above: 5000.0,  // KES 5,000
+            require_voice_above: 5000.0, // KES 5,000
         }
     }
 }
@@ -205,7 +205,9 @@ impl CreditApprovalGate {
             }],
         };
 
-        let mut pending = self.pending_decisions.lock()
+        let mut pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending.insert(decision_id.clone(), decision);
 
@@ -225,7 +227,9 @@ impl CreditApprovalGate {
         approved: bool,
         user_comment: Option<&str>,
     ) -> Result<ApprovalStatus, String> {
-        let mut pending = self.pending_decisions.lock()
+        let mut pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let decision = pending
             .get_mut(decision_id)
@@ -272,14 +276,18 @@ impl CreditApprovalGate {
 
     /// Get the status of a pending decision.
     pub fn get_decision(&self, decision_id: &str) -> Option<CreditDecision> {
-        let pending = self.pending_decisions.lock()
+        let pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending.get(decision_id).cloned()
     }
 
     /// Get all pending decisions for a worker.
     pub fn get_pending_for_worker(&self, worker_id: &str) -> Vec<CreditDecision> {
-        let pending = self.pending_decisions.lock()
+        let pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         pending
             .values()
@@ -290,7 +298,9 @@ impl CreditApprovalGate {
 
     /// Expire stale decisions (cleanup).
     pub fn expire_stale(&self) -> usize {
-        let mut pending = self.pending_decisions.lock()
+        let mut pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -315,11 +325,11 @@ impl CreditApprovalGate {
 
     /// Get audit trail for a decision.
     pub fn get_audit_trail(&self, decision_id: &str) -> Option<Vec<AuditEntry>> {
-        let pending = self.pending_decisions.lock()
+        let pending = self
+            .pending_decisions
+            .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        pending
-            .get(decision_id)
-            .map(|d| d.audit_trail.clone())
+        pending.get(decision_id).map(|d| d.audit_trail.clone())
     }
 }
 
@@ -354,7 +364,9 @@ fn build_description(
         CreditDecisionType::DebtRestructuring => {
             format!(
                 "Debt restructuring recommendation: KES {:,.0} via {} at {:.1}% APR.",
-                amount, product, apr * 100.0
+                amount,
+                product,
+                apr * 100.0
             )
         }
         CreditDecisionType::GroupCredit => {
@@ -387,7 +399,9 @@ fn build_description(
         CreditDecisionType::DebtRestructuring => {
             format!(
                 "Pendekezo la kubadilisha deni: KES {:,.0} kupitia {} kwa riba ya {:.1}% APR.",
-                amount, product, apr * 100.0
+                amount,
+                product,
+                apr * 100.0
             )
         }
         CreditDecisionType::GroupCredit => {

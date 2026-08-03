@@ -1,8 +1,8 @@
 // Loop Engineering Metrics — Observability for all loops
 // Prometheus-compatible metrics for monitoring OODA loops, drift, pipelines
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 // ─── Loop Metrics ─────────────────────────────────────────────────────────
 
@@ -76,42 +76,72 @@ impl LoopMetrics {
         // Fast loop
         lines.push("# HELP angavu_loop_fast_iterations Total fast loop iterations".to_string());
         lines.push("# TYPE angavu_loop_fast_iterations counter".to_string());
-        lines.push(format!("angavu_loop_fast_iterations {}", self.fast_loop_iterations));
+        lines.push(format!(
+            "angavu_loop_fast_iterations {}",
+            self.fast_loop_iterations
+        ));
 
         lines.push("# HELP angavu_loop_fast_lag_total Events lagged behind".to_string());
         lines.push("# TYPE angavu_loop_fast_lag_total counter".to_string());
-        lines.push(format!("angavu_loop_fast_lag_total {}", self.fast_loop_lag_count));
+        lines.push(format!(
+            "angavu_loop_fast_lag_total {}",
+            self.fast_loop_lag_count
+        ));
 
         lines.push("# HELP angavu_loop_fast_duration_ms Average fast loop duration".to_string());
         lines.push("# TYPE angavu_loop_fast_duration_ms gauge".to_string());
-        lines.push(format!("angavu_loop_fast_duration_ms {}", self.fast_loop_avg_duration_ms));
+        lines.push(format!(
+            "angavu_loop_fast_duration_ms {}",
+            self.fast_loop_avg_duration_ms
+        ));
 
         // Medium loop
         lines.push("# HELP angavu_loop_medium_iterations Total medium loop iterations".to_string());
         lines.push("# TYPE angavu_loop_medium_iterations counter".to_string());
-        lines.push(format!("angavu_loop_medium_iterations {}", self.medium_loop_iterations));
+        lines.push(format!(
+            "angavu_loop_medium_iterations {}",
+            self.medium_loop_iterations
+        ));
 
-        lines.push("# HELP angavu_loop_medium_duration_ms Average medium loop duration".to_string());
+        lines
+            .push("# HELP angavu_loop_medium_duration_ms Average medium loop duration".to_string());
         lines.push("# TYPE angavu_loop_medium_duration_ms gauge".to_string());
-        lines.push(format!("angavu_loop_medium_duration_ms {}", self.medium_loop_avg_duration_ms));
+        lines.push(format!(
+            "angavu_loop_medium_duration_ms {}",
+            self.medium_loop_avg_duration_ms
+        ));
 
         // Slow loop
         lines.push("# HELP angavu_loop_slow_iterations Total slow loop iterations".to_string());
         lines.push("# TYPE angavu_loop_slow_iterations counter".to_string());
-        lines.push(format!("angavu_loop_slow_iterations {}", self.slow_loop_iterations));
+        lines.push(format!(
+            "angavu_loop_slow_iterations {}",
+            self.slow_loop_iterations
+        ));
 
         lines.push("# HELP angavu_loop_slow_reports_generated Total reports generated".to_string());
         lines.push("# TYPE angavu_loop_slow_reports_generated counter".to_string());
-        lines.push(format!("angavu_loop_slow_reports_generated {}", self.slow_loop_reports_generated));
+        lines.push(format!(
+            "angavu_loop_slow_reports_generated {}",
+            self.slow_loop_reports_generated
+        ));
 
         // Deep loop
         lines.push("# HELP angavu_loop_deep_iterations Total deep loop iterations".to_string());
         lines.push("# TYPE angavu_loop_deep_iterations counter".to_string());
-        lines.push(format!("angavu_loop_deep_iterations {}", self.deep_loop_iterations));
+        lines.push(format!(
+            "angavu_loop_deep_iterations {}",
+            self.deep_loop_iterations
+        ));
 
-        lines.push("# HELP angavu_loop_deep_fl_rounds Federated learning rounds completed".to_string());
+        lines.push(
+            "# HELP angavu_loop_deep_fl_rounds Federated learning rounds completed".to_string(),
+        );
         lines.push("# TYPE angavu_loop_deep_fl_rounds counter".to_string());
-        lines.push(format!("angavu_loop_deep_fl_rounds {}", self.deep_loop_fl_rounds_completed));
+        lines.push(format!(
+            "angavu_loop_deep_fl_rounds {}",
+            self.deep_loop_fl_rounds_completed
+        ));
 
         // Uptime
         lines.push("# HELP angavu_uptime_seconds Server uptime".to_string());
@@ -165,15 +195,25 @@ impl DriftMetrics {
 
         lines.push("# HELP angavu_drift_degradation Relative accuracy degradation".to_string());
         lines.push("# TYPE angavu_drift_degradation gauge".to_string());
-        lines.push(format!("angavu_drift_degradation {}", self.relative_degradation));
+        lines.push(format!(
+            "angavu_drift_degradation {}",
+            self.relative_degradation
+        ));
 
         lines.push("# HELP angavu_drift_calibration_error Expected calibration error".to_string());
         lines.push("# TYPE angavu_drift_calibration_error gauge".to_string());
-        lines.push(format!("angavu_drift_calibration_error {}", self.calibration_error));
+        lines.push(format!(
+            "angavu_drift_calibration_error {}",
+            self.calibration_error
+        ));
 
-        lines.push("# HELP angavu_drift_rolled_back Whether model is in rollback state".to_string());
+        lines
+            .push("# HELP angavu_drift_rolled_back Whether model is in rollback state".to_string());
         lines.push("# TYPE angavu_drift_rolled_back gauge".to_string());
-        lines.push(format!("angavu_drift_rolled_back {}", if self.is_rolled_back { 1 } else { 0 }));
+        lines.push(format!(
+            "angavu_drift_rolled_back {}",
+            if self.is_rolled_back { 1 } else { 0 }
+        ));
 
         lines.push("# HELP angavu_drift_sample_count Samples in drift window".to_string());
         lines.push("# TYPE angavu_drift_sample_count gauge".to_string());
@@ -207,7 +247,9 @@ impl CircuitBreakerMetrics {
         for svc in &self.services {
             let labels = format!("service=\"{}\"", svc.name);
 
-            lines.push(format!("# HELP angavu_circuit_state Circuit state (0=closed,1=open,2=half-open)"));
+            lines.push(format!(
+                "# HELP angavu_circuit_state Circuit state (0=closed,1=open,2=half-open)"
+            ));
             lines.push("# TYPE angavu_circuit_state gauge".to_string());
             let state_val = match svc.state.as_str() {
                 "Closed" => 0,
@@ -217,10 +259,22 @@ impl CircuitBreakerMetrics {
             };
             lines.push(format!("angavu_circuit_state{{{}}} {}", labels, state_val));
 
-            lines.push(format!("angavu_circuit_failure_rate{{{}}} {}", labels, svc.failure_rate));
-            lines.push(format!("angavu_circuit_latency_ms{{{}}} {}", labels, svc.avg_latency_ms));
-            lines.push(format!("angavu_circuit_requests_total{{{}}} {}", labels, svc.total_requests));
-            lines.push(format!("angavu_circuit_rejected_total{{{}}} {}", labels, svc.total_rejected));
+            lines.push(format!(
+                "angavu_circuit_failure_rate{{{}}} {}",
+                labels, svc.failure_rate
+            ));
+            lines.push(format!(
+                "angavu_circuit_latency_ms{{{}}} {}",
+                labels, svc.avg_latency_ms
+            ));
+            lines.push(format!(
+                "angavu_circuit_requests_total{{{}}} {}",
+                labels, svc.total_requests
+            ));
+            lines.push(format!(
+                "angavu_circuit_rejected_total{{{}}} {}",
+                labels, svc.total_rejected
+            ));
         }
 
         lines.join("\n") + "\n"

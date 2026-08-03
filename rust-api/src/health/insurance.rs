@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 /// Types of insurance products in our catalog.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum InsuranceProductType {
-    PersonalAccident,      // Covers accidental injury/death
-    MotorVehicle,          // Motorcycle/vehicle insurance
-    OutpatientCover,       // OPD visits, medication
-    InpatientCover,        // Hospitalization
-    CriticalIllness,       // Cancer, organ failure, chronic disease
-    Disability,            // Permanent/temporary disability
-    LifeInsurance,         // Death benefit
-    MentalHealthCover,     // Counseling, psychiatric care
+    PersonalAccident,  // Covers accidental injury/death
+    MotorVehicle,      // Motorcycle/vehicle insurance
+    OutpatientCover,   // OPD visits, medication
+    InpatientCover,    // Hospitalization
+    CriticalIllness,   // Cancer, organ failure, chronic disease
+    Disability,        // Permanent/temporary disability
+    LifeInsurance,     // Death benefit
+    MentalHealthCover, // Counseling, psychiatric care
 }
 
 /// An insurance product in our catalog.
@@ -23,12 +23,12 @@ pub struct InsuranceProduct {
     pub name: String,
     pub name_local: String,
     pub product_type: InsuranceProductType,
-    pub provider: String,               // Insurance company name
-    pub monthly_premium_base: f64,      // Base monthly premium (KES)
-    pub coverage_amount: f64,           // Maximum coverage (KES)
+    pub provider: String,          // Insurance company name
+    pub monthly_premium_base: f64, // Base monthly premium (KES)
+    pub coverage_amount: f64,      // Maximum coverage (KES)
     pub coverage_description: String,
     pub eligibility_criteria: EligibilityCriteria,
-    pub risk_loadings: RiskLoadings,    // How risk score affects premium
+    pub risk_loadings: RiskLoadings, // How risk score affects premium
 }
 
 /// Criteria for insurance eligibility.
@@ -36,20 +36,20 @@ pub struct InsuranceProduct {
 pub struct EligibilityCriteria {
     pub min_age: u8,
     pub max_age: u8,
-    pub max_risk_tier: RiskTier,        // Won't sell above this risk
+    pub max_risk_tier: RiskTier, // Won't sell above this risk
     pub excluded_occupations: Vec<OccupationType>,
-    pub min_income_stability: f64,      // Minimum income stability score
+    pub min_income_stability: f64, // Minimum income stability score
     pub requires_health_screening: bool,
 }
 
 /// How risk score adjusts premium.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskLoadings {
-    pub base_multiplier: f64,           // 1.0 at base risk
-    pub per_risk_tier_increment: f64,   // +X% per tier above Low
+    pub base_multiplier: f64,         // 1.0 at base risk
+    pub per_risk_tier_increment: f64, // +X% per tier above Low
     pub occupation_loading: HashMap<OccupationType, f64>,
-    pub location_loading: f64,          // Multiplier for high-risk locations
-    pub max_premium_multiplier: f64,    // Cap on how high premium can go
+    pub location_loading: f64,       // Multiplier for high-risk locations
+    pub max_premium_multiplier: f64, // Cap on how high premium can go
 }
 
 /// Result of insurance eligibility assessment.
@@ -64,31 +64,31 @@ pub struct InsuranceEligibility {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EligibleProduct {
     pub product: InsuranceProduct,
-    pub risk_adjusted_premium: f64,     // Monthly premium after risk loading
-    pub premium_explanation: String,     // "Your premium is KES 800/month because..."
+    pub risk_adjusted_premium: f64, // Monthly premium after risk loading
+    pub premium_explanation: String, // "Your premium is KES 800/month because..."
     pub coverage_adequacy: CoverageAdequacy,
-    pub match_score: f64,               // How well this matches their risks (0-1)
+    pub match_score: f64, // How well this matches their risks (0-1)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IneligibleProduct {
     pub product_name: String,
-    pub reason: String,                  // "Risk tier Critical exceeds maximum High"
-    pub alternative: Option<String>,     // "Consider Personal Accident cover instead"
+    pub reason: String,              // "Risk tier Critical exceeds maximum High"
+    pub alternative: Option<String>, // "Consider Personal Accident cover instead"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoverageAdequacy {
-    FullyCovered,       // All top risks covered
-    PartiallyCovered,   // Some risks covered, some not
-    Insufficient,       // Coverage too low for risk level
+    FullyCovered,     // All top risks covered
+    PartiallyCovered, // Some risks covered, some not
+    Insufficient,     // Coverage too low for risk level
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PremiumRange {
     pub min_monthly: f64,
     pub max_monthly: f64,
-    pub currency: String,  // "KES"
+    pub currency: String, // "KES"
 }
 
 /// Insurance eligibility engine.
@@ -115,7 +115,11 @@ impl InsuranceEligibilityEngine {
                     eligible.push(EligibleProduct {
                         product: product.clone(),
                         risk_adjusted_premium: adjusted_premium,
-                        premium_explanation: self.explain_premium(product, adjusted_premium, risk_profile),
+                        premium_explanation: self.explain_premium(
+                            product,
+                            adjusted_premium,
+                            risk_profile,
+                        ),
                         coverage_adequacy: self.assess_coverage(product, risk_profile),
                         match_score,
                     });
@@ -131,12 +135,20 @@ impl InsuranceEligibilityEngine {
         }
 
         // Sort eligible by match score (best match first)
-        eligible.sort_by(|a, b| b.match_score.partial_cmp(&a.match_score).unwrap_or(std::cmp::Ordering::Equal));
+        eligible.sort_by(|a, b| {
+            b.match_score
+                .partial_cmp(&a.match_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let recommended = eligible.first().cloned();
 
         let premium_range = if eligible.is_empty() {
-            PremiumRange { min_monthly: 0.0, max_monthly: 0.0, currency: "KES".into() }
+            PremiumRange {
+                min_monthly: 0.0,
+                max_monthly: 0.0,
+                currency: "KES".into(),
+            }
         } else {
             let premiums: Vec<f64> = eligible.iter().map(|e| e.risk_adjusted_premium).collect();
             PremiumRange {
@@ -273,9 +285,14 @@ impl RiskExplanation {
 
         let summary_local = translate_to_swahili(&summary);
 
-        let top_risks: Vec<TopRisk> = occupation_risk.hazard_scores
+        let top_risks: Vec<TopRisk> = occupation_risk
+            .hazard_scores
             .iter()
-            .sorted_by(|a, b| b.risk_contribution.partial_cmp(&a.risk_contribution).unwrap_or(std::cmp::Ordering::Equal))
+            .sorted_by(|a, b| {
+                b.risk_contribution
+                    .partial_cmp(&a.risk_contribution)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .take(3)
             .enumerate()
             .map(|(i, hs)| TopRisk {
@@ -288,7 +305,8 @@ impl RiskExplanation {
             })
             .collect();
 
-        let protective_actions: Vec<String> = occupation_risk.protective_factors
+        let protective_actions: Vec<String> = occupation_risk
+            .protective_factors
             .iter()
             .map(|pf| pf.clone())
             .collect();

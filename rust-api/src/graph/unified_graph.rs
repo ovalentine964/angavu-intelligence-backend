@@ -21,9 +21,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use super::harness_graph::HarnessGraph;
 use super::knowledge_graph::*;
 use super::pg_knowledge_graph::PgKnowledgeGraph;
-use super::harness_graph::HarnessGraph;
 use super::{GraphEdge, GraphNode, NodeStatus};
 
 /// Unified graph operations trait — single interface for all graph types.
@@ -41,9 +41,16 @@ pub trait UnifiedGraphOps: Send + Sync {
 
     // ── Cross-Graph Queries ──────────────────────────────────
     /// Find knowledge related to a harness component (tool, loop, etc.).
-    async fn knowledge_for_component(&self, component_id: &str) -> Result<ComponentKnowledge, String>;
+    async fn knowledge_for_component(
+        &self,
+        component_id: &str,
+    ) -> Result<ComponentKnowledge, String>;
     /// Find all episodic memories within a time range (from PG).
-    async fn episodes_in_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<EpisodicMemory>, String>;
+    async fn episodes_in_range(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<EpisodicMemory>, String>;
     /// Search semantic knowledge by concept (from PG).
     async fn search_knowledge(&self, concept: &str) -> Result<Vec<SemanticMemory>, String>;
     /// Get unified graph statistics.
@@ -264,7 +271,10 @@ impl UnifiedGraphOps for UnifiedKnowledgeLayer {
         Ok(())
     }
 
-    async fn knowledge_for_component(&self, component_id: &str) -> Result<ComponentKnowledge, String> {
+    async fn knowledge_for_component(
+        &self,
+        component_id: &str,
+    ) -> Result<ComponentKnowledge, String> {
         let refs = self.cross_refs.read().await;
         let memory_ids = refs.get(component_id).cloned().unwrap_or_default();
 
@@ -284,7 +294,10 @@ impl UnifiedGraphOps for UnifiedKnowledgeLayer {
         }
 
         // Determine component type from harness
-        let component_type = self.harness.nodes.iter()
+        let component_type = self
+            .harness
+            .nodes
+            .iter()
             .find(|n| {
                 let nid = match n {
                     super::harness_graph::HarnessNode::Tool(t) => &t.id,
@@ -318,7 +331,11 @@ impl UnifiedGraphOps for UnifiedKnowledgeLayer {
         })
     }
 
-    async fn episodes_in_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<EpisodicMemory>, String> {
+    async fn episodes_in_range(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<EpisodicMemory>, String> {
         // Try PostgreSQL first (persistent, complete data)
         match self.pg_graph.episodic_by_participant("").await {
             Ok(episodes) => {
@@ -331,7 +348,11 @@ impl UnifiedGraphOps for UnifiedKnowledgeLayer {
             Err(_) => {
                 // Fallback to in-memory graph
                 let graph = self.memory_graph.read().await;
-                Ok(graph.episodic_in_range(start, end).into_iter().cloned().collect())
+                Ok(graph
+                    .episodic_in_range(start, end)
+                    .into_iter()
+                    .cloned()
+                    .collect())
             }
         }
     }
@@ -343,7 +364,11 @@ impl UnifiedGraphOps for UnifiedKnowledgeLayer {
             _ => {
                 // Fallback to in-memory
                 let graph = self.memory_graph.read().await;
-                Ok(graph.semantic_by_concept(concept).into_iter().cloned().collect())
+                Ok(graph
+                    .semantic_by_concept(concept)
+                    .into_iter()
+                    .cloned()
+                    .collect())
             }
         }
     }

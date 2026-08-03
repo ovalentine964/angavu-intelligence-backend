@@ -4,35 +4,35 @@
 
 #![deny(missing_docs)]
 
-pub mod loops;
+pub mod agent;
+pub mod behavioral;
+pub mod billing;
 pub mod credit;
+pub mod gateway;
 pub mod graph;
 pub mod graphql;
-pub mod orchestrator;
-pub mod gateway;
 pub mod health;
-pub mod service_pricing;
-pub mod sync;
-pub mod observability;
-pub mod webhook;
-pub mod billing;
-pub mod statistical;
-pub mod behavioral;
-pub mod rag;
-pub mod telemetry;
 pub mod llm;
-pub mod agent;
+pub mod loops;
+pub mod observability;
 pub mod optimization;
+pub mod orchestrator;
+pub mod rag;
+pub mod service_pricing;
+pub mod statistical;
+pub mod sync;
+pub mod telemetry;
+pub mod webhook;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use loops::ooda_loop::{OodaSupervisor, LoopConfig, OodaDatabase};
-use loops::drift_detection::{DriftDetector, DriftConfig};
-use loops::pipeline_feedback::{PipelineFeedbackChannel, PipelineFeedbackLoop};
 use loops::circuit_breaker::CircuitBreakerRegistry;
+use loops::drift_detection::{DriftConfig, DriftDetector};
 use loops::metrics::LoopMetrics;
+use loops::ooda_loop::{LoopConfig, OodaDatabase, OodaSupervisor};
+use loops::pipeline_feedback::{PipelineFeedbackChannel, PipelineFeedbackLoop};
 
 /// Initialize and start all loop engineering components.
 /// Call this from the application's main/startup function.
@@ -43,9 +43,7 @@ pub async fn init_loop_engineering(db: Arc<dyn OodaDatabase>) -> LoopEngineering
     let metrics = Arc::new(RwLock::new(LoopMetrics::default()));
 
     // 2. Drift detector
-    let drift_detector = Arc::new(RwLock::new(
-        DriftDetector::new(DriftConfig::default())
-    ));
+    let drift_detector = Arc::new(RwLock::new(DriftDetector::new(DriftConfig::default())));
 
     // 3. Pipeline feedback channel
     let pipeline_feedback = Arc::new(PipelineFeedbackChannel::new());

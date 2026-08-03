@@ -13,7 +13,6 @@
 ///   - Control group behavior (what happened without the nudge)
 ///   - Effect size (Cohen's h for proportions)
 ///   - Statistical significance (p-value from z-test)
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -352,7 +351,10 @@ impl NudgeEffectivenessEngine {
     }
 
     /// Get the most effective nudge for a given behavior
-    pub fn best_nudge_for_behavior(&mut self, behavior: &str) -> Option<(String, NudgeEffectiveness)> {
+    pub fn best_nudge_for_behavior(
+        &mut self,
+        behavior: &str,
+    ) -> Option<(String, NudgeEffectiveness)> {
         self.compute_all()
             .into_iter()
             .filter(|(_, eff)| {
@@ -394,7 +396,8 @@ fn normal_cdf(x: f64) -> f64 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let x_abs = x.abs();
     let t = 1.0 / (1.0 + p * x_abs);
-    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x_abs * x_abs / 2.0).exp();
+    let y =
+        1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x_abs * x_abs / 2.0).exp();
 
     0.5 * (1.0 + sign * y)
 }
@@ -420,14 +423,24 @@ mod tests {
 
         // Treatment: 60% took action (saved more)
         for i in 0..100 {
-            engine.record_treatment("social_proof_savings_001", i < 60, if i < 60 { 500.0 } else { 200.0 });
+            engine.record_treatment(
+                "social_proof_savings_001",
+                i < 60,
+                if i < 60 { 500.0 } else { 200.0 },
+            );
         }
         // Control: 40% took action
         for i in 0..100 {
-            engine.record_control("social_proof_savings_001", i < 40, if i < 40 { 500.0 } else { 200.0 });
+            engine.record_control(
+                "social_proof_savings_001",
+                i < 40,
+                if i < 40 { 500.0 } else { 200.0 },
+            );
         }
 
-        let eff = engine.compute_effectiveness("social_proof_savings_001").unwrap();
+        let eff = engine
+            .compute_effectiveness("social_proof_savings_001")
+            .unwrap();
 
         assert!(eff.significant_at_05, "Should be significant");
         assert!(eff.rate_difference > 0.0, "Should have positive effect");

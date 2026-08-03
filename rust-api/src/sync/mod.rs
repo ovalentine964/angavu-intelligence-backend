@@ -8,11 +8,11 @@
 // - Data freshness checks
 // - Alama Score distribution back to devices
 
+pub mod freshness;
+pub mod integration_tests;
 pub mod receiver;
 pub mod verification;
 pub mod version_compat;
-pub mod freshness;
-pub mod integration_tests;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -76,7 +76,7 @@ pub enum ModuleMessage {
     CreditAssessment {
         trace_id: TraceId,
         worker_id_hash: String,
-        alama_score: u32,       // 300-850
+        alama_score: u32, // 300-850
         risk_level: RiskLevel,
         factors: Vec<CreditFactor>,
         confidence: f64,
@@ -93,7 +93,7 @@ pub enum ModuleMessage {
         trace_id: TraceId,
         region: String,
         product_category: String,
-        gap_severity: f64,      // 0.0 = no gap, 1.0 = severe
+        gap_severity: f64, // 0.0 = no gap, 1.0 = severe
         opportunity_size_usd: f64,
         affected_workers: u32,
     },
@@ -187,7 +187,7 @@ pub enum ModuleMessage {
     Heartbeat {
         module_id: ModuleId,
         queue_depth: u64,
-        processing_rate: f64,   // messages/sec
+        processing_rate: f64, // messages/sec
         last_error: Option<String>,
         uptime_secs: u64,
     },
@@ -364,10 +364,7 @@ impl ModuleMessageBus {
     }
 
     /// Register a module's queue. Returns a receiver for point-to-point messages.
-    pub fn register_module(
-        &self,
-        module_id: ModuleId,
-    ) -> mpsc::Receiver<ModuleMessage> {
+    pub fn register_module(&self, module_id: ModuleId) -> mpsc::Receiver<ModuleMessage> {
         let (tx, rx) = mpsc::channel(self.config.module_queue_capacity);
         self.module_queues.insert(module_id, tx);
         info!(module = ?module_id, "Module registered on message bus");
@@ -381,10 +378,7 @@ impl ModuleMessageBus {
 
     /// Publish a message to the broadcast channel (all subscribers receive it)
     /// Handles backpressure: if broadcast capacity is near limit, drops low-priority messages.
-    pub async fn publish(
-        &self,
-        message: ModuleMessage,
-    ) -> Result<(), BusError> {
+    pub async fn publish(&self, message: ModuleMessage) -> Result<(), BusError> {
         // Check backpressure: if broadcast channel is near capacity
         let receiver_count = self.broadcast_tx.receiver_count();
         let priority = extract_priority(&message);
@@ -427,8 +421,12 @@ impl ModuleMessageBus {
     /// Returns true if the system is under pressure.
     fn backpressure_active(&self) -> bool {
         // Use dropped message ratio as a proxy for queue pressure
-        let published = self.messages_published.load(std::sync::atomic::Ordering::Relaxed);
-        let dropped = self.messages_dropped.load(std::sync::atomic::Ordering::Relaxed);
+        let published = self
+            .messages_published
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let dropped = self
+            .messages_dropped
+            .load(std::sync::atomic::Ordering::Relaxed);
         if published == 0 {
             return false;
         }
@@ -462,7 +460,8 @@ impl ModuleMessageBus {
                     // Queue is full
                     if priority >= Priority::High {
                         // High/Critical: wait for space (blocking)
-                        tx.send(message).await
+                        tx.send(message)
+                            .await
                             .map_err(|_| BusError::ModuleQueueFull(target))?;
                         self.messages_delivered
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -537,9 +536,7 @@ impl ModuleMessageBus {
             source: extract_source_module(message),
             destination,
             priority: extract_priority(message),
-            payload_size_bytes: bincode::serialize(message)
-                .map(|b| b.len())
-                .unwrap_or(0),
+            payload_size_bytes: bincode::serialize(message).map(|b| b.len()).unwrap_or(0),
         };
 
         let mut buffer = self.audit_buffer.write().await;
@@ -587,8 +584,8 @@ fn extract_trace_id(msg: &ModuleMessage) -> TraceId {
         | ModuleMessage::AnomalyAlert { trace_id, .. }
         | ModuleMessage::EmergentPattern { trace_id, .. }
         | ModuleMessage::RouteCommand { trace_id, .. } => *trace_id,
-        | ModuleMessage::ServicePriceBroadcast { trace_id, .. } => *trace_id,
-        | ModuleMessage::ServiceMarketSignal { trace_id, .. } => *trace_id,
+        ModuleMessage::ServicePriceBroadcast { trace_id, .. } => *trace_id,
+        ModuleMessage::ServiceMarketSignal { trace_id, .. } => *trace_id,
         ModuleMessage::Heartbeat { .. } => Uuid::nil(),
     }
 }

@@ -26,11 +26,11 @@ pub struct HealthUtilityWeight {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DalYComponents {
     pub condition: String,
-    pub yll: f64,              // Years of Life Lost
-    pub yld: f64,              // Years Lived with Disability
-    pub total_daly: f64,       // YLL + YLD
+    pub yll: f64,        // Years of Life Lost
+    pub yld: f64,        // Years Lived with Disability
+    pub total_daly: f64, // YLL + YLD
     pub disability_weight: f64,
-    pub incidence: f64,        // Cases per 1000 workers
+    pub incidence: f64, // Cases per 1000 workers
     pub mean_age_onset: f64,
     pub mean_duration_years: f64,
     pub standard_life_expectancy: f64,
@@ -44,7 +44,7 @@ pub struct QalyResult {
     pub qaly_gained: f64,
     pub intervention_cost: f64,
     pub cost_per_qaly: f64,
-    pub cost_effective: bool,          // < 3x GDP per capita
+    pub cost_effective: bool, // < 3x GDP per capita
     pub kenya_gdp_per_capita: f64,
 }
 
@@ -52,7 +52,7 @@ pub struct QalyResult {
 pub struct HealthEconomicsModule {
     utility_weights: HashMap<String, f64>,
     disability_weights: HashMap<String, f64>,
-    kenya_gdp_per_capita: f64,  // USD 2026
+    kenya_gdp_per_capita: f64, // USD 2026
     standard_life_expectancy: f64,
 }
 
@@ -100,8 +100,8 @@ impl HealthEconomicsModule {
         Self {
             utility_weights,
             disability_weights,
-            kenya_gdp_per_capita: 2100.0,  // USD 2026 estimate
-            standard_life_expectancy: 63.0,  // Kenya average
+            kenya_gdp_per_capita: 2100.0,   // USD 2026 estimate
+            standard_life_expectancy: 63.0, // Kenya average
         }
     }
 
@@ -183,7 +183,10 @@ impl HealthEconomicsModule {
 
     /// Get disability weight for a condition
     pub fn disability_weight(&self, condition: &str) -> f64 {
-        self.disability_weights.get(condition).copied().unwrap_or(0.0)
+        self.disability_weights
+            .get(condition)
+            .copied()
+            .unwrap_or(0.0)
     }
 
     /// Cost-effectiveness analysis for a set of interventions
@@ -207,10 +210,10 @@ mod tests {
         let module = HealthEconomicsModule::new();
         let result = module.compute_qaly(
             "depression",
-            50.0,   // $50 intervention (group therapy)
-            5.0,    // 5 years benefit
-            0.50,   // moderate depression utility
-            0.80,   // mild depression after treatment
+            50.0, // $50 intervention (group therapy)
+            5.0,  // 5 years benefit
+            0.50, // moderate depression utility
+            0.80, // mild depression after treatment
         );
         assert!(result.qaly_gained > 0.0);
         assert!(result.cost_per_qaly < 200.0); // Very cost-effective
@@ -222,11 +225,11 @@ mod tests {
         let module = HealthEconomicsModule::new();
         let daly = module.compute_daly(
             "silicosis",
-            25.0,   // 25 per 1000 miners
-            5.0,    // 5 deaths per 1000
-            35.0,   // onset at 35
-            20.0,   // 20 years duration
-            0.295,  // disability weight
+            25.0,  // 25 per 1000 miners
+            5.0,   // 5 deaths per 1000
+            35.0,  // onset at 35
+            20.0,  // 20 years duration
+            0.295, // disability weight
         );
         assert!(daly.total_daly > 0.0);
         assert!(daly.yll > 0.0);

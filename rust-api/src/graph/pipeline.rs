@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
-use super::ooda::{CircuitBreaker, CircuitState, make_node_circuit_breaker};
+use super::ooda::{make_node_circuit_breaker, CircuitBreaker, CircuitState};
 
 /// A node in the pipeline DAG.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +20,7 @@ pub struct PipelineNode {
     pub name: String,
     pub node_type: PipelineNodeType,
     pub status: PipelineNodeStatus,
-    pub depends_on: Vec<String>,        // names of nodes this depends on
+    pub depends_on: Vec<String>, // names of nodes this depends on
     pub circuit_breaker: CircuitBreaker,
     pub max_retries: u32,
     pub retry_count: u32,
@@ -70,7 +70,7 @@ pub struct PipelineDag {
     pub id: Uuid,
     pub name: String,
     pub nodes: HashMap<String, PipelineNode>,
-    pub execution_order: Vec<Vec<String>>,  // topological levels (parallel groups)
+    pub execution_order: Vec<Vec<String>>, // topological levels (parallel groups)
     pub created_at: DateTime<Utc>,
 }
 
@@ -88,222 +88,252 @@ impl PipelineDag {
         let mut nodes = HashMap::new();
 
         // ── Level 0: Sync nodes (parallel, no dependencies) ──────────
-        nodes.insert("sync_transactions".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "sync_transactions".to_string(),
-            node_type: PipelineNodeType::Sync,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![],
-            circuit_breaker: make_node_circuit_breaker("sync_transactions", 3, 120),
-            max_retries: 3,
-            retry_count: 0,
-            timeout_ms: 30_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "sync_transactions".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "sync_transactions".to_string(),
+                node_type: PipelineNodeType::Sync,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![],
+                circuit_breaker: make_node_circuit_breaker("sync_transactions", 3, 120),
+                max_retries: 3,
+                retry_count: 0,
+                timeout_ms: 30_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
-        nodes.insert("sync_market_data".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "sync_market_data".to_string(),
-            node_type: PipelineNodeType::Sync,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![],
-            circuit_breaker: make_node_circuit_breaker("sync_market_data", 3, 120),
-            max_retries: 3,
-            retry_count: 0,
-            timeout_ms: 30_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "sync_market_data".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "sync_market_data".to_string(),
+                node_type: PipelineNodeType::Sync,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![],
+                circuit_breaker: make_node_circuit_breaker("sync_market_data", 3, 120),
+                max_retries: 3,
+                retry_count: 0,
+                timeout_ms: 30_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
-        nodes.insert("sync_external".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "sync_external".to_string(),
-            node_type: PipelineNodeType::Sync,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![],
-            circuit_breaker: make_node_circuit_breaker("sync_external", 3, 120),
-            max_retries: 3,
-            retry_count: 0,
-            timeout_ms: 30_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "sync_external".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "sync_external".to_string(),
+                node_type: PipelineNodeType::Sync,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![],
+                circuit_breaker: make_node_circuit_breaker("sync_external", 3, 120),
+                max_retries: 3,
+                retry_count: 0,
+                timeout_ms: 30_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // ── Level 1: Anonymize (depends on all sync nodes) ───────────
-        nodes.insert("anonymize".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "anonymize".to_string(),
-            node_type: PipelineNodeType::Anonymize,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![
-                "sync_transactions".to_string(),
-                "sync_market_data".to_string(),
-                "sync_external".to_string(),
-            ],
-            circuit_breaker: make_node_circuit_breaker("anonymize", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 60_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "anonymize".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "anonymize".to_string(),
+                node_type: PipelineNodeType::Anonymize,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![
+                    "sync_transactions".to_string(),
+                    "sync_market_data".to_string(),
+                    "sync_external".to_string(),
+                ],
+                circuit_breaker: make_node_circuit_breaker("anonymize", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 60_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // ── Level 2: Aggregate (depends on anonymize) ────────────────
-        nodes.insert("aggregate".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "aggregate".to_string(),
-            node_type: PipelineNodeType::Aggregate,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec!["anonymize".to_string()],
-            circuit_breaker: make_node_circuit_breaker("aggregate", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 120_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "aggregate".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "aggregate".to_string(),
+                node_type: PipelineNodeType::Aggregate,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec!["anonymize".to_string()],
+                circuit_breaker: make_node_circuit_breaker("aggregate", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 120_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // ── Level 3: Analyze (parallel, all depend on aggregate) ─────
-        nodes.insert("analyze_patterns".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "analyze_patterns".to_string(),
-            node_type: PipelineNodeType::Analyze,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec!["aggregate".to_string()],
-            circuit_breaker: make_node_circuit_breaker("analyze_patterns", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 180_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "analyze_patterns".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "analyze_patterns".to_string(),
+                node_type: PipelineNodeType::Analyze,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec!["aggregate".to_string()],
+                circuit_breaker: make_node_circuit_breaker("analyze_patterns", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 180_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
-        nodes.insert("analyze_credit".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "analyze_credit".to_string(),
-            node_type: PipelineNodeType::Analyze,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec!["aggregate".to_string()],
-            circuit_breaker: make_node_circuit_breaker("analyze_credit", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 180_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "analyze_credit".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "analyze_credit".to_string(),
+                node_type: PipelineNodeType::Analyze,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec!["aggregate".to_string()],
+                circuit_breaker: make_node_circuit_breaker("analyze_credit", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 180_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
-        nodes.insert("analyze_market".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "analyze_market".to_string(),
-            node_type: PipelineNodeType::Analyze,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec!["aggregate".to_string()],
-            circuit_breaker: make_node_circuit_breaker("analyze_market", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 180_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "analyze_market".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "analyze_market".to_string(),
+                node_type: PipelineNodeType::Analyze,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec!["aggregate".to_string()],
+                circuit_breaker: make_node_circuit_breaker("analyze_market", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 180_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // ── Level 4: Generate (depends on analyze nodes) ─────────────
-        nodes.insert("generate_reports".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "generate_reports".to_string(),
-            node_type: PipelineNodeType::Generate,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![
-                "analyze_patterns".to_string(),
-                "analyze_credit".to_string(),
-                "analyze_market".to_string(),
-            ],
-            circuit_breaker: make_node_circuit_breaker("generate_reports", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 120_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "generate_reports".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "generate_reports".to_string(),
+                node_type: PipelineNodeType::Generate,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![
+                    "analyze_patterns".to_string(),
+                    "analyze_credit".to_string(),
+                    "analyze_market".to_string(),
+                ],
+                circuit_breaker: make_node_circuit_breaker("generate_reports", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 120_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
-        nodes.insert("generate_signals".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "generate_signals".to_string(),
-            node_type: PipelineNodeType::Generate,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![
-                "analyze_patterns".to_string(),
-                "analyze_market".to_string(),
-            ],
-            circuit_breaker: make_node_circuit_breaker("generate_signals", 3, 60),
-            max_retries: 2,
-            retry_count: 0,
-            timeout_ms: 60_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "generate_signals".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "generate_signals".to_string(),
+                node_type: PipelineNodeType::Generate,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec!["analyze_patterns".to_string(), "analyze_market".to_string()],
+                circuit_breaker: make_node_circuit_breaker("generate_signals", 3, 60),
+                max_retries: 2,
+                retry_count: 0,
+                timeout_ms: 60_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // ── Level 5: Distribute (depends on generate nodes) ──────────
-        nodes.insert("distribute".to_string(), PipelineNode {
-            id: Uuid::new_v4(),
-            name: "distribute".to_string(),
-            node_type: PipelineNodeType::Distribute,
-            status: PipelineNodeStatus::Pending,
-            depends_on: vec![
-                "generate_reports".to_string(),
-                "generate_signals".to_string(),
-            ],
-            circuit_breaker: make_node_circuit_breaker("distribute", 5, 300),
-            max_retries: 5,
-            retry_count: 0,
-            timeout_ms: 60_000,
-            started_at: None,
-            completed_at: None,
-            duration_ms: None,
-            input_data: serde_json::json!({}),
-            output_data: serde_json::json!({}),
-            error: None,
-        });
+        nodes.insert(
+            "distribute".to_string(),
+            PipelineNode {
+                id: Uuid::new_v4(),
+                name: "distribute".to_string(),
+                node_type: PipelineNodeType::Distribute,
+                status: PipelineNodeStatus::Pending,
+                depends_on: vec![
+                    "generate_reports".to_string(),
+                    "generate_signals".to_string(),
+                ],
+                circuit_breaker: make_node_circuit_breaker("distribute", 5, 300),
+                max_retries: 5,
+                retry_count: 0,
+                timeout_ms: 60_000,
+                started_at: None,
+                completed_at: None,
+                duration_ms: None,
+                input_data: serde_json::json!({}),
+                output_data: serde_json::json!({}),
+                error: None,
+            },
+        );
 
         // Compute topological levels
         let execution_order = Self::topological_levels(&nodes);
@@ -649,10 +679,7 @@ impl PipelineExecutor {
     /// The handler receives (node_name, input) and returns Ok(output) or Err(error).
     /// This is the main entry point for running a pipeline to completion.
     #[tracing::instrument(skip(self, handler), fields(pipeline_nodes = self.nodes.len()))]
-    pub async fn execute<F, Fut>(
-        &mut self,
-        handler: F,
-    ) -> anyhow::Result<Vec<NodeExecutionResult>>
+    pub async fn execute<F, Fut>(&mut self, handler: F) -> anyhow::Result<Vec<NodeExecutionResult>>
     where
         F: Fn(String, serde_json::Value) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<serde_json::Value, String>> + Send,

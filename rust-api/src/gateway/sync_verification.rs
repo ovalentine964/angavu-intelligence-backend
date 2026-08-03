@@ -19,17 +19,45 @@ const VALID_AMOUNT_BUCKETS: &[&str] = &["0-100", "100-500", "500-1000", "1000-50
 
 /// Valid transaction categories
 const VALID_CATEGORIES: &[&str] = &[
-    "sale", "expense", "purchase", "service", "transfer",
-    "refund", "withdrawal", "deposit", "loan", "repayment",
-    "salary", "wage", "commission", "tip", "discount",
-    "transport", "food", "rent", "utilities", "supplies",
-    "stock", "inventory", "repair", "maintenance", "other",
+    "sale",
+    "expense",
+    "purchase",
+    "service",
+    "transfer",
+    "refund",
+    "withdrawal",
+    "deposit",
+    "loan",
+    "repayment",
+    "salary",
+    "wage",
+    "commission",
+    "tip",
+    "discount",
+    "transport",
+    "food",
+    "rent",
+    "utilities",
+    "supplies",
+    "stock",
+    "inventory",
+    "repair",
+    "maintenance",
+    "other",
 ];
 
 /// Valid payment methods
 const VALID_PAYMENT_METHODS: &[&str] = &[
-    "cash", "mpesa", "m-pesa", "bank", "card", "credit",
-    "airtel_money", "equitel", "sasapay", "other",
+    "cash",
+    "mpesa",
+    "m-pesa",
+    "bank",
+    "card",
+    "credit",
+    "airtel_money",
+    "equitel",
+    "sasapay",
+    "other",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,7 +225,9 @@ pub fn verify_sync_batch(transactions: &[AnonymizedTransactionIn]) -> SyncBatchV
         }
     }
 
-    let has_high = issues.iter().any(|i| matches!(i.severity, IssueSeverity::High));
+    let has_high = issues
+        .iter()
+        .any(|i| matches!(i.severity, IssueSeverity::High));
     let valid_count = transactions.len().saturating_sub(rejected);
 
     SyncBatchVerification {
@@ -234,10 +264,10 @@ mod tests {
     #[test]
     fn empty_batch_flagged() {
         let result = verify_sync_batch(&[]);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            SyncBatchIssueType::EmptyBatch
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, SyncBatchIssueType::EmptyBatch)));
     }
 
     #[test]
@@ -253,10 +283,10 @@ mod tests {
         let mut tx = valid_transaction();
         tx.category = "xyz_nonexistent".to_string();
         let result = verify_sync_batch(&[tx]);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            SyncBatchIssueType::InvalidCategory
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, SyncBatchIssueType::InvalidCategory)));
     }
 
     #[test]
@@ -264,10 +294,10 @@ mod tests {
         let mut tx = valid_transaction();
         tx.payment_method = "bitcoin".to_string();
         let result = verify_sync_batch(&[tx]);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            SyncBatchIssueType::InvalidPaymentMethod
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, SyncBatchIssueType::InvalidPaymentMethod)));
     }
 
     #[test]
@@ -291,10 +321,10 @@ mod tests {
         let mut tx = valid_transaction();
         tx.category = "+254712345678".to_string();
         let result = verify_sync_batch(&[tx]);
-        assert!(result.issues.iter().any(|i| matches!(
-            i.issue_type,
-            SyncBatchIssueType::PiiDetected
-        )));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| matches!(i.issue_type, SyncBatchIssueType::PiiDetected)));
     }
 
     #[test]

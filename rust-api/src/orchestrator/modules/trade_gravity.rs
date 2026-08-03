@@ -15,7 +15,7 @@ use std::collections::HashMap;
 pub struct TradeNode {
     pub id: String,
     pub name: String,
-    pub gdp_proxy: f64,       // Economic size proxy from transaction data
+    pub gdp_proxy: f64, // Economic size proxy from transaction data
     pub population: f64,
     pub is_border_region: bool,
     pub border_country: Option<String>,
@@ -28,7 +28,7 @@ pub struct TradeFlow {
     pub destination: String,
     pub predicted_volume: f64,
     pub actual_volume: f64,
-    pub trade_intensity: f64,    // predicted / expected
+    pub trade_intensity: f64, // predicted / expected
     pub distance_km: f64,
     pub has_trade_agreement: bool,
     pub common_language: bool,
@@ -37,12 +37,12 @@ pub struct TradeFlow {
 /// Gravity model parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GravityModelParams {
-    pub gdp_origin_elasticity: f64,    // α
-    pub gdp_dest_elasticity: f64,      // β
-    pub distance_elasticity: f64,      // γ (negative)
-    pub trade_agreement_effect: f64,   // δ
+    pub gdp_origin_elasticity: f64,  // α
+    pub gdp_dest_elasticity: f64,    // β
+    pub distance_elasticity: f64,    // γ (negative)
+    pub trade_agreement_effect: f64, // δ
     pub common_language_effect: f64,
-    pub constant: f64,                 // A
+    pub constant: f64, // A
 }
 
 impl Default for GravityModelParams {
@@ -81,14 +81,70 @@ impl TradeGravityModel {
     /// Initialize with East African trade nodes
     fn init_east_africa(&mut self) {
         let nodes = vec![
-            TradeNode { id: "nairobi".into(), name: "Nairobi".into(), gdp_proxy: 5000.0, population: 4_500_000.0, is_border_region: false, border_country: None },
-            TradeNode { id: "mombasa".into(), name: "Mombasa".into(), gdp_proxy: 2000.0, population: 1_200_000.0, is_border_region: false, border_country: None },
-            TradeNode { id: "kisumu".into(), name: "Kisumu".into(), gdp_proxy: 800.0, population: 600_000.0, is_border_region: true, border_country: Some("UG".into()) },
-            TradeNode { id: "nakuru".into(), name: "Nakuru".into(), gdp_proxy: 1200.0, population: 500_000.0, is_border_region: false, border_country: None },
-            TradeNode { id: "eldoret".into(), name: "Eldoret".into(), gdp_proxy: 900.0, population: 450_000.0, is_border_region: false, border_country: None },
-            TradeNode { id: "malaba".into(), name: "Malaba Border".into(), gdp_proxy: 300.0, population: 50_000.0, is_border_region: true, border_country: Some("UG".into()) },
-            TradeNode { id: "namanga".into(), name: "Namanga Border".into(), gdp_proxy: 200.0, population: 30_000.0, is_border_region: true, border_country: Some("TZ".into()) },
-            TradeNode { id: "busia".into(), name: "Busia Border".into(), gdp_proxy: 250.0, population: 60_000.0, is_border_region: true, border_country: Some("UG".into()) },
+            TradeNode {
+                id: "nairobi".into(),
+                name: "Nairobi".into(),
+                gdp_proxy: 5000.0,
+                population: 4_500_000.0,
+                is_border_region: false,
+                border_country: None,
+            },
+            TradeNode {
+                id: "mombasa".into(),
+                name: "Mombasa".into(),
+                gdp_proxy: 2000.0,
+                population: 1_200_000.0,
+                is_border_region: false,
+                border_country: None,
+            },
+            TradeNode {
+                id: "kisumu".into(),
+                name: "Kisumu".into(),
+                gdp_proxy: 800.0,
+                population: 600_000.0,
+                is_border_region: true,
+                border_country: Some("UG".into()),
+            },
+            TradeNode {
+                id: "nakuru".into(),
+                name: "Nakuru".into(),
+                gdp_proxy: 1200.0,
+                population: 500_000.0,
+                is_border_region: false,
+                border_country: None,
+            },
+            TradeNode {
+                id: "eldoret".into(),
+                name: "Eldoret".into(),
+                gdp_proxy: 900.0,
+                population: 450_000.0,
+                is_border_region: false,
+                border_country: None,
+            },
+            TradeNode {
+                id: "malaba".into(),
+                name: "Malaba Border".into(),
+                gdp_proxy: 300.0,
+                population: 50_000.0,
+                is_border_region: true,
+                border_country: Some("UG".into()),
+            },
+            TradeNode {
+                id: "namanga".into(),
+                name: "Namanga Border".into(),
+                gdp_proxy: 200.0,
+                population: 30_000.0,
+                is_border_region: true,
+                border_country: Some("TZ".into()),
+            },
+            TradeNode {
+                id: "busia".into(),
+                name: "Busia Border".into(),
+                gdp_proxy: 250.0,
+                population: 60_000.0,
+                is_border_region: true,
+                border_country: Some("UG".into()),
+            },
         ];
 
         for node in nodes {
@@ -97,10 +153,14 @@ impl TradeGravityModel {
 
         // Approximate distances (km)
         let dist_data = vec![
-            ("nairobi", "mombasa", 480.0), ("nairobi", "kisumu", 340.0),
-            ("nairobi", "nakuru", 160.0), ("nairobi", "eldoret", 310.0),
-            ("nairobi", "namanga", 180.0), ("kisumu", "busia", 100.0),
-            ("eldoret", "malaba", 80.0), ("mombasa", "nairobi", 480.0),
+            ("nairobi", "mombasa", 480.0),
+            ("nairobi", "kisumu", 340.0),
+            ("nairobi", "nakuru", 160.0),
+            ("nairobi", "eldoret", 310.0),
+            ("nairobi", "namanga", 180.0),
+            ("kisumu", "busia", 100.0),
+            ("eldoret", "malaba", 80.0),
+            ("mombasa", "nairobi", 480.0),
         ];
 
         for (a, b, d) in dist_data {
@@ -113,7 +173,8 @@ impl TradeGravityModel {
         let o = self.nodes.get(origin)?;
         let d = self.nodes.get(destination)?;
 
-        let distance = self.distances
+        let distance = self
+            .distances
             .get(&(origin.into(), destination.into()))
             .copied()
             .unwrap_or(500.0);
@@ -125,14 +186,22 @@ impl TradeGravityModel {
         let predicted = p.constant
             * (o.gdp_proxy.powf(p.gdp_origin_elasticity) * d.gdp_proxy.powf(p.gdp_dest_elasticity))
             / distance.powf(-p.distance_elasticity)
-            * if has_agreement { (1.0 + p.trade_agreement_effect) } else { 1.0 }
-            * if common_lang { (1.0 + p.common_language_effect) } else { 1.0 };
+            * if has_agreement {
+                (1.0 + p.trade_agreement_effect)
+            } else {
+                1.0
+            }
+            * if common_lang {
+                (1.0 + p.common_language_effect)
+            } else {
+                1.0
+            };
 
         Some(TradeFlow {
             origin: origin.into(),
             destination: destination.into(),
             predicted_volume: predicted,
-            actual_volume: 0.0,  // To be filled from transaction data
+            actual_volume: 0.0, // To be filled from transaction data
             trade_intensity: 0.0,
             distance_km: distance,
             has_trade_agreement: has_agreement,
@@ -165,7 +234,9 @@ impl TradeGravityModel {
                 flow.actual_volume = actual_volume;
                 flow.trade_intensity = if flow.predicted_volume > 0.0 {
                     actual_volume / flow.predicted_volume
-                } else { 0.0 };
+                } else {
+                    0.0
+                };
             }
         }
     }

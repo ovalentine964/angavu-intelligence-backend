@@ -52,7 +52,7 @@ impl FlowNetwork {
             num_nodes,
             adjacency: HashMap::new(),
             edges: Vec::new(),
-    }
+        }
     }
 
     /// Add a directed edge with capacity.
@@ -95,7 +95,11 @@ impl FlowNetwork {
             for &edge_idx in &path {
                 self.edges[edge_idx].flow += bottleneck;
                 // Residual edge is at odd index if forward is even, and vice versa
-                let residual_idx = if edge_idx % 2 == 0 { edge_idx + 1 } else { edge_idx - 1 };
+                let residual_idx = if edge_idx % 2 == 0 {
+                    edge_idx + 1
+                } else {
+                    edge_idx - 1
+                };
                 self.edges[residual_idx].flow -= bottleneck;
             }
 
@@ -111,7 +115,9 @@ impl FlowNetwork {
         let min_cut_capacity = self.compute_min_cut_capacity(&min_cut_source);
 
         // Collect edge flows for original edges (even indices)
-        let edge_flows: Vec<(usize, usize, f64)> = self.edges.iter()
+        let edge_flows: Vec<(usize, usize, f64)> = self
+            .edges
+            .iter()
             .enumerate()
             .filter(|(i, _)| i % 2 == 0)
             .filter(|(_, e)| e.flow > 0.0)

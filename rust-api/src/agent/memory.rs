@@ -349,7 +349,10 @@ impl WorkingMemory {
             summary.push_str(&format!("## Current Task\n{}\n\n", task));
         }
 
-        summary.push_str(&format!("Phase: {} | Iteration: {}\n\n", state.current_phase, state.iteration));
+        summary.push_str(&format!(
+            "Phase: {} | Iteration: {}\n\n",
+            state.current_phase, state.iteration
+        ));
 
         if !state.observations.is_empty() {
             summary.push_str("## Observations\n");
@@ -372,7 +375,11 @@ impl WorkingMemory {
 
         if !state.hypotheses.is_empty() {
             summary.push_str("## Active Hypotheses\n");
-            for hyp in state.hypotheses.iter().filter(|h| h.status == HypothesisStatus::Active) {
+            for hyp in state
+                .hypotheses
+                .iter()
+                .filter(|h| h.status == HypothesisStatus::Active)
+            {
                 summary.push_str(&format!(
                     "- {} (confidence: {:.0}%): {} supporting, {} contradicting\n",
                     hyp.statement,
@@ -490,7 +497,11 @@ impl LongTermMemory {
     }
 
     /// Find patterns matching given conditions
-    pub fn find_patterns(&self, pattern_type: Option<PatternType>, min_confidence: f64) -> Vec<LearnedPattern> {
+    pub fn find_patterns(
+        &self,
+        pattern_type: Option<PatternType>,
+        min_confidence: f64,
+    ) -> Vec<LearnedPattern> {
         self.patterns
             .iter()
             .filter(|entry| {
@@ -526,14 +537,17 @@ impl LongTermMemory {
             patterns_count: self.patterns.len(),
             strategies_count: self.strategies.len(),
             facts_count: self.domain_knowledge.len(),
-            total_entries: self.patterns.len() + self.strategies.len() + self.domain_knowledge.len(),
+            total_entries: self.patterns.len()
+                + self.strategies.len()
+                + self.domain_knowledge.len(),
         }
     }
 
     /// Serialize all memory to JSON (for persistence)
     pub fn to_json(&self) -> serde_json::Value {
         let patterns: Vec<&LearnedPattern> = self.patterns.iter().map(|e| e.value()).collect();
-        let strategies: Vec<&SuccessfulStrategy> = self.strategies.iter().map(|e| e.value()).collect();
+        let strategies: Vec<&SuccessfulStrategy> =
+            self.strategies.iter().map(|e| e.value()).collect();
         let facts: Vec<&DomainFact> = self.domain_knowledge.iter().map(|e| e.value()).collect();
 
         serde_json::json!({
@@ -576,7 +590,9 @@ impl LongTermMemory {
     }
 
     fn evict_oldest_pattern(&self) {
-        if let Some(oldest_key) = self.patterns.iter()
+        if let Some(oldest_key) = self
+            .patterns
+            .iter()
             .min_by_key(|e| e.value().last_observed)
             .map(|e| e.key().clone())
         {
@@ -585,7 +601,9 @@ impl LongTermMemory {
     }
 
     fn evict_oldest_strategy(&self) {
-        if let Some(oldest_key) = self.strategies.iter()
+        if let Some(oldest_key) = self
+            .strategies
+            .iter()
             .min_by_key(|e| e.value().last_used)
             .map(|e| e.key().clone())
         {
@@ -594,7 +612,9 @@ impl LongTermMemory {
     }
 
     fn evict_oldest_fact(&self) {
-        if let Some(oldest_key) = self.domain_knowledge.iter()
+        if let Some(oldest_key) = self
+            .domain_knowledge
+            .iter()
             .min_by_key(|e| e.value().last_verified)
             .map(|e| e.key().clone())
         {
@@ -644,8 +664,12 @@ impl AgentMemory {
         if !patterns.is_empty() {
             context.push_str("## Relevant Patterns\n");
             for pattern in patterns.iter().take(5) {
-                context.push_str(&format!("- {}: {} (observed {} times)\n",
-                    pattern.pattern_type_str(), pattern.description, pattern.times_observed));
+                context.push_str(&format!(
+                    "- {}: {} (observed {} times)\n",
+                    pattern.pattern_type_str(),
+                    pattern.description,
+                    pattern.times_observed
+                ));
             }
             context.push('\n');
         }
@@ -729,9 +753,15 @@ mod tests {
         let wm = WorkingMemory::new(100_000);
         wm.begin_task("Analyze tomatoes market", "observe").await;
 
-        wm.add_observation("market_tool", "Prices rising 15%", Some("market_analysis")).await;
-        wm.add_reasoning_step("Prices are rising, likely due to supply shortage", Some("check_supply")).await;
-        wm.add_hypothesis("Supply disruption caused by drought", 0.7).await;
+        wm.add_observation("market_tool", "Prices rising 15%", Some("market_analysis"))
+            .await;
+        wm.add_reasoning_step(
+            "Prices are rising, likely due to supply shortage",
+            Some("check_supply"),
+        )
+        .await;
+        wm.add_hypothesis("Supply disruption caused by drought", 0.7)
+            .await;
 
         let snapshot = wm.snapshot().await;
         assert_eq!(snapshot.observations.len(), 1);
